@@ -110,20 +110,24 @@ export interface MapFeatureDiagnostics {
 
 ---
 
-## 5. Browser-Based Visual Verification Checklist
+## 5. Optional Browser-Based Visual Sanity Checks
 
-Automated tests verify numerical contracts, but visual correctness must also be confirmed in the browser:
+Automated tests and measurable regression checks are the primary and default verification mechanism for the project. Manual browser-based visual inspection remains available as an optional debugging and sanity-check tool when working on complex rendering features.
+
+Visual inspection is discretionary and is not a mandatory ticket acceptance criterion by default. Screenshot capture and screenshot-based review are not required for ticket or milestone closure.
+
+For targeted visual sanity checks, the following inspection points may be useful:
 
 1. **At-Grade Intersections**:
-   - Observe road junctions at glancing tilt angles ($72^\circ$). Road surfaces must remain solid and crisp without shimmering, flickering, or visible seam gaps.
+   - Observe road junctions at glancing tilt angles ($72^\circ$). Road surfaces should appear solid and crisp without shimmering, flickering, or visible seam gaps.
 2. **Bridges & Flyovers**:
-   - Verify that bridges rise smoothly via sloped approach ramps and pass cleanly over crossed roads/waterways with full clearance. Check that piers touch ground and parapets track deck edges.
+   - Check that bridges rise via sloped approach ramps and pass over crossed roads/waterways with adequate clearance. Check that piers meet ground and parapets follow deck edges.
 3. **Tunnel Portals**:
-   - Check that tunnels enter dark recessed 3D portal structures, with dashed traces indicating underground routes.
+   - Check that tunnels enter recessed 3D portal structures, with surface traces indicating underground routes.
 4. **Building Courtyards**:
    - Verify that doughnut-shaped or courtyard buildings show open sky through their interior courtyards.
 5. **Boundary Framing**:
-   - Verify that the framed map fits comfortably within the canvas without edge bleeding when rotating $360^\circ$.
+   - Verify that the framed map fits comfortably within the canvas without edge clipping when rotating $360^\circ$.
 
 ---
 
@@ -131,5 +135,5 @@ Automated tests verify numerical contracts, but visual correctness must also be 
 
 When completing any implementation or bug-fix task, always report:
 1. Exact commands run: `npm test`, `npm run lint`, `npm run build`, `npm run docs:api`.
-2. Actual exit codes and execution summaries (e.g. `63 passed, 0 failed, 5.4s`).
-3. Confirmation of whether visual verification was performed. Never claim visual verification succeeded unless actually inspected in the browser.
+2. Actual exit codes and execution summaries (e.g. `91 passed, 0 failed, 8.1s`).
+3. If discretionary visual inspection was performed, briefly describe the observations. If visual inspection was not performed, simply state that it was not performed or omit visual claims. Never claim visual verification was performed when it was not.

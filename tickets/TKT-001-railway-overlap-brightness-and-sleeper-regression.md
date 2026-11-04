@@ -2,7 +2,7 @@
 id: TKT-001
 title: Fix railway overlap brightness accumulation via idempotent rendering and restore sleeper generation
 type: bug
-status: in_progress
+status: closed
 priority: high
 created: 2026-10-30
 updated: 2026-11-04
@@ -84,6 +84,10 @@ Following the approval and closure of **Milestone 2.1 (`TKT-002`)** selecting **
 
 ## Status & Verification Record
 - **Status**: `closed`
+- **Visual Verification Policy Alignment & Screenshot Waiver (2026-11-04)**:
+  - On 2026-11-04, the project owner updated the project verification policy: automated regression tests and measurable contracts are the primary verification method; manual browser visual inspection and screenshot captures are optional debugging aids rather than mandatory acceptance criteria.
+  - The project owner explicitly waived screenshot-based visual evidence as a mandatory closeout requirement for TKT-001.
+  - The absence of additional M2.2 screenshots is not an outstanding acceptance criterion.
 - **Verification**:
   - `npm test`: **87 / 87 passed** (including all 5 new production unit/integration tests in `src/world/RailwayRendering.test.ts` and all 14 M2.1 benchmark/geometric regression tests in `src/world/PerformanceBaseline.test.ts`).
   - `npm run lint`: **0 errors** (`tsc --noEmit`).

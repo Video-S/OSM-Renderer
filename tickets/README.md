@@ -55,7 +55,7 @@ A good ticket is self-contained so that any future human or AI development sessi
 - **Observed vs. Expected**: Concrete difference between current behavior and desired behavior (can be omitted for pure docs/feature tasks if not applicable).
 - **Reproduction**: Minimal steps or test scenario to see the defect.
 - **Acceptance Criteria**: Checkbox list of specific, observable, testable outcomes required to close the ticket.
-- **Verification Plan & Results**: Empty when created; filled with actual command outputs, test passes, and visual check results prior to closing.
+- **Verification Plan & Results**: Empty when created; filled with actual automated command outputs and test passes prior to closing, with optional visual check notes where applicable.
 - **Related References**: Links to source files (`src/...`), test files (`src/...test.ts`), and architectural docs (`docs/...`).
 
 Do not include API keys, credentials, personal secrets, or full dumps of unrelated logs.
@@ -69,10 +69,11 @@ Do not include API keys, credentials, personal secrets, or full dumps of unrelat
 3. **Inspect When Requested**: When asked to review outstanding work, Gemini inspects `tickets/`, summarizes open tickets grouped by priority/type, and highlights blockers or dependencies.
 4. **Track Active Work**: Set `status: in_progress` and update `updated: YYYY-MM-DD` when starting implementation.
 5. **Honest Verification**:
-   - Run tests (`npm test`), type check / linter (`npm run lint`), build (`npm run build`), and API docs if applicable (`npm run docs:api`).
-   - Run visual or browser verification when relevant to map rendering or camera behavior.
+   - Run tests (`npm test`), type check / linter (`npm run lint`), build (`npm run build`), and API docs if applicable (`npm run docs:api`). Automated regression tests are the default verification method.
+   - Manual browser-based visual inspection is optional, not mandatory for ticket acceptance or closure. Screenshot capture and screenshot indexes are not required for milestone or ticket closure.
    - Record actual commands and exit status in the ticket's `## Verification` section.
-   - **Never** mark a ticket `closed` if any acceptance criterion is unmet or if tests/builds were not executed. If a check could not be run, document the limitation honestly and leave the ticket `open` or `blocked`.
+   - **Never claim** that visual verification or tests were performed when they were not.
+   - **Never** mark a ticket `closed` if any acceptance criterion is unmet or if required automated checks were not executed. If a check could not be run, document the limitation honestly and leave the ticket `open` or `blocked`.
 6. **Closing**: Set `status: closed` and update the `updated` date only after all criteria are met and verified.
 7. **Reporting**: Clearly report the ticket ID(s) completed, blocked, or left open in the final turn summary.
 

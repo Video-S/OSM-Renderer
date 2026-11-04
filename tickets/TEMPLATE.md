@@ -35,13 +35,13 @@ updated: YYYY-MM-DD
 
 ## Verification
 <!-- Leave unverified until actual verification occurs during implementation.
-     Record actual test commands, exit codes, visual browser checks, and dates. -->
+     Record actual test commands, exit codes, and dates. Optional manual browser inspection notes may be included if performed. -->
 - Status: Unverified
-- Verification steps to run:
+- Verification steps:
   - `npm test`
   - `npm run lint`
   - `npm run build`
-  - Visual inspection in browser (if applicable)
+  - Optional manual browser sanity check (discretionary; screenshots not required)
 
 ## Related files and documentation
 <!-- Relative links to source files, tests, ADRs, or external references. -->

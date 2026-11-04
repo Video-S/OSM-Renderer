@@ -22,9 +22,10 @@ When working on this codebase, adhere strictly to the following instructions:
    - When a significant architectural decision or interface contract changes, update the corresponding documentation files and Architectural Decision Records (`docs/decisions/`).
 
 4. **Verification & Honesty**:
-   - Run the relevant tests and build commands (`npm test`, `npm run lint`, `npm run build`, `npm run docs:api`) whenever making code changes. Filing a ticket, updating documentation, or maintaining ticket files does not need this step.
+   - Running the relevant automated tests and build commands (`npm test`, `npm run lint`, `npm run build`, `npm run docs:api`) remains mandatory whenever making application code changes. Filing a ticket, updating documentation, or maintaining ticket files does not need this step.
+   - Manual browser-based visual verification is optional unless explicitly requested by the project owner or an individual ticket. Screenshot capture and review are not required for ticket or milestone closeout.
    - Report actual commands executed, exit codes, and output.
-   - **Never claim** that tests, compilation, or visual verification succeeded unless they were actually executed in the environment.
+   - **Never claim** that tests, compilation, or visual verification were performed or succeeded unless they were actually executed in the environment.
 
 5. **Scope Boundary**:
    - Keep the product scope limited to **Goalpost 1: 3D map rendering and camera controls**, unless explicitly instructed otherwise.

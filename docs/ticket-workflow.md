@@ -127,7 +127,7 @@ If work cannot proceed due to an environmental limitation, missing dependency, u
 3. **Never mark a blocked ticket `closed`**. A ticket that cannot be finished must remain open or blocked.
 
 ### Phase E: Verifying and Closing Tickets
-A ticket may only be moved to `closed` when all acceptance criteria have been satisfied and verified.
+A ticket may only be moved to `closed` when all acceptance criteria have been satisfied and verified through automated tests or defined deliverables.
 
 #### Six Mandatory Pre-Closure Steps:
 1. **Criteria Checklist**: Check off every acceptance criterion in the checklist and confirm each is met.
@@ -136,16 +136,17 @@ A ticket may only be moved to `closed` when all acceptance criteria have been sa
    - `npm run lint`: Typecheck (`tsc --noEmit`) and syntax checks.
    - `npm run build`: Production bundle compilation.
    - `npm run docs:api`: API documentation generator (when public interfaces change).
-3. **Visual & Interactive Verification**: If the ticket affects 3D rendering, shaders, materials, camera controls, or UI, perform visual checks in the running environment and confirm absence of visual artifacts (e.g., z-fighting, clipping errors).
+3. **Optional Visual Inspection**: Manual browser inspection is an optional sanity-check and debugging aid. It is not a mandatory ticket acceptance criterion, and screenshot capture or screenshot indexes are not required for ticket closure. Targeted manual inspection may still be conducted at the developer's discretion for particularly intricate rendering tasks.
 4. **Document Verification**: Update the `## Verification` section of the ticket with:
    - Actual commands executed and exit codes.
    - Summary of test results.
-   - Observations from visual verification.
+   - Optional notes from visual inspection if one was performed.
 5. **Acknowledge Limitations**: If any non-critical limitation remains, explicitly record it in the ticket notes.
 6. **Set Closed Status**: Change frontmatter `status` to `closed` and update `updated` to the current date.
 
 > **Strict Truthfulness Rule**:
 > - Never claim a check passed if it was not actually executed.
+> - Never claim visual verification was performed when it was not.
 > - Never conceal test failures by modifying acceptance criteria after writing code.
 > - If an environment prevents running a specific verification step, state the limitation openly and do not close the ticket without user confirmation.
 
@@ -168,6 +169,6 @@ A ticket may only be moved to `closed` when all acceptance criteria have been sa
 - **One Ticket, One Problem**: Keep tickets focused and atomic.
 - **Observable Criteria**: Frame criteria as verifiable facts (e.g., "Road junction triangles do not overlap at elevation y=0.04m" rather than "Road looks good").
 - **Relative Markdown Links**: Always use relative paths when referencing repository files (e.g., `[GeometryBuilder.ts](../src/world/GeometryBuilder.ts)`).
-- **Supporting Assets**: Visual screenshots or logs should be placed in appropriate asset directories and linked as supporting evidence, accompanied by written explanations.
+- **Supporting Assets**: Optional visual screenshots or logs may be placed in appropriate asset directories when helpful, but screenshot generation or review is never a mandatory requirement for ticket closeout.
 - **No Secrets**: Never commit tokens, credentials, or sensitive data in tickets or attachments.
 - **Summary Reporting**: In AI assistant turn completions, always explicitly state the ticket IDs that were worked on, closed, blocked, or remain open.

@@ -2,10 +2,10 @@
 id: TKT-001
 title: Fix railway overlap brightness accumulation via idempotent rendering and restore sleeper generation
 type: bug
-status: closed
+status: in_progress
 priority: high
 created: 2026-10-30
-updated: 2026-11-03
+updated: 2026-11-04
 ---
 
 # TKT-001: Fix railway overlap brightness accumulation via idempotent rendering and restore sleeper generation

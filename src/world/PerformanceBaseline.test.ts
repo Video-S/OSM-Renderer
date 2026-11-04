@@ -166,14 +166,14 @@ test('M2.1: builds continuous UV-parameterized ribbons with automatic sharp-corn
   geo.dispose();
 });
 
-test('M2.1: records reproducible Goalpost 1 baseline and compares Candidate A vs Candidate B on Switchyard fixture with zero resource leaks', () => {
+test('M2.2: benchmarks production Candidate B renderer and compares Candidate A vs Candidate B on Switchyard fixture with zero resource leaks', () => {
   const switchyardData = createRailwayPrototypeFixtureData();
   assert.ok(switchyardData.railways.length >= 45);
 
-  const baselineReport = runCpuAndLifecycleBenchmark(
+  const productionReport = runCpuAndLifecycleBenchmark(
     switchyardData,
     MAP_THEMES.tactical,
-    'baseline',
+    'production',
     5
   );
   const candidateAReport = runCpuAndLifecycleBenchmark(
@@ -189,11 +189,11 @@ test('M2.1: records reproducible Goalpost 1 baseline and compares Candidate A vs
     5
   );
 
-  // 1. Warmed-up baseline lifecycle check: zero net leaked geometries or materials across 5 reload cycles
-  assert.equal(baselineReport.lifecycleAudit.warmedUpOwnedGeometriesAfterDispose, 0);
-  assert.equal(baselineReport.lifecycleAudit.warmedUpOwnedMaterialsAfterDispose, 0);
-  assert.equal(baselineReport.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
-  assert.equal(baselineReport.lifecycleAudit.netLeakedMaterialsAfterCycles, 0);
+  // 1. Warmed-up production lifecycle check: zero net leaked geometries or materials across 5 reload cycles
+  assert.equal(productionReport.lifecycleAudit.warmedUpOwnedGeometriesAfterDispose, 0);
+  assert.equal(productionReport.lifecycleAudit.warmedUpOwnedMaterialsAfterDispose, 0);
+  assert.equal(productionReport.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
+  assert.equal(productionReport.lifecycleAudit.netLeakedMaterialsAfterCycles, 0);
 
   assert.equal(candidateAReport.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
   assert.equal(candidateAReport.lifecycleAudit.netLeakedMaterialsAfterCycles, 0);
@@ -202,24 +202,24 @@ test('M2.1: records reproducible Goalpost 1 baseline and compares Candidate A vs
 
   // 2. Candidate A (Pure Procedural UV Ribbon) uses dramatically fewer railway vertices/triangles than discrete 3D sleepers
   assert.ok(
-    candidateAReport.railwayGroupStats.vertices < baselineReport.railwayGroupStats.vertices
+    candidateAReport.railwayGroupStats.vertices < productionReport.railwayGroupStats.vertices
   );
   assert.ok(
-    candidateAReport.railwayGroupStats.triangles < baselineReport.railwayGroupStats.triangles
+    candidateAReport.railwayGroupStats.triangles < productionReport.railwayGroupStats.triangles
   );
   assert.ok(
     candidateAReport.railwayGroupStats.vertices < candidateBReport.railwayGroupStats.vertices
   );
 
   console.table({
-    'Switchyard Baseline (G1)': {
-      totalBuildMs: baselineReport.buildTimeMs,
-      railBuildMs: baselineReport.railwayBuildTimeMs,
-      railMeshes: baselineReport.railwayGroupStats.meshCount,
-      railVertices: baselineReport.railwayGroupStats.vertices,
-      railTriangles: baselineReport.railwayGroupStats.triangles,
-      railCpuKB: Number((baselineReport.railwayGroupStats.cpuBufferBytes / 1024).toFixed(1)),
-      sceneCpuMB: baselineReport.cpuBufferMB,
+    'Switchyard Production (Candidate B)': {
+      totalBuildMs: productionReport.buildTimeMs,
+      railBuildMs: productionReport.railwayBuildTimeMs,
+      railMeshes: productionReport.railwayGroupStats.meshCount,
+      railVertices: productionReport.railwayGroupStats.vertices,
+      railTriangles: productionReport.railwayGroupStats.triangles,
+      railCpuKB: Number((productionReport.railwayGroupStats.cpuBufferBytes / 1024).toFixed(1)),
+      sceneCpuMB: productionReport.cpuBufferMB,
     },
     'Switchyard Candidate A (Procedural UV)': {
       totalBuildMs: candidateAReport.buildTimeMs,
@@ -242,32 +242,52 @@ test('M2.1: records reproducible Goalpost 1 baseline and compares Candidate A vs
   });
 });
 
-test('M2.1: records reproducible Goalpost 1 baseline on multi-category Urban Corridor GeoJSON fixture', () => {
+test('M2.2: rejects misleading baseline benchmark mode with explanatory error', () => {
+  const switchyardData = createRailwayPrototypeFixtureData();
+  assert.throws(
+    () => {
+      runCpuAndLifecycleBenchmark(
+        switchyardData,
+        MAP_THEMES.tactical,
+        'baseline' as any,
+        1
+      );
+    },
+    (err: any) => {
+      return (
+        err instanceof Error &&
+        err.message.includes("The 'baseline' benchmark mode represents the historical Goalpost 1 renderer")
+      );
+    }
+  );
+});
+
+test('M2.2: records reproducible production Candidate B on multi-category Urban Corridor GeoJSON fixture', () => {
   const provider = new LocalGeoJsonProvider();
   const mapData = provider.parseGeoJson(
     URBAN_CORRIDOR_GEOJSON_FIXTURE,
     'Urban Corridor Benchmark Fixture'
   );
 
-  const baselineReport = runCpuAndLifecycleBenchmark(
+  const productionReport = runCpuAndLifecycleBenchmark(
     mapData,
     MAP_THEMES.tactical,
-    'baseline',
+    'production',
     3
   );
-  assert.ok(baselineReport.totalTriangles > 100);
-  assert.ok(baselineReport.cpuBufferBytes > 1024);
-  assert.equal(baselineReport.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
-  assert.equal(baselineReport.lifecycleAudit.netLeakedMaterialsAfterCycles, 0);
+  assert.ok(productionReport.totalTriangles > 100);
+  assert.ok(productionReport.cpuBufferBytes > 1024);
+  assert.equal(productionReport.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
+  assert.equal(productionReport.lifecycleAudit.netLeakedMaterialsAfterCycles, 0);
 
   console.table({
-    'Urban Corridor GeoJSON Baseline (G1)': {
-      totalBuildMs: baselineReport.buildTimeMs,
-      railBuildMs: baselineReport.railwayBuildTimeMs,
-      meshes: baselineReport.constructedMeshesCount,
-      totalVertices: baselineReport.totalVertices,
-      totalTriangles: baselineReport.totalTriangles,
-      sceneCpuMB: baselineReport.cpuBufferMB,
+    'Urban Corridor GeoJSON Production (Candidate B)': {
+      totalBuildMs: productionReport.buildTimeMs,
+      railBuildMs: productionReport.railwayBuildTimeMs,
+      meshes: productionReport.constructedMeshesCount,
+      totalVertices: productionReport.totalVertices,
+      totalTriangles: productionReport.totalTriangles,
+      sceneCpuMB: productionReport.cpuBufferMB,
     },
   });
 });
@@ -866,7 +886,7 @@ test('M2.1 Runtime Investigation 4-Configuration Isolation: disabled, candidateA
   const theme = MAP_THEMES.tactical;
 
   const repDisabled = runCpuAndLifecycleBenchmark(switchyardData, theme, 'disabled', 2);
-  const repBaseline = runCpuAndLifecycleBenchmark(switchyardData, theme, 'baseline', 2);
+  const repProduction = runCpuAndLifecycleBenchmark(switchyardData, theme, 'production', 2);
   const repCandA = runCpuAndLifecycleBenchmark(switchyardData, theme, 'candidateA', 2);
   const repCandB = runCpuAndLifecycleBenchmark(switchyardData, theme, 'candidateB', 2, {
     sleeper3DMode: 'instanced',
@@ -880,9 +900,10 @@ test('M2.1 Runtime Investigation 4-Configuration Isolation: disabled, candidateA
   assert.equal(repCandA.roadsGroupStats.triangles, repDisabled.roadsGroupStats.triangles);
   assert.equal(repCandB.roadsGroupStats.triangles, repDisabled.roadsGroupStats.triangles);
 
-  // Baseline includes railway bridge structures inside roadsGroup
-  assert.ok(repBaseline.roadsGroupStats.triangles >= repDisabled.roadsGroupStats.triangles);
+  // In production, railway bridge structures are in railwaysGroup, not in roadsGroup
+  assert.equal(repProduction.roadsGroupStats.triangles, repDisabled.roadsGroupStats.triangles);
   assert.equal(repDisabled.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
+  assert.equal(repProduction.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
   assert.equal(repCandB.lifecycleAudit.netLeakedGeometriesAfterCycles, 0);
 });
 

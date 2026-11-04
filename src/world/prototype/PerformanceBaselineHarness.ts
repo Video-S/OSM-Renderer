@@ -176,10 +176,20 @@ export function computeGroupGeometryStats(group: THREE.Group): GroupGeometryStat
 export function runCpuAndLifecycleBenchmark(
   data: ProcessedMapData,
   theme: MapStyleTheme,
-  mode: RailwayPrototypeMode = 'baseline',
+  mode: RailwayPrototypeMode = 'production',
   reloadCycles: number = 5,
   prototypeOptions?: BuildRailwayPrototypeOptions
 ): CpuBenchmarkReport {
+  if ((mode as string) === 'baseline') {
+    throw new Error(
+      "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer. " +
+      "Because git history is uninitialized in this environment ('fatal: not a git repository'), " +
+      "the superseded Goalpost 1 renderer cannot be checked out or dynamically re-executed. " +
+      "Its historical frozen benchmark data is preserved in 'docs/m2-1-baseline-data.json'. " +
+      "Use mode: 'production' to benchmark the current Candidate B production renderer."
+    );
+  }
+
   const builder = new GeometryBuilder();
   const nonRailData: ProcessedMapData = {
     ...data,
@@ -188,7 +198,7 @@ export function runCpuAndLifecycleBenchmark(
   };
 
   // 1. Warmup cycle (establishes warmed-up baseline and verifies clean disposal)
-  const warmupScene = builder.buildScene(mode === 'baseline' ? data : nonRailData, theme);
+  const warmupScene = builder.buildScene(mode === 'production' ? data : nonRailData, theme);
   warmupScene.dispose();
   const warmedUpOwnedGeometriesAfterDispose = warmupScene.resources.ownedGeometriesCount;
   const warmedUpOwnedMaterialsAfterDispose = warmupScene.resources.ownedMaterialsCount;
@@ -196,7 +206,7 @@ export function runCpuAndLifecycleBenchmark(
   // 2. N reload cycles to verify zero cumulative resource leaks relative to warmed-up baseline
   let lastDisposedScene: BuiltSceneGeometry | null = null;
   for (let c = 0; c < reloadCycles; c++) {
-    const cycleScene = builder.buildScene(mode === 'baseline' ? data : nonRailData, theme);
+    const cycleScene = builder.buildScene(mode === 'production' ? data : nonRailData, theme);
     if (mode === 'candidateA' || mode === 'candidateB') {
       const proto = buildRailwayPrototypeGroup(data, theme, mode, 8.0, prototypeOptions);
       proto.dispose();
@@ -250,12 +260,11 @@ export function runCpuAndLifecycleBenchmark(
     return report;
   }
 
-  if (mode === 'baseline') {
+  if (mode === 'production') {
     const tStart = performance.now();
     const scene = builder.buildScene(data, theme);
-    const baseBuildTimeMs = Number((performance.now() - tStart).toFixed(2));
+    const buildTimeMs = Number((performance.now() - tStart).toFixed(2));
 
-    // Measure non-railway map build time and railway-only build time (including railway bridges in roadsGroup)
     const railOnlyData: ProcessedMapData = {
       ...data,
       buildings: [],
@@ -272,37 +281,18 @@ export function runCpuAndLifecycleBenchmark(
     const tRail0 = performance.now();
     const railOnlyScene = builder.buildScene(railOnlyData, theme);
     const railwayBuildTimeMs = Number((performance.now() - tRail0).toFixed(2));
-
-    // In Goalpost 1, railway tracks are in scene.railwaysGroup and railway bridge substructures/parapets are in scene.roadsGroup
-    const railOnlyTrackStats = computeGroupGeometryStats(railOnlyScene.railwaysGroup);
-    const railOnlyBridgeStats = computeGroupGeometryStats(railOnlyScene.roadsGroup);
     railOnlyScene.dispose();
 
-    const combinedBaselineRailStats: GroupGeometryStats = {
-      meshCount: railOnlyTrackStats.meshCount + railOnlyBridgeStats.meshCount,
-      visibleMeshCount: railOnlyTrackStats.visibleMeshCount + railOnlyBridgeStats.visibleMeshCount,
-      vertices: railOnlyTrackStats.vertices + railOnlyBridgeStats.vertices,
-      triangles: railOnlyTrackStats.triangles + railOnlyBridgeStats.triangles,
-      renderedVerticesWithInstances:
-        railOnlyTrackStats.renderedVerticesWithInstances +
-        railOnlyBridgeStats.renderedVerticesWithInstances,
-      renderedTrianglesWithInstances:
-        railOnlyTrackStats.renderedTrianglesWithInstances +
-        railOnlyBridgeStats.renderedTrianglesWithInstances,
-      visibleRenderedTriangles:
-        railOnlyTrackStats.visibleRenderedTriangles + railOnlyBridgeStats.visibleRenderedTriangles,
-      cpuBufferBytes: railOnlyTrackStats.cpuBufferBytes + railOnlyBridgeStats.cpuBufferBytes,
-    };
-
+    const railwayGroupStats = computeGroupGeometryStats(scene.railwaysGroup);
     const roadsGroupStats = computeGroupGeometryStats(scene.roadsGroup);
     const buildingsGroupStats = computeGroupGeometryStats(scene.buildingsGroup);
     const baseMem = scene.resources.getCpuBufferMemoryStats();
 
     const report: CpuBenchmarkReport = {
       datasetName: data.regionName,
-      mode: 'baseline',
-      buildTimeMs: baseBuildTimeMs,
-      nonRailwayBuildTimeMs: Number(Math.max(0, baseBuildTimeMs - railwayBuildTimeMs).toFixed(2)),
+      mode: 'production',
+      buildTimeMs,
+      nonRailwayBuildTimeMs: Number(Math.max(0, buildTimeMs - railwayBuildTimeMs).toFixed(2)),
       railwayBuildTimeMs,
       constructedMeshesCount: scene.stats.totalDrawCalls,
       totalVertices: scene.stats.totalVertices,
@@ -311,7 +301,7 @@ export function runCpuAndLifecycleBenchmark(
       renderedTrianglesWithInstances: scene.stats.totalTriangles,
       cpuBufferBytes: baseMem.totalBytes,
       cpuBufferMB: baseMem.totalMB,
-      railwayGroupStats: combinedBaselineRailStats,
+      railwayGroupStats,
       roadsGroupStats,
       buildingsGroupStats,
       lifecycleAudit: {

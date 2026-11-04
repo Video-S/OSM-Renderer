@@ -37,7 +37,7 @@ import {
   subtractLateralInterval,
 } from './RailwayTopology';
 
-export type RailwayPrototypeMode = 'disabled' | 'baseline' | 'candidateA' | 'candidateB';
+export type RailwayPrototypeMode = 'disabled' | 'production' | 'candidateA' | 'candidateB';
 
 export interface BuildRailwayPrototypeOptions {
   /** Enable 8m × 8m uniform spatial grid index for host track queries (default true) */

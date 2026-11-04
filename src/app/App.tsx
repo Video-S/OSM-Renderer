@@ -97,9 +97,9 @@ export default function App() {
   const [bevelEnabled, setBevelEnabled] = useState<boolean>(true);
   const [wireframe, setWireframe] = useState<boolean>(false);
 
-  // Milestone 2.1 Isolated Railway Prototype state ('disabled' | 'baseline' | 'candidateA' | 'candidateB')
+  // Milestone 2.2 Production Railway state ('production' | 'candidateA' | 'candidateB' | 'disabled')
   const [railwayPrototypeMode, setRailwayPrototypeMode] =
-    useState<RailwayPrototypeMode>('baseline');
+    useState<RailwayPrototypeMode>('production');
   const [prototypeOptions, setPrototypeOptions] = useState<BuildRailwayPrototypeOptions>({
     useSpatialGridIndex: true,
     adaptiveBridgeSampling: true,
@@ -192,37 +192,36 @@ export default function App() {
     }));
   };
 
+  const loadCachedHengeloFixture = async (
+    target: [number, number, number] = [0, 0, 0],
+    zoom: number = 1.0,
+    azimuthDeg: number = 45
+  ) => {
+    setActiveLocationId('hengelo');
+    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0]);
+    setExplicitPose((prev) => ({
+      target,
+      zoom,
+      azimuthRad: (azimuthDeg * Math.PI) / 180,
+      signal: prev.signal + 1,
+    }));
+  };
+
   const loadCachedAmsterdamFixture = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
     azimuthDeg: number = 45
   ) => {
-    setLoading(true);
-    setError(null);
-    setHoveredFeature(null);
-    setSelectedFeature(null);
     setActiveLocationId('amsterdam');
-    setStatusMessage('Loading cached Amsterdam Centraal (420m) static map fixture...');
-    try {
-      const res = await fetch('/assets/m2-1-prototype/amsterdam-centraal-full-420m.json');
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} loading Amsterdam fixture`);
-      }
-      const parsedData: ProcessedMapData = await res.json();
-      setCurrentRawGeoJson(null);
-      setMapData(parsedData);
-      setLoading(false);
-      setExplicitPose((prev) => ({
-        target,
-        zoom,
-        azimuthRad: (azimuthDeg * Math.PI) / 180,
-        signal: prev.signal + 1,
-      }));
-    } catch (err: any) {
-      console.error('Failed to load cached Amsterdam fixture, falling back to live fetch:', err);
-      await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[1]);
-    }
+    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[1]);
+    setExplicitPose((prev) => ({
+      target,
+      zoom,
+      azimuthRad: (azimuthDeg * Math.PI) / 180,
+      signal: prev.signal + 1,
+    }));
   };
+
 
   const resolvePrototypeZonePreset = (zoneId: string) => {
     const aliasMap: Record<string, RailwayPrototypeZoneId> = {
@@ -310,11 +309,13 @@ export default function App() {
     const protoParam = params.get('prototype') as RailwayPrototypeMode | null;
     if (
       protoParam === 'disabled' ||
-      protoParam === 'baseline' ||
+      protoParam === 'production' ||
       protoParam === 'candidateA' ||
       protoParam === 'candidateB'
     ) {
       setRailwayPrototypeMode(protoParam);
+    } else if ((protoParam as string) === 'baseline') {
+      setRailwayPrototypeMode('production');
     }
     const themeParam = params.get('theme');
     if (themeParam && MAP_THEMES[themeParam]) {
@@ -344,6 +345,8 @@ export default function App() {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam);
     } else if (fixtureParam === 'amsterdam') {
       loadCachedAmsterdamFixture([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
+    } else if (fixtureParam === 'hengelo') {
+      loadCachedHengeloFixture([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
     } else {
       fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0]);
     }
@@ -353,12 +356,12 @@ export default function App() {
     return MAP_THEMES[selectedThemeId] || MAP_THEMES.tactical;
   }, [selectedThemeId]);
 
-  const useBaselineSceneRailways = railwayPrototypeMode === 'baseline';
+  const useProductionSceneRailways =
+    railwayPrototypeMode === 'production' || (railwayPrototypeMode as string) === 'baseline';
 
-  // Generate 3D Scene Geometries when geometric parameters or baseline railway mode change.
-  // When railwayPrototypeMode !== 'baseline', pass railways: [] to GeometryBuilder so the
-  // non-railway map is 100% identical across 'disabled', 'candidateA', and 'candidateB' and
-  // railway bridges are never duplicated inside roadsGroup.
+  // Generate 3D Scene Geometries when geometric parameters or railway mode change.
+  // When railwayPrototypeMode is 'candidateA', 'candidateB', or 'disabled', pass railways: []
+  // to GeometryBuilder so the non-railway map is 100% identical and railway bridges are never duplicated.
   useEffect(() => {
     if (!mapData) return;
 
@@ -374,7 +377,7 @@ export default function App() {
       initialCameraZoom: currentCameraZoomRef.current,
     });
 
-    const sceneData: ProcessedMapData = useBaselineSceneRailways
+    const sceneData: ProcessedMapData = useProductionSceneRailways
       ? mapData
       : {
           ...mapData,
@@ -400,7 +403,7 @@ export default function App() {
     setCpuBuildTimeMs(Number((performance.now() - t0).toFixed(2)));
     activeSceneRef.current = scene;
     setBuiltGeometry(scene);
-  }, [mapData, heightMultiplier, roadWidthMultiplier, bevelEnabled, useBaselineSceneRailways]);
+  }, [mapData, heightMultiplier, roadWidthMultiplier, bevelEnabled, useProductionSceneRailways]);
 
   // Build or dispose the isolated M2.1 Railway Prototype group when mode, options, or mapData changes
   useEffect(() => {
@@ -408,7 +411,12 @@ export default function App() {
       activePrototypeRef.current.dispose();
       activePrototypeRef.current = null;
     }
-    if (!mapData || railwayPrototypeMode === 'baseline' || railwayPrototypeMode === 'disabled') {
+    if (
+      !mapData ||
+      railwayPrototypeMode === 'production' ||
+      (railwayPrototypeMode as string) === 'baseline' ||
+      railwayPrototypeMode === 'disabled'
+    ) {
       setBuiltPrototypeRailways(null);
       return;
     }
@@ -422,6 +430,7 @@ export default function App() {
     activePrototypeRef.current = proto;
     setBuiltPrototypeRailways(proto);
   }, [mapData, railwayPrototypeMode, prototypeOptions]);
+
 
   // Separate material theme updates from geometry regeneration (zero GPU re-allocations)
   useEffect(() => {
@@ -496,6 +505,11 @@ export default function App() {
         zoom?: number,
         azimuthDeg?: number
       ) => loadSwitchyardFixture(zone, zoom, azimuthDeg),
+      loadHengelo: (
+        target: [number, number, number] = [0, 0, 0],
+        zoom: number = 1.0,
+        azimuthDeg: number = 45
+      ) => loadCachedHengeloFixture(target, zoom, azimuthDeg),
       loadAmsterdam: (
         target: [number, number, number] = [0, 0, 0],
         zoom: number = 1.0,
@@ -1598,9 +1612,9 @@ export default function App() {
                         {(
                           [
                             { id: 'disabled', label: 'A. Railways Disabled' },
-                            { id: 'baseline', label: 'B. Goalpost 1 Baseline' },
+                            { id: 'production', label: 'B. Production (Candidate B)' },
                             { id: 'candidateA', label: 'C. Candidate A (Procedural)' },
-                            { id: 'candidateB', label: 'D. Candidate B (Hybrid 3D + Procedural)' },
+                            { id: 'candidateB', label: 'D. Candidate B Prototype' },
                           ] as const
                         ).map((m) => (
                           <button

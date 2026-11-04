@@ -1,0 +1,41 @@
+{
+  "switchyard": {
+    "totalBuildMs": 101.86,
+    "railBuildMs": 101.77,
+    "meshes": 40,
+    "totalVertices": 12968,
+    "totalTriangles": 11622,
+    "railVertices": 12860,
+    "railTriangles": 11550,
+    "railCpuKB": 681.6,
+    "sceneCpuMB": 0.442,
+    "leakedGeometries": 0,
+    "leakedMaterials": 0
+  },
+  "hengelo": {
+    "totalBuildMs": 281.25,
+    "railBuildMs": 234.91,
+    "meshes": 62,
+    "totalVertices": 35091,
+    "totalTriangles": 33725,
+    "railVertices": 35000,
+    "railTriangles": 33650,
+    "railCpuKB": 1941.9,
+    "sceneCpuMB": 1.21,
+    "leakedGeometries": 0,
+    "leakedMaterials": 0
+  },
+  "amsterdam": {
+    "totalBuildMs": 909.06,
+    "railBuildMs": 885.75,
+    "meshes": 169,
+    "totalVertices": 196816,
+    "totalTriangles": 145744,
+    "railVertices": 195128,
+    "railTriangles": 144414,
+    "railCpuKB": 7528.4,
+    "sceneCpuMB": 5.986,
+    "leakedGeometries": 0,
+    "leakedMaterials": 0
+  }
+}

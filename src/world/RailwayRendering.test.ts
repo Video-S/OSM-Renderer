@@ -559,3 +559,262 @@ test('RailwayGeometryBuilder & GeometryBuilder: hybrid zoom switching, close par
   assert.equal(standaloneRm.ownedGeometriesCount, 0);
 });
 
+test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, parapet, and pier scene layer generation', () => {
+  const bridgeRailway: RailwayFeature = {
+    id: 'rail-bridge-test-1',
+    type: 'railway',
+    railwayType: 'rail',
+    name: 'Mainline Viaduct Test',
+    points: [
+      [-60, 0],
+      [-20, 0],
+      [20, 0],
+      [60, 0],
+    ],
+    isBridge: true,
+    isTunnel: false,
+    layer: 1,
+    width: 3.2,
+    osmTags: { railway: 'rail', bridge: 'yes', layer: '1', name: 'Mainline Viaduct Test' },
+  };
+
+  const mapData = createBaseMapData([bridgeRailway]);
+  const builder = new GeometryBuilder();
+  const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
+
+  const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
+    (obj as THREE.Mesh).isMesh ? (obj as THREE.Mesh) : (obj.children[0] as THREE.Mesh);
+
+  // 1. Verify bridge meshes in railwaysGroup
+  const bridgeSubTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Bridge_Substructure'
+  );
+  assert.ok(bridgeSubTarget, 'railwaysGroup must contain Railway_Bridge_Substructure');
+  const bridgeSubMesh = firstMesh(bridgeSubTarget);
+  assert.ok(
+    bridgeSubMesh.geometry.attributes.position.count > 0,
+    'Bridge substructure must have vertex geometry'
+  );
+
+  const bridgeParapetTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Bridge_Parapets'
+  );
+  assert.ok(bridgeParapetTarget, 'railwaysGroup must contain Railway_Bridge_Parapets');
+  const bridgeParapetMesh = firstMesh(bridgeParapetTarget);
+  assert.ok(
+    bridgeParapetMesh.geometry.attributes.position.count > 0,
+    'Bridge parapet must have vertex geometry'
+  );
+
+  // 2. Elevated track geometry: Ballast and 3D rails must be elevated above ground level (Y > 0)
+  const ballastTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Ballast'
+  );
+  assert.ok(ballastTarget, 'Ballast target must be present');
+  const ballastMesh = firstMesh(ballastTarget);
+  const posAttr = ballastMesh.geometry.attributes.position;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < posAttr.count; i++) {
+    const y = posAttr.getY(i);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  assert.ok(maxY > 2.0, `Bridge track ballast must be elevated above Y=2.0 (got maxY=${maxY})`);
+
+  // 3. No duplicate bridge geometry in roadsGroup
+  const roadBridgeSub = scene.roadsGroup.children.find(
+    (c) => c.name === 'BridgeSubstructure' || c.name === 'BridgeParapets'
+  );
+  assert.equal(
+    roadBridgeSub,
+    undefined,
+    'Roads group must not contain bridge geometry for railway-only features'
+  );
+
+  // 4. Inspection provenance: faceRanges map to bridge feature
+  assert.ok(bridgeSubMesh.userData.faceRanges, 'Bridge substructure must have faceRanges');
+  const inspectedBridge = resolveInspectedFeature({
+    object: bridgeSubMesh,
+    faceIndex: 0,
+  });
+  assert.ok(inspectedBridge, 'Inspecting bridge substructure must return feature info');
+  assert.equal(
+    inspectedBridge.sourceFeatureId,
+    'rail-bridge-test-1',
+    'Bridge inspection must trace back to the source railway feature'
+  );
+
+  scene.dispose();
+});
+
+test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
+  const tunnelRailway: RailwayFeature = {
+    id: 'rail-tunnel-test-1',
+    type: 'railway',
+    railwayType: 'rail',
+    name: 'Underground Corridor Test',
+    points: [
+      [-80, 20],
+      [-40, 20],
+      [0, 20],
+      [40, 20],
+      [80, 20],
+    ],
+    isBridge: false,
+    isTunnel: true,
+    layer: -1,
+    width: 3.2,
+    osmTags: { railway: 'rail', tunnel: 'yes', layer: '-1', name: 'Underground Corridor Test' },
+  };
+
+  const mapData = createBaseMapData([tunnelRailway]);
+  const builder = new GeometryBuilder();
+  const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
+
+  const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
+    (obj as THREE.Mesh).isMesh ? (obj as THREE.Mesh) : (obj.children[0] as THREE.Mesh);
+
+  // 1. Verify tunnel meshes in railwaysGroup
+  const portalTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Tunnel_Portals'
+  );
+  assert.ok(portalTarget, 'railwaysGroup must contain Railway_Tunnel_Portals');
+  const portalMesh = firstMesh(portalTarget);
+  assert.ok(
+    portalMesh.geometry.attributes.position.count > 0,
+    'Tunnel portal geometry must contain vertices'
+  );
+
+  const traceTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Tunnel_Traces'
+  );
+  assert.ok(traceTarget, 'railwaysGroup must contain Railway_Tunnel_Traces');
+  const traceMesh = firstMesh(traceTarget);
+  assert.ok(
+    traceMesh.geometry.attributes.position.count > 0,
+    'Tunnel trace geometry must contain vertices'
+  );
+
+  // 2. Inspection provenance
+  assert.ok(portalMesh.userData.faceRanges, 'Tunnel portals must have faceRanges');
+  const inspectedPortal = resolveInspectedFeature({
+    object: portalMesh,
+    faceIndex: 0,
+  });
+  assert.ok(inspectedPortal, 'Inspecting tunnel portal must resolve feature info');
+  assert.equal(
+    inspectedPortal.sourceFeatureId,
+    'rail-tunnel-test-1',
+    'Tunnel portal inspection must trace back to the source railway feature'
+  );
+
+  scene.dispose();
+});
+
+test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and deterministic resource disposal', () => {
+  const bridgeRailway: RailwayFeature = {
+    id: 'rail-bridge-test-theme',
+    type: 'railway',
+    railwayType: 'rail',
+    points: [
+      [-50, 0],
+      [0, 0],
+      [50, 0],
+    ],
+    isBridge: true,
+    isTunnel: false,
+    layer: 1,
+    width: 3.2,
+    osmTags: { railway: 'rail', bridge: 'yes', layer: '1' },
+  };
+
+  const tunnelRailway: RailwayFeature = {
+    id: 'rail-tunnel-test-theme',
+    type: 'railway',
+    railwayType: 'rail',
+    points: [
+      [-50, 30],
+      [0, 30],
+      [50, 30],
+    ],
+    isBridge: false,
+    isTunnel: true,
+    layer: -1,
+    width: 3.2,
+    osmTags: { railway: 'rail', tunnel: 'yes', layer: '-1' },
+  };
+
+  const mapData = createBaseMapData([bridgeRailway, tunnelRailway]);
+  const builder = new GeometryBuilder();
+  const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
+
+  const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
+    (obj as THREE.Mesh).isMesh ? (obj as THREE.Mesh) : (obj.children[0] as THREE.Mesh);
+
+  const bridgeSubTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Bridge_Substructure'
+  );
+  const bridgeParapetTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Bridge_Parapets'
+  );
+  const tunnelPortalTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Tunnel_Portals'
+  );
+  const tunnelTraceTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Tunnel_Traces'
+  );
+
+  assert.ok(bridgeSubTarget, 'Bridge substructure target must exist');
+  assert.ok(bridgeParapetTarget, 'Bridge parapet target must exist');
+  assert.ok(tunnelPortalTarget, 'Tunnel portal target must exist');
+  assert.ok(tunnelTraceTarget, 'Tunnel trace target must exist');
+
+  const bridgeSubMesh = firstMesh(bridgeSubTarget);
+  const bridgeParapetMesh = firstMesh(bridgeParapetTarget);
+  const tunnelPortalMesh = firstMesh(tunnelPortalTarget);
+  const tunnelTraceMesh = firstMesh(tunnelTraceTarget);
+
+  const initialSubUuid = bridgeSubMesh.geometry.uuid;
+  const initialParapetUuid = bridgeParapetMesh.geometry.uuid;
+  const initialPortalUuid = tunnelPortalMesh.geometry.uuid;
+  const initialTraceUuid = tunnelTraceMesh.geometry.uuid;
+
+  for (const themeKey of ['tactical', 'daylight', 'dusk', 'blueprint'] as const) {
+    const theme = MAP_THEMES[themeKey];
+    scene.updateTheme(theme);
+
+    // Buffers must not be re-allocated
+    assert.equal(
+      bridgeSubMesh.geometry.uuid,
+      initialSubUuid,
+      `Bridge substructure geometry buffer must remain stable across ${themeKey}`
+    );
+    assert.equal(
+      bridgeParapetMesh.geometry.uuid,
+      initialParapetUuid,
+      `Bridge parapet geometry buffer must remain stable across ${themeKey}`
+    );
+    assert.equal(
+      tunnelPortalMesh.geometry.uuid,
+      initialPortalUuid,
+      `Tunnel portal geometry buffer must remain stable across ${themeKey}`
+    );
+    assert.equal(
+      tunnelTraceMesh.geometry.uuid,
+      initialTraceUuid,
+      `Tunnel trace geometry buffer must remain stable across ${themeKey}`
+    );
+  }
+
+  // Verify resource disposal
+  assert.ok(scene.resources.ownedGeometriesCount > 0);
+  assert.ok(scene.resources.ownedMaterialsCount > 0);
+
+  scene.dispose();
+
+  assert.equal(scene.resources.ownedGeometriesCount, 0, 'All geometries must be freed upon dispose');
+  assert.equal(scene.resources.ownedMaterialsCount, 0, 'All materials must be freed upon dispose');
+  assert.equal(scene.railwaysGroup.children.length, 0, 'railwaysGroup must be empty after dispose');
+});
+

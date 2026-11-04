@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-World 3D Map Viewer</title>
+    <meta name="description" content="An interactive 3D map viewer rendering real-world OpenStreetMap buildings, railways, streets, linear waterways, and landuse with orthographic camera controls." />
+    <meta property="og:title" content="Real-World 3D Map Viewer" />
+    <meta property="og:description" content="An interactive 3D map viewer rendering real-world OpenStreetMap buildings, railways, streets, linear waterways, and landuse with orthographic camera controls." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // In AI Studio iFrame environment, HMR is disabled; ignore Vite WebSocket connection transport errors
+      window.addEventListener('error', function(event) {
+        if (event.message && (event.message.includes('WebSocket') || event.message.includes('@vite/client') || event.filename?.includes('@vite/client'))) {
+          event.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        const reason = event.reason ? String(event.reason.stack || event.reason.message || event.reason) : '';
+        if (reason.includes('WebSocket') || reason.includes('@vite/client') || reason.includes('createWebSocketModuleRunnerTransport')) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true);
+    </script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased overflow-hidden select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

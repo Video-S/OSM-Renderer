@@ -1,0 +1,2259 @@
+{
+  "benchmarkMetadata": {
+    "date": "2026-11-03",
+    "runsCount": 5,
+    "architecturalAssumption": "Pre-baked static maps (offline map preparation is secondary; runtime rendering efficiency, frustum culling, raycast responsiveness, and asset footprint are primary)",
+    "environment": {
+      "nodeVersion": "v22.23.3",
+      "platform": "linux",
+      "arch": "x64",
+      "rasterizer": "Chromium Headless / SwiftShader WebGL2 (Software GL)"
+    },
+    "datasets": {
+      "switchyard": "Idealized Synthetic Switchyard & Station Throat Benchmark (4 Zones, 65 railway ways including 18 short chained ways)",
+      "amsterdamFull420m": "Real OpenStreetMap Amsterdam Centraal Full Station & Approach Map (radius=420m, 613 buildings, 1031 roads, 383 railways including 167 railway bridges and 14 tunnels)",
+      "amsterdamThroat180m": "Real OpenStreetMap Amsterdam Centraal Western Throat Extract (radius=180m, 160 railway ways including 83 bridges)",
+      "hengelo400m": "Real OpenStreetMap Station Hengelo Extract (radius=400m, 67 railway ways)"
+    }
+  },
+  "canonicalDimensions": {
+    "innerGaugeMeters": 1.435,
+    "physicalRailHeadWidthMeters": 0.072,
+    "physicalCenterToCenterGaugeMeters": 1.5070000000000001,
+    "visualRailWidthMeters": 0.2,
+    "visualTramRailWidthMeters": 0.16,
+    "visualCenterToCenterGaugeMeters": 1.635,
+    "visualTramCenterToCenterGaugeMeters": 1.595,
+    "ballastWidthMeters": 3.5,
+    "tramBallastWidthMeters": 2.5,
+    "sleeperWidthMeters": 2.5,
+    "tramSleeperWidthMeters": 2,
+    "hostSleeperClearanceHalfWidthMeters": 1.21,
+    "physicalSleeperLengthMeters": 0.26,
+    "visualSleeperLengthMeters": 0.36,
+    "candidateB3DSleeperLengthMeters": 0.28,
+    "physicalSleeperPeriodMeters": 0.6,
+    "candidateBCloseSleeperPeriodMeters": 0.725,
+    "candidateBCloseTramSleeperPeriodMeters": 0.825,
+    "visualSleeperPeriodMeters": 1.45,
+    "visualTramSleeperPeriodMeters": 1.65,
+    "sleeperStepHeightMeters": 0.011999999999999997,
+    "railStepHeightMeters": 0.013000000000000012,
+    "candidateB3DSleeperHeightMeters": 0.024,
+    "candidateB3DRailHeightMeters": 0.026,
+    "hybridCloseZoomThresholdPxPerMeter": 4.5,
+    "switchBladeTaperLengthMeters": 3.2
+  },
+  "cameraProjection": {
+    "fixedTiltAngleRad": 0.966643893412244,
+    "fixedTiltAngleDeg": 55.38,
+    "azimuthAngleRad": 0.7853981633974483,
+    "azimuthAngleDeg": 45,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "orthoFrustum": {
+      "left": -640,
+      "right": 640,
+      "top": 360,
+      "bottom": -360
+    },
+    "scaleRule": "scale (px/m) = cameraZoom in camera view plane",
+    "verticalStepProjection": {
+      "formula": "dy_screen = stepHeightMeters * sin(fixedTiltAngle) * cameraZoom",
+      "sinTilt": 0.823,
+      "cosTilt": 0.5681,
+      "sleeperStep12mm": {
+        "heightMeters": 0.012,
+        "projectedHeightMeters": 0.009876,
+        "atZoom1_0_px": 0.0099,
+        "atZoom3_0_px": 0.0296,
+        "atZoom8_0_px": 0.079,
+        "atZoom16_0_px": 0.158
+      },
+      "candidateB3DSleeper24mm": {
+        "heightMeters": 0.024,
+        "atZoom8_0_px": 0.158,
+        "atZoom16_0_px": 0.316
+      },
+      "candidateBCombined50mm": {
+        "heightMeters": 0.05,
+        "atZoom8_0_px": 0.3292,
+        "atZoom16_0_px": 0.6584
+      }
+    },
+    "longitudinalSleeperPeriodScreenDistance": {
+      "proceduralPeriod1_45m": {
+        "periodMeters": 1.45,
+        "atZoom1_0_px": 0.82,
+        "atZoom3_0_px": 2.47,
+        "atZoom4_5_px": 3.71,
+        "atZoom8_0_px": 6.59,
+        "atZoom16_0_px": 13.18
+      },
+      "candidateBClosePeriod0_725m": {
+        "periodMeters": 0.725,
+        "atZoom4_5_px": 1.85,
+        "atZoom8_0_px": 3.29,
+        "atZoom16_0_px": 6.59
+      }
+    }
+  },
+  "nodeBenchmarkResults": {
+    "disabled": {
+      "cold": {
+        "totalBuildMs": 5.31,
+        "nonRailBuildMs": 5.31,
+        "railBuildMs": 0,
+        "meshes": 4,
+        "vertices": 108,
+        "triangles": 72,
+        "renderedVerticesWithInstances": 108,
+        "renderedTrianglesWithInstances": 72,
+        "cpuBufferMB": 0.003,
+        "railMeshes": 0,
+        "railVertices": 0,
+        "railTriangles": 0,
+        "railRenderedTrianglesWithInstances": 0,
+        "railCpuKB": 0
+      },
+      "warmRuns": [
+        {
+          "totalBuildMs": 1.96,
+          "nonRailBuildMs": 1.96,
+          "railBuildMs": 0,
+          "meshes": 4,
+          "vertices": 108,
+          "triangles": 72,
+          "renderedVerticesWithInstances": 108,
+          "renderedTrianglesWithInstances": 72,
+          "cpuBufferMB": 0.003,
+          "railMeshes": 0,
+          "railVertices": 0,
+          "railTriangles": 0,
+          "railRenderedTrianglesWithInstances": 0,
+          "railCpuKB": 0
+        },
+        {
+          "totalBuildMs": 2.15,
+          "nonRailBuildMs": 2.15,
+          "railBuildMs": 0,
+          "meshes": 4,
+          "vertices": 108,
+          "triangles": 72,
+          "renderedVerticesWithInstances": 108,
+          "renderedTrianglesWithInstances": 72,
+          "cpuBufferMB": 0.003,
+          "railMeshes": 0,
+          "railVertices": 0,
+          "railTriangles": 0,
+          "railRenderedTrianglesWithInstances": 0,
+          "railCpuKB": 0
+        },
+        {
+          "totalBuildMs": 1.72,
+          "nonRailBuildMs": 1.72,
+          "railBuildMs": 0,
+          "meshes": 4,
+          "vertices": 108,
+          "triangles": 72,
+          "renderedVerticesWithInstances": 108,
+          "renderedTrianglesWithInstances": 72,
+          "cpuBufferMB": 0.003,
+          "railMeshes": 0,
+          "railVertices": 0,
+          "railTriangles": 0,
+          "railRenderedTrianglesWithInstances": 0,
+          "railCpuKB": 0
+        },
+        {
+          "totalBuildMs": 1.01,
+          "nonRailBuildMs": 1.01,
+          "railBuildMs": 0,
+          "meshes": 4,
+          "vertices": 108,
+          "triangles": 72,
+          "renderedVerticesWithInstances": 108,
+          "renderedTrianglesWithInstances": 72,
+          "cpuBufferMB": 0.003,
+          "railMeshes": 0,
+          "railVertices": 0,
+          "railTriangles": 0,
+          "railRenderedTrianglesWithInstances": 0,
+          "railCpuKB": 0
+        }
+      ],
+      "warmStats": {
+        "totalBuildMs": {
+          "median": 1.84,
+          "min": 1.01,
+          "max": 2.15,
+          "spread": 1.14
+        },
+        "railBuildMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "spread": 0
+        }
+      },
+      "stats": {
+        "totalBuildMs": {
+          "median": 1.96,
+          "min": 1.01,
+          "max": 5.31,
+          "spread": 4.3
+        },
+        "railBuildMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "spread": 0
+        },
+        "meshes": 4,
+        "vertices": 108,
+        "triangles": 72,
+        "renderedVerticesWithInstances": 108,
+        "renderedTrianglesWithInstances": 72,
+        "cpuBufferMB": 0.003,
+        "railMeshes": 0,
+        "railVertices": 0,
+        "railTriangles": 0,
+        "railRenderedTrianglesWithInstances": 0,
+        "railCpuKB": 0
+      }
+    },
+    "baseline": {
+      "cold": {
+        "totalBuildMs": 47.76,
+        "nonRailBuildMs": 0,
+        "railBuildMs": 48.24,
+        "meshes": 7,
+        "vertices": 9466,
+        "triangles": 5250,
+        "renderedVerticesWithInstances": 9466,
+        "renderedTrianglesWithInstances": 5250,
+        "cpuBufferMB": 0.347,
+        "railMeshes": 3,
+        "railVertices": 9358,
+        "railTriangles": 5178,
+        "railRenderedTrianglesWithInstances": 5178,
+        "railCpuKB": 351.6
+      },
+      "warmRuns": [
+        {
+          "totalBuildMs": 48.18,
+          "nonRailBuildMs": 7.63,
+          "railBuildMs": 40.55,
+          "meshes": 7,
+          "vertices": 9466,
+          "triangles": 5250,
+          "renderedVerticesWithInstances": 9466,
+          "renderedTrianglesWithInstances": 5250,
+          "cpuBufferMB": 0.347,
+          "railMeshes": 3,
+          "railVertices": 9358,
+          "railTriangles": 5178,
+          "railRenderedTrianglesWithInstances": 5178,
+          "railCpuKB": 351.6
+        },
+        {
+          "totalBuildMs": 41.06,
+          "nonRailBuildMs": 2.11,
+          "railBuildMs": 38.95,
+          "meshes": 7,
+          "vertices": 9466,
+          "triangles": 5250,
+          "renderedVerticesWithInstances": 9466,
+          "renderedTrianglesWithInstances": 5250,
+          "cpuBufferMB": 0.347,
+          "railMeshes": 3,
+          "railVertices": 9358,
+          "railTriangles": 5178,
+          "railRenderedTrianglesWithInstances": 5178,
+          "railCpuKB": 351.6
+        },
+        {
+          "totalBuildMs": 38.79,
+          "nonRailBuildMs": 0,
+          "railBuildMs": 44.97,
+          "meshes": 7,
+          "vertices": 9466,
+          "triangles": 5250,
+          "renderedVerticesWithInstances": 9466,
+          "renderedTrianglesWithInstances": 5250,
+          "cpuBufferMB": 0.347,
+          "railMeshes": 3,
+          "railVertices": 9358,
+          "railTriangles": 5178,
+          "railRenderedTrianglesWithInstances": 5178,
+          "railCpuKB": 351.6
+        },
+        {
+          "totalBuildMs": 35.62,
+          "nonRailBuildMs": 0.18,
+          "railBuildMs": 35.44,
+          "meshes": 7,
+          "vertices": 9466,
+          "triangles": 5250,
+          "renderedVerticesWithInstances": 9466,
+          "renderedTrianglesWithInstances": 5250,
+          "cpuBufferMB": 0.347,
+          "railMeshes": 3,
+          "railVertices": 9358,
+          "railTriangles": 5178,
+          "railRenderedTrianglesWithInstances": 5178,
+          "railCpuKB": 351.6
+        }
+      ],
+      "warmStats": {
+        "totalBuildMs": {
+          "median": 39.92,
+          "min": 35.62,
+          "max": 48.18,
+          "spread": 12.56
+        },
+        "railBuildMs": {
+          "median": 39.75,
+          "min": 35.44,
+          "max": 44.97,
+          "spread": 9.53
+        }
+      },
+      "stats": {
+        "totalBuildMs": {
+          "median": 41.06,
+          "min": 35.62,
+          "max": 48.18,
+          "spread": 12.56
+        },
+        "railBuildMs": {
+          "median": 40.55,
+          "min": 35.44,
+          "max": 48.24,
+          "spread": 12.8
+        },
+        "meshes": 7,
+        "vertices": 9466,
+        "triangles": 5250,
+        "renderedVerticesWithInstances": 9466,
+        "renderedTrianglesWithInstances": 5250,
+        "cpuBufferMB": 0.347,
+        "railMeshes": 3,
+        "railVertices": 9358,
+        "railTriangles": 5178,
+        "railRenderedTrianglesWithInstances": 5178,
+        "railCpuKB": 351.6
+      }
+    },
+    "candidateA": {
+      "cold": {
+        "totalBuildMs": 18.2,
+        "nonRailBuildMs": 1.01,
+        "railBuildMs": 17.19,
+        "meshes": 7,
+        "vertices": 5244,
+        "triangles": 4688,
+        "renderedVerticesWithInstances": 5244,
+        "renderedTrianglesWithInstances": 4688,
+        "cpuBufferMB": 0.225,
+        "railMeshes": 3,
+        "railVertices": 5136,
+        "railTriangles": 4616,
+        "railRenderedTrianglesWithInstances": 4616,
+        "railCpuKB": 227.7
+      },
+      "warmRuns": [
+        {
+          "totalBuildMs": 13.19,
+          "nonRailBuildMs": 0.94,
+          "railBuildMs": 12.25,
+          "meshes": 7,
+          "vertices": 5244,
+          "triangles": 4688,
+          "renderedVerticesWithInstances": 5244,
+          "renderedTrianglesWithInstances": 4688,
+          "cpuBufferMB": 0.225,
+          "railMeshes": 3,
+          "railVertices": 5136,
+          "railTriangles": 4616,
+          "railRenderedTrianglesWithInstances": 4616,
+          "railCpuKB": 227.7
+        },
+        {
+          "totalBuildMs": 11.19,
+          "nonRailBuildMs": 0.78,
+          "railBuildMs": 10.41,
+          "meshes": 7,
+          "vertices": 5244,
+          "triangles": 4688,
+          "renderedVerticesWithInstances": 5244,
+          "renderedTrianglesWithInstances": 4688,
+          "cpuBufferMB": 0.225,
+          "railMeshes": 3,
+          "railVertices": 5136,
+          "railTriangles": 4616,
+          "railRenderedTrianglesWithInstances": 4616,
+          "railCpuKB": 227.7
+        },
+        {
+          "totalBuildMs": 12.47,
+          "nonRailBuildMs": 1.85,
+          "railBuildMs": 10.62,
+          "meshes": 7,
+          "vertices": 5244,
+          "triangles": 4688,
+          "renderedVerticesWithInstances": 5244,
+          "renderedTrianglesWithInstances": 4688,
+          "cpuBufferMB": 0.225,
+          "railMeshes": 3,
+          "railVertices": 5136,
+          "railTriangles": 4616,
+          "railRenderedTrianglesWithInstances": 4616,
+          "railCpuKB": 227.7
+        },
+        {
+          "totalBuildMs": 10.73,
+          "nonRailBuildMs": 0.8,
+          "railBuildMs": 9.93,
+          "meshes": 7,
+          "vertices": 5244,
+          "triangles": 4688,
+          "renderedVerticesWithInstances": 5244,
+          "renderedTrianglesWithInstances": 4688,
+          "cpuBufferMB": 0.225,
+          "railMeshes": 3,
+          "railVertices": 5136,
+          "railTriangles": 4616,
+          "railRenderedTrianglesWithInstances": 4616,
+          "railCpuKB": 227.7
+        }
+      ],
+      "warmStats": {
+        "totalBuildMs": {
+          "median": 11.83,
+          "min": 10.73,
+          "max": 13.19,
+          "spread": 2.46
+        },
+        "railBuildMs": {
+          "median": 10.52,
+          "min": 9.93,
+          "max": 12.25,
+          "spread": 2.32
+        }
+      },
+      "stats": {
+        "totalBuildMs": {
+          "median": 12.47,
+          "min": 10.73,
+          "max": 18.2,
+          "spread": 7.47
+        },
+        "railBuildMs": {
+          "median": 10.62,
+          "min": 9.93,
+          "max": 17.19,
+          "spread": 7.26
+        },
+        "meshes": 7,
+        "vertices": 5244,
+        "triangles": 4688,
+        "renderedVerticesWithInstances": 5244,
+        "renderedTrianglesWithInstances": 4688,
+        "cpuBufferMB": 0.225,
+        "railMeshes": 3,
+        "railVertices": 5136,
+        "railTriangles": 4616,
+        "railRenderedTrianglesWithInstances": 4616,
+        "railCpuKB": 227.7
+      }
+    },
+    "candidateB": {
+      "cold": {
+        "totalBuildMs": 121.3,
+        "nonRailBuildMs": 0.74,
+        "railBuildMs": 120.56,
+        "meshes": 9,
+        "vertices": 87268,
+        "triangles": 48772,
+        "renderedVerticesWithInstances": 87268,
+        "renderedTrianglesWithInstances": 48772,
+        "cpuBufferMB": 2.568,
+        "railMeshes": 5,
+        "railVertices": 87160,
+        "railTriangles": 48700,
+        "railRenderedTrianglesWithInstances": 48700,
+        "railCpuKB": 2626.1
+      },
+      "warmRuns": [
+        {
+          "totalBuildMs": 76.77,
+          "nonRailBuildMs": 0.98,
+          "railBuildMs": 75.79,
+          "meshes": 9,
+          "vertices": 87268,
+          "triangles": 48772,
+          "renderedVerticesWithInstances": 87268,
+          "renderedTrianglesWithInstances": 48772,
+          "cpuBufferMB": 2.568,
+          "railMeshes": 5,
+          "railVertices": 87160,
+          "railTriangles": 48700,
+          "railRenderedTrianglesWithInstances": 48700,
+          "railCpuKB": 2626.1
+        },
+        {
+          "totalBuildMs": 75.59,
+          "nonRailBuildMs": 0.77,
+          "railBuildMs": 74.82,
+          "meshes": 9,
+          "vertices": 87268,
+          "triangles": 48772,
+          "renderedVerticesWithInstances": 87268,
+          "renderedTrianglesWithInstances": 48772,
+          "cpuBufferMB": 2.568,
+          "railMeshes": 5,
+          "railVertices": 87160,
+          "railTriangles": 48700,
+          "railRenderedTrianglesWithInstances": 48700,
+          "railCpuKB": 2626.1
+        },
+        {
+          "totalBuildMs": 67.7,
+          "nonRailBuildMs": 0.7,
+          "railBuildMs": 67,
+          "meshes": 9,
+          "vertices": 87268,
+          "triangles": 48772,
+          "renderedVerticesWithInstances": 87268,
+          "renderedTrianglesWithInstances": 48772,
+          "cpuBufferMB": 2.568,
+          "railMeshes": 5,
+          "railVertices": 87160,
+          "railTriangles": 48700,
+          "railRenderedTrianglesWithInstances": 48700,
+          "railCpuKB": 2626.1
+        },
+        {
+          "totalBuildMs": 87.2,
+          "nonRailBuildMs": 0.7,
+          "railBuildMs": 86.5,
+          "meshes": 9,
+          "vertices": 87268,
+          "triangles": 48772,
+          "renderedVerticesWithInstances": 87268,
+          "renderedTrianglesWithInstances": 48772,
+          "cpuBufferMB": 2.568,
+          "railMeshes": 5,
+          "railVertices": 87160,
+          "railTriangles": 48700,
+          "railRenderedTrianglesWithInstances": 48700,
+          "railCpuKB": 2626.1
+        }
+      ],
+      "warmStats": {
+        "totalBuildMs": {
+          "median": 76.18,
+          "min": 67.7,
+          "max": 87.2,
+          "spread": 19.5
+        },
+        "railBuildMs": {
+          "median": 75.31,
+          "min": 67,
+          "max": 86.5,
+          "spread": 19.5
+        }
+      },
+      "stats": {
+        "totalBuildMs": {
+          "median": 76.77,
+          "min": 67.7,
+          "max": 121.3,
+          "spread": 53.6
+        },
+        "railBuildMs": {
+          "median": 75.79,
+          "min": 67,
+          "max": 120.56,
+          "spread": 53.56
+        },
+        "meshes": 9,
+        "vertices": 87268,
+        "triangles": 48772,
+        "renderedVerticesWithInstances": 87268,
+        "renderedTrianglesWithInstances": 48772,
+        "cpuBufferMB": 2.568,
+        "railMeshes": 5,
+        "railVertices": 87160,
+        "railTriangles": 48700,
+        "railRenderedTrianglesWithInstances": 48700,
+        "railCpuKB": 2626.1
+      }
+    }
+  },
+  "candidateBDensitySweep": {
+    "period_0.6m": {
+      "periodMeters": 0.6,
+      "sleeperLengthMeters": 0.28,
+      "sleeperBoxesCount": 4471,
+      "turnoutBearersCount": 505,
+      "sleeperMeshVertices": 89420,
+      "sleeperMeshTriangles": 44710,
+      "totalRailGroupVertices": 102260,
+      "totalRailGroupTriangles": 56250,
+      "cpuBufferBytes": 3142176,
+      "cpuBufferKB": 3068.5,
+      "cpuBufferMB": 2.997,
+      "buildTimeMs": 121.76
+    },
+    "period_0.725m": {
+      "periodMeters": 0.725,
+      "sleeperLengthMeters": 0.28,
+      "sleeperBoxesCount": 3716,
+      "turnoutBearersCount": 416,
+      "sleeperMeshVertices": 74320,
+      "sleeperMeshTriangles": 37160,
+      "totalRailGroupVertices": 87160,
+      "totalRailGroupTriangles": 48700,
+      "cpuBufferBytes": 2689176,
+      "cpuBufferKB": 2626.1,
+      "cpuBufferMB": 2.565,
+      "buildTimeMs": 84.23
+    },
+    "period_1.45m": {
+      "periodMeters": 1.45,
+      "sleeperLengthMeters": 0.36,
+      "sleeperBoxesCount": 1867,
+      "turnoutBearersCount": 199,
+      "sleeperMeshVertices": 37340,
+      "sleeperMeshTriangles": 18670,
+      "totalRailGroupVertices": 50180,
+      "totalRailGroupTriangles": 30210,
+      "cpuBufferBytes": 1467756,
+      "cpuBufferKB": 1433.4,
+      "cpuBufferMB": 1.4,
+      "buildTimeMs": 36.05
+    }
+  },
+  "geometricAcceptanceSummary": {
+    "totalSwitchyardWays": 65,
+    "totalRailsTested": 130,
+    "sampleStepMeters": 0.1,
+    "maxAllowedUnsupportedSpanMeters": 1.65,
+    "measuredMaxUnsupportedSpanMeters": 1.2,
+    "unsupportedRailsCount": 0,
+    "sleeper3DBoxCountAt0_725m": 3716,
+    "turnoutBearerCountAt0_725m": 416,
+    "interTrackOverlappingBoxPairs2D": 0,
+    "obbTouchToleranceMeters": 0.02
+  },
+  "realOsmVerification": {
+    "hengelo": {
+      "name": "Station Hengelo",
+      "source": "OpenStreetMap Overpass API via /api/osm-data",
+      "extractedAt": "2026-11-01T19:31:24.947Z",
+      "centerLonLat": [
+        6.7934,
+        52.2623
+      ],
+      "evaluatedRadiusMeters": 350,
+      "rawOsmRailwayFeaturesCount": 162,
+      "parsedRailwayWaysCount": 67,
+      "bridgeWaysCount": 0,
+      "tunnelWaysCount": 0,
+      "untaggedServiceOrUsageCount": 0,
+      "shortChainedWaysUnder2mCount": 2,
+      "sampleOsmWayIds": [
+        "way/97083386",
+        "way/97083393",
+        "way/97083397",
+        "way/97083402",
+        "way/97083406",
+        "way/97083454",
+        "way/97083499",
+        "way/291585887",
+        "way/323281709",
+        "way/375235373"
+      ],
+      "candidateA": {
+        "buildTimeMs": 13.59,
+        "totalVertices": 10888,
+        "totalTriangles": 10352,
+        "drawCalls": 3,
+        "cpuBufferKB": 486
+      },
+      "candidateB_unoptimized": {
+        "buildTimeMs": 344.23,
+        "totalVertices": 158200,
+        "totalTriangles": 91370,
+        "drawCalls": 5,
+        "cpuBufferKB": 4797,
+        "sleeper3DBoxCount": 6549,
+        "turnoutBearerCount": 1250,
+        "profile": {
+          "totalBuildTimeMs": 344.23,
+          "phaseAndSortTimeMs": 2.54,
+          "bridgeAndTunnelTimeMs": 0,
+          "uvRibbonAndSwitchTimeMs": 50.87,
+          "sleeper3DPlacementTimeMs": 253.67,
+          "rail3DExtrusionTimeMs": 7.67,
+          "geometryMergeAndChunkTimeMs": 27.35,
+          "spatialIndexStats": {
+            "useSpatialGrid": false,
+            "registeredSegmentsCount": 1614,
+            "gridCellsCount": 0,
+            "totalQueries": 20280,
+            "totalSegmentsExamined": 8984024,
+            "avgSegmentsPerQuery": 443,
+            "maxSegmentsInSingleQuery": 1286,
+            "totalDistanceCalculations": 126440,
+            "queryTimeMs": 179.75
+          },
+          "sleeperOverlapStats": {
+            "multiIntervalClipEnabled": false,
+            "proposedSleeperStations": 7890,
+            "existingCandidatesChecked": 300021,
+            "minkowskiOverlapCalculations": 44016,
+            "sharedTurnoutBearersCount": 1250,
+            "clippedOrShortenedSleepersCount": 103,
+            "splitIntoTwoSegmentsStationsCount": 0,
+            "discardedSleepersCount": 1341,
+            "emittedSleeperBoxesCount": 6549,
+            "overlapResolutionTimeMs": 246.7
+          },
+          "bakedAssetStats": {
+            "sleeper3DMode": "merged",
+            "spatialChunkSizeMeters": 0,
+            "spatialChunkCount": 1,
+            "estimatedBakedBinaryBytes": 4912168,
+            "estimatedBakedBinaryMB": 4.685
+          }
+        }
+      },
+      "candidateB": {
+        "buildTimeMs": 114.31,
+        "totalVertices": 27240,
+        "totalTriangles": 25890,
+        "renderedVerticesWithInstances": 158200,
+        "renderedTrianglesWithInstances": 91370,
+        "drawCalls": 42,
+        "cpuBufferKB": 1369.6,
+        "sleeper3DBoxCount": 6549,
+        "turnoutBearerCount": 1250,
+        "splitMultiSegmentStationsCount": 0,
+        "profile": {
+          "totalBuildTimeMs": 114.31,
+          "phaseAndSortTimeMs": 1.43,
+          "bridgeAndTunnelTimeMs": 0,
+          "uvRibbonAndSwitchTimeMs": 10.77,
+          "sleeper3DPlacementTimeMs": 83.36,
+          "rail3DExtrusionTimeMs": 4.15,
+          "geometryMergeAndChunkTimeMs": 12.77,
+          "spatialIndexStats": {
+            "useSpatialGrid": true,
+            "registeredSegmentsCount": 640,
+            "gridCellsCount": 1256,
+            "totalQueries": 20280,
+            "totalSegmentsExamined": 123986,
+            "avgSegmentsPerQuery": 6.11,
+            "maxSegmentsInSingleQuery": 19,
+            "totalDistanceCalculations": 59360,
+            "queryTimeMs": 28.72
+          },
+          "sleeperOverlapStats": {
+            "multiIntervalClipEnabled": true,
+            "proposedSleeperStations": 7890,
+            "existingCandidatesChecked": 300021,
+            "minkowskiOverlapCalculations": 43638,
+            "sharedTurnoutBearersCount": 1250,
+            "clippedOrShortenedSleepersCount": 103,
+            "splitIntoTwoSegmentsStationsCount": 0,
+            "discardedSleepersCount": 1341,
+            "emittedSleeperBoxesCount": 6549,
+            "overlapResolutionTimeMs": 82.11
+          },
+          "bakedAssetStats": {
+            "sleeper3DMode": "instanced",
+            "spatialChunkSizeMeters": 128,
+            "spatialChunkCount": 10,
+            "estimatedBakedBinaryBytes": 1402504,
+            "estimatedBakedBinaryMB": 1.338
+          }
+        }
+      }
+    },
+    "amsterdamCentraal": {
+      "name": "Amsterdam Centraal",
+      "source": "OpenStreetMap Overpass API via /api/osm-data",
+      "extractedAt": "2026-11-01T19:31:24.947Z",
+      "centerLonLat": [
+        4.9,
+        52.378
+      ],
+      "evaluatedRadiusMeters": 180,
+      "rawOsmRailwayFeaturesCount": 771,
+      "parsedRailwayWaysCount": 160,
+      "bridgeWaysCount": 83,
+      "tunnelWaysCount": 14,
+      "untaggedServiceOrUsageCount": 78,
+      "shortChainedWaysUnder2mCount": 0,
+      "sampleOsmWayIds": [
+        "way/26446731",
+        "way/90119531",
+        "way/143073729",
+        "way/222748910",
+        "way/320049729",
+        "way/320049730",
+        "way/397809161",
+        "way/397809163",
+        "way/513172574",
+        "way/513172665"
+      ],
+      "candidateA": {
+        "buildTimeMs": 90.43,
+        "totalVertices": 68356,
+        "totalTriangles": 42306,
+        "drawCalls": 7,
+        "cpuBufferKB": 2140.5
+      },
+      "candidateB_unoptimized": {
+        "buildTimeMs": 3687.6,
+        "totalVertices": 717508,
+        "totalTriangles": 456164,
+        "drawCalls": 9,
+        "cpuBufferKB": 22941,
+        "sleeper3DBoxCount": 9478,
+        "turnoutBearerCount": 1347,
+        "profile": {
+          "totalBuildTimeMs": 3687.6,
+          "phaseAndSortTimeMs": 2.84,
+          "bridgeAndTunnelTimeMs": 74,
+          "uvRibbonAndSwitchTimeMs": 2174.42,
+          "sleeper3DPlacementTimeMs": 1121.38,
+          "rail3DExtrusionTimeMs": 149.31,
+          "geometryMergeAndChunkTimeMs": 159.52,
+          "spatialIndexStats": {
+            "useSpatialGrid": false,
+            "registeredSegmentsCount": 10896,
+            "gridCellsCount": 0,
+            "totalQueries": 47309,
+            "totalSegmentsExamined": 130622014,
+            "avgSegmentsPerQuery": 2761.04,
+            "maxSegmentsInSingleQuery": 8702,
+            "totalDistanceCalculations": 578456,
+            "queryTimeMs": 3201.23
+          },
+          "sleeperOverlapStats": {
+            "multiIntervalClipEnabled": false,
+            "proposedSleeperStations": 11001,
+            "existingCandidatesChecked": 418875,
+            "minkowskiOverlapCalculations": 77731,
+            "sharedTurnoutBearersCount": 1347,
+            "clippedOrShortenedSleepersCount": 264,
+            "splitIntoTwoSegmentsStationsCount": 0,
+            "discardedSleepersCount": 1523,
+            "emittedSleeperBoxesCount": 9478,
+            "overlapResolutionTimeMs": 1096.76
+          },
+          "bakedAssetStats": {
+            "sleeper3DMode": "merged",
+            "spatialChunkSizeMeters": 0,
+            "spatialChunkCount": 1,
+            "estimatedBakedBinaryBytes": 23491592,
+            "estimatedBakedBinaryMB": 22.403
+          }
+        }
+      },
+      "candidateB": {
+        "buildTimeMs": 241.37,
+        "totalVertices": 96264,
+        "totalTriangles": 68452,
+        "renderedVerticesWithInstances": 287624,
+        "renderedTrianglesWithInstances": 164132,
+        "drawCalls": 94,
+        "cpuBufferKB": 3545.9,
+        "sleeper3DBoxCount": 9569,
+        "turnoutBearerCount": 1322,
+        "splitMultiSegmentStationsCount": 83,
+        "profile": {
+          "totalBuildTimeMs": 241.37,
+          "phaseAndSortTimeMs": 2.85,
+          "bridgeAndTunnelTimeMs": 27.84,
+          "uvRibbonAndSwitchTimeMs": 23.99,
+          "sleeper3DPlacementTimeMs": 162.66,
+          "rail3DExtrusionTimeMs": 5.18,
+          "geometryMergeAndChunkTimeMs": 15.48,
+          "spatialIndexStats": {
+            "useSpatialGrid": true,
+            "registeredSegmentsCount": 2018,
+            "gridCellsCount": 2232,
+            "totalQueries": 35862,
+            "totalSegmentsExamined": 338891,
+            "avgSegmentsPerQuery": 9.45,
+            "maxSegmentsInSingleQuery": 74,
+            "totalDistanceCalculations": 138776,
+            "queryTimeMs": 61.7
+          },
+          "sleeperOverlapStats": {
+            "multiIntervalClipEnabled": true,
+            "proposedSleeperStations": 11001,
+            "existingCandidatesChecked": 415783,
+            "minkowskiOverlapCalculations": 74713,
+            "sharedTurnoutBearersCount": 1322,
+            "clippedOrShortenedSleepersCount": 350,
+            "splitIntoTwoSegmentsStationsCount": 83,
+            "discardedSleepersCount": 1516,
+            "emittedSleeperBoxesCount": 9569,
+            "overlapResolutionTimeMs": 158.6
+          },
+          "bakedAssetStats": {
+            "sleeper3DMode": "instanced",
+            "spatialChunkSizeMeters": 128,
+            "spatialChunkCount": 15,
+            "estimatedBakedBinaryBytes": 3630996,
+            "estimatedBakedBinaryMB": 3.463
+          }
+        }
+      }
+    }
+  },
+  "amsterdamFull4ConfigComparison": {
+    "configA_disabled": {
+      "label": "A. Railway Rendering Disabled (Non-Railway Map Only)",
+      "mode": "disabled",
+      "options": null,
+      "totalOfflineBuildTimeMs": 2960.03,
+      "nonRailwayBuildTimeMs": 2960.03,
+      "railwayOfflineBuildTimeMs": 0,
+      "constructedMeshesCount": 57,
+      "uniqueBufferVertices": 593346,
+      "uniqueBufferTriangles": 180585,
+      "renderedVerticesWithInstances": 593346,
+      "renderedTrianglesWithInstances": 180585,
+      "cpuBufferBytes": 11118238,
+      "cpuBufferMB": 10.603,
+      "railwayGroupStats": {
+        "meshCount": 0,
+        "visibleMeshCount": 0,
+        "vertices": 0,
+        "triangles": 0,
+        "renderedVerticesWithInstances": 0,
+        "renderedTrianglesWithInstances": 0,
+        "visibleRenderedTriangles": 0,
+        "cpuBufferBytes": 0
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 165962,
+        "triangles": 89762,
+        "renderedVerticesWithInstances": 165962,
+        "renderedTrianglesWithInstances": 89762,
+        "visibleRenderedTriangles": 89762,
+        "cpuBufferBytes": 4736292
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": null,
+      "frustumAndRaycastOverview": null,
+      "frustumAndRaycastThroatClose": null,
+      "lifecycleZeroLeaks": true
+    },
+    "configB_baselineG1": {
+      "label": "B. Existing Goalpost 1 Railway Renderer",
+      "mode": "baseline",
+      "options": null,
+      "totalOfflineBuildTimeMs": 4208.76,
+      "nonRailwayBuildTimeMs": 2918.32,
+      "railwayOfflineBuildTimeMs": 1290.44,
+      "constructedMeshesCount": 60,
+      "uniqueBufferVertices": 1721014,
+      "uniqueBufferTriangles": 815039,
+      "renderedVerticesWithInstances": 1721014,
+      "renderedTrianglesWithInstances": 815039,
+      "cpuBufferBytes": 47077654,
+      "cpuBufferMB": 44.897,
+      "railwayGroupStats": {
+        "meshCount": 9,
+        "visibleMeshCount": 9,
+        "vertices": 1127668,
+        "triangles": 634454,
+        "renderedVerticesWithInstances": 1127668,
+        "renderedTrianglesWithInstances": 634454,
+        "visibleRenderedTriangles": 634454,
+        "cpuBufferBytes": 35850720
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 1100754,
+        "triangles": 557158,
+        "renderedVerticesWithInstances": 1100754,
+        "renderedTrianglesWithInstances": 557158,
+        "visibleRenderedTriangles": 557158,
+        "cpuBufferBytes": 32854776
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": null,
+      "frustumAndRaycastOverview": null,
+      "frustumAndRaycastThroatClose": null,
+      "lifecycleZeroLeaks": true
+    },
+    "configC_candidateA_global": {
+      "label": "C1. Candidate A (Procedural UV Ribbons, Global Merge)",
+      "mode": "candidateA",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "spatialChunkSizeMeters": 0
+      },
+      "totalOfflineBuildTimeMs": 3282.73,
+      "nonRailwayBuildTimeMs": 3016.68,
+      "railwayOfflineBuildTimeMs": 266.05,
+      "constructedMeshesCount": 64,
+      "uniqueBufferVertices": 731302,
+      "uniqueBufferTriangles": 270143,
+      "renderedVerticesWithInstances": 731302,
+      "renderedTrianglesWithInstances": 270143,
+      "cpuBufferBytes": 15718786,
+      "cpuBufferMB": 14.991,
+      "railwayGroupStats": {
+        "meshCount": 7,
+        "visibleMeshCount": 7,
+        "vertices": 137956,
+        "triangles": 89558,
+        "renderedVerticesWithInstances": 137956,
+        "renderedTrianglesWithInstances": 89558,
+        "visibleRenderedTriangles": 89558,
+        "cpuBufferBytes": 4600548
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 165962,
+        "triangles": 89762,
+        "renderedVerticesWithInstances": 165962,
+        "renderedTrianglesWithInstances": 89762,
+        "visibleRenderedTriangles": 89762,
+        "cpuBufferBytes": 4736292
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": {
+        "totalBuildTimeMs": 266.05,
+        "phaseAndSortTimeMs": 32.47,
+        "bridgeAndTunnelTimeMs": 116.85,
+        "uvRibbonAndSwitchTimeMs": 71.95,
+        "sleeper3DPlacementTimeMs": 0,
+        "rail3DExtrusionTimeMs": 0,
+        "geometryMergeAndChunkTimeMs": 36.06,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 36476,
+          "totalSegmentsExamined": 260721,
+          "avgSegmentsPerQuery": 7.15,
+          "maxSegmentsInSingleQuery": 67,
+          "totalDistanceCalculations": 136278,
+          "queryTimeMs": 64.11
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 0,
+          "existingCandidatesChecked": 0,
+          "minkowskiOverlapCalculations": 0,
+          "sharedTurnoutBearersCount": 0,
+          "clippedOrShortenedSleepersCount": 0,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 0,
+          "emittedSleeperBoxesCount": 0,
+          "overlapResolutionTimeMs": 0
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 4600548,
+          "estimatedBakedBinaryMB": 4.387
+        }
+      },
+      "frustumAndRaycastOverview": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 9.547,
+        "maxRaycastTimeMs": 11.037
+      },
+      "frustumAndRaycastThroatClose": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 9.994,
+        "maxRaycastTimeMs": 34.832
+      },
+      "lifecycleZeroLeaks": true
+    },
+    "configC_candidateA_chunked128m": {
+      "label": "C2. Candidate A (Procedural UV Ribbons, 128m Spatial Chunks)",
+      "mode": "candidateA",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "spatialChunkSizeMeters": 128
+      },
+      "totalOfflineBuildTimeMs": 2924.56,
+      "nonRailwayBuildTimeMs": 2702.65,
+      "railwayOfflineBuildTimeMs": 221.91,
+      "constructedMeshesCount": 180,
+      "uniqueBufferVertices": 731302,
+      "uniqueBufferTriangles": 270143,
+      "renderedVerticesWithInstances": 731302,
+      "renderedTrianglesWithInstances": 270143,
+      "cpuBufferBytes": 15718786,
+      "cpuBufferMB": 14.991,
+      "railwayGroupStats": {
+        "meshCount": 123,
+        "visibleMeshCount": 123,
+        "vertices": 137956,
+        "triangles": 89558,
+        "renderedVerticesWithInstances": 137956,
+        "renderedTrianglesWithInstances": 89558,
+        "visibleRenderedTriangles": 89558,
+        "cpuBufferBytes": 4600548
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 165962,
+        "triangles": 89762,
+        "renderedVerticesWithInstances": 165962,
+        "renderedTrianglesWithInstances": 89762,
+        "visibleRenderedTriangles": 89762,
+        "cpuBufferBytes": 4736292
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": {
+        "totalBuildTimeMs": 221.91,
+        "phaseAndSortTimeMs": 15.72,
+        "bridgeAndTunnelTimeMs": 103.44,
+        "uvRibbonAndSwitchTimeMs": 69.08,
+        "sleeper3DPlacementTimeMs": 0,
+        "rail3DExtrusionTimeMs": 0,
+        "geometryMergeAndChunkTimeMs": 25.07,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 36476,
+          "totalSegmentsExamined": 260721,
+          "avgSegmentsPerQuery": 7.15,
+          "maxSegmentsInSingleQuery": 67,
+          "totalDistanceCalculations": 136278,
+          "queryTimeMs": 65.65
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 0,
+          "existingCandidatesChecked": 0,
+          "minkowskiOverlapCalculations": 0,
+          "sharedTurnoutBearersCount": 0,
+          "clippedOrShortenedSleepersCount": 0,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 0,
+          "emittedSleeperBoxesCount": 0,
+          "overlapResolutionTimeMs": 0
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 128,
+          "spatialChunkCount": 29,
+          "estimatedBakedBinaryBytes": 4600548,
+          "estimatedBakedBinaryMB": 4.387
+        }
+      },
+      "frustumAndRaycastOverview": {
+        "totalActiveMeshes": 123,
+        "frustumVisibleMeshes": 123,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 0.318,
+        "maxRaycastTimeMs": 5.99
+      },
+      "frustumAndRaycastThroatClose": {
+        "totalActiveMeshes": 123,
+        "frustumVisibleMeshes": 38,
+        "frustumCulledMeshes": 85,
+        "frustumVisibleTriangles": 37340,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 58.3,
+        "medianRaycastTimeMs": 1.567,
+        "maxRaycastTimeMs": 2.482
+      },
+      "lifecycleZeroLeaks": true
+    },
+    "configD_candidateB_unoptimized": {
+      "label": "D1. Candidate B Unoptimized (Pre-Investigation: Linear Scan + 0.35m Bridge + Merged Sleepers + Global Mesh)",
+      "mode": "candidateB",
+      "options": {
+        "useSpatialGridIndex": false,
+        "adaptiveBridgeSampling": false,
+        "multiIntervalClip": false,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0
+      },
+      "totalOfflineBuildTimeMs": 31620.33,
+      "nonRailwayBuildTimeMs": 2618.17,
+      "railwayOfflineBuildTimeMs": 29002.16,
+      "constructedMeshesCount": 66,
+      "uniqueBufferVertices": 2598790,
+      "uniqueBufferTriangles": 1475397,
+      "renderedVerticesWithInstances": 2598790,
+      "renderedTrianglesWithInstances": 1475397,
+      "cpuBufferBytes": 77891298,
+      "cpuBufferMB": 74.283,
+      "railwayGroupStats": {
+        "meshCount": 9,
+        "visibleMeshCount": 7,
+        "vertices": 2005444,
+        "triangles": 1294812,
+        "renderedVerticesWithInstances": 2005444,
+        "renderedTrianglesWithInstances": 1294812,
+        "visibleRenderedTriangles": 1117362,
+        "cpuBufferBytes": 66773060
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 165962,
+        "triangles": 89762,
+        "renderedVerticesWithInstances": 165962,
+        "renderedTrianglesWithInstances": 89762,
+        "visibleRenderedTriangles": 89762,
+        "cpuBufferBytes": 4736292
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": {
+        "totalBuildTimeMs": 29002.16,
+        "phaseAndSortTimeMs": 16.62,
+        "bridgeAndTunnelTimeMs": 320.51,
+        "uvRibbonAndSwitchTimeMs": 21198.3,
+        "sleeper3DPlacementTimeMs": 5909.5,
+        "rail3DExtrusionTimeMs": 913.12,
+        "geometryMergeAndChunkTimeMs": 621.95,
+        "spatialIndexStats": {
+          "useSpatialGrid": false,
+          "registeredSegmentsCount": 31462,
+          "gridCellsCount": 0,
+          "totalQueries": 124920,
+          "totalSegmentsExamined": 995121224,
+          "avgSegmentsPerQuery": 7966.07,
+          "maxSegmentsInSingleQuery": 25816,
+          "totalDistanceCalculations": 1496682,
+          "queryTimeMs": 27335.16
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": false,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1047981,
+          "minkowskiOverlapCalculations": 152221,
+          "sharedTurnoutBearersCount": 4257,
+          "clippedOrShortenedSleepersCount": 722,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22469,
+          "overlapResolutionTimeMs": 5813.52
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 66773060,
+          "estimatedBakedBinaryMB": 63.68
+        }
+      },
+      "frustumAndRaycastOverview": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 715222,
+        "totalActiveTriangles": 715222,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 145.664,
+        "maxRaycastTimeMs": 159.526
+      },
+      "frustumAndRaycastThroatClose": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 1117362,
+        "totalActiveTriangles": 1117362,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 156.123,
+        "maxRaycastTimeMs": 173.152
+      },
+      "lifecycleZeroLeaks": true
+    },
+    "configD_candidateB_optimized": {
+      "label": "D2. Candidate B Optimized (Spatial Grid + Adaptive Bridge + Multi-Interval Clip + Instanced Sleepers + 128m Chunks)",
+      "mode": "candidateB",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 128
+      },
+      "totalOfflineBuildTimeMs": 3926.73,
+      "nonRailwayBuildTimeMs": 3253.73,
+      "railwayOfflineBuildTimeMs": 673,
+      "constructedMeshesCount": 235,
+      "uniqueBufferVertices": 801846,
+      "uniqueBufferTriangles": 336285,
+      "renderedVerticesWithInstances": 1251226,
+      "renderedTrianglesWithInstances": 560975,
+      "cpuBufferBytes": 19246834,
+      "cpuBufferMB": 18.355,
+      "railwayGroupStats": {
+        "meshCount": 178,
+        "visibleMeshCount": 130,
+        "vertices": 208500,
+        "triangles": 155700,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "visibleRenderedTriangles": 347324,
+        "cpuBufferBytes": 8128596
+      },
+      "roadsGroupStats": {
+        "meshCount": 18,
+        "visibleMeshCount": 18,
+        "vertices": 165962,
+        "triangles": 89762,
+        "renderedVerticesWithInstances": 165962,
+        "renderedTrianglesWithInstances": 89762,
+        "visibleRenderedTriangles": 89762,
+        "cpuBufferBytes": 4736292
+      },
+      "buildingsGroupStats": {
+        "meshCount": 6,
+        "visibleMeshCount": 6,
+        "vertices": 83052,
+        "triangles": 27684,
+        "renderedVerticesWithInstances": 83052,
+        "renderedTrianglesWithInstances": 27684,
+        "visibleRenderedTriangles": 27684,
+        "cpuBufferBytes": 2657664
+      },
+      "railwayProfile": {
+        "totalBuildTimeMs": 673,
+        "phaseAndSortTimeMs": 18.2,
+        "bridgeAndTunnelTimeMs": 116,
+        "uvRibbonAndSwitchTimeMs": 86.01,
+        "sleeper3DPlacementTimeMs": 377.24,
+        "rail3DExtrusionTimeMs": 18.71,
+        "geometryMergeAndChunkTimeMs": 44.97,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 212.81
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 349.84
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "instanced",
+          "spatialChunkSizeMeters": 128,
+          "spatialChunkCount": 35,
+          "estimatedBakedBinaryBytes": 8128596,
+          "estimatedBakedBinaryMB": 7.752
+        }
+      },
+      "frustumAndRaycastOverview": {
+        "totalActiveMeshes": 123,
+        "frustumVisibleMeshes": 123,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 0.232,
+        "maxRaycastTimeMs": 5.845
+      },
+      "frustumAndRaycastThroatClose": {
+        "totalActiveMeshes": 130,
+        "frustumVisibleMeshes": 39,
+        "frustumCulledMeshes": 91,
+        "frustumVisibleTriangles": 140952,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 59.4,
+        "medianRaycastTimeMs": 4.469,
+        "maxRaycastTimeMs": 20.673
+      },
+      "lifecycleZeroLeaks": true
+    }
+  },
+  "candidateBSingleVariableExperiments": {
+    "step0_unoptimized": {
+      "variableUnderTest": "Baseline Candidate B (O(N) linear scan, 0.35m full bridge sampling, single-interval clip, merged 3D sleepers, global mesh)",
+      "options": {
+        "useSpatialGridIndex": false,
+        "adaptiveBridgeSampling": false,
+        "multiIntervalClip": false,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 27362.59,
+        "totalVertices": 2005444,
+        "totalTriangles": 1294812,
+        "renderedVerticesWithInstances": 2005444,
+        "renderedTrianglesWithInstances": 1294812,
+        "drawCalls": 9,
+        "cpuBufferBytes": 66773060,
+        "cpuBufferMB": 63.68,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22469,
+        "turnoutBearerCount": 4257,
+        "splitMultiSegmentStationsCount": 0,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0,
+        "spatialChunkCount": 1
+      },
+      "profile": {
+        "totalBuildTimeMs": 27362.59,
+        "phaseAndSortTimeMs": 13.76,
+        "bridgeAndTunnelTimeMs": 379.09,
+        "uvRibbonAndSwitchTimeMs": 19983.33,
+        "sleeper3DPlacementTimeMs": 5492.93,
+        "rail3DExtrusionTimeMs": 864.08,
+        "geometryMergeAndChunkTimeMs": 609.49,
+        "spatialIndexStats": {
+          "useSpatialGrid": false,
+          "registeredSegmentsCount": 31462,
+          "gridCellsCount": 0,
+          "totalQueries": 124920,
+          "totalSegmentsExamined": 995121224,
+          "avgSegmentsPerQuery": 7966.07,
+          "maxSegmentsInSingleQuery": 25816,
+          "totalDistanceCalculations": 1496682,
+          "queryTimeMs": 25731.35
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": false,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1047981,
+          "minkowskiOverlapCalculations": 152221,
+          "sharedTurnoutBearersCount": 4257,
+          "clippedOrShortenedSleepersCount": 722,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22469,
+          "overlapResolutionTimeMs": 5420.55
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 66773060,
+          "estimatedBakedBinaryMB": 63.68
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 1117362,
+        "totalActiveTriangles": 1117362,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 159.201,
+        "maxRaycastTimeMs": 175.413
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 715222,
+        "totalActiveTriangles": 715222,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 162.22,
+        "maxRaycastTimeMs": 213.502
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.252,
+        "perToggleCallUs": 0.252,
+        "steady1000CallsMs": 0.048
+      }
+    },
+    "stepA1_spatialGridIndex": {
+      "variableUnderTest": "+ Experiment A1: 8m x 8m Uniform Spatial Grid Index + 2D Track Registration",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": false,
+        "multiIntervalClip": false,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 1860.09,
+        "totalVertices": 2005444,
+        "totalTriangles": 1294812,
+        "renderedVerticesWithInstances": 2005444,
+        "renderedTrianglesWithInstances": 1294812,
+        "drawCalls": 9,
+        "cpuBufferBytes": 66773060,
+        "cpuBufferMB": 63.68,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22469,
+        "turnoutBearerCount": 4257,
+        "splitMultiSegmentStationsCount": 0,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0,
+        "spatialChunkCount": 1
+      },
+      "profile": {
+        "totalBuildTimeMs": 1860.09,
+        "phaseAndSortTimeMs": 19.91,
+        "bridgeAndTunnelTimeMs": 408.76,
+        "uvRibbonAndSwitchTimeMs": 281.47,
+        "sleeper3DPlacementTimeMs": 430.6,
+        "rail3DExtrusionTimeMs": 39.33,
+        "geometryMergeAndChunkTimeMs": 669.48,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 124944,
+          "totalSegmentsExamined": 1036840,
+          "avgSegmentsPerQuery": 8.3,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 563667,
+          "queryTimeMs": 331.63
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": false,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1047981,
+          "minkowskiOverlapCalculations": 152221,
+          "sharedTurnoutBearersCount": 4257,
+          "clippedOrShortenedSleepersCount": 722,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22469,
+          "overlapResolutionTimeMs": 376.84
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 66773060,
+          "estimatedBakedBinaryMB": 63.68
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 1117362,
+        "totalActiveTriangles": 1117362,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 162.184,
+        "maxRaycastTimeMs": 176.357
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 715222,
+        "totalActiveTriangles": 715222,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 158.04,
+        "maxRaycastTimeMs": 197.542
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.241,
+        "perToggleCallUs": 0.241,
+        "steady1000CallsMs": 0.051
+      }
+    },
+    "stepA2_adaptiveBridgeSampling": {
+      "variableUnderTest": "+ Experiment A2: Adaptive Bridge Deck Sampling (decimate flat colinear 0.35m points while preserving ramps & switch curvature)",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": false,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 930.44,
+        "totalVertices": 657860,
+        "totalTriangles": 380380,
+        "renderedVerticesWithInstances": 657860,
+        "renderedTrianglesWithInstances": 380380,
+        "drawCalls": 9,
+        "cpuBufferBytes": 20568108,
+        "cpuBufferMB": 19.615,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22469,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 0,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0,
+        "spatialChunkCount": 1
+      },
+      "profile": {
+        "totalBuildTimeMs": 930.44,
+        "phaseAndSortTimeMs": 21.21,
+        "bridgeAndTunnelTimeMs": 130.33,
+        "uvRibbonAndSwitchTimeMs": 89.77,
+        "sleeper3DPlacementTimeMs": 433.97,
+        "rail3DExtrusionTimeMs": 15.19,
+        "geometryMergeAndChunkTimeMs": 230.24,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 263.02
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": false,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1047991,
+          "minkowskiOverlapCalculations": 152202,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 723,
+          "splitIntoTwoSegmentsStationsCount": 0,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22469,
+          "overlapResolutionTimeMs": 373.28
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 20568108,
+          "estimatedBakedBinaryMB": 19.615
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 347314,
+        "totalActiveTriangles": 347314,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 46.117,
+        "maxRaycastTimeMs": 56.839
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 44.273,
+        "maxRaycastTimeMs": 50.917
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.561,
+        "perToggleCallUs": 0.561,
+        "steady1000CallsMs": 0.058
+      }
+    },
+    "stepB_multiIntervalClip": {
+      "variableUnderTest": "+ Experiment B: Multi-Interval Lateral Subtraction (subtractIntervalFromList preserves both outer segments when interior cut splits a bearer)",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 769.11,
+        "totalVertices": 657880,
+        "totalTriangles": 380390,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "drawCalls": 9,
+        "cpuBufferBytes": 20568708,
+        "cpuBufferMB": 19.616,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22470,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 1,
+        "sleeper3DMode": "merged",
+        "spatialChunkSizeMeters": 0,
+        "spatialChunkCount": 1
+      },
+      "profile": {
+        "totalBuildTimeMs": 769.11,
+        "phaseAndSortTimeMs": 15.93,
+        "bridgeAndTunnelTimeMs": 112.79,
+        "uvRibbonAndSwitchTimeMs": 77.37,
+        "sleeper3DPlacementTimeMs": 383.5,
+        "rail3DExtrusionTimeMs": 15.56,
+        "geometryMergeAndChunkTimeMs": 152.94,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 216.41
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 334.02
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "merged",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 20568708,
+          "estimatedBakedBinaryMB": 19.616
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 347324,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 48.31,
+        "maxRaycastTimeMs": 54.236
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 47.973,
+        "maxRaycastTimeMs": 51.982
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.056,
+        "perToggleCallUs": 0.056,
+        "steady1000CallsMs": 0.022
+      }
+    },
+    "stepC_instanced3DSleepers": {
+      "variableUnderTest": "+ Experiment C: THREE.InstancedMesh for 3D Sleepers & Variable-Length Turnout Bearers",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 0
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 566.02,
+        "totalVertices": 208500,
+        "totalTriangles": 155700,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "drawCalls": 9,
+        "cpuBufferBytes": 8525388,
+        "cpuBufferMB": 8.13,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22470,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 1,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 0,
+        "spatialChunkCount": 1
+      },
+      "profile": {
+        "totalBuildTimeMs": 566.02,
+        "phaseAndSortTimeMs": 16.13,
+        "bridgeAndTunnelTimeMs": 89.33,
+        "uvRibbonAndSwitchTimeMs": 71.34,
+        "sleeper3DPlacementTimeMs": 279.01,
+        "rail3DExtrusionTimeMs": 19.29,
+        "geometryMergeAndChunkTimeMs": 81.57,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 194.56
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 267.37
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "instanced",
+          "spatialChunkSizeMeters": 0,
+          "spatialChunkCount": 1,
+          "estimatedBakedBinaryBytes": 8525388,
+          "estimatedBakedBinaryMB": 8.13
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 347324,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 22.936,
+        "maxRaycastTimeMs": 25.455
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 7,
+        "frustumVisibleMeshes": 7,
+        "frustumCulledMeshes": 0,
+        "frustumVisibleTriangles": 89558,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 0,
+        "medianRaycastTimeMs": 21.907,
+        "maxRaycastTimeMs": 22.69
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.19,
+        "perToggleCallUs": 0.19,
+        "steady1000CallsMs": 0.05
+      }
+    },
+    "stepD_spatialChunks64m": {
+      "variableUnderTest": "+ Experiment D (64m): Static 64m x 64m Spatial Partitioning Chunks",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 64
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 625.37,
+        "totalVertices": 208500,
+        "totalTriangles": 155700,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "drawCalls": 378,
+        "cpuBufferBytes": 8128596,
+        "cpuBufferMB": 7.752,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22470,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 1,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 64,
+        "spatialChunkCount": 81
+      },
+      "profile": {
+        "totalBuildTimeMs": 625.37,
+        "phaseAndSortTimeMs": 14.9,
+        "bridgeAndTunnelTimeMs": 105.17,
+        "uvRibbonAndSwitchTimeMs": 70.08,
+        "sleeper3DPlacementTimeMs": 294.77,
+        "rail3DExtrusionTimeMs": 13.99,
+        "geometryMergeAndChunkTimeMs": 108.62,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 183.24
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 267.99
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "instanced",
+          "spatialChunkSizeMeters": 64,
+          "spatialChunkCount": 81,
+          "estimatedBakedBinaryBytes": 8128596,
+          "estimatedBakedBinaryMB": 7.752
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 268,
+        "frustumVisibleMeshes": 66,
+        "frustumCulledMeshes": 202,
+        "frustumVisibleTriangles": 105578,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 69.6,
+        "medianRaycastTimeMs": 2.618,
+        "maxRaycastTimeMs": 4.973
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 246,
+        "frustumVisibleMeshes": 93,
+        "frustumCulledMeshes": 153,
+        "frustumVisibleTriangles": 48892,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 45.4,
+        "medianRaycastTimeMs": 1.538,
+        "maxRaycastTimeMs": 3.031
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.24,
+        "perToggleCallUs": 0.24,
+        "steady1000CallsMs": 0.05
+      }
+    },
+    "stepD_spatialChunks128m": {
+      "variableUnderTest": "+ Experiment D (128m): Static 128m x 128m Spatial Partitioning Chunks",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 128
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 564.18,
+        "totalVertices": 208500,
+        "totalTriangles": 155700,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "drawCalls": 178,
+        "cpuBufferBytes": 8128596,
+        "cpuBufferMB": 7.752,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22470,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 1,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 128,
+        "spatialChunkCount": 35
+      },
+      "profile": {
+        "totalBuildTimeMs": 564.18,
+        "phaseAndSortTimeMs": 15.74,
+        "bridgeAndTunnelTimeMs": 114.16,
+        "uvRibbonAndSwitchTimeMs": 71.1,
+        "sleeper3DPlacementTimeMs": 290.67,
+        "rail3DExtrusionTimeMs": 15.28,
+        "geometryMergeAndChunkTimeMs": 44.84,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 179.92
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 269
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "instanced",
+          "spatialChunkSizeMeters": 128,
+          "spatialChunkCount": 35,
+          "estimatedBakedBinaryBytes": 8128596,
+          "estimatedBakedBinaryMB": 7.752
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 130,
+        "frustumVisibleMeshes": 39,
+        "frustumCulledMeshes": 91,
+        "frustumVisibleTriangles": 140952,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 59.4,
+        "medianRaycastTimeMs": 4.034,
+        "maxRaycastTimeMs": 6.566
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 123,
+        "frustumVisibleMeshes": 61,
+        "frustumCulledMeshes": 62,
+        "frustumVisibleTriangles": 54250,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 39.4,
+        "medianRaycastTimeMs": 3.195,
+        "maxRaycastTimeMs": 6.557
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.4,
+        "perToggleCallUs": 0.4,
+        "steady1000CallsMs": 0.051
+      }
+    },
+    "stepD_spatialChunks256m": {
+      "variableUnderTest": "+ Experiment D (256m): Static 256m x 256m Spatial Partitioning Chunks",
+      "options": {
+        "useSpatialGridIndex": true,
+        "adaptiveBridgeSampling": true,
+        "multiIntervalClip": true,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 256
+      },
+      "stats": {
+        "mode": "candidateB",
+        "buildTimeMs": 545.78,
+        "totalVertices": 208500,
+        "totalTriangles": 155700,
+        "renderedVerticesWithInstances": 657880,
+        "renderedTrianglesWithInstances": 380390,
+        "drawCalls": 74,
+        "cpuBufferBytes": 8128596,
+        "cpuBufferMB": 7.752,
+        "renderedRailwaysCount": 383,
+        "closeZoomSleeperPeriodMeters": 0.725,
+        "sleeper3DBoxCount": 22470,
+        "turnoutBearerCount": 4256,
+        "splitMultiSegmentStationsCount": 1,
+        "sleeper3DMode": "instanced",
+        "spatialChunkSizeMeters": 256,
+        "spatialChunkCount": 13
+      },
+      "profile": {
+        "totalBuildTimeMs": 545.78,
+        "phaseAndSortTimeMs": 17.99,
+        "bridgeAndTunnelTimeMs": 105.31,
+        "uvRibbonAndSwitchTimeMs": 74.62,
+        "sleeper3DPlacementTimeMs": 275.53,
+        "rail3DExtrusionTimeMs": 13.92,
+        "geometryMergeAndChunkTimeMs": 50.23,
+        "spatialIndexStats": {
+          "useSpatialGrid": true,
+          "registeredSegmentsCount": 3774,
+          "gridCellsCount": 5524,
+          "totalQueries": 92336,
+          "totalSegmentsExamined": 801559,
+          "avgSegmentsPerQuery": 8.68,
+          "maxSegmentsInSingleQuery": 69,
+          "totalDistanceCalculations": 405549,
+          "queryTimeMs": 179.38
+        },
+        "sleeperOverlapStats": {
+          "multiIntervalClipEnabled": true,
+          "proposedSleeperStations": 27500,
+          "existingCandidatesChecked": 1048022,
+          "minkowskiOverlapCalculations": 151291,
+          "sharedTurnoutBearersCount": 4256,
+          "clippedOrShortenedSleepersCount": 724,
+          "splitIntoTwoSegmentsStationsCount": 1,
+          "discardedSleepersCount": 5031,
+          "emittedSleeperBoxesCount": 22470,
+          "overlapResolutionTimeMs": 265.7
+        },
+        "bakedAssetStats": {
+          "sleeper3DMode": "instanced",
+          "spatialChunkSizeMeters": 256,
+          "spatialChunkCount": 13,
+          "estimatedBakedBinaryBytes": 8128596,
+          "estimatedBakedBinaryMB": 7.752
+        }
+      },
+      "throatCloseZoom8_0": {
+        "totalActiveMeshes": 56,
+        "frustumVisibleMeshes": 20,
+        "frustumCulledMeshes": 36,
+        "frustumVisibleTriangles": 174926,
+        "totalActiveTriangles": 347324,
+        "cullingReductionPercent": 49.6,
+        "medianRaycastTimeMs": 6.097,
+        "maxRaycastTimeMs": 8.717
+      },
+      "throatMediumZoom3_0": {
+        "totalActiveMeshes": 54,
+        "frustumVisibleMeshes": 36,
+        "frustumCulledMeshes": 18,
+        "frustumVisibleTriangles": 72248,
+        "totalActiveTriangles": 89558,
+        "cullingReductionPercent": 19.3,
+        "medianRaycastTimeMs": 5.622,
+        "maxRaycastTimeMs": 8.629
+      },
+      "lodUpdateCost": {
+        "toggle1000CallsMs": 0.061,
+        "perToggleCallUs": 0.061,
+        "steady1000CallsMs": 0.023
+      }
+    }
+  },
+  "experimentELodAnalysis": {
+    "closeZoomThreshold": 4.5,
+    "candidateA_proceduralOnly": {
+      "cpuBufferKB": 4492.7,
+      "cpuBufferMB": 4.387,
+      "visibleMeshes": 123,
+      "visibleRenderedTriangles": 89558
+    },
+    "candidateB_atCloseZoom8_0": {
+      "activeRepresentation": "3D Instanced Sleepers + 3D Extruded Rails + Ballast + Bridges/Tunnels (Procedural Sleeper/Rail Ribbons hidden via visible=false)",
+      "totalRetainedCpuBufferKB": 7938.1,
+      "totalRetainedCpuBufferMB": 7.752,
+      "totalMeshesInGroup": 178,
+      "visibleMeshesSubmittedToWebGL": 130,
+      "hiddenLodMeshesCulledByVisibleFlag": 48,
+      "visibleRenderedTriangles": 347324
+    },
+    "candidateB_atMediumFarZoom3_0": {
+      "activeRepresentation": "Procedural UV Sleeper + Rail Ribbons + Ballast + Bridges/Tunnels (3D Sleepers & 3D Rails hidden via visible=false)",
+      "totalRetainedCpuBufferKB": 7938.1,
+      "totalRetainedCpuBufferMB": 7.752,
+      "totalMeshesInGroup": 178,
+      "visibleMeshesSubmittedToWebGL": 123,
+      "hiddenLodMeshesCulledByVisibleFlag": 55,
+      "visibleRenderedTriangles": 89558
+    },
+    "dualRepresentationMemoryOverheadKB": 3445.4,
+    "dualRepresentationMemoryOverheadMB": 3.365
+  },
+  "browserLiveTelemetry": {
+    "userManualRuntimeObservation": {
+      "location": "Amsterdam Centraal (full static map, 420m radius)",
+      "observedFramerate": "Approximately 144 FPS smooth rendering on user machine",
+      "observationType": "Manual runtime observation (not an automated benchmark or instrumented measurement)",
+      "hardwareOrDisplayNote": "Reported on user 144 Hz display; no unrecorded hardware or test conditions inferred",
+      "evaluationConclusion": "Optimized Candidate B delivers sufficiently good observed runtime performance for Milestone 2.1; runtime performance is no longer considered a blocker for M2.1."
+    },
+    "profilingCaveats": {
+      "hoverRaycastScope": "hoverRaycastTimeMs measures resolveInspectedFeature() feature-info resolution time once an intersection occurs, not the complete R3F/Three.js scene-wide CPU raycasting traversal.",
+      "nodeInspectionTimingScope": "The 4.03 ms inspection timing is a Node-side raycast against the isolated railway group (evaluateFrustumAndRaycastAtPose), not the full browser R3F scene raycast.",
+      "scenarioTimingCaveat": "Timings derived from requestAnimationFrame followed by setTimeout are not reliable frame-time measurements (particularly on 144 Hz displays). Automated browser timers must not be presented as proof of actual browser frame interval.",
+      "softwareRasterizerNote": "Headless Chromium in container environments uses Google SwiftShader (CPU Software WebGL2 rasterizer). Software rasterizer timings are strictly for headless sanity checking and never used to rank candidate performance."
+    },
+    "deferredNonRailwayFindings": {
+      "issue": "Non-railway building draw-call amplification from BufferGeometry.groups",
+      "description": "In Configuration A (zero railways), the scene issues 2,537 WebGL draw calls per frame (2,480 gl.drawArrays) despite having only 57 THREE.Mesh objects. This is caused by THREE.ExtrudeGeometry creating 2 groups per building (613 x 2 = 1,226 groups), which mergeWithFaceRanges() in GeometryBuilder.ts preserves onto the merged building meshes. WebGLRenderer renders each group as a separate draw call in both the directional shadow pass and the camera pass (1,226 x 2 = 2,452 calls).",
+      "disposition": "Documented as a known, deferred rendering-optimization finding for future work; not part of M2.1 scope."
+    },
+    "gpuTimerQueryImplementation": "Bracketed rawGl.beginQuery(TIME_ELAPSED_EXT) / rawGl.endQuery(TIME_ELAPSED_EXT) around gl.render(scene, camera) in MapScene.tsx with async FIFO polling and GPU_DISJOINT_EXT invalidation."
+  }
+}

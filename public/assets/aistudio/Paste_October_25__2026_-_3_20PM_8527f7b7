@@ -1,0 +1,841 @@
+
+OpenStreetMap Carto/Symbols
+< OpenStreetMap Carto
+Help
+OpenStreetMap Carto/SymbolsIn other languages
+ Deutsch   English   italiano   中文（简体）   中文（繁體） 
+Other languages...
+Symbols
+Lines
+Areas
+±
+
+
+
+Contents
+1	Symbols
+1.1	Gastronomy
+1.2	Culture, entertainment and arts
+1.3	Historical objects
+1.4	Leisure, recreation and sports
+1.5	Waste management
+1.6	Outdoor
+1.7	Tourism and accommodation
+1.8	Finance
+1.9	Healthcare
+1.10	Communication
+1.11	Transportation
+1.12	Road features
+1.13	Nature
+1.14	Administrative facilities
+1.15	Religious place
+1.16	Shops and services
+1.17	Landmarks, man-made infrastructure, masts and towers
+1.18	Electricity
+1.19	Places
+2	See also
+3	External links
+Symbols
+Single symbols denote several kinds of points of interest or describe a larger area. If the map feature in question has a name, it is written below the symbol most of the time, in the same color of the symbol.
+
+Icon	Description	Tags
+Gastronomy
+	Restaurant (except fast food) / food court	amenity=restaurant / amenity=food_court
+	Cafe	amenity=cafe
+	Fast food restaurant or snack bar or sandwich bar or similar	amenity=fast_food
+	Bar	amenity=bar
+	Pub	amenity=pub
+	Ice cream shop	amenity=ice_cream
+	Biergarten (traditional sense)	amenity=biergarten
+	An outdoor seating area, usually for the consumption of food and drink from neighbouring cafes and restaurants	leisure=outdoor_seating
+Culture, entertainment and arts
+	Artwork	tourism=artwork
+	Community centre	amenity=community_centre
+	Library	amenity=library
+	Museum	tourism=museum
+	Theatre	amenity=theatre
+	Cinema	amenity=cinema
+	Nightclub	amenity=nightclub
+	Arts centre	amenity=arts_centre
+	Art gallery, art museum	tourism=gallery
+	Internet cafe	amenity=internet_cafe
+	Casino	amenity=casino
+	Public bookcase	amenity=public_bookcase
+	A venue with pay-to-play games	leisure=amusement_arcade
+Historical objects
+	Memorial (standard size)	historic=memorial
+	Place in which objects of historic interest are preserved	historic=archaeological_site
+	Historical shrine	historic=wayside_shrine
+	Monument	historic=monument
+	Castle	historic=castle
+	Memorial plaque / Blue plaque	historic=memorial + memorial=plaque / historic=memorial + memorial=blue_plaque
+	Statue	historic=memorial + memorial=statue / tourism=artwork + artwork_type=statue
+	Memorial as a stone	historic=memorial + memorial=stone
+	Palace / Stately home	historic=castle + castle_type=palace / historic=castle + castle_type=stately
+	Defensive castle / Fortress / Castra / Shiro / Kremlin	historic=castle + castle_type=* =>defensive / =>fortress / =>castrum / =>shiro / =>kremlin
+	Military historic fort	historic=fort
+	Bust	historic=memorial + memorial=bust / tourism=artwork + artwork_type=bust
+	City gate	historic=city_gate
+	Manor house	historic=manor / historic=castle + castle_type=manor
+	Obelisk	man_made=obelisk
+Leisure, recreation and sports
+	Playground	leisure=playground
+	Fitness centre / fitness station	leisure=fitness_centre / leisure=fitness_station
+	Golf course	leisure=golf_course
+	Water park / swimming area / (indoor or outdoor) swimming pool	leisure=water_park / leisure=swimming_area / leisure=sports_centre + sport=swimming
+	Massage shop	shop=massage
+	Sauna	leisure=sauna
+	A location where the public may bathe in common	amenity=public_bath
+	Miniature golf course	leisure=miniature_golf
+	A managed beach	leisure=beach_resort
+	A public place for fishing	leisure=fishing
+	Bowling centre	leisure=bowling_alley
+	Dog park	leisure=dog_park
+	Dance venue or dance hall	leisure=dance
+	Hole of a golf course	golf=pin
+Waste management
+	Public toilets	amenity=toilets
+	Recycling container or recycling centre	amenity=recycling
+	Waste basket	amenity=waste_basket
+	Disposal bin (medium size), for bagged up household or industrial waste	amenity=waste_disposal
+	Excrement bag dispenser	amenity=vending_machine + vending=excrement_bags
+Outdoor
+	Bench	amenity=bench
+	Shelter (e.g. weather shelter)	amenity=shelter
+	Drinking water, bubbler, drinking fountain	amenity=drinking_water
+	Picnic site	tourism=picnic_site
+	Fountain (recreational/decorational)	amenity=fountain
+	Campsite, campground	tourism=camp_site
+	Picnic table	leisure=picnic_table
+	Caravan site, caravan park, RV park	tourism=caravan_site
+	Barbeque	amenity=bbq
+	Shower	amenity=shower
+	Fireplace	leisure=firepit
+	Bird hide	leisure=bird_hide
+Tourism and accommodation
+	Guidepost	tourism=information + information=guidepost
+	Information board	tourism=information + information=board
+	Board with a map / Information map as 3D-model	tourism=information + information=map / tourism=information + information=tactile_map
+	Tourism-Information	tourism=information + information=office
+	Information terminal	tourism=information + information=terminal
+	Audioguide	tourism=information + information=audioguide
+	Viewpoint	tourism=viewpoint
+	Hotel	tourism=hotel
+	Guest house	tourism=guest_house
+	Hostel	tourism=hostel
+	Chalet (holiday cottage)	tourism=chalet
+	Motel	tourism=motel
+	Apartment	tourism=apartment
+	Alpine hut	tourism=alpine_hut
+	Wilderness hut	tourism=wilderness_hut
+Finance
+	Bank	amenity=bank
+	ATM or cash point	amenity=atm
+	Bureau de change	amenity=bureau_de_change
+Healthcare
+	Pharmacy	amenity=pharmacy
+	Hospital (for stationary treatment)	amenity=hospital
+	surgery or a small clinic (for ambulant treatment) / Doctor's practice	amenity=clinic / amenity=doctors
+	Dentist	amenity=dentist
+	Veterinary	amenity=veterinary
+Communication
+	Post box	amenity=post_box
+	Post office	amenity=post_office
+	Machine for picking up and sending parcels	amenity=parcel_locker
+	Public telephone	amenity=telephone
+	Emergency phone	emergency=phone
+Transportation
+	Car parking	amenity=parking
+	Car parking on the carriageway / Car parking adjacent to the carriageway	amenity=parking + parking=lane / amenity=parking + parking=street_side
+	Bus stop	highway=bus_stop
+	Gas station or petrol station or similar	amenity=fuel
+	Bicycle parking	amenity=bicycle_parking
+	Railway station / Railway stop point / Tram stop point / Aerialway station	railway=station / railway=halt / railway=tram_stop / aerialway=station
+	Bus station	amenity=bus_station
+	Helipad	aeroway=helipad
+	Airport	aeroway=aerodrome
+	Bicycle-sharing/rental station	amenity=bicycle_rental
+	Slipway for boats	leisure=slipway
+	Taxi rank	amenity=taxi
+	A machine selling tickets for parking	amenity=vending_machine + vending=parking_tickets
+	Subway entrance	railway=subway_entrance
+	Charging station	amenity=charging_station
+	Elevator	highway=elevator
+	Rent a car	amenity=car_rental
+	Underground parking entrance	amenity=parking_entrance + parking=underground
+	A machine vending bus, tram, train... tickets	amenity=vending_machine + vending=public_transport_tickets
+	Ferry terminal	amenity=ferry_terminal
+	Motorcycle parking	amenity=motorcycle_parking
+	Bicycle repair station	amenity=bicycle_repair_station
+	Boat rental	amenity=boat_rental
+	Multi-storey parking entrance	amenity=parking_entrance + parking=multi-storey
+Road features
+	One-way	oneway=yes
+	Gate	barrier=gate
+	Traffic lights	highway=traffic_signals
+	Railroad crossing, zoom >=16	railway=level_crossing / railway=crossing
+	Railroad crossing, zoom <=15	railway=level_crossing / railway=crossing
+	Barriers (bollard / large block / turnstile / log)	barrier=bollard / barrier=block / barrier=turnstile / barrier=log
+	Boom barrier	barrier=lift_gate / barrier=swing_gate
+	Barriers to bicycle traffic	barrier=cycle_barrier
+	Stile	barrier=stile
+	Mini roundabout	highway=mini_roundabout
+	Tollbooth	barrier=toll_booth
+	Cattle grid	barrier=cattle_grid
+	A gate which allows people to cross, but not livestock.	barrier=kissing_gate
+	A full-height turnstile	barrier=full-height_turnstile
+	Motorcycle barrier	barrier=motorcycle_barrier
+	Ford / Ford with stepping stones	ford=yes / ford=stepping_stones
+	Saddle on a course of a way	mountain_pass=yes
+	Dam	waterway=dam
+	Weir	waterway=weir
+	Gate of a lock	waterway=lock_gate
+	Turning circle at agricultural or forestry roads	Node with highway=turning_circle at way with highway=track
+Nature
+	Tree	natural=tree
+	Peak, summit, etc.	natural=peak
+	Spring	natural=spring
+	Cave entrance	natural=cave_entrance
+	Waterfall	waterway=waterfall
+	Topographic saddle	natural=saddle
+	Volcano	natural=volcano
+Administrative facilities
+	Police station	amenity=police
+	Townhall	amenity=townhall
+	Fire station	amenity=fire_station
+	Social facility	amenity=social_facility
+	Court house	amenity=courthouse
+	Embassy	office=diplomatic + diplomatic=embassy
+	Consulate	office=diplomatic + diplomatic=consulate
+	Prison	amenity=prison
+Religious place
+	Christian (except Jehovah's Witnesses, La Luz del Mundo, Iglesia ni Cristo and Mormons)	amenity=place_of_worship + religion=christian
+	Jewish	amenity=place_of_worship + religion=jewish
+	Muslim	amenity=place_of_worship + religion=muslim
+	Taoist	amenity=place_of_worship + religion=taoist
+	Hindu	amenity=place_of_worship + religion=hindu
+	Buddhist	amenity=place_of_worship + religion=buddhist
+	Shinto	amenity=place_of_worship + religion=shinto
+	Sikh	amenity=place_of_worship + religion=sikh
+	Unspecified or other religion	amenity=place_of_worship + without or other religion=* value
+Shops and services
+	Marketplace	amenity=marketplace
+	Convenience store	shop=convenience
+	Supermarket	shop=supermarket
+	Clothes shop / Fashion shop	shop=clothes / shop=fashion
+	Hairdresser's and/or barber's	shop=hairdresser
+	Bakery	shop=bakery
+	Car repair service	shop=car_repair
+	Do-It-Yourself store / Hardware store	shop=doityourself / shop=hardware
+	Car store	shop=car
+	Kiosk / Newsstand	shop=kiosk / shop=newsagent
+	Beauty services except hairdressing	shop=beauty
+	Car wash	amenity=car_wash
+	Butcher	shop=butcher
+	Shop selling alcohol / Wine shop	shop=alcohol / shop=wine
+	Furniture store	shop=furniture
+	Florist	shop=florist
+	Shop selling mobile phones and accessories	shop=mobile_phone
+	Shop selling consumer electronics	shop=electronics
+	Shoe store	shop=shoes
+	Car parts shop	shop=car_parts
+	Greengrocer / Farm shop	shop=greengrocer / shop=farm
+	Laundry shop / Clothes dry cleaning service	shop=laundry / shop=dry_cleaning
+	Optician	shop=optician
+	Jewellery	shop=jewelry
+	Book store	shop=books
+	Gift or souvenier shop	shop=gift
+	Department store	shop=department_store
+	Bicycle shop, retail, repair and/or rental	shop=bicycle
+	Confectionery / Chocolate shop / Patisserie	shop=confectionery / shop=chocolate / shop=pastry
+	Variety store	shop=variety_store
+	Travel agency	shop=travel_agency
+	Sports equipment shop	shop=sports
+	Chemist	shop=chemist
+	Computer store	shop=computer
+	Stationery shop	shop=stationery
+	Pet shop	shop=pet
+	Shop selling beverages	shop=beverages
+	Cosmetics shop / Perfumery	shop=cosmetics / shop=perfumery
+	Tyres shop	shop=tyres
+	Motorcycle shop	shop=motorcycle
+	Garden centre	shop=garden_centre
+	Copy shop	shop=copyshop
+	Toy shop	shop=toys
+	Shop selling delicatessen (gourmet foods)	shop=deli
+	Tobacco shop	shop=tobacco
+	Shop selling fish and/or seafood	shop=seafood, shop=fishmonger
+	Shop selling interior decorations	shop=interior_decoration
+	A shop selling tickets for concerts, events, public transport	shop=ticket
+	Photo shop or photo studio	shop=photo / shop=photo_studio / shop=photography
+	A place of business that sells to a particular trade or trades / Wholesale	shop=trade / shop=wholesale
+	Shop selling outdoor equipment	shop=outdoor
+	Shop selling houseware	shop=houseware
+	Art shop	shop=art
+	Shop selling paints	shop=paint
+	Shop that sells fabric	shop=fabric
+	Bookmaker	shop=bookmaker
+	A shop selling second hand goods	shop=second_hand
+	Charity store	shop=charity
+	Shop selling mattresses	shop=bed
+	A store where you can buy medical equipment	shop=medical_supply
+	Hi-fi store	shop=hifi
+	Shop selling recorded music	shop=music
+	Coffee shop	shop=coffee
+	A place where you can get your motorcycles repaired	shop=motorcycle_repair
+	Shop selling hearing aids	shop=hearing_aids
+	Shop selling musical instruments	shop=musical_instrument
+	Tea shop	shop=tea
+	Shop selling or renting videos/DVDs	shop=video
+	Bag shop	shop=bag
+	Shop selling carpets	shop=carpet
+	Shop selling video games	shop=video_games
+	Government vehicle inspection	amenity=vehicle_inspection
+	Shop selling dairy products	shop=dairy
+	Shop (specified and other, not listed above) / Driving school	Any shop=* value (except 'yes', 'no', 'vacant', 'closed', 'disused', 'empty')
+/ amenity=driving_school
+	Office, department, bureau (all)	office=*
+	Nursing home care / Childcare	amenity=nursing_home / amenity=childcare
+Landmarks, man-made infrastructure, masts and towers
+	Storage tanks / Silo	man_made=storage_tank / man_made=silo
+	Tower in general	man_made=tower
+	Communication towers	man_made=tower + tower:type=communication
+	Wind turbine	power=generator + generator:source=wind ( + generator:method=wind_turbine)
+	Hunting stand	amenity=hunting_stand
+	Wayside cross / Summit cross or similar	historic=wayside_cross / man_made=cross
+	Water tower	man_made=water_tower
+	Mast in general	man_made=mast
+	Bunker	military=bunker
+	Chimney	man_made=chimney
+	Observation tower / Watch tower	man_made=tower + tower:type=observation / man_made=tower + tower:type=watchtower
+	Bell tower	man_made=tower + tower:type=bell_tower
+	Towers for lighting	man_made=tower + tower:type=lighting
+	Lighthouse	man_made=lighthouse
+	Advertising column	advertising=column
+	Crane (stationary)	man_made=crane
+	Windmill	man_made=windmill
+	Lattice communication towers	man_made=tower + tower:type=communication + tower:construction=lattice
+	Poles for lighting	man_made=mast + tower:type=lighting
+	Mast with transmitters	man_made=mast + tower:type=communication
+	A huge tower for transmitting radio applications	man_made=communications_tower
+	Fortified defensive tower	man_made=tower + tower:type=defensive
+	Cooling tower	man_made=tower + tower:type=cooling
+	The tower is constructed from steel lattice	man_made=tower + tower:construction=lattice
+	Tower is constructed from steel lattice for lighting	man_made=tower + tower:type=lighting + tower:construction=lattice
+	The 'communication tower' is a dish	man_made=tower + tower:construction=dish
+	The 'communication tower' is a dome	man_made=tower + tower:construction=dome
+	Radio telescope	man_made=telescope + telescope:type=radio
+	Optical telescope	man_made=telescope + telescope:type=optical
+Electricity
+	Big electricity pylon, carrying high voltage electricity cables	power=tower
+	Small electricity pole, carrying low voltage electricity cables	power=pole
+Places
+	City	place=city
+	Capital	capital=*
+	Entrance (exit) of a building / A direct public entrance to a shop which is not a main building entrance	entrance=yes / entrance=shop
+	Main entrance (exit) of a building	entrance=main
+	A backdoor of a building	entrance=service
+	Any door of a building and access is not allowed	entrance=* + access=no
+(no alphabetic order, order based on database units)
+
+See also
+Standard tile layer (OSM Carto)
+External links
+Definition of styles for points on OSM Carto GitHub GitHub
+Source of icons: gravitystorm/openstreetmap-carto/tree/master/symbols GitHub
+Source of icons: Osmic (OSM Icons) GitHub
+v · d · eopenstreetmap.org
+Interface elements	
+Share map with marker · Map Data layer · Query features tool · Routing · Changeset Discussions · Nearby users · Notes
+Top menu	
+Edit · History · Export
+GPS traces	
+How to upload a GPS (Troubleshooting) · Visibility of GPS traces
+Layers	
+Standard · CyclOSM · OpenCycleMap · Transport Map · Tracestrack Topo · Humanitarian · Shortbread · MapTiler OMT · Former: MapQuest Open · ÖPNVKarte · NoName · Tiles@home
+Account and login	
+Privacy Policy · Lost password · Account deletion
+See also	
+Main OSM blog · User diaries · When do I see my work on OpenStreetMap?
+Category: OSM Carto
+Navigation menu
+English
+Create account
+Log in
+PageDiscussion
+ReadView sourceView history
+Search
+Search OpenStreetMap Wiki
+Main Page
+The map
+Map Features
+Contributors
+Help
+Blogs
+Shop
+Donations
+Wiki discussion
+Recent changes
+Special pages
+Tools
+What links here
+Related changes
+Printable version
+Permanent link
+Page information
+Cite this page
+This page was last edited on 6 September 2026, at 21:13.
+Content is available under Creative Commons Attribution-ShareAlike 2.0 license unless otherwise noted.
+Privacy policyAbout OpenStreetMap WikiDisclaimersMobile view
+Creative Commons Attribution-ShareAlike 2.0 license
+Powered by MediaWiki
+
+
+OpenStreetMap Carto/Lines
+< OpenStreetMap Carto
+Help
+OpenStreetMap Carto/LinesIn other languages
+ Deutsch   English   italiano   中文（简体）   中文（繁體） 
+Other languages...
+Symbols
+Lines
+Areas
+±
+
+
+
+Contents
+1	Lines
+1.1	Roads
+1.1.1	Major roads
+1.1.2	City roads
+1.1.3	Roads and ways for non-motorized vehicles
+1.1.4	Agricultural and/or forestry roads
+1.1.5	Miscellaneous roads
+1.2	Railways
+1.3	Aerial lifts
+1.4	Waterways
+1.5	Water traffic
+1.6	Platforms
+1.7	Energy supply
+1.8	Barriers
+1.9	Nature
+1.10	Boundaries
+2	See also
+3	External links
+4	Footnotes
+Lines
+Roads
+In OpenStreetMap, the major roads of a road network are sorted on an importance scale, from motorway to quaternary road.
+
+Major roads
+Drawing	Description	Wiki page
+	Motorway, the most important roads in a road network. Equivalent to freeway, Autobahn (Germany), etc.	highway=motorway
+	The link roads (sliproads / ramps) leading to and from a motorway	highway=motorway_link
+	Motorway under construction / Motorway link under construction	highway=construction + construction=motorway / highway=construction + construction=motorway_link
+	Trunks, the most important roads in a road network that aren't motorways	highway=trunk
+	The link roads (sliproads / ramps) leading to and from a trunk highway	highway=trunk_link
+	Trunk under construction / Trunk link under construction	highway=construction + construction=trunk / highway=construction + construction=trunk_link
+	Primary road	highway=primary
+	Connecting slip roads/ramps of primary highways	highway=primary_link
+	Primary road under construction / Primary road link under construction	highway=construction + construction=primary / highway=construction + construction=primary_link
+	Secondary road	highway=secondary
+	Connecting slip roads/ramps of secondary highways	highway=secondary_link
+	Secondary road under construction / Secondary road link under construction	highway=construction + construction=secondary / highway=construction + construction=secondary_link
+	Tertiary road	highway=tertiary
+	Connecting slip roads/ramps of tertiary highways	highway=tertiary_link
+	Quaternary road	highway=unclassified
+City roads
+Drawing	Description	Wiki page
+	Residential road	highway=residential
+	Tertiary road under construction / Tertiary road link under construction / Quaternary road under construction / Residential road under construction	highway=construction + construction=tertiary / highway=construction + construction=tertiary_link / highway=construction + construction=unclassified / highway=construction + construction=residential / highway=construction (without construction=*)
+	Residential road only local traffic	highway=residential + access tagging corresponding to access=destination for (motor)vehicles.
+	Residential road only private traffic / prohibited to be used by the general public	highway=residential + access tagging corresponding to access=private or access=no for (motor)vehicles.
+	Access road (may be also outside of a city)	highway=service
+	Subordinated way in a parking lot / drive-through highway / driveway / slipway	highway=service + service=parking_aisle / highway=service + service=drive-through / highway=service + service=driveway / highway=service + leisure=slipway
+	Access road under construction	highway=construction + construction=service
+	Living street	highway=living_street
+	Living street under construction	highway=construction + construction=living_street
+	Pedestrian street	highway=pedestrian
+	Pedestrian street under construction	highway=construction + construction=pedestrian
+Roads and ways for non-motorized vehicles
+Drawing	Description	Wiki page
+	Bridleway	highway=bridleway / highway=path + horse=designated
+	Cycleway	highway=cycleway / highway=path + bicycle=designated
+	Footway / Multi-use path	highway=footway / highway=path
+	Steps	highway=steps
+	Bridleway / Cycleway / Footway / Multi-use path / Steps / Track under construction	highway=construction + construction=bridleway / highway=construction + construction=cycleway / highway=construction + construction=footway / highway=construction + construction=path / highway=construction + construction=steps / highway=construction + construction=track
+Agricultural and/or forestry roads
+Drawing	Description	Wiki page
+	Track. Solid surface.	highway=track + tracktype=grade1
+	Track. Mostly solid surface.	highway=track + tracktype=grade2
+	Track. Even amount of solid and soft materials.	highway=track + tracktype=grade3
+	Track. Mostly soft surface.	highway=track + tracktype=grade4
+	Track. Soft surface.	highway=track + tracktype=grade5
+	Track with unknown surface type.	highway=track
+Miscellaneous roads
+Drawing	Description	Wiki page
+	Runway	aeroway=runway
+	Taxiway	aeroway=taxiway
+	Way for guided buses	highway=bus_guideway
+	Track (non-motorised)	leisure=track
+	Racetrack (motorised)	highway=raceway
+	Completely unknown road type. Anything from footpath to motorway is possible. This should be temporary, until the road type has been surveyed properly.	highway=road
+	Raceway under construction / Road with unknown classification under construction	highway=construction + construction=raceway / highway=construction + construction=road
+	Pier, Landing stage	man_made=pier
+Railways
+Drawing	Description	Wiki page
+	Railway for full-sized passenger trains	railway=rail
+	Construction railway	railway=construction
+	Disused railway	railway=disused
+	Railway full-sized passenger trains service segments (Siding track / Yard / Spur track)	railway=rail + service=siding / railway=rail + service=yard / railway=rail + service=spur
+	Narrow gauge railway / Cable-driven inclined railway / Rails of a light rail	railway=narrow_gauge / railway=funicular / railway=light_rail
+	Tram railway	railway=tram
+	Subway railway	railway=subway
+	Miniature railway	railway=miniature
+	Monorail railway	railway=monorail
+	Railway turntable	railway=turntable
+	Roller coaster track	roller_coaster=track
+Aerial lifts
+Drawing	Description	Wiki page
+	Chairlift / Drag lift / T-bar lift / J-bar lift / Platter lift / Rope tow lift / Zip line	aerialway=chair_lift / aerialway=drag_lift / aerialway=t-bar / aerialway=j-bar / aerialway=platter / aerialway=rope_tow / aerialway=zip_line
+	Gondola lift / Cable car run / Mixed lift	aerialway=gondola / aerialway=cable_car / aerialway=mixed_lift
+	An aerial lift for goods	aerialway=goods
+Waterways
+Drawing	Description	Wiki page
+	River / Canal	waterway=river / waterway=canal
+	River intermittent / Canal intermittent / River seasonal / Canal seasonal	waterway=river + intermittent=* / waterway=river + seasonal=* / waterway=canal + intermittent=* / waterway=canal + seasonal=*
+	River in tunnel / Canal in tunnel	waterway=river + tunnel=yes / waterway=canal + tunnel=yes
+	Canal in tunnel	waterway=canal + tunnel=flooded
+	Stream / Ditch / Drain	waterway=stream / waterway=ditch / waterway=drain
+	Stream intermittent / Stream seasonal / Ditch intermittent / Ditch seasonal / Drain intermittent / Drain seasonal	waterway=stream + intermittent=* / waterway=stream + seasonal=* / waterway=ditch + intermittent=* / waterway=ditch + seasonal=* / waterway=drain + intermittent=* / waterway=drain + seasonal=*
+	Stream in pipe or tunnel / Ditch in pipe or tunnel / drain in pipe or tunnel	waterway=stream + tunnel=yes / waterway=ditch + tunnel=yes / waterway=drain + tunnel=yes
+	Water slide	attraction=water_slide
+Water traffic
+Drawing	Description	Wiki page
+	Ferry route	route=ferry
+Platforms
+Drawing	Description	Wiki page
+	Platform at a bus stop or station / Railway platform	highway=platform / railway=platform
+Energy supply
+Drawing	Description	Wiki page
+	Major power line	power=line
+	Minor power line / Path from tee area to the green of a golf course	power=minor_line / golf=hole
+	Overground pipeline	man_made=pipeline + location=overground/overhead
+	Overground gas pipeline	man_made=pipeline + location=overground/overhead + substance=gas
+	Overground oil pipeline	man_made=pipeline + location=overground/overhead + substance=oil
+	Overground water pipeline	man_made=pipeline + location=overground/overhead + substance=water
+	Conveyor system for transporting materials	man_made=goods_conveyor
+Barriers
+Drawing	Description	Wiki page
+	City wall	barrier=city_wall / historic=citywalls
+	Wall / Fence / Chain / Guard rail / Hand rail / Ditch / Jersey barrier	barrier=retaining_wall / barrier=wall / barrier=fence / barrier=chain / barrier=guard_rail / barrier=handrail / barrier=ditch / barrier=jersey_barrier
+	Hedge	barrier=hedge
+	Breakwater / Groyne	man_made=breakwater / man_made=groyne
+	Weir	waterway=weir
+	Dam	waterway=dam
+Nature
+Drawing	Description	Wiki page
+	Line of trees	natural=tree_row
+	A straight line cut in a forest	man_made=cutline
+	Cliff	natural=cliff
+	Arete	natural=arete
+	Ridge	natural=ridge
+	Embankment	man_made=embankment
+Boundaries
+Drawing	Description	Wiki page
+	National[1] boundary	boundary=administrative + admin_level=2
+	Sub-national boundary (highest level)	boundary=administrative + admin_level=3
+	Sub-national boundary (second-highest level)	boundary=administrative + admin_level=4
+	Sub-national boundary (third-highest level)	boundary=administrative + admin_level=5
+	Sub-national boundary (fourth-highest level)	boundary=administrative + admin_level=6
+	Sub-national boundary (fifth-highest or sixth-highest level)	boundary=administrative + admin_level=7 / boundary=administrative + admin_level=8
+	Sub-national boundary (seventh-highest or eighth-highest level)	boundary=administrative + admin_level=9 / boundary=administrative + admin_level=10
+See also
+Standard tile layer (OSM Carto)
+External links
+Definition of styles on OSM Carto GitHub GitHub
+Footnotes
+ In OpenStreetMap, countries are generally recognized as countries if they have an ISO-3166-1 code.
+v · d · eopenstreetmap.org
+Interface elements	
+Share map with marker · Map Data layer · Query features tool · Routing · Changeset Discussions · Nearby users · Notes
+Top menu	
+Edit · History · Export
+GPS traces	
+How to upload a GPS (Troubleshooting) · Visibility of GPS traces
+Layers	
+Standard · CyclOSM · OpenCycleMap · Transport Map · Tracestrack Topo · Humanitarian · Shortbread · MapTiler OMT · Former: MapQuest Open · ÖPNVKarte · NoName · Tiles@home
+Account and login	
+Privacy Policy · Lost password · Account deletion
+See also	
+Main OSM blog · User diaries · When do I see my work on OpenStreetMap?
+Category: OSM Carto
+Navigation menu
+English
+Create account
+Log in
+PageDiscussion
+ReadView sourceView history
+Search
+Search OpenStreetMap Wiki
+Main Page
+The map
+Map Features
+Contributors
+Help
+Blogs
+Shop
+Donations
+Wiki discussion
+Recent changes
+Special pages
+Tools
+What links here
+Related changes
+Printable version
+Permanent link
+Page information
+Cite this page
+This page was last edited on 31 January 2026, at 19:14.
+Content is available under Creative Commons Attribution-ShareAlike 2.0 license unless otherwise noted.
+Privacy policyAbout OpenStreetMap WikiDisclaimersMobile view
+Creative Commons Attribution-ShareAlike 2.0 license
+Powered by MediaWiki
+
+
+OpenStreetMap Carto/Areas
+< OpenStreetMap Carto
+Help
+OpenStreetMap Carto/AreasIn other languages
+ Deutsch   English   italiano   العربية   中文（简体） 
+Other languages...
+Symbols
+Lines
+Areas
+±
+
+
+
+Contents
+1	Areas
+1.1	Nature
+1.2	City planning
+1.3	Buildings
+1.4	Transportation
+1.5	Agriculture and industry
+1.6	Electricity
+1.7	Leisure and recreation
+1.8	Sports
+1.9	Institutional areas
+1.10	Military
+1.11	Miscellaneous - framed areas
+2	See also
+3	External links
+Areas
+Areas in the Standard tile layer denote various different things, from land usage to buildings to restricted access zones. A few areas may be drawn as a overlay. This means they can be combined with another background. For example, wetland can be combined with forest, grassland, etc.
+
+Area	Symbol	Description	Overlay?	Wiki page
+Nature
+	(no symbol)	Land (This is only shown when no more specific information is available)	No	
+	(no symbol)	Body of water (ocean, sea, pond, river) / swimming pool / artificial basin / artificial lake / water-covered area of a river / dock	No	natural=water / leisure=swimming_pool / landuse=basin / landuse=reservoir / waterway=riverbank / waterway=dock
+	(no symbol)	Water body intermittent / Water body seasonal / Infiltration basin / Detention basin	No	natural=water + intermittent=* / natural=water + seasonal=* / landuse=basin + basin=infiltration / landuse=basin + basin=detention
+	(no symbol)	Reef	No	natural=reef
+	(no symbol)	Natural woodland which is mostly or not at all not used for timber production	Yes	natural=wood
+	(no symbol)	Broadleaved woodland	Yes	natural=wood + leaf_type=broadleaved
+	(no symbol)	Needleleaved woodland	Yes	natural=wood + leaf_type=needleleaved
+	(no symbol)	Mixed woodland	Yes	natural=wood + leaf_type=mixed
+	(no symbol)	Leafless vegetation	Yes	natural=wood + leaf_type=leafless
+	(no symbol)	Natural grassland	No	natural=grassland
+	(no symbol)	Bushes and small trees	No	natural=scrub
+	(no symbol)	Dwarf scrubs	No	natural=heath
+	(no symbol)	Generic beach / Shoal	No	natural=beach / natural=shoal
+	(no symbol)	Generic sand area / golf bunker	No	natural=sand / golf=bunker
+	(no symbol)	Beach with sand surface / shoal with sand surface	No	natural=beach + surface=sand / natural=shoal + surface=sand
+	(no symbol)	Beach with coarse sand surface / shoal with coarse sand surface	No	natural=beach + surface=gravel / natural=shoal + surface=gravel
+	(no symbol)	Bare rock surface	No	natural=bare_rock
+	(no symbol)	Scree / Shingle	No	natural=scree / natural=shingle
+	(no symbol)	Wetland (generic)	Yes	natural=wetland
+	(no symbol)	Mud	No	natural=mud
+	(no symbol)	Marsh / Semi-wetland meadow / Fen	Yes	natural=wetland + wetland=marsh / natural=wetland + wetland=wet_meadow / natural=wetland + wetland=fen
+	(no symbol)	Reedbed	Yes	natural=wetland + wetland=reedbed
+	(no symbol)	Salt marsh	Yes	natural=wetland + wetland=saltmarsh
+	(no symbol)	Swamp	Yes	natural=wetland + wetland=swamp
+	(no symbol)	Mangrove	Yes	natural=wetland + wetland=mangrove
+	(no symbol)	Bog / String bog	Yes	natural=wetland + wetland=bog / natural=wetland + wetland=string_bog
+	(no symbol)	Tidalflat, Mudflat	Yes	natural=wetland + wetland=tidalflat
+	(no symbol)	Salt pond	Yes	landuse=salt_pond
+	(no symbol)	Glacier	No	natural=glacier
+City planning
+	(no symbol)	Residential area	No	landuse=residential
+	(no symbol)	Commercial area or business park (predominantly offices)	No	landuse=commercial
+	(no symbol)	Retail area (predominantly shops) / Shopping mall	No	landuse=retail / shop=mall
+		A marketplace where trade is regulated	No	amenity=marketplace
+	(no symbol)	Industrial area / Area for railway usage / Waterworks / Wastewater plant	No	landuse=industrial / landuse=railway / man_made=water_works / man_made=wastewater_plant
+		Railway station	No	railway=station
+	(no symbol)	Garages area	No	landuse=garages
+	(no symbol)	Christian cemetery / Christian grave yard	No	landuse=cemetery + religion=christian / amenity=grave_yard + religion=christian
+	(no symbol)	Jewish cemetery / Jewish grave yard	No	landuse=cemetery + religion=jewish / amenity=grave_yard + religion=jewish
+	(no symbol)	Muslim cemetery / Muslim grave yard	No	landuse=cemetery + religion=muslim / amenity=grave_yard + religion=muslim
+	(no symbol)	Cemetery with unknown, other or no specific religious background / Grave yard with unknown, other or no specific religious background	No	landuse=cemetery / amenity=grave_yard
+	(no symbol)	Brownfield / Construction yard	No	landuse=brownfield / landuse=construction
+	(no symbol)	Landfill	No	landuse=landfill
+Buildings
+	(no symbol)	Non-specific building	No	building=*
+	(no symbol)	Airport terminal / Train station / Aerialway station / Bus station	No	aeroway=terminal + building=* / building=train_station / aerialway=station + building=* / public_transport=station + building=*
+	  
+  
+  
+
+Place of worship where religious practices are held, i.e. church, synagogue, mosque, temple.	No	amenity=place_of_worship + building=*
+Transportation
+	
+
+
+	Car parking lot
+Bicycle parking
+Motorcycle parking
+Taxi rank	No	amenity=parking
+amenity=bicycle_parking
+amenity=motorcycle_parking
+amenity=taxi
+	
+
+	Airport
+Ferry terminal
+Bus station	No	aeroway=aerodrome
+amenity=ferry_terminal
+amenity=bus_station
+	(no symbol)	Place where drivers can leave a road to refuel, rest, or take refreshments / Place where drivers can leave the road to rest, but not refuel	No	highway=services / highway=rest_area
+	(no symbol)	Platform at a bus stop or station / Railway platform	No	highway=platform / railway=platform
+	(no symbol)	Bridge	No	man_made=bridge
+	(no symbol)	Runway / taxiway	No	aeroway=runway / aeroway=taxiway
+		helipad	No	aeroway=helipad
+	(no symbol)	Apron	No	aeroway=apron
+	(no symbol)	Service highway as a freely routable area	No	highway=service + area=yes
+	(no symbol)	Living street as an freely routable area	No	highway=living_street + area=yes
+	(no symbol)	Pedestrian street or footway as a freely routable area	No	highway=pedestrian + area=yes / highway=footway + area=yes
+Agriculture and industry
+	(no symbol)	Farmland / Land area used for growing plants in greenhouses	No	landuse=farmland / landuse=greenhouse_horticulture
+	(no symbol)	Farmyard	No	landuse=farmyard
+	(no symbol)	Allotments	No	landuse=allotments
+	(no symbol)	Orchard	No	landuse=orchard
+	(no symbol)	Plant nursery	No	landuse=plant_nursery
+	(no symbol)	Garden	No	leisure=garden
+	(no symbol)	Managed forest	No	landuse=forest
+	(no symbol)	Broadleaved woodland	No	landuse=forest + leaf_type=broadleaved
+	(no symbol)	Needleleaved woodland	No	landuse=forest + leaf_type=needleleaved
+	(no symbol)	Mixed woodland	No	landuse=forest + leaf_type=mixed
+	(no symbol)	Leafless vegetation	No	landuse=forest + leaf_type=leafless
+	(no symbol)	Vineyard	No	landuse=vineyard
+	(no symbol)	Quarry	No	landuse=quarry
+	(no symbol)	Dam	No	waterway=dam
+	(no symbol)	Breakwater / Groyne	No	man_made=breakwater + area=yes / man_made=groyne + area=yes
+Electricity
+	(no symbol)	Generator / Substation / Plant	No	power=generator / power=substation / power=plant
+Leisure and recreation
+	(no symbol)	Park	No	leisure=park
+	(no symbol)	Recreation ground	No	landuse=recreation_ground
+	
+	Playground
+Fitness station	No	leisure=playground
+leisure=fitness_station
+	(no symbol)	(managed) Grassland / (managed) Meadow / Village green / Teeing ground of a golf course / Fairway of a golf course / Driving range of a golf course	No	landuse=grass / landuse=meadow / landuse=village_green / golf=tee / golf=fairway / golf=driving_range
+	
+	Campsite
+Caravansite	No	tourism=camp_site
+tourism=caravan_site
+		Dog park	No	leisure=dog_park
+	(no symbol)	Flowerbed	No	landuse=flowerbed
+Sports
+	(no symbol)	Sports centre / Stadium	No	leisure=sports_centre / leisure=stadium
+	(no symbol)	Sports pitch (i.e. soccer field, basketball field, etc.) / Running track	No	leisure=pitch / leisure=track
+	(no symbol)	A place where you can skate and play bandy or ice hockey	No	leisure=ice_rink
+	
+	Golf course
+Miniature golf course	No	leisure=golf_course
+leisure=miniature_golf
+	(no symbol)	Golf rough	No	golf=rough
+	(no symbol)	Putting green of a golf course	No	golf=green
+Institutional areas
+	(no symbol)	Area which belongs to a kindergarten / school / college / university	No	amenity=kindergarten / amenity=school / amenity=college / amenity=university
+	
+
+	Area which belongs to a community centre
+social facility
+arts centre	No	amenity=community_centre
+amenity=social_facility
+amenity=arts_centre
+		Area which belongs to a hospital	No	amenity=hospital
+		Area which belongs to a clinic	No	amenity=clinic
+	
+	Police station
+Fire station	No	amenity=police
+amenity=fire_station
+		Prison ground	Yes	amenity=prison
+	(no symbol)	Religious ground	No	landuse=religious
+	  
+  
+  
+
+Place of worship where religious practices are held (other than building).	No	amenity=place_of_worship
+Military
+	(no symbol)	Land used by the military.	Yes	landuse=military
+	(no symbol)	A military zone which has been be declared to be dangerous for some reason (i.e. a firing range, bombing range, etc.).	Yes	military=danger_area
+Miscellaneous - framed areas
+	(no symbol)	National park / Nature reserve	Yes	boundary=national_park / leisure=nature_reserve
+	(no symbol)	Aboriginal Lands	Yes	boundary=aboriginal_lands
+	(no symbol)	Zoo	Yes	tourism=zoo
+	(no symbol)	Marina	Yes	leisure=marina
+	(no symbol)	Theme park, Amusement park, Discovery park, Open-air museum, Miniature park	Yes	tourism=theme_park
+	(no symbol)	A factory or industrial production plant	Yes	man_made=works
+	(no symbol)	single parking space on a parking lot	Yes	amenity=parking_space
+See also
+Standard tile layer (OSM Carto)
+External links
+Definition of styles for areas on OSM Carto GitHub GitHub
+v · d · eopenstreetmap.org
+Interface elements	
+Share map with marker · Map Data layer · Query features tool · Routing · Changeset Discussions · Nearby users · Notes
+Top menu	
+Edit · History · Export
+GPS traces	
+How to upload a GPS (Troubleshooting) · Visibility of GPS traces
+Layers	
+Standard · CyclOSM · OpenCycleMap · Transport Map · Tracestrack Topo · Humanitarian · Shortbread · MapTiler OMT · Former: MapQuest Open · ÖPNVKarte · NoName · Tiles@home
+Account and login	
+Privacy Policy · Lost password · Account deletion
+See also	
+Main OSM blog · User diaries · When do I see my work on OpenStreetMap?
+Category: OSM Carto
+Navigation menu
+English
+Create account
+Log in
+PageDiscussion
+ReadView sourceView history
+Search
+Search OpenStreetMap Wiki
+Main Page
+The map
+Map Features
+Contributors
+Help
+Blogs
+Shop
+Donations
+Wiki discussion
+Recent changes
+Special pages
+Tools
+What links here
+Related changes
+Printable version
+Permanent link
+Page information
+Cite this page
+This page was last edited on 31 January 2026, at 19:21.
+Content is available under Creative Commons Attribution-ShareAlike 2.0 license unless otherwise noted.
+Privacy policyAbout OpenStreetMap WikiDisclaimersMobile view
+Creative Commons Attribution-ShareAlike 2.0 license
+Powered by MediaWiki

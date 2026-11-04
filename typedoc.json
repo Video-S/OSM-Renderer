@@ -1,0 +1,31 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "3D Map Viewer API Reference",
+  "plugin": ["typedoc-plugin-markdown"],
+  "entryPoints": [
+    "src/types/MapFeature.ts",
+    "src/world/WorldCoordinates.ts",
+    "src/world/ElevationPolicy.ts",
+    "src/world/MapDataProvider.ts",
+    "src/world/LocalGeoJsonProvider.ts",
+    "src/world/OsmApiProvider.ts",
+    "src/world/FeatureCatalogue.ts",
+    "src/world/GeometryBuilder.ts",
+    "src/world/BridgeAndTunnelBuilder.ts",
+    "src/world/TopologicalNodeIndex.ts",
+    "src/world/SceneResourceManager.ts",
+    "src/world/ZFightingValidator.ts",
+    "src/world/PlanarLayerValidator.ts",
+    "src/styles/mapThemes.ts",
+    "src/scene/CameraController.tsx"
+  ],
+  "out": "docs/api-reference",
+  "exclude": [
+    "**/*.test.ts",
+    "**/node_modules/**",
+    "**/dist/**"
+  ],
+  "readme": "none",
+  "githubPages": false,
+  "cleanOutputDir": true
+}

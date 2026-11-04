@@ -1,0 +1,8 @@
+{
+  "name": "Real-World 3D Map Viewer",
+  "description": "An interactive 3D map viewer rendering real-world OpenStreetMap buildings, streets, paths, and water features with an orthographic camera and strategy game styling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

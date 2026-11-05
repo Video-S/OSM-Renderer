@@ -60,10 +60,22 @@
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1 & M2.2 Tests** | `npm test` | **92 / 92 passed** (0 failures; 68 core G1 + 15 M2.1/M2.2 benchmark & geometric + 9 M2.2 production railway, bridge/tunnel & preset separation tests) |
+| **Unit, Integration, M2.1 & M2.2 Tests** | `npm test` | **92 / 92 passed** (0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
+
+### Test Declaration Breakdown (Verified Source Declarations)
+
+| Suite | Test declarations |
+|---|---:|
+| Core suites (WorldCoordinates, FeatureCoverage, GeometryBuilder, ElevationAndZIndex, JunctionAndTopology) | 66 |
+| `PerformanceBaseline.test.ts` | 17 |
+| `RailwayRendering.test.ts` | 9 |
+| **Total** | **92** |
+
+*(Verified by inspecting current source declarations; recorded test execution remains the 2026-11-04 verification result.)*
+
 
 ---
 

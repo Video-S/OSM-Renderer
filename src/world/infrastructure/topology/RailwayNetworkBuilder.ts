@@ -515,11 +515,10 @@ const RAILWAY_ROLE_PRIORITY: readonly RailwayNodeRole[] = [
   'junction',
   'grade_transition',
   'level_crossing',
-  'pedestrian_crossing',
   'attribute_break',
   'loop_anchor',
   'boundary_clip',
-  'buffer_stop',
+  'dead_end',
 ];
 
 function selectPrimaryRailwayNodeRole(roles: readonly RailwayNodeRole[]): RailwayNodeRole {
@@ -1835,7 +1834,7 @@ export function buildRailwayNetwork(
       rolesSet.add('boundary_clip');
       diagnostics.boundaryClippedNodeCount++;
     } else if (degree === 1) {
-      rolesSet.add('buffer_stop');
+      rolesSet.add('dead_end');
     }
 
     if (rec.isLoopAnchor) {

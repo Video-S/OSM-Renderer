@@ -6,7 +6,7 @@
 
 # Interface: RailwayNode
 
-Defined in: world/infrastructure/topology/types.ts:278
+Defined in: world/infrastructure/topology/types.ts:280
 
 ## Extends
 
@@ -132,7 +132,7 @@ Effective vertical OSM layer tag (default 0).
 
 > **network**: `"railway"`
 
-Defined in: world/infrastructure/topology/types.ts:279
+Defined in: world/infrastructure/topology/types.ts:281
 
 Network domain ('road' | 'railway').
 
@@ -217,7 +217,7 @@ Non-exclusive, canonically sorted list of all topological roles held by this nod
 
 > `optional` **turnoutTopology?**: [`TurnoutTopologySpec`](TurnoutTopologySpec.md)
 
-Defined in: world/infrastructure/topology/types.ts:280
+Defined in: world/infrastructure/topology/types.ts:282
 
 ***
 

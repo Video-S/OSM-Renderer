@@ -21,6 +21,8 @@
 - [LevelCrossingRelation](interfaces/LevelCrossingRelation.md)
 - [RailwayEdge](interfaces/RailwayEdge.md)
 - [RailwayFlatCrossingRelation](interfaces/RailwayFlatCrossingRelation.md)
+- [RailwayNetworkBuildResult](interfaces/RailwayNetworkBuildResult.md)
+- [RailwayNetworkDiagnostics](interfaces/RailwayNetworkDiagnostics.md)
 - [RailwayNode](interfaces/RailwayNode.md)
 - [RoadEdge](interfaces/RoadEdge.md)
 - [RoadNetworkBuildResult](interfaces/RoadNetworkBuildResult.md)

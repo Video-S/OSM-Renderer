@@ -6,7 +6,18 @@
 
 # world/infrastructure/topology/InfrastructureGraph
 
+## Functions
+
+- [buildRailwayNetwork](functions/buildRailwayNetwork.md)
+- [isSecondaryRailwayBranch](functions/isSecondaryRailwayBranch.md)
+
 ## References
+
+### areVerticesAndNodeIdsEqual
+
+Re-exports [areVerticesAndNodeIdsEqual](../RoadNetworkBuilder/functions/areVerticesAndNodeIdsEqual.md)
+
+***
 
 ### BaseInfrastructureEdge
 
@@ -23,6 +34,42 @@ Re-exports [BaseInfrastructureNode](../types/interfaces/BaseInfrastructureNode.m
 ### buildRoadNetwork
 
 Re-exports [buildRoadNetwork](../RoadNetworkBuilder/functions/buildRoadNetwork.md)
+
+***
+
+### cloneOsmTags
+
+Re-exports [cloneOsmTags](../RoadNetworkBuilder/functions/cloneOsmTags.md)
+
+***
+
+### comparePointArraysMillimeter
+
+Re-exports [comparePointArraysMillimeter](../RoadNetworkBuilder/functions/comparePointArraysMillimeter.md)
+
+***
+
+### compareStringsCodeUnit
+
+Re-exports [compareStringsCodeUnit](../RoadNetworkBuilder/functions/compareStringsCodeUnit.md)
+
+***
+
+### computeCumulativeLengths
+
+Re-exports [computeCumulativeLengths](../RoadNetworkBuilder/functions/computeCumulativeLengths.md)
+
+***
+
+### computeEndInwardTangent
+
+Re-exports [computeEndInwardTangent](../RoadNetworkBuilder/functions/computeEndInwardTangent.md)
+
+***
+
+### computeStartInwardTangent
+
+Re-exports [computeStartInwardTangent](../RoadNetworkBuilder/functions/computeStartInwardTangent.md)
 
 ***
 
@@ -53,6 +100,12 @@ Re-exports [enrichGeoJsonWithOsmXmlNodeIds](../OsmNodeIdEnricher/functions/enric
 ### enrichGeoJsonWithOverpassNodeIds
 
 Re-exports [enrichGeoJsonWithOverpassNodeIds](../OsmNodeIdEnricher/functions/enrichGeoJsonWithOverpassNodeIds.md)
+
+***
+
+### EXACT\_DUPLICATE\_VERTEX\_TOLERANCE\_METERS
+
+Re-exports [EXACT_DUPLICATE_VERTEX_TOLERANCE_METERS](../RoadNetworkBuilder/variables/EXACT_DUPLICATE_VERTEX_TOLERANCE_METERS.md)
 
 ***
 
@@ -161,6 +214,18 @@ Re-exports [RailwayFlatCrossingRelation](../types/interfaces/RailwayFlatCrossing
 ### RailwayNetwork
 
 Re-exports [RailwayNetwork](../types/type-aliases/RailwayNetwork.md)
+
+***
+
+### RailwayNetworkBuildResult
+
+Re-exports [RailwayNetworkBuildResult](../types/interfaces/RailwayNetworkBuildResult.md)
+
+***
+
+### RailwayNetworkDiagnostics
+
+Re-exports [RailwayNetworkDiagnostics](../types/interfaces/RailwayNetworkDiagnostics.md)
 
 ***
 

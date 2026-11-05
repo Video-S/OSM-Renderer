@@ -73,9 +73,9 @@ The pipeline classifies OSM tags into strongly typed categories defined in `src/
 
 ---
 
-## 5. Topology, Node Indexing & Road Network Graph (`ADR-0009`)
+## 5. Topology, Node Indexing & Road/Railway Network Graphs (`ADR-0009`)
 
-The topological network of roads, railways, and linear paths is managed by `TopologicalNodeIndex` (`src/world/TopologicalNodeIndex.ts`), `OsmNodeIdEnricher` (`src/world/infrastructure/topology/OsmNodeIdEnricher.ts`), and `RoadNetworkBuilder` (`src/world/infrastructure/topology/RoadNetworkBuilder.ts`):
+The topological networks of roads, railways, and linear paths are managed by `TopologicalNodeIndex` (`src/world/TopologicalNodeIndex.ts`), `OsmNodeIdEnricher` (`src/world/infrastructure/topology/OsmNodeIdEnricher.ts`), `RoadNetworkBuilder` (`src/world/infrastructure/topology/RoadNetworkBuilder.ts`), and `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`):
 
 - **Verified Per-Vertex OSM Node ID Enrichment (`OsmNodeIdEnricher.ts`)**:
   - In `server.ts`, immediately after `osmtogeojson` converts Overpass JSON (`way.nodes`) or OSM 0.6 XML (`<nd ref>`), `enrichGeoJsonWithOverpassNodeIds` and `enrichGeoJsonWithOsmXmlNodeIds` attach `properties._nodeIds` (for `LineString`) or `properties._nodeIdsByPart` (for `MultiLineString`) **only** when way identity and 1:1 per-vertex coordinate alignment (`<= 1e-5` deg) against the OSM node table are verified.
@@ -83,8 +83,8 @@ The topological network of roads, railways, and linear paths is managed by `Topo
   - `TopologicalNodeIndex` preserves explicit OSM node IDs (`nodes`, `nodeIds`, `_nodeIds`, `_nodeIdsByPart`) across ways; two distinct explicit OSM node IDs never merge even if their coordinates coincide.
   - When explicit IDs are omitted, endpoints within a **15 cm** (`0.15 m`) radius are clustered into a shared topological node with deterministic tie-breaking.
 - **Boundary-Clipped Endpoint Isolation**:
-  - Synthetic endpoints created by `clipPolylineToBox` (`clippedAtStart` / `clippedAtEnd`) receive isolated `boundary_clip` node identities in `RoadNetworkBuilder` so two unrelated ways clipped near the same bounding-box edge never snap into a false junction.
-- **Layer-Scoped Isolation (`layerScope`)**: Node lookups are partitioned by `${layer}|${isBridge}|${isTunnel}`. A grade-separated bridge or subterranean tunnel passing over an at-grade road at identical $(X, Z)$ coordinates is strictly isolated and never generates a spurious 4-way intersection.
+  - Synthetic endpoints created by `clipPolylineToBox` (`clippedAtStart` / `clippedAtEnd`) receive isolated `boundary_clip` node identities in `RoadNetworkBuilder` and `RailwayNetworkBuilder` so two unrelated ways clipped near the same bounding-box edge never snap into a false junction.
+- **Layer-Scoped Isolation (`layerScope`)**: Node lookups are partitioned by `${layer}|${isBridge}|${isTunnel}`. A grade-separated bridge or subterranean tunnel passing over an at-grade road or railway at identical $(X, Z)$ coordinates is strictly isolated and never generates a spurious 4-way intersection.
 
 ---
 
@@ -92,11 +92,13 @@ The topological network of roads, railways, and linear paths is managed by `Topo
 
 To satisfy both the current 3D renderer and the `ADR-0009` infrastructure graph:
 - **Non-Destructive Topology Capture (`ProcessedMapData.topologySource`)**:
-  - Immediately after metric projection, `clipPolylineToBox`, and culvert/grade classification—and **before** `seenRoadSegments` heuristic deduplication and **before** `chainContiguousRoads`—`LocalGeoJsonProvider` captures cloned `UnchainedRoadPart` records into `ProcessedMapData.topologySource.roadParts`.
-- **`RoadNetworkBuilder` (`src/world/infrastructure/topology/RoadNetworkBuilder.ts`)**:
-  - Consumes `topologySource.roadParts` to construct `RoadNetwork` (`nodes`, `edges`, `featureToEdgeIds`), performing strict `1 mm` (`1e-3 m`) vertex-by-vertex duplicate detection, interior OSM junction splitting, P-loop and isolated closed-loop (`loop_anchor`) preservation, parallel multi-edge indexing (`parallelIndex`), and OSMnx-style degree-2 simplification with road attribute and one-way guards plus full per-segment provenance (`reversedRelativeToSource`).
-- **Renderer-Facing Legacy Chaining (`mapData.roads`)**:
-  - During Milestone 2.3 Stages B–D, `LocalGeoJsonProvider` continues to populate `mapData.roads` via `seenRoadSegments` and `chainContiguousRoads()` with zero behavioral changes for `GeometryBuilder`.
+  - Immediately after metric projection, `clipPolylineToBox`, and culvert/grade classification—and **before** `seenRoadSegments` heuristic deduplication and **before** `chainContiguousRoads`—`LocalGeoJsonProvider` captures cloned `UnchainedRoadPart` records into `ProcessedMapData.topologySource.roadParts` and cloned `UnchainedRailwayPart` records into `ProcessedMapData.topologySource.railwayParts`.
+  - Point features with `railway=switch` (`kind: 'railway_switch'`) and `railway=railway_crossing` (`kind: 'railway_crossing_flat'`) inside the clipped bounds are captured in `ProcessedMapData.topologySource.infrastructurePoints` (`InfrastructurePointMetadata[]`) without altering `mapData.landmarks` or skipped-feature diagnostics.
+- **`RoadNetworkBuilder` & `RailwayNetworkBuilder` (`src/world/infrastructure/topology/`)**:
+  - `RoadNetworkBuilder` consumes `topologySource.roadParts` to construct `RoadNetwork` (`nodes`, `edges`, `featureToEdgeIds`), performing strict `1 mm` (`1e-3 m`) vertex-by-vertex duplicate detection, interior OSM junction splitting, P-loop and isolated closed-loop (`loop_anchor`) preservation, parallel multi-edge indexing (`parallelIndex`), and OSMnx-style degree-2 simplification with road attribute and one-way guards plus full per-segment provenance (`reversedRelativeToSource`).
+  - `RailwayNetworkBuilder` consumes `topologySource.railwayParts` and railway-only `topologySource.infrastructurePoints` to construct `RailwayNetwork` and `RailwayFlatCrossingRelation[]`, enforcing railway attribute simplification guards (`railwayType`, `width`, `gauge`, `electrified`, `service`, `usage`, `isSecondaryBranch`, and `osmTags`), conservative turnout (`1-to-2` throat) classification (`confirmed`, `unresolved_main_vs_diverging`, `unresolved_throat`), and non-interconnecting flat diamond crossing decoupling.
+- **Renderer-Facing Legacy Pipelines (`mapData.roads` & `mapData.railways`)**:
+  - During Milestone 2.3 Stages B–D, `LocalGeoJsonProvider` continues to populate `mapData.roads` and `mapData.railways` with zero behavioral changes for `GeometryBuilder` and `RailwayGeometryBuilder`.
 
 ---
 

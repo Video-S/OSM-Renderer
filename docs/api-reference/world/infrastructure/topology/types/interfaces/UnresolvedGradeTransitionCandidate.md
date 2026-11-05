@@ -6,7 +6,7 @@
 
 # Interface: UnresolvedGradeTransitionCandidate
 
-Defined in: world/infrastructure/topology/types.ts:408
+Defined in: world/infrastructure/topology/types.ts:410
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:408
 
 > **candidateAtGradeEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:413
+Defined in: world/infrastructure/topology/types.ts:415
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:413
 
 > `optional` **continuousTraversalDot?**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:415
+Defined in: world/infrastructure/topology/types.ts:417
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:415
 
 > **distanceMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:414
+Defined in: world/infrastructure/topology/types.ts:416
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:414
 
 > **gradeSeparatedEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:411
+Defined in: world/infrastructure/topology/types.ts:413
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:411
 
 > **gradeSeparatedEndpoint**: `"end"` \| `"start"`
 
-Defined in: world/infrastructure/topology/types.ts:412
+Defined in: world/infrastructure/topology/types.ts:414
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:412
 
 > **network**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:409
+Defined in: world/infrastructure/topology/types.ts:411
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:409
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:410
+Defined in: world/infrastructure/topology/types.ts:412
 
 ***
 
@@ -70,4 +70,4 @@ Defined in: world/infrastructure/topology/types.ts:410
 
 > **reason**: `"ambiguous_multiple_candidates"` \| `"misaligned_tangent"` \| `"non_terminal_endpoint"` \| `"incompatible_class_or_tier"` \| `"distinct_explicit_osm_nodes"` \| `"exceeds_snap_tolerance"`
 
-Defined in: world/infrastructure/topology/types.ts:416
+Defined in: world/infrastructure/topology/types.ts:418

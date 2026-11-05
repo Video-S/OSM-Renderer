@@ -6,7 +6,7 @@
 
 # Interface: UnresolvedCrossingCandidate
 
-Defined in: world/infrastructure/topology/types.ts:454
+Defined in: world/infrastructure/topology/types.ts:456
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:454
 
 > **edgeAId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:457
+Defined in: world/infrastructure/topology/types.ts:459
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:457
 
 > **edgeBId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:458
+Defined in: world/infrastructure/topology/types.ts:460
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:458
 
 > **kind**: `"road_rail"` \| `"pedestrian_rail"` \| `"rail_rail"` \| `"road_road"`
 
-Defined in: world/infrastructure/topology/types.ts:455
+Defined in: world/infrastructure/topology/types.ts:457
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:455
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:456
+Defined in: world/infrastructure/topology/types.ts:458
 
 ***
 
@@ -46,4 +46,4 @@ Defined in: world/infrastructure/topology/types.ts:456
 
 > **reason**: `"coincident_vertex_without_osm_id"` \| `"geometric_intersection_without_shared_node"` \| `"missing_railway_crossing_tag_at_degree_4_node"`
 
-Defined in: world/infrastructure/topology/types.ts:459
+Defined in: world/infrastructure/topology/types.ts:461

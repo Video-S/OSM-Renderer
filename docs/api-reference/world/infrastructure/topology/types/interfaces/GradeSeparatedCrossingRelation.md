@@ -6,7 +6,7 @@
 
 # Interface: GradeSeparatedCrossingRelation
 
-Defined in: world/infrastructure/topology/types.ts:465
+Defined in: world/infrastructure/topology/types.ts:490
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:465
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:466
+Defined in: world/infrastructure/topology/types.ts:491
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:466
 
 > **lowerEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:473
+Defined in: world/infrastructure/topology/types.ts:498
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:473
 
 > **lowerIsTunnel**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:475
+Defined in: world/infrastructure/topology/types.ts:500
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:475
 
 > **lowerLayer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:474
+Defined in: world/infrastructure/topology/types.ts:499
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:474
 
 > **lowerNetwork**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:472
+Defined in: world/infrastructure/topology/types.ts:497
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:472
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:467
+Defined in: world/infrastructure/topology/types.ts:492
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:467
 
 > **upperEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:469
+Defined in: world/infrastructure/topology/types.ts:494
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/infrastructure/topology/types.ts:469
 
 > **upperIsBridge**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:471
+Defined in: world/infrastructure/topology/types.ts:496
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/infrastructure/topology/types.ts:471
 
 > **upperLayer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:470
+Defined in: world/infrastructure/topology/types.ts:495
 
 ***
 
@@ -86,4 +86,4 @@ Defined in: world/infrastructure/topology/types.ts:470
 
 > **upperNetwork**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:468
+Defined in: world/infrastructure/topology/types.ts:493

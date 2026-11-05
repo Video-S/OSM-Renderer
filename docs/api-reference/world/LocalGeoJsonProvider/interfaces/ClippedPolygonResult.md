@@ -6,7 +6,7 @@
 
 # Interface: ClippedPolygonResult
 
-Defined in: world/LocalGeoJsonProvider.ts:544
+Defined in: world/LocalGeoJsonProvider.ts:616
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/LocalGeoJsonProvider.ts:544
 
 > `optional` **fallbackUsed?**: `boolean`
 
-Defined in: world/LocalGeoJsonProvider.ts:547
+Defined in: world/LocalGeoJsonProvider.ts:619
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/LocalGeoJsonProvider.ts:547
 
 > **polygons**: \[`number`, `number`\][][][]
 
-Defined in: world/LocalGeoJsonProvider.ts:545
+Defined in: world/LocalGeoJsonProvider.ts:617
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: world/LocalGeoJsonProvider.ts:545
 
 > **wasClipped**: `boolean`
 
-Defined in: world/LocalGeoJsonProvider.ts:546
+Defined in: world/LocalGeoJsonProvider.ts:618

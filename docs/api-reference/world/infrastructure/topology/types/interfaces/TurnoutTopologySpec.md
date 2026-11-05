@@ -14,7 +14,15 @@ Defined in: world/infrastructure/topology/types.ts:270
 
 > **candidateEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:275
+Defined in: world/infrastructure/topology/types.ts:277
+
+***
+
+### divergenceAngleRad?
+
+> `optional` **divergenceAngleRad?**: `number`
+
+Defined in: world/infrastructure/topology/types.ts:276
 
 ***
 
@@ -47,3 +55,11 @@ Defined in: world/infrastructure/topology/types.ts:271
 > `optional` **trunkEdgeId?**: `string`
 
 Defined in: world/infrastructure/topology/types.ts:272
+
+***
+
+### turnoutSide?
+
+> `optional` **turnoutSide?**: `"left"` \| `"right"`
+
+Defined in: world/infrastructure/topology/types.ts:275

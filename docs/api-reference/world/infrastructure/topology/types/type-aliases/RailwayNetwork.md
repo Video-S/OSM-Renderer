@@ -8,4 +8,4 @@
 
 > **RailwayNetwork** = [`InfrastructureNetwork`](../interfaces/InfrastructureNetwork.md)\<[`RailwayNode`](../interfaces/RailwayNode.md), [`RailwayEdge`](../interfaces/RailwayEdge.md)\>
 
-Defined in: world/infrastructure/topology/types.ts:366
+Defined in: world/infrastructure/topology/types.ts:368

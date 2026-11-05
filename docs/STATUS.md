@@ -3,7 +3,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestone 2.2 complete; awaiting approval for M2.3)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 approved — Stage A `M2.3-A` / `TKT-003` active)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -79,9 +79,13 @@
 
 ---
 
-## Next Planned Milestones
+## Active & Planned Milestones
 
-1. **M2.3 Topological Road Graph & Intersection Trim Refinement**:
-   - Planned Goalpost 2 road topology foundation prior to road surface markings (`M2.4`).
-
-
+1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage A`)**:
+   - **Stage A (`M2.3-A` / `TKT-003` — `in_progress`)**: Source audit completed and architectural proposal **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Proposed`) authored, awaiting project-owner review before Stage B implementation.
+   - **Stage B (`M2.3-B` — Planned)**: Road network graph construction (`RoadNetworkBuilder`), explicit per-vertex node ID preservation, interior junction splitting, P-loop handling, and OSMnx-style degree-2 simplification.
+   - **Stage C (`M2.3-C` — Planned)**: Independent railway network graph construction (`RailwayNetworkBuilder`), turnout (`1-to-2` switch) and crossover classification, and parallel track multi-edge support.
+   - **Stage D (`M2.3-D` — Planned)**: Crossings and grade transitions (`CrossModalAnalyzer`), preserving point-level OSM crossing/switch metadata and distinguishing level crossings, bridge/tunnel portal transitions, and grade-separated overpasses.
+   - **Stage E (`M2.3-E` — Planned)**: Renderer integration (`GeometryBuilder` road junction trimming and portal transition consumption) with full regression preservation.
+2. **Milestone 2.4: Road Surface Markings (`Planned`)**:
+   - Goalpost 2 procedural road surface markings (lane dividers, directional arrows, crosswalks, stop bars) consuming `InfrastructureGraph` topology and per-segment provenance.

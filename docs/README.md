@@ -14,7 +14,7 @@ This documentation is organized into two distinct categories:
 ## Manually Maintained Documents
 
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
-  Tracks the current implementation milestone (Goalpost 1), verified test/build status, known limitations, and next steps.
+  Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1 & M2.2 complete, M2.3 Stage A active), verified test/build status, known limitations, and next steps.
 
 - **[System Architecture (architecture.md)](./architecture.md)**  
   High-level system overview, component responsibilities, runtime data flow, module relationships, and architectural boundaries.

@@ -38,7 +38,7 @@ All ADRs must be structured using the reusable template:
 
 ## Index of Architectural Decisions
 
-The following architectural decisions have been accepted and represent the established architecture of Goalpost 1:
+The following architectural decisions have been accepted and represent the established architecture across Goalpost 1 and Goalpost 2 (M2.1–M2.2):
 
 - **[ADR-0001: Geographic Coordinates, Projection, and Local World Coordinates](./ADR-0001-geographic-coordinates-and-local-projection.md)**  
   Local equirectangular metric projection centered at dataset origin $(0, 0, 0)$ with metric axes (+X East, +Y Up, +Z South).
@@ -63,4 +63,9 @@ The following architectural decisions have been accepted and represent the estab
 
 - **[ADR-0008: Hybrid Railway Rendering, Multi-Interval Turnout Support, and UV-Ribbon Architecture](./ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md)**  
   Hybrid railway rendering architecture combining close-zoom (`> 4.5 px/m`) 3D instanced sleepers and extruded steel rails with medium/far procedural `fwidth` UV-ribbons, multi-interval turnout/parallel sleeper clipping, and `128 m x 128 m` spatial chunking.
+
+### Proposed Decisions (Pending Review)
+
+- **[ADR-0009: Infrastructure Graph Topology, Domain Contracts, and Simplification Architecture](./ADR-0009-infrastructure-graph-topology.md)** *(Proposed — M2.3 Stage A)*  
+  OSMnx-referenced pure-TypeScript infrastructure topology graph (`RoadNetwork`, `RailwayNetwork`, `GradeTransitionRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`), non-interstitial degree-2 simplification with per-segment provenance, and staged renderer integration plan.
 

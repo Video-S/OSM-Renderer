@@ -54,40 +54,8 @@ class BoundedCache<K, V> {
   }
 }
 
-import fs from 'fs';
-
 const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
 const osmCache = new BoundedCache<string, any>(40, 30 * 60 * 1000);
-
-// Pre-populate cache with real OpenStreetMap benchmark extracts for reliable offline verification
-try {
-  const extractsPath = path.resolve(__dirname, 'src/world/prototype/realOsmRailwayExtracts.json');
-  if (fs.existsSync(extractsPath)) {
-    const raw = JSON.parse(fs.readFileSync(extractsPath, 'utf-8'));
-    if (raw.regions?.hengelo) {
-      const geojson = {
-        type: 'FeatureCollection',
-        name: raw.regions.hengelo.name,
-        crs: { type: 'name', properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' } },
-        features: raw.regions.hengelo.features,
-      };
-      osmCache.set('52.2625,6.7935,400', geojson);
-      osmCache.set('52.2625,6.7935,350', geojson);
-    }
-    if (raw.regions?.amsterdamCentraal) {
-      const geojson = {
-        type: 'FeatureCollection',
-        name: raw.regions.amsterdamCentraal.name,
-        crs: { type: 'name', properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' } },
-        features: raw.regions.amsterdamCentraal.features,
-      };
-      osmCache.set('52.3791,4.9003,420', geojson);
-      osmCache.set('52.3791,4.9003,350', geojson);
-    }
-  }
-} catch (e) {
-  console.warn('Could not pre-populate OSM cache with real extracts:', e);
-}
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
 app.get('/api/geocode', async (req, res) => {

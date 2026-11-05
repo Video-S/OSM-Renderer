@@ -177,7 +177,7 @@ async function main() {
   const theme = MAP_THEMES.tactical;
 
   const N = 5;
-  const modes = ['disabled', 'baseline', 'candidateA', 'candidateB'] as const;
+  const modes = ['disabled', 'production', 'candidateA', 'candidateB'] as const;
 
   const resultsByMode: Record<string, any> = {};
 
@@ -470,7 +470,7 @@ async function main() {
   const amsConfigs: Array<{
     key: string;
     label: string;
-    mode: 'disabled' | 'baseline' | 'candidateA' | 'candidateB';
+    mode: 'disabled' | 'production' | 'candidateA' | 'candidateB';
     options?: BuildRailwayPrototypeOptions;
   }> = [
     {
@@ -479,9 +479,9 @@ async function main() {
       mode: 'disabled',
     },
     {
-      key: 'configB_baselineG1',
-      label: 'B. Existing Goalpost 1 Railway Renderer',
-      mode: 'baseline',
+      key: 'configB_production',
+      label: 'B. Production Railway Renderer (Candidate B)',
+      mode: 'production',
     },
     {
       key: 'configC_candidateA_global',

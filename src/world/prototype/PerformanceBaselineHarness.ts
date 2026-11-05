@@ -167,11 +167,15 @@ export function computeGroupGeometryStats(group: THREE.Group): GroupGeometryStat
 
 /**
  * Runs a reproducible CPU & memory benchmark + warmed-up resource lifecycle audit for a dataset and mode.
- * Supports all 4 configurations:
+ * Supports the 4 active benchmark configurations:
  * - `'disabled'`: Non-railway map only (`railways: []`), isolating the baseline cost of the rest of the map.
- * - `'baseline'`: Goalpost 1 production railway renderer.
+ * - `'production'`: Current production scene pipeline with the integrated Candidate B hybrid railway renderer.
  * - `'candidateA'`: Non-railway map + Candidate A pure procedural UV railway ribbons.
  * - `'candidateB'`: Non-railway map + Candidate B hybrid 3D close-zoom + procedural railway renderer.
+ *
+ * Note: Historical Goalpost 1 `'baseline'` measurements cannot be dynamically regenerated because the
+ * available project source and git history do not contain the superseded Goalpost 1 railway implementation.
+ * Historical Goalpost 1 baseline measurements are preserved as frozen evidence in `docs/m2-1-baseline-data.json`.
  */
 export function runCpuAndLifecycleBenchmark(
   data: ProcessedMapData,
@@ -183,9 +187,9 @@ export function runCpuAndLifecycleBenchmark(
   if ((mode as string) === 'baseline') {
     throw new Error(
       "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer. " +
-      "Because git history is uninitialized in this environment ('fatal: not a git repository'), " +
-      "the superseded Goalpost 1 renderer cannot be checked out or dynamically re-executed. " +
-      "Its historical frozen benchmark data is preserved in 'docs/m2-1-baseline-data.json'. " +
+      "The available project source and git history do not contain the superseded Goalpost 1 railway implementation, " +
+      "so historical Goalpost 1 baseline measurements cannot be dynamically regenerated. " +
+      "Frozen historical baseline data is preserved in 'docs/m2-1-baseline-data.json'. " +
       "Use mode: 'production' to benchmark the current Candidate B production renderer."
     );
   }

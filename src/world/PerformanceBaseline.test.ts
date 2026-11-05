@@ -256,7 +256,8 @@ test('M2.2: rejects misleading baseline benchmark mode with explanatory error', 
     (err: any) => {
       return (
         err instanceof Error &&
-        err.message.includes("The 'baseline' benchmark mode represents the historical Goalpost 1 renderer")
+        err.message.includes("The 'baseline' benchmark mode represents the historical Goalpost 1 renderer") &&
+        err.message.includes("do not contain the superseded Goalpost 1 railway implementation")
       );
     }
   );

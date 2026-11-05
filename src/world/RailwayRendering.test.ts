@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import {
   buildUvRibbonGeometry2D,
@@ -21,8 +24,13 @@ import {
 } from './infrastructure/railways/RailwayTopology';
 import { buildRailwayInfrastructure } from './infrastructure/railways/RailwayGeometryBuilder';
 import { GeometryBuilder, resolveInspectedFeature, SceneResourceManager } from './GeometryBuilder';
+import { ELEVATION_POLICY, getRailwayElevations } from './ElevationPolicy';
+import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { MAP_THEMES } from '../styles/mapThemes';
 import { ProcessedMapData, RailwayFeature } from '../types/MapFeature';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function createBaseMapData(railways: RailwayFeature[]): ProcessedMapData {
   return {
@@ -563,6 +571,7 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
   const bridgeRailway: RailwayFeature = {
     id: 'rail-bridge-test-1',
     type: 'railway',
+    sourceFeatureId: 'way/9001',
     railwayType: 'rail',
     name: 'Mainline Viaduct Test',
     points: [
@@ -585,7 +594,19 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
     (obj as THREE.Mesh).isMesh ? (obj as THREE.Mesh) : (obj.children[0] as THREE.Mesh);
 
-  // 1. Verify bridge meshes in railwaysGroup
+  const getYBounds = (geo: THREE.BufferGeometry): { minY: number; maxY: number } => {
+    const pos = geo.attributes.position;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return { minY, maxY };
+  };
+
+  // 1. Verify bridge substructure and support piers in railwaysGroup
   const bridgeSubTarget = scene.railwaysGroup.children.find(
     (c) => c.name === 'Railway_Bridge_Substructure'
   );
@@ -596,31 +617,123 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
     'Bridge substructure must have vertex geometry'
   );
 
+  // Verify pier geometry exists: Railway_Bridge_Substructure merges [substructureGeo, piersGeo],
+  // producing 2 distinct faceRanges for this single bridge feature (range 0 = deck/abutments, range 1 = support piers).
+  const subFaceRanges = bridgeSubMesh.userData.faceRanges as Array<{
+    startFace: number;
+    endFace: number;
+    info: any;
+  }>;
+  assert.ok(
+    Array.isArray(subFaceRanges) && subFaceRanges.length === 2,
+    `Expected 2 faceRanges (substructure + support piers) in Railway_Bridge_Substructure for a 120m span bridge, got ${subFaceRanges?.length}`
+  );
+  const pierRange = subFaceRanges[1];
+  assert.ok(
+    pierRange.endFace > pierRange.startFace,
+    `Pier face range must contain generated pier triangles (${pierRange.startFace}..${pierRange.endFace})`
+  );
+
+  // Inspect actual pier vertices from pierRange (faces startFace..endFace):
+  // Support piers are placed in the central elevated span (|x| < 45m) and extend from ELEVATION_POLICY.GROUND (-0.015m) up to the deck soffit (~2.52m).
+  const subIdxAttr = bridgeSubMesh.geometry.index!;
+  const subPosAttr = bridgeSubMesh.geometry.attributes.position;
+  let pierMinY = Infinity;
+  let pierMaxY = -Infinity;
+  let pierMinAbsX = Infinity;
+  for (let f = pierRange.startFace; f < pierRange.endFace; f++) {
+    for (let k = 0; k < 3; k++) {
+      const vIdx = subIdxAttr.getX(f * 3 + k);
+      const vx = subPosAttr.getX(vIdx);
+      const vy = subPosAttr.getY(vIdx);
+      pierMinY = Math.min(pierMinY, vy);
+      pierMaxY = Math.max(pierMaxY, vy);
+      pierMinAbsX = Math.min(pierMinAbsX, Math.abs(vx));
+    }
+  }
+  assert.ok(
+    Math.abs(pierMinY - ELEVATION_POLICY.GROUND) < 1e-4,
+    `Bridge pier bases must meet ELEVATION_POLICY.GROUND (${ELEVATION_POLICY.GROUND}m), got pierMinY=${pierMinY}`
+  );
+  assert.ok(
+    pierMaxY > 2.4,
+    `Bridge pier tops must reach the elevated deck soffit (> 2.4m), got pierMaxY=${pierMaxY}`
+  );
+  assert.ok(
+    pierMinAbsX < 35,
+    `Bridge piers must be generated along the central elevated span (|x| < 35m), got pierMinAbsX=${pierMinAbsX}`
+  );
+
   const bridgeParapetTarget = scene.railwaysGroup.children.find(
     (c) => c.name === 'Railway_Bridge_Parapets'
   );
   assert.ok(bridgeParapetTarget, 'railwaysGroup must contain Railway_Bridge_Parapets');
   const bridgeParapetMesh = firstMesh(bridgeParapetTarget);
+  const parapetBounds = getYBounds(bridgeParapetMesh.geometry);
   assert.ok(
-    bridgeParapetMesh.geometry.attributes.position.count > 0,
-    'Bridge parapet must have vertex geometry'
+    parapetBounds.maxY > 3.1,
+    `Bridge parapets must rise above the elevated bridge deck (> 3.1m), got maxY=${parapetBounds.maxY}`
   );
 
-  // 2. Elevated track geometry: Ballast and 3D rails must be elevated above ground level (Y > 0)
-  const ballastTarget = scene.railwaysGroup.children.find(
-    (c) => c.name === 'Railway_Ballast'
-  );
-  assert.ok(ballastTarget, 'Ballast target must be present');
+  // 2. Elevated track geometry across ALL track components (ballast, UV sleeper/rail ribbons, 3D instanced sleepers, and 3D extruded rails)
+  const expectedElevs = getRailwayElevations(1, true, false);
+  const ballastTarget = scene.railwaysGroup.children.find((c) => c.name === 'Railway_Ballast');
+  const sleepersRibbonTarget = scene.railwaysGroup.children.find((c) => c.name === 'Railway_Sleepers');
+  const railsRibbonTarget = scene.railwaysGroup.children.find((c) => c.name === 'Railway_Rails');
+  const sleepers3DTarget = scene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Sleepers_3D'));
+  const rails3DTarget = scene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Rails_3D'));
+
+  assert.ok(ballastTarget && sleepersRibbonTarget && railsRibbonTarget, 'Bridge UV-ribbon track layers must exist');
+  assert.ok(sleepers3DTarget && rails3DTarget, 'Bridge 3D close-zoom sleeper and rail layers must exist');
+
   const ballastMesh = firstMesh(ballastTarget);
-  const posAttr = ballastMesh.geometry.attributes.position;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i < posAttr.count; i++) {
-    const y = posAttr.getY(i);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
+  const sleepersRibbonMesh = firstMesh(sleepersRibbonTarget);
+  const railsRibbonMesh = firstMesh(railsRibbonTarget);
+  const sleepers3DMesh = firstMesh(sleepers3DTarget) as THREE.InstancedMesh;
+  const rails3DMesh = firstMesh(rails3DTarget);
+
+  const ballastY = getYBounds(ballastMesh.geometry);
+  const sleepersRibbonY = getYBounds(sleepersRibbonMesh.geometry);
+  const railsRibbonY = getYBounds(railsRibbonMesh.geometry);
+  const rails3DY = getYBounds(rails3DMesh.geometry);
+
+  // Verify sloped approach ramps transition from at-grade base up to full layer-1 bridge elevation
+  assert.ok(
+    Math.abs(ballastY.minY - ELEVATION_POLICY.RAILWAY_BALLAST) < 0.05 &&
+      Math.abs(ballastY.maxY - expectedElevs.ballast) < 0.02,
+    `Bridge ballast must ramp from ~${ELEVATION_POLICY.RAILWAY_BALLAST}m to ~${expectedElevs.ballast}m (got ${ballastY.minY.toFixed(3)}..${ballastY.maxY.toFixed(3)})`
+  );
+  assert.ok(
+    Math.abs(sleepersRibbonY.maxY - expectedElevs.sleepers) < 0.02 &&
+      sleepersRibbonY.maxY > ballastY.maxY,
+    `Bridge sleeper UV-ribbon must reach elevated sleeper height ~${expectedElevs.sleepers}m above ballast (got ${sleepersRibbonY.maxY.toFixed(3)})`
+  );
+  assert.ok(
+    Math.abs(railsRibbonY.maxY - expectedElevs.rails) < 0.02 &&
+      railsRibbonY.maxY > sleepersRibbonY.maxY,
+    `Bridge rail UV-ribbon must reach elevated rail height ~${expectedElevs.rails}m above sleepers (got ${railsRibbonY.maxY.toFixed(3)})`
+  );
+  assert.ok(
+    rails3DY.minY < 0.3 && rails3DY.maxY > expectedElevs.rails,
+    `3D extruded bridge rails must follow the ramped bridge profile from <0.3m up to >${expectedElevs.rails}m (got ${rails3DY.minY.toFixed(3)}..${rails3DY.maxY.toFixed(3)})`
+  );
+
+  // Verify 3D instanced sleepers follow the elevated 3D bridge profile via instance matrices
+  assert.ok(sleepers3DMesh.isInstancedMesh && sleepers3DMesh.count > 50, 'Bridge must have instanced 3D sleepers');
+  const mat4 = new THREE.Matrix4();
+  const posVec = new THREE.Vector3();
+  let minSleeperInstY = Infinity;
+  let maxSleeperInstY = -Infinity;
+  for (let i = 0; i < sleepers3DMesh.count; i++) {
+    sleepers3DMesh.getMatrixAt(i, mat4);
+    posVec.setFromMatrixPosition(mat4);
+    minSleeperInstY = Math.min(minSleeperInstY, posVec.y);
+    maxSleeperInstY = Math.max(maxSleeperInstY, posVec.y);
   }
-  assert.ok(maxY > 2.0, `Bridge track ballast must be elevated above Y=2.0 (got maxY=${maxY})`);
+  assert.ok(
+    minSleeperInstY < 0.3 && maxSleeperInstY > expectedElevs.ballast,
+    `Instanced 3D bridge sleepers must follow the elevated bridge profile from approach ramps (<0.3m) to central deck (>${expectedElevs.ballast}m), got ${minSleeperInstY.toFixed(3)}..${maxSleeperInstY.toFixed(3)}`
+  );
 
   // 3. No duplicate bridge geometry in roadsGroup
   const roadBridgeSub = scene.roadsGroup.children.find(
@@ -632,26 +745,35 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
     'Roads group must not contain bridge geometry for railway-only features'
   );
 
-  // 4. Inspection provenance: faceRanges map to bridge feature
-  assert.ok(bridgeSubMesh.userData.faceRanges, 'Bridge substructure must have faceRanges');
-  const inspectedBridge = resolveInspectedFeature({
-    object: bridgeSubMesh,
-    faceIndex: 0,
-  });
-  assert.ok(inspectedBridge, 'Inspecting bridge substructure must return feature info');
-  assert.equal(
-    inspectedBridge.sourceFeatureId,
-    'rail-bridge-test-1',
-    'Bridge inspection must trace back to the source railway feature'
-  );
+  // 4. Inspection provenance across bridge substructure, piers, parapets, ballast, 3D rails, and 3D sleepers
+  for (const [label, hit] of [
+    ['Bridge Substructure', resolveInspectedFeature({ object: bridgeSubMesh, faceIndex: subFaceRanges[0].startFace })],
+    ['Bridge Piers', resolveInspectedFeature({ object: bridgeSubMesh, faceIndex: pierRange.startFace })],
+    ['Bridge Parapets', resolveInspectedFeature({ object: bridgeParapetMesh, faceIndex: 0 })],
+    ['Bridge Ballast', resolveInspectedFeature({ object: ballastMesh, faceIndex: 0 })],
+    ['Bridge 3D Rails', resolveInspectedFeature({ object: rails3DMesh, faceIndex: 0 })],
+    ['Bridge 3D Sleepers', resolveInspectedFeature({ object: sleepers3DMesh, instanceId: 0 })],
+  ] as const) {
+    assert.ok(hit, `${label} must resolve feature inspection info`);
+    assert.equal(hit.sourceFeatureId, 'way/9001', `${label} must preserve sourceFeatureId 'way/9001'`);
+    assert.equal(hit.isBridge, true, `${label} must preserve isBridge=true`);
+    assert.equal(hit.layer, 1, `${label} must preserve layer=1`);
+  }
 
+  // 5. Deterministic disposal
+  assert.ok(scene.resources.ownedGeometriesCount > 0);
+  assert.ok(scene.resources.ownedMaterialsCount > 0);
   scene.dispose();
+  assert.equal(scene.resources.ownedGeometriesCount, 0, 'All bridge geometries must be disposed');
+  assert.equal(scene.resources.ownedMaterialsCount, 0, 'All bridge materials must be disposed');
+  assert.equal(scene.railwaysGroup.children.length, 0, 'railwaysGroup must be empty after dispose');
 });
 
-test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
+test('M2.2 Railway tunnel: underground track elevation profile, portals, mouths, and underground traces', () => {
   const tunnelRailway: RailwayFeature = {
     id: 'rail-tunnel-test-1',
     type: 'railway',
+    sourceFeatureId: 'way/9002',
     railwayType: 'rail',
     name: 'Underground Corridor Test',
     points: [
@@ -668,6 +790,31 @@ test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
     osmTags: { railway: 'rail', tunnel: 'yes', layer: '-1', name: 'Underground Corridor Test' },
   };
 
+  // 1. Verify underground track elevation profile independently of surface portal and trace geometry
+  const tunnelElevsLayer1 = getRailwayElevations(
+    tunnelRailway.layer,
+    tunnelRailway.isBridge,
+    tunnelRailway.isTunnel
+  );
+  assert.equal(
+    tunnelElevsLayer1.ballast,
+    ELEVATION_POLICY.TUNNEL_DEPTH,
+    `Layer -1 tunnel ballast must sit at subterranean depth ELEVATION_POLICY.TUNNEL_DEPTH (${ELEVATION_POLICY.TUNNEL_DEPTH}m)`
+  );
+  assert.ok(
+    tunnelElevsLayer1.ballast < tunnelElevsLayer1.sleepers &&
+      tunnelElevsLayer1.sleepers < tunnelElevsLayer1.rails &&
+      tunnelElevsLayer1.rails < 0,
+    `Tunnel track components must maintain strict subterranean vertical hierarchy < 0m (got ballast=${tunnelElevsLayer1.ballast}, sleepers=${tunnelElevsLayer1.sleepers}, rails=${tunnelElevsLayer1.rails})`
+  );
+
+  const tunnelElevsLayer2 = getRailwayElevations(-2, false, true);
+  assert.equal(
+    tunnelElevsLayer2.ballast,
+    ELEVATION_POLICY.TUNNEL_DEPTH - ELEVATION_POLICY.TUNNEL_LAYER_STEP,
+    'Layer -2 railway tunnel must descend by an additional TUNNEL_LAYER_STEP (-3.0m)'
+  );
+
   const mapData = createBaseMapData([tunnelRailway]);
   const builder = new GeometryBuilder();
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
@@ -675,7 +822,8 @@ test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
     (obj as THREE.Mesh).isMesh ? (obj as THREE.Mesh) : (obj.children[0] as THREE.Mesh);
 
-  // 1. Verify tunnel meshes in railwaysGroup
+  // 2. Verify tunnel portal (arch structure + recessed mouth) and trace meshes in railwaysGroup,
+  //    and confirm above-ground ballast/sleeper/rail meshes are not emitted for a subterranean tunnel span
   const portalTarget = scene.railwaysGroup.children.find(
     (c) => c.name === 'Railway_Tunnel_Portals'
   );
@@ -684,6 +832,17 @@ test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
   assert.ok(
     portalMesh.geometry.attributes.position.count > 0,
     'Tunnel portal geometry must contain vertices'
+  );
+
+  // Railway_Tunnel_Portals merges [portalStructureGeo, portalMouthGeo] -> 2 faceRanges for 1 tunnel feature
+  const portalRanges = portalMesh.userData.faceRanges as Array<{
+    startFace: number;
+    endFace: number;
+    info: any;
+  }>;
+  assert.ok(
+    Array.isArray(portalRanges) && portalRanges.length === 2,
+    `Expected 2 faceRanges (portal structure + recessed mouth) in Railway_Tunnel_Portals, got ${portalRanges?.length}`
   );
 
   const traceTarget = scene.railwaysGroup.children.find(
@@ -696,26 +855,48 @@ test('M2.2 Railway tunnel: portals, mouths, and underground traces', () => {
     'Tunnel trace geometry must contain vertices'
   );
 
-  // 2. Inspection provenance
-  assert.ok(portalMesh.userData.faceRanges, 'Tunnel portals must have faceRanges');
-  const inspectedPortal = resolveInspectedFeature({
-    object: portalMesh,
-    faceIndex: 0,
-  });
-  assert.ok(inspectedPortal, 'Inspecting tunnel portal must resolve feature info');
   assert.equal(
-    inspectedPortal.sourceFeatureId,
-    'rail-tunnel-test-1',
-    'Tunnel portal inspection must trace back to the source railway feature'
+    scene.railwaysGroup.children.find((c) => c.name === 'Railway_Ballast'),
+    undefined,
+    'Subterranean tunnel must not emit surface Railway_Ballast ribbon'
+  );
+  assert.equal(
+    scene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Rails')),
+    undefined,
+    'Subterranean tunnel must not emit surface Railway_Rails ribbon or 3D rails'
   );
 
+  // 3. Inspection provenance & subterranean elevation recorded on tunnel feature info
+  for (const [label, hit] of [
+    ['Tunnel Portal Structure', resolveInspectedFeature({ object: portalMesh, faceIndex: portalRanges[0].startFace })],
+    ['Tunnel Portal Mouth', resolveInspectedFeature({ object: portalMesh, faceIndex: portalRanges[1].startFace })],
+    ['Tunnel Surface Trace', resolveInspectedFeature({ object: traceMesh, faceIndex: 0 })],
+  ] as const) {
+    assert.ok(hit, `${label} must resolve feature info`);
+    assert.equal(hit.sourceFeatureId, 'way/9002', `${label} must trace back to 'way/9002'`);
+    assert.equal(hit.isTunnel, true, `${label} must record isTunnel=true`);
+    assert.equal(hit.layer, -1, `${label} must record layer=-1`);
+    assert.equal(
+      hit.elevation,
+      ELEVATION_POLICY.TUNNEL_DEPTH,
+      `${label} feature metadata must record subterranean track elevation (${ELEVATION_POLICY.TUNNEL_DEPTH}m)`
+    );
+  }
+
+  // 4. Deterministic disposal
+  assert.ok(scene.resources.ownedGeometriesCount > 0);
+  assert.ok(scene.resources.ownedMaterialsCount > 0);
   scene.dispose();
+  assert.equal(scene.resources.ownedGeometriesCount, 0, 'All tunnel geometries must be disposed');
+  assert.equal(scene.resources.ownedMaterialsCount, 0, 'All tunnel materials must be disposed');
+  assert.equal(scene.railwaysGroup.children.length, 0, 'railwaysGroup must be empty after dispose');
 });
 
 test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and deterministic resource disposal', () => {
   const bridgeRailway: RailwayFeature = {
     id: 'rail-bridge-test-theme',
     type: 'railway',
+    sourceFeatureId: 'way/9003',
     railwayType: 'rail',
     points: [
       [-50, 0],
@@ -732,6 +913,7 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
   const tunnelRailway: RailwayFeature = {
     id: 'rail-tunnel-test-theme',
     type: 'railway',
+    sourceFeatureId: 'way/9004',
     railwayType: 'rail',
     points: [
       [-50, 30],
@@ -764,47 +946,96 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
   const tunnelTraceTarget = scene.railwaysGroup.children.find(
     (c) => c.name === 'Railway_Tunnel_Traces'
   );
+  const ballastTarget = scene.railwaysGroup.children.find(
+    (c) => c.name === 'Railway_Ballast'
+  );
+  const sleepers3DTarget = scene.railwaysGroup.children.find(
+    (c) => c.name.startsWith('Railway_Sleepers_3D')
+  );
+  const rails3DTarget = scene.railwaysGroup.children.find(
+    (c) => c.name.startsWith('Railway_Rails_3D')
+  );
 
-  assert.ok(bridgeSubTarget, 'Bridge substructure target must exist');
-  assert.ok(bridgeParapetTarget, 'Bridge parapet target must exist');
-  assert.ok(tunnelPortalTarget, 'Tunnel portal target must exist');
-  assert.ok(tunnelTraceTarget, 'Tunnel trace target must exist');
+  assert.ok(bridgeSubTarget && bridgeParapetTarget, 'Bridge structure targets must exist');
+  assert.ok(tunnelPortalTarget && tunnelTraceTarget, 'Tunnel targets must exist');
+  assert.ok(ballastTarget && sleepers3DTarget && rails3DTarget, 'Bridge track targets must exist');
 
   const bridgeSubMesh = firstMesh(bridgeSubTarget);
   const bridgeParapetMesh = firstMesh(bridgeParapetTarget);
   const tunnelPortalMesh = firstMesh(tunnelPortalTarget);
   const tunnelTraceMesh = firstMesh(tunnelTraceTarget);
+  const ballastMesh = firstMesh(ballastTarget);
+  const sleepers3DMesh = firstMesh(sleepers3DTarget);
+  const rails3DMesh = firstMesh(rails3DTarget);
 
   const initialSubUuid = bridgeSubMesh.geometry.uuid;
   const initialParapetUuid = bridgeParapetMesh.geometry.uuid;
   const initialPortalUuid = tunnelPortalMesh.geometry.uuid;
   const initialTraceUuid = tunnelTraceMesh.geometry.uuid;
+  const initialBallastUuid = ballastMesh.geometry.uuid;
+  const initialRails3DUuid = rails3DMesh.geometry.uuid;
+
+  const expectedStructureColors: Record<
+    'tactical' | 'daylight' | 'dusk' | 'blueprint',
+    { sub: string; parapet: string; portal: string; trace: string }
+  > = {
+    tactical: { sub: '#334155', parapet: '#64748b', portal: '#475569', trace: '#38bdf8' },
+    daylight: { sub: '#64748b', parapet: '#94a3b8', portal: '#94a3b8', trace: '#475569' },
+    dusk: { sub: '#334155', parapet: '#64748b', portal: '#475569', trace: '#38bdf8' },
+    blueprint: { sub: '#0077b6', parapet: '#48cae4', portal: '#0096c7', trace: '#00b4d8' },
+  };
 
   for (const themeKey of ['tactical', 'daylight', 'dusk', 'blueprint'] as const) {
     const theme = MAP_THEMES[themeKey];
+    const expected = expectedStructureColors[themeKey];
     scene.updateTheme(theme);
 
-    // Buffers must not be re-allocated
+    // 1. Verify bridge and tunnel structural materials actually update their colors in place
     assert.equal(
-      bridgeSubMesh.geometry.uuid,
-      initialSubUuid,
-      `Bridge substructure geometry buffer must remain stable across ${themeKey}`
+      '#' + (bridgeSubMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      expected.sub,
+      `Bridge substructure material color must update for ${themeKey} theme`
     );
     assert.equal(
-      bridgeParapetMesh.geometry.uuid,
-      initialParapetUuid,
-      `Bridge parapet geometry buffer must remain stable across ${themeKey}`
+      '#' + (bridgeParapetMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      expected.parapet,
+      `Bridge parapet material color must update for ${themeKey} theme`
     );
     assert.equal(
-      tunnelPortalMesh.geometry.uuid,
-      initialPortalUuid,
-      `Tunnel portal geometry buffer must remain stable across ${themeKey}`
+      '#' + (tunnelPortalMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      expected.portal,
+      `Tunnel portal material color must update for ${themeKey} theme`
     );
     assert.equal(
-      tunnelTraceMesh.geometry.uuid,
-      initialTraceUuid,
-      `Tunnel trace geometry buffer must remain stable across ${themeKey}`
+      '#' + (tunnelTraceMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      expected.trace,
+      `Tunnel trace material color must update for ${themeKey} theme`
     );
+
+    // 2. Verify elevated bridge track materials (ballast, 3D sleepers, 3D rails) also update in place
+    assert.equal(
+      '#' + (ballastMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      theme.railwayColors.ballast.toLowerCase(),
+      `Bridge ballast material color must update for ${themeKey} theme`
+    );
+    assert.equal(
+      '#' + (sleepers3DMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      (theme.railwayColors.sleeper || '#64748b').toLowerCase(),
+      `Bridge 3D sleeper material color must update for ${themeKey} theme`
+    );
+    assert.equal(
+      '#' + (rails3DMesh.material as THREE.MeshStandardMaterial).color.getHexString(),
+      theme.railwayColors.rail.toLowerCase(),
+      `Bridge 3D rail material color must update for ${themeKey} theme`
+    );
+
+    // 3. Buffers must not be re-allocated
+    assert.equal(bridgeSubMesh.geometry.uuid, initialSubUuid, `Bridge substructure geometry buffer must remain stable across ${themeKey}`);
+    assert.equal(bridgeParapetMesh.geometry.uuid, initialParapetUuid, `Bridge parapet geometry buffer must remain stable across ${themeKey}`);
+    assert.equal(tunnelPortalMesh.geometry.uuid, initialPortalUuid, `Tunnel portal geometry buffer must remain stable across ${themeKey}`);
+    assert.equal(tunnelTraceMesh.geometry.uuid, initialTraceUuid, `Tunnel trace geometry buffer must remain stable across ${themeKey}`);
+    assert.equal(ballastMesh.geometry.uuid, initialBallastUuid, `Bridge ballast geometry buffer must remain stable across ${themeKey}`);
+    assert.equal(rails3DMesh.geometry.uuid, initialRails3DUuid, `Bridge 3D rail geometry buffer must remain stable across ${themeKey}`);
   }
 
   // Verify resource disposal
@@ -817,4 +1048,56 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
   assert.equal(scene.resources.ownedMaterialsCount, 0, 'All materials must be freed upon dispose');
   assert.equal(scene.railwaysGroup.children.length, 0, 'railwaysGroup must be empty after dispose');
 });
+
+test('M2.2 OSM Preset Regression: server.ts never seeds osmCache with railway-only benchmark extracts', () => {
+  const serverPath = path.resolve(__dirname, '..', '..', 'server.ts');
+  const serverSource = fs.readFileSync(serverPath, 'utf-8');
+
+  assert.equal(
+    serverSource.includes('realOsmRailwayExtracts.json'),
+    false,
+    'server.ts must not load or seed general-purpose osmCache with realOsmRailwayExtracts.json'
+  );
+
+  // Confirm that realOsmRailwayExtracts.json remains intact for offline railway benchmarks,
+  // and verify why it must never masquerade as a full regional OSM preset dataset:
+  const extractPath = path.resolve(__dirname, 'prototype', 'realOsmRailwayExtracts.json');
+  assert.ok(fs.existsSync(extractPath), 'realOsmRailwayExtracts.json must remain available for railway benchmarks');
+  const rawExtract = JSON.parse(fs.readFileSync(extractPath, 'utf-8'));
+
+  const hengeloFeatures = rawExtract.regions.hengelo.features as Array<{ properties?: Record<string, any> }>;
+  const amsterdamFeatures = rawExtract.regions.amsterdamCentraal.features as Array<{ properties?: Record<string, any> }>;
+  assert.equal(hengeloFeatures.length, 162, 'Hengelo railway extract contains 162 railway-scoped features');
+  assert.equal(amsterdamFeatures.length, 771, 'Amsterdam railway extract contains 771 railway-scoped features');
+  assert.ok(
+    hengeloFeatures.every((f) => Boolean(f.properties?.railway)),
+    'Every feature in Hengelo railway benchmark extract carries a railway tag'
+  );
+  assert.ok(
+    amsterdamFeatures.every((f) => Boolean(f.properties?.railway)),
+    'Every feature in Amsterdam railway benchmark extract carries a railway tag'
+  );
+
+  const provider = new LocalGeoJsonProvider();
+  const hengeloExtractParsed = provider.parseGeoJson(
+    {
+      type: 'FeatureCollection',
+      name: rawExtract.regions.hengelo.name,
+      features: hengeloFeatures,
+    },
+    rawExtract.regions.hengelo.name,
+    rawExtract.regions.hengelo.center,
+    rawExtract.regions.hengelo.radiusMeters
+  );
+  assert.ok(hengeloExtractParsed.railways.length > 50, 'Hengelo railway benchmark extract contains railway ways');
+  assert.equal(
+    hengeloExtractParsed.roads.length +
+      hengeloExtractParsed.waterBodies.length +
+      hengeloExtractParsed.linearWaterways.length +
+      hengeloExtractParsed.parks.length,
+    0,
+    'Hengelo railway benchmark extract contains 0 roads, waterBodies, linearWaterways, or parks'
+  );
+});
+
 

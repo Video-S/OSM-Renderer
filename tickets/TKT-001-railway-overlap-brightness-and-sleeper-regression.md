@@ -64,9 +64,12 @@ Following the approval and closure of **Milestone 2.1 (`TKT-002`)** selecting **
    - Removed ~860 lines of obsolete railway-specific heuristics from `GeometryBuilder.ts` (`RailClearanceSpatialIndex`, `resolveRailPolylineClearance`, `sortRailwaysMainlineFirst`, `computeRailwaySleeperPhases`, `attachRibbonOffsetAttribute`, `applyRibbonMinScreenWidthShader`).
    - Wired `updateCameraZoom(zoom)` and `updateTheme(newTheme)` across `GeometryBuilder.ts`, `MapScene.tsx`, and `App.tsx`.
    - Preserved `faceRanges` and `instanceInfos` feature inspection provenance and `SceneResourceManager` GPU lifecycle management.
-3. **Documentation & ADR Synchronization**:
+3. **Documentation, Benchmark Semantics & OSM Preset Closeout**:
    - Created `docs/decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md` and indexed it in `docs/decisions/README.md`.
    - Updated `docs/geometry-and-rendering.md`, `docs/architecture.md`, `docs/testing-and-diagnostics.md`, and `docs/STATUS.md`.
+   - **OSM Preset Data Regression Fix (`server.ts`, `src/app/App.tsx`)**: Removed startup pre-population of the general-purpose `osmCache` from `src/world/prototype/realOsmRailwayExtracts.json` so normal Hengelo (`52.2625,6.7935,400`) and Amsterdam (`52.3791,4.9003,420`) location presets retrieve complete multi-category regional OpenStreetMap datasets rather than railway-only benchmark extracts.
+   - **Strengthened Bridge & Tunnel Regression Coverage (`src/world/RailwayRendering.test.ts`)**: Verified bridge support pier generation and vertex bounds (`ELEVATION_POLICY.GROUND` to deck soffit), elevated track profile across all components (`Railway_Ballast`, `Railway_Sleepers` UV-ribbon, `Railway_Rails` UV-ribbon, `Railway_Sleepers_3D` instanced matrices, `Railway_Rails_3D` extruded rails, and `Railway_Bridge_Parapets`), subterranean tunnel track elevation profile (`getRailwayElevations` and tunnel `InspectableFeatureInfo.elevation === -2.0m`) alongside portal structure/mouth/trace geometry, in-place material color updates across all 4 themes (`tactical`, `daylight`, `dusk`, `blueprint`), feature inspection provenance (`resolveInspectedFeature`), and deterministic resource disposal.
+   - **Benchmark Semantics Clarification (`src/world/prototype/PerformanceBaselineHarness.ts`, `src/world/PerformanceBaseline.test.ts`)**: Updated harness documentation to describe the active supported configurations (`'disabled'`, `'production'`, `'candidateA'`, `'candidateB'`) and clarified that historical Goalpost 1 `'baseline'` measurements cannot be dynamically regenerated because the available project source and git history do not contain the superseded Goalpost 1 railway implementation (with `docs/m2-1-baseline-data.json` preserved as frozen historical evidence).
 
 ---
 
@@ -85,18 +88,21 @@ Following the approval and closure of **Milestone 2.1 (`TKT-002`)** selecting **
 ## Status & Verification Record
 - **Status**: `closed`
 - **Visual Verification Policy Alignment & Screenshot Waiver (2026-11-04)**:
-  - On 2026-11-04, the project owner updated the project verification policy: automated regression tests and measurable contracts are the primary verification method; manual browser visual inspection and screenshot captures are optional debugging aids rather than mandatory acceptance criteria.
-  - The project owner explicitly waived screenshot-based visual evidence as a mandatory closeout requirement for TKT-001.
-  - The absence of additional M2.2 screenshots is not an outstanding acceptance criterion.
-- **Verification**:
-  - `npm test`: **87 / 87 passed** (including all 5 new production unit/integration tests in `src/world/RailwayRendering.test.ts` and all 14 M2.1 benchmark/geometric regression tests in `src/world/PerformanceBaseline.test.ts`).
+  - On 2026-11-04, the project owner explicitly waived screenshot-based visual verification as a closeout requirement for TKT-001 and updated project policy so automated regression tests and measurable contracts are the primary verification mechanism.
+  - No additional M2.2 screenshot matrices or screenshot indexes were required or interpreted for closeout.
+- **Automated Verification (2026-11-04)**:
+  - `npm test`: **92 / 92 passed** (`0` failures, `8.48s`; includes all 9 M2.2 production railway, bridge, tunnel, theme, disposal, and OSM preset/cache separation tests in `src/world/RailwayRendering.test.ts` and all 15 M2.1/M2.2 benchmark and geometric regression tests in `src/world/PerformanceBaseline.test.ts`).
   - `npm run lint`: **0 errors** (`tsc --noEmit`).
-  - `npm run build`: **Succeeded** (`vite build`).
-  - `npm run docs:api`: **Succeeded** (`typedoc`).
+  - `npm run build`: **Succeeded** (`vite build`, `dist/` generated in `1.75s`).
+  - `npm run docs:api`: **Succeeded** (`typedoc`, generated `./docs/api-reference`).
+- **Runtime API Smoke Test (`/api/osm-data`, 2026-11-04)**:
+  - `hengelo` (`52.2625, 6.7935, r=400m`): `7,363` raw features → `707` buildings, `725` roads, `80` railways, `23` waterBodies, `22` linearWaterways, `452` parks, `193` landuse, `237` barriers, `1,268` landmarks.
+  - `amsterdam` (`52.3791, 4.9003, r=420m`): `10,443` raw features → `613` buildings, `1,036` roads, `383` railways, `25` waterBodies, `52` linearWaterways, `73` parks, `218` landuse, `148` barriers, `1,473` landmarks.
+  - `eiffel` (`48.8584, 2.2945, r=400m`): `5,578` raw features → `286` buildings, `608` roads, `6` railways, `13` waterBodies, `3` linearWaterways, `142` parks, `70` landuse, `118` barriers, `3,034` landmarks.
 
 ## Related Files and Documentation
 - Related Tickets: [`tickets/TKT-002-m2-1-performance-baseline-and-railway-prototype.md`](TKT-002-m2-1-performance-baseline-and-railway-prototype.md)
-- Source: [`src/world/GeometryBuilder.ts`](../src/world/GeometryBuilder.ts), [`src/world/infrastructure/railways/RailwayGeometryBuilder.ts`](../src/world/infrastructure/railways/RailwayGeometryBuilder.ts), [`src/world/infrastructure/railways/RailwayTopology.ts`](../src/world/infrastructure/railways/RailwayTopology.ts), [`src/world/infrastructure/rendering/UvRibbonBuilder.ts`](../src/world/infrastructure/rendering/UvRibbonBuilder.ts), [`src/world/infrastructure/rendering/InfrastructureShaderChunks.ts`](../src/world/infrastructure/rendering/InfrastructureShaderChunks.ts)
+- Source: [`server.ts`](../server.ts), [`src/app/App.tsx`](../src/app/App.tsx), [`src/world/GeometryBuilder.ts`](../src/world/GeometryBuilder.ts), [`src/world/infrastructure/railways/RailwayGeometryBuilder.ts`](../src/world/infrastructure/railways/RailwayGeometryBuilder.ts), [`src/world/infrastructure/railways/RailwayTopology.ts`](../src/world/infrastructure/railways/RailwayTopology.ts), [`src/world/infrastructure/rendering/UvRibbonBuilder.ts`](../src/world/infrastructure/rendering/UvRibbonBuilder.ts), [`src/world/infrastructure/rendering/InfrastructureShaderChunks.ts`](../src/world/infrastructure/rendering/InfrastructureShaderChunks.ts), [`src/world/prototype/PerformanceBaselineHarness.ts`](../src/world/prototype/PerformanceBaselineHarness.ts)
 - Tests: [`src/world/RailwayRendering.test.ts`](../src/world/RailwayRendering.test.ts), [`src/world/PerformanceBaseline.test.ts`](../src/world/PerformanceBaseline.test.ts), [`src/world/ElevationAndZIndex.test.ts`](../src/world/ElevationAndZIndex.test.ts), [`src/world/FeatureCoverage.test.ts`](../src/world/FeatureCoverage.test.ts)
 - Documentation: [`docs/decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md`](../docs/decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md), [`docs/geometry-and-rendering.md`](../docs/geometry-and-rendering.md), [`docs/STATUS.md`](../docs/STATUS.md)
 

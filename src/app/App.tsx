@@ -67,7 +67,7 @@ export interface LivePresetLocation {
   radius: number;
 }
 
-const LIVE_PRESET_LOCATIONS: LivePresetLocation[] = [
+export const LIVE_PRESET_LOCATIONS: LivePresetLocation[] = [
   { id: 'hengelo', name: 'Station Hengelo (Overijssel)', lat: 52.2625, lon: 6.7935, radius: 400 },
   { id: 'amsterdam', name: 'Amsterdam Centraal (Railways & Canals)', lat: 52.3791, lon: 4.9003, radius: 420 },
   { id: 'eiffel', name: 'Eiffel Tower & Seine (Paris)', lat: 48.8584, lon: 2.2945, radius: 400 },
@@ -192,7 +192,7 @@ export default function App() {
     }));
   };
 
-  const loadCachedHengeloFixture = async (
+  const loadLiveHengeloPreset = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
     azimuthDeg: number = 45
@@ -207,7 +207,7 @@ export default function App() {
     }));
   };
 
-  const loadCachedAmsterdamFixture = async (
+  const loadLiveAmsterdamPreset = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
     azimuthDeg: number = 45
@@ -344,9 +344,9 @@ export default function App() {
     if (fixtureParam === 'switchyard') {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam);
     } else if (fixtureParam === 'amsterdam') {
-      loadCachedAmsterdamFixture([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
+      loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
     } else if (fixtureParam === 'hengelo') {
-      loadCachedHengeloFixture([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
+      loadLiveHengeloPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
     } else {
       fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0]);
     }
@@ -509,12 +509,12 @@ export default function App() {
         target: [number, number, number] = [0, 0, 0],
         zoom: number = 1.0,
         azimuthDeg: number = 45
-      ) => loadCachedHengeloFixture(target, zoom, azimuthDeg),
+      ) => loadLiveHengeloPreset(target, zoom, azimuthDeg),
       loadAmsterdam: (
         target: [number, number, number] = [0, 0, 0],
         zoom: number = 1.0,
         azimuthDeg: number = 45
-      ) => loadCachedAmsterdamFixture(target, zoom, azimuthDeg),
+      ) => loadLiveAmsterdamPreset(target, zoom, azimuthDeg),
       setCameraPose: (
         target: [number, number, number],
         zoom: number,
@@ -1899,10 +1899,10 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => loadCachedAmsterdamFixture([0, 0, 0], 1.0, 45)}
+                        onClick={() => loadLiveAmsterdamPreset([0, 0, 0], 1.0, 45)}
                         className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-500/50 text-purple-200 transition cursor-pointer"
                       >
-                        Load Cached Amsterdam (420m)
+                        Load Amsterdam Preset (420m)
                       </button>
                       <button
                         type="button"

@@ -210,11 +210,130 @@ function extractTopologySourceFromInput(
   };
 }
 
+const MIN_LEVEL_CROSSING_ANGLE_RAD = (10 * Math.PI) / 180;
+const COS_60_DEG = 0.5;
+
+function intersectPolylinesNearPoint2D(
+  polyA: readonly [number, number][],
+  polyB: readonly [number, number][],
+  refPoint: readonly [number, number],
+  maxDistanceMeters: number
+): boolean {
+  for (let i = 0; i < polyA.length - 1; i++) {
+    const ax0 = polyA[i][0];
+    const az0 = polyA[i][1];
+    const ax1 = polyA[i + 1][0];
+    const az1 = polyA[i + 1][1];
+    const dax = ax1 - ax0;
+    const daz = az1 - az0;
+    const lenA = Math.hypot(dax, daz);
+    if (lenA <= 1e-9) continue;
+
+    for (let j = 0; j < polyB.length - 1; j++) {
+      const bx0 = polyB[j][0];
+      const bz0 = polyB[j][1];
+      const bx1 = polyB[j + 1][0];
+      const bz1 = polyB[j + 1][1];
+      const dbx = bx1 - bx0;
+      const dbz = bz1 - bz0;
+      const lenB = Math.hypot(dbx, dbz);
+      if (lenB <= 1e-9) continue;
+
+      const denom = dax * dbz - daz * dbx;
+      if (Math.abs(denom) < 1e-10) continue;
+
+      const s = ((bx0 - ax0) * dbz - (bz0 - az0) * dbx) / denom;
+      const t = ((bx0 - ax0) * daz - (bz0 - az0) * dax) / denom;
+      const eps = 1e-5;
+      if (s < -eps || s > 1 + eps || t < -eps || t > 1 + eps) continue;
+
+      const cs = Math.max(0, Math.min(1, s));
+      const ix = ax0 + cs * dax;
+      const iz = az0 + cs * daz;
+      if (Math.hypot(ix - refPoint[0], iz - refPoint[1]) > maxDistanceMeters) {
+        continue;
+      }
+
+      const absDot = Math.min(
+        1,
+        Math.max(0, Math.abs((dax / lenA) * (dbx / lenB) + (daz / lenA) * (dbz / lenB)))
+      );
+      const angle = Math.acos(absDot);
+      if (angle >= MIN_LEVEL_CROSSING_ANGLE_RAD) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function computePartInwardTangentAtVertex(
+  pts: readonly [number, number][],
+  vertexIndex: number,
+  which: 'start' | 'end'
+): [number, number] | undefined {
+  if (which === 'start') {
+    for (let i = vertexIndex + 1; i < pts.length; i++) {
+      const dx = pts[i][0] - pts[vertexIndex][0];
+      const dz = pts[i][1] - pts[vertexIndex][1];
+      const len = Math.hypot(dx, dz);
+      if (len > 1e-9) return [dx / len, dz / len];
+    }
+    return undefined;
+  } else {
+    for (let i = vertexIndex - 1; i >= 0; i--) {
+      const dx = pts[i][0] - pts[vertexIndex][0];
+      const dz = pts[i][1] - pts[vertexIndex][1];
+      const len = Math.hypot(dx, dz);
+      if (len > 1e-9) return [dx / len, dz / len];
+    }
+    return undefined;
+  }
+}
+
+function isUnambiguousSinglePartContinuation<
+  TPart extends { id: string; points: readonly [number, number][]; rawOsmNodeIds: readonly (string | undefined)[] },
+>(parts: readonly TPart[], osmId?: string): boolean {
+  if (parts.length === 0) return false;
+  if (parts.length === 1) {
+    if (!osmId) return true;
+    const p = parts[0];
+    let matchCount = 0;
+    for (let i = 0; i < p.points.length; i++) {
+      if (stripNodePrefix(p.rawOsmNodeIds[i]) === osmId) matchCount++;
+    }
+    return matchCount <= 1;
+  }
+  if (parts.length === 2 && osmId !== undefined) {
+    const [pA, pB] = parts;
+    if (pA.id === pB.id) return false;
+    const idxA = pA.rawOsmNodeIds.findIndex((id) => stripNodePrefix(id) === osmId);
+    const idxB = pB.rawOsmNodeIds.findIndex((id) => stripNodePrefix(id) === osmId);
+    const aIsTerminal = idxA === 0 || idxA === pA.points.length - 1;
+    const bIsTerminal = idxB === 0 || idxB === pB.points.length - 1;
+    if (!aIsTerminal || !bIsTerminal) return false;
+    const tA = computePartInwardTangentAtVertex(
+      pA.points,
+      idxA,
+      idxA === 0 ? 'start' : 'end'
+    );
+    const tB = computePartInwardTangentAtVertex(
+      pB.points,
+      idxB,
+      idxB === 0 ? 'start' : 'end'
+    );
+    if (!tA || !tB) return false;
+    const dot = tA[0] * tB[0] + tA[1] * tB[1];
+    return dot <= -COS_60_DEG;
+  }
+  return false;
+}
+
 /**
  * Pre-scans `TopologySourceData` to identify vertices on road and railway parts that
  * participate in confirmed level crossings (`railway=level_crossing`, `railway=crossing`,
- * or shared explicit `rawOsmNodeId` between at-grade road and rail) so that degree-2
- * path simplification preserves those crossing nodes.
+ * or shared explicit `rawOsmNodeId` between at-grade road and rail) or confirmed portals
+ * so that degree-2 path simplification preserves only genuinely confirmed crossing/portal nodes.
  */
 function computeProtectedCrossingVertices(source: TopologySourceData): {
   protectedRoadOsmIds: Set<string>;
@@ -308,15 +427,47 @@ function computeProtectedCrossingVertices(source: TopologySourceData): {
     );
     if (compatibleRoadRefs.length === 0) continue;
 
+    const targetLayer = compatibleRoadRefs[0].part.layer;
+    const layerRoadParts = [...new Map(compatibleRoadRefs.map((r) => [r.part.id, r.part])).values()];
+    const layerRailParts = [
+      ...new Map(
+        railRefs.filter((rl) => rl.part.layer === targetLayer).map((rl) => [rl.part.id, rl.part])
+      ).values(),
+    ];
+
+    if (
+      !isUnambiguousSinglePartContinuation(layerRoadParts, osmId) ||
+      !isUnambiguousSinglePartContinuation(layerRailParts, osmId)
+    ) {
+      continue;
+    }
+
+    const pos = compatibleRoadRefs[0].point;
+    const hasValidCrossingGeometry = layerRoadParts.some((rp) =>
+      layerRailParts.some((rlp) =>
+        intersectPolylinesNearPoint2D(
+          rp.points,
+          rlp.points,
+          pos,
+          DEFAULT_NODE_SNAP_TOLERANCE_METERS
+        )
+      )
+    );
+    if (!hasValidCrossingGeometry) continue;
+
     // Check if an explicit crossing point conflicts with the road tier
     let matchedPt = crossingPtByOsmId.get(osmId);
     if (!matchedPt) {
-      const pos = compatibleRoadRefs[0].point;
-      const nearby = railCrossingPts.filter(
-        (pt) =>
+      const nearby = railCrossingPts.filter((pt) => {
+        const ptOsm =
+          stripNodePrefix(pt.rawOsmNodeId) ??
+          (pt.hasExplicitSourceId ? stripNodePrefix(pt.id) : undefined);
+        return (
+          ptOsm === osmId &&
           Math.hypot(pt.point[0] - pos[0], pt.point[1] - pos[1]) <=
-          DEFAULT_NODE_SNAP_TOLERANCE_METERS
-      );
+            DEFAULT_NODE_SNAP_TOLERANCE_METERS
+        );
+      });
       if (nearby.length === 1) {
         matchedPt = nearby[0];
       }
@@ -336,11 +487,13 @@ function computeProtectedCrossingVertices(source: TopologySourceData): {
     protectedRailOsmIds.add(osmId);
   }
 
-  // 2. Point-tagged `railway_level_crossing` and `railway_ped_crossing` within 0.15 m of vertices
+  // 2. Point-tagged `railway_level_crossing` and `railway_ped_crossing` matching at least one way's verified `rawOsmNodeId`
   for (const pt of railCrossingPts) {
     const ptOsmId =
       stripNodePrefix(pt.rawOsmNodeId) ??
       (pt.hasExplicitSourceId ? stripNodePrefix(pt.id) : undefined);
+    // ADR-0009 Section 6.2: Point-based confirmation requires a verified OSM node ID on the point
+    if (ptOsmId === undefined) continue;
 
     const nearbyRoadParts = source.roadParts.filter(
       (rp) =>
@@ -362,20 +515,16 @@ function computeProtectedCrossingVertices(source: TopologySourceData): {
     );
     if (sameLayerRoads.length === 0) continue;
 
+    const distinctLayers = new Set(sameLayerRoads.map((rp) => rp.layer));
+    if (distinctLayers.size !== 1) continue;
+
     const targetLayer = sameLayerRoads[0].layer;
     const layerRails = nearbyRailParts.filter((rlp) => rlp.layer === targetLayer);
 
-    // Check tier compatibility
-    const tier = getRoadTier(sameLayerRoads[0].roadClass);
-    const tierConflict =
-      (pt.kind === 'railway_level_crossing' && tier !== 'vehicular') ||
-      (pt.kind === 'railway_ped_crossing' && tier !== 'path');
-    if (tierConflict) continue;
-
-    // Check for conflicting explicit OSM node IDs on nearby vertices
+    // Check for conflicting explicit OSM node IDs on nearby vertices and verify at least one way matches ptOsmId
     let hasIdConflict = false;
-    const roadVertexCandidates: Array<{ partId: string; vertexIndex: number }> = [];
-    const railVertexCandidates: Array<{ partId: string; vertexIndex: number }> = [];
+    const matchedRoadVertices: Array<{ partId: string; vertexIndex: number }> = [];
+    const matchedRailVertices: Array<{ partId: string; vertexIndex: number }> = [];
 
     for (const rp of sameLayerRoads) {
       for (let i = 0; i < rp.points.length; i++) {
@@ -384,10 +533,11 @@ function computeProtectedCrossingVertices(source: TopologySourceData): {
           DEFAULT_NODE_SNAP_TOLERANCE_METERS
         ) {
           const vOsm = stripNodePrefix(rp.rawOsmNodeIds[i]);
-          if (ptOsmId !== undefined && vOsm !== undefined && vOsm !== ptOsmId) {
+          if (vOsm !== undefined && vOsm !== ptOsmId) {
             hasIdConflict = true;
+          } else if (vOsm === ptOsmId) {
+            matchedRoadVertices.push({ partId: rp.id, vertexIndex: i });
           }
-          roadVertexCandidates.push({ partId: rp.id, vertexIndex: i });
         }
       }
     }
@@ -399,25 +549,66 @@ function computeProtectedCrossingVertices(source: TopologySourceData): {
           DEFAULT_NODE_SNAP_TOLERANCE_METERS
         ) {
           const vOsm = stripNodePrefix(rlp.rawOsmNodeIds[i]);
-          if (ptOsmId !== undefined && vOsm !== undefined && vOsm !== ptOsmId) {
+          if (vOsm !== undefined && vOsm !== ptOsmId) {
             hasIdConflict = true;
+          } else if (vOsm === ptOsmId) {
+            matchedRailVertices.push({ partId: rlp.id, vertexIndex: i });
           }
-          railVertexCandidates.push({ partId: rlp.id, vertexIndex: i });
         }
       }
     }
 
     if (hasIdConflict) continue;
+    if (matchedRoadVertices.length === 0 && matchedRailVertices.length === 0) {
+      // Point OSM node ID matches neither way's verified nodes -> do not protect
+      continue;
+    }
 
-    if (ptOsmId !== undefined) {
+    // Check non-ambiguity in both domains
+    if (
+      !isUnambiguousSinglePartContinuation(
+        sameLayerRoads,
+        matchedRoadVertices.length > 0 ? ptOsmId : undefined
+      ) ||
+      !isUnambiguousSinglePartContinuation(
+        layerRails,
+        matchedRailVertices.length > 0 ? ptOsmId : undefined
+      )
+    ) {
+      continue;
+    }
+
+    // Check tier compatibility
+    const tier = getRoadTier(sameLayerRoads[0].roadClass);
+    const tierConflict =
+      (pt.kind === 'railway_level_crossing' && tier !== 'vehicular') ||
+      (pt.kind === 'railway_ped_crossing' && tier !== 'path');
+    if (tierConflict) continue;
+
+    // Check genuine non-parallel 2D crossing geometry within 0.15 m of pt.point
+    const hasValidCrossingGeometry = sameLayerRoads.some((rp) =>
+      layerRails.some((rlp) =>
+        intersectPolylinesNearPoint2D(
+          rp.points,
+          rlp.points,
+          pt.point,
+          DEFAULT_NODE_SNAP_TOLERANCE_METERS
+        )
+      )
+    );
+    if (!hasValidCrossingGeometry) continue;
+
+    if (matchedRoadVertices.length > 0) {
       protectedRoadOsmIds.add(ptOsmId);
+      for (const rv of matchedRoadVertices) {
+        addProtectedPartVertex(protectedRoadPartVertices, rv.partId, rv.vertexIndex);
+      }
+    }
+    if (matchedRailVertices.length > 0) {
       protectedRailOsmIds.add(ptOsmId);
-    }
-    for (const rv of roadVertexCandidates) {
-      addProtectedPartVertex(protectedRoadPartVertices, rv.partId, rv.vertexIndex);
-    }
-    for (const rlv of railVertexCandidates) {
-      addProtectedPartVertex(protectedRailPartVertices, rlv.partId, rlv.vertexIndex);
+      for (const rlv of matchedRailVertices) {
+        addProtectedPartVertex(protectedRailPartVertices, rlv.partId, rlv.vertexIndex);
+      }
     }
   }
 

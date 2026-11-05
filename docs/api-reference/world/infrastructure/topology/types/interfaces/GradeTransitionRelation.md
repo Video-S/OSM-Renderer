@@ -6,7 +6,7 @@
 
 # Interface: GradeTransitionRelation
 
-Defined in: world/infrastructure/topology/types.ts:394
+Defined in: world/infrastructure/topology/types.ts:423
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:394
 
 > **atGradeEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:401
+Defined in: world/infrastructure/topology/types.ts:430
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:401
 
 > **atGradeEndpoint**: `"end"` \| `"start"`
 
-Defined in: world/infrastructure/topology/types.ts:402
+Defined in: world/infrastructure/topology/types.ts:431
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:402
 
 > **atGradeNodeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:400
+Defined in: world/infrastructure/topology/types.ts:429
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:400
 
 > **confidence**: `"explicit_osm_node"` \| `"coordinate_fallback_confirmed"`
 
-Defined in: world/infrastructure/topology/types.ts:407
+Defined in: world/infrastructure/topology/types.ts:436
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:407
 
 > **continuousTraversalDot**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:406
+Defined in: world/infrastructure/topology/types.ts:435
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:406
 
 > **gradeSeparatedEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:404
+Defined in: world/infrastructure/topology/types.ts:433
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:404
 
 > **gradeSeparatedEndpoint**: `"end"` \| `"start"`
 
-Defined in: world/infrastructure/topology/types.ts:405
+Defined in: world/infrastructure/topology/types.ts:434
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/infrastructure/topology/types.ts:405
 
 > **gradeSeparatedNodeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:403
+Defined in: world/infrastructure/topology/types.ts:432
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/infrastructure/topology/types.ts:403
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:395
+Defined in: world/infrastructure/topology/types.ts:424
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: world/infrastructure/topology/types.ts:395
 
 > **network**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:396
+Defined in: world/infrastructure/topology/types.ts:425
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/infrastructure/topology/types.ts:396
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:398
+Defined in: world/infrastructure/topology/types.ts:427
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/infrastructure/topology/types.ts:398
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:399
+Defined in: world/infrastructure/topology/types.ts:428
 
 ***
 
@@ -110,4 +110,4 @@ Defined in: world/infrastructure/topology/types.ts:399
 
 > **transitionType**: `"bridge_approach"` \| `"tunnel_portal"`
 
-Defined in: world/infrastructure/topology/types.ts:397
+Defined in: world/infrastructure/topology/types.ts:426

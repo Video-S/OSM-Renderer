@@ -6,7 +6,7 @@
 
 # Interface: UnresolvedInfrastructurePointCandidate
 
-Defined in: world/infrastructure/topology/types.ts:475
+Defined in: world/infrastructure/topology/types.ts:507
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:475
 
 > **candidateNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:480
+Defined in: world/infrastructure/topology/types.ts:512
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:480
 
 > **kind**: [`InfrastructurePointKind`](../type-aliases/InfrastructurePointKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:478
+Defined in: world/infrastructure/topology/types.ts:510
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:478
 
 > **osmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:482
+Defined in: world/infrastructure/topology/types.ts:514
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:482
 
 > **pointId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:476
+Defined in: world/infrastructure/topology/types.ts:508
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:476
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:479
+Defined in: world/infrastructure/topology/types.ts:511
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:479
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:477
+Defined in: world/infrastructure/topology/types.ts:509
 
 ***
 
@@ -62,4 +62,4 @@ Defined in: world/infrastructure/topology/types.ts:477
 
 > **reason**: [`UnresolvedInfrastructurePointReason`](../type-aliases/UnresolvedInfrastructurePointReason.md)
 
-Defined in: world/infrastructure/topology/types.ts:481
+Defined in: world/infrastructure/topology/types.ts:513

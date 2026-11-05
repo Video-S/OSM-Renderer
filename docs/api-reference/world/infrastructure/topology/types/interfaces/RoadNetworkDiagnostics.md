@@ -89,3 +89,11 @@ Defined in: world/infrastructure/topology/types.ts:380
 > **roadSimplifiedDegree2Count**: `number`
 
 Defined in: world/infrastructure/topology/types.ts:378
+
+***
+
+### unresolvedInfrastructurePoints?
+
+> `optional` **unresolvedInfrastructurePoints?**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
+
+Defined in: world/infrastructure/topology/types.ts:384

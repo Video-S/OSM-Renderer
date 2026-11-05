@@ -8,7 +8,7 @@
 
 > **getCanonicalMeaningfulOsmTagsString**(`tags?`): `string`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:251
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:255
 
 Returns a canonical, sorted string representation of meaningful OSM tags for a road part,
 excluding only identity and node-enrichment bookkeeping keys.

@@ -74,7 +74,7 @@
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C & M2.3-D Tests** | `npm test` | **134 / 134 passed** (0 failures) |
+| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C & M2.3-D Tests** | `npm test` | **135 / 135 passed** (0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
@@ -90,8 +90,8 @@
 | `RailwayRendering.test.ts` | 9 |
 | `RoadNetworkTopology.test.ts` (`M2.3-B`) | 16 |
 | `RailwayNetworkTopology.test.ts` (`M2.3-C`) | 18 |
-| `CrossModalTopology.test.ts` (`M2.3-D`) | 8 |
-| **Total** | **134** |
+| `CrossModalTopology.test.ts` (`M2.3-D`) | 9 |
+| **Total** | **135** |
 
 ---
 
@@ -101,7 +101,7 @@
    - **Stage A (`M2.3-A` / `TKT-003` — `closed`)**: Source audit completed and **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Accepted`) approved by project owner.
    - **Stage B (`M2.3-B` / `TKT-004` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource` road capture, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts` (`108 / 108` Stage B baseline).
    - **Stage C (`M2.3-C` / `TKT-005` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints`, pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
-   - **Stage D (`M2.3-D` / `TKT-006` — `in_progress`, pending project-owner review)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories (`railway_switch`, `railway_crossing_flat`, `railway_level_crossing`, `railway_ped_crossing`, `highway_crossing`), implemented `CrossModalAnalyzer` (`src/world/infrastructure/topology/CrossModalAnalyzer.ts`) and `buildInfrastructureGraph` (`src/world/infrastructure/topology/InfrastructureGraph.ts`) for confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation`), same-domain road/railway grade transitions (`GradeTransitionRelation`), and grade-separated crossings (`GradeSeparatedCrossingRelation`), protected crossing and portal nodes against degree-2 simplification, and added `8` comprehensive automated test suites in `src/world/CrossModalTopology.test.ts` (`134 / 134` total tests).
+   - **Stage D (`M2.3-D` / `TKT-006` — `in_progress`, pending project-owner review)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories (`railway_switch`, `railway_crossing_flat`, `railway_level_crossing`, `railway_ped_crossing`, `highway_crossing`), implemented `CrossModalAnalyzer` (`src/world/infrastructure/topology/CrossModalAnalyzer.ts`) and `buildInfrastructureGraph` (`src/world/infrastructure/topology/InfrastructureGraph.ts`) for confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation`), same-domain road/railway grade transitions (`GradeTransitionRelation`), and grade-separated crossings (`GradeSeparatedCrossingRelation`), protected crossing and portal nodes against degree-2 simplification, and added `9` comprehensive automated test suites in `src/world/CrossModalTopology.test.ts` (`135 / 135` total tests).
    - **Stage E (`M2.3-E` — Planned, requires explicit approval)**: Renderer integration (`GeometryBuilder` road junction trimming and portal transition consumption) with full regression preservation.
 2. **Milestone 2.4: Road Surface Markings (`Planned`)**:
    - Goalpost 2 procedural road surface markings (lane dividers, directional arrows, crosswalks, stop bars) consuming `InfrastructureGraph` topology and per-segment provenance.

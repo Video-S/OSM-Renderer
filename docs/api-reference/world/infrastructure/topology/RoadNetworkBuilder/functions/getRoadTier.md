@@ -8,7 +8,7 @@
 
 > **getRoadTier**(`roadClass`): [`RoadTier`](../../types/type-aliases/RoadTier.md)
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:44
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:48
 
 Classifies a `RoadClass` into `'vehicular'` or `'path'` tier.
 

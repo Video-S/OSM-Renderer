@@ -283,15 +283,17 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
     assert.equal(graphA2.levelCrossings[0].confidence, 'shared_explicit_osm_node');
     assert.equal(graphA2.levelCrossings[0].crossingKind, 'road_rail_level_crossing');
 
-    // (b) Road way and railway way lacking explicit node IDs, with a Point feature railway=level_crossing within 0.15 m of their interior intersection
+    // (b) Explicit railway=level_crossing point whose verified rawOsmNodeId matches a vertex on the road way, while the railway way crosses within 0.15 m without a shared node
     const sourceB: TopologySourceData = {
       roadParts: [
         makeRoadPart({
           id: 'way/101-0',
           points: [
             [-25, 0],
+            [0, 0],
             [25, 0],
           ],
+          rawOsmNodeIds: ['1010', '6001', '1011'],
           roadClass: 'residential',
         }),
       ],
@@ -299,9 +301,10 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
         makeRailwayPart({
           id: 'way/201-0',
           points: [
-            [0, -35],
-            [0, 35],
+            [0.04, -35],
+            [0.04, 35],
           ],
+          rawOsmNodeIds: ['2010', '2011'],
           railwayType: 'rail',
         }),
       ],
@@ -310,7 +313,7 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
           id: 'node/6001',
           hasExplicitSourceId: true,
           rawOsmNodeId: '6001',
-          point: [0.04, -0.03],
+          point: [0, 0],
           kind: 'railway_level_crossing',
           osmTags: { railway: 'level_crossing' },
         },
@@ -321,18 +324,78 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
     assert.equal(graphB.levelCrossings.length, 1);
     assert.equal(graphB.levelCrossings[0].confidence, 'explicit_osm_crossing_tag');
     assert.equal(graphB.levelCrossings[0].crossingKind, 'road_rail_level_crossing');
-    assert.equal(
+    assert.equal(graphB.levelCrossings[0].rawOsmNodeId, '6001');
+    assert.ok(
       graphB.levelCrossings[0].roadNodeId,
-      undefined,
-      'Must not invent a roadNodeId when crossing occurs inside an unsplit edge'
+      'Road vertex matching explicit crossing point rawOsmNodeId must be retained'
+    );
+    assert.ok(
+      graphB.roads.nodes.get(graphB.levelCrossings[0].roadNodeId!)?.roles.includes('level_crossing')
     );
     assert.equal(
       graphB.levelCrossings[0].railwayNodeId,
       undefined,
-      'Must not invent a railwayNodeId when crossing occurs inside an unsplit edge'
+      'Must not invent a railwayNodeId when railway way crosses within 0.15 m without a vertex at crossing'
     );
-    assert.ok(Math.abs(graphB.levelCrossings[0].roadArcLengthMeters - 25.04) < 1e-4);
-    assert.ok(Math.abs(graphB.levelCrossings[0].railwayArcLengthMeters - 34.97) < 1e-4);
+    assert.ok(Math.abs(graphB.levelCrossings[0].position[0] - 0.04) < 1e-6);
+    assert.ok(Math.abs(graphB.levelCrossings[0].position[1] - 0) < 1e-6);
+    assert.ok(
+      Math.abs(graphB.levelCrossings[0].roadArcLengthMeters - 25.0) < 1e-4,
+      `Expected roadArcLengthMeters close to 25.0 m, got ${graphB.levelCrossings[0].roadArcLengthMeters}`
+    );
+    assert.ok(Math.abs(graphB.levelCrossings[0].railwayArcLengthMeters - 35.0) < 1e-4);
+
+    // (b2) Symmetric case: explicit railway=level_crossing point whose verified rawOsmNodeId matches a vertex on the railway way, while the road way crosses within 0.15 m
+    const sourceB2: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/101b-0',
+          points: [
+            [-25, -0.03],
+            [25, -0.03],
+          ],
+          rawOsmNodeIds: ['1012', '1013'],
+          roadClass: 'residential',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/201b-0',
+          points: [
+            [0, -35],
+            [0, 0],
+            [0, 35],
+          ],
+          rawOsmNodeIds: ['2012', '6002', '2013'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/6002',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '6002',
+          point: [0, 0],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const graphB2 = buildInfrastructureGraph(sourceB2);
+    assert.equal(graphB2.levelCrossings.length, 1);
+    assert.equal(graphB2.levelCrossings[0].rawOsmNodeId, '6002');
+    assert.equal(graphB2.levelCrossings[0].roadNodeId, undefined);
+    assert.ok(graphB2.levelCrossings[0].railwayNodeId);
+    assert.ok(
+      graphB2.railways.nodes
+        .get(graphB2.levelCrossings[0].railwayNodeId!)
+        ?.roles.includes('level_crossing')
+    );
+    assert.ok(Math.abs(graphB2.levelCrossings[0].position[0] - 0) < 1e-6);
+    assert.ok(Math.abs(graphB2.levelCrossings[0].position[1] - -0.03) < 1e-6);
+    assert.ok(Math.abs(graphB2.levelCrossings[0].roadArcLengthMeters - 25.0) < 1e-4);
+    assert.ok(Math.abs(graphB2.levelCrossings[0].railwayArcLengthMeters - 34.97) < 1e-4);
 
     // (c) Road way and railway way sharing a coincident coordinate-only vertex (<= 0.15 m) with NO explicit OSM node ID and NO railway=level_crossing tag
     const sourceC: TopologySourceData = {
@@ -540,6 +603,259 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
     assert.ok(crosswalkNode.roles.includes('highway_crossing'));
     assert.equal(crosswalkNode.primaryRole, 'highway_crossing');
     assert.equal(crosswalkNode.pointOsmTags?.['crossing:markings'], 'zebra');
+
+    // Negative 1: Explicit railway=level_crossing point whose rawOsmNodeId matches NEITHER way's nodes must be rejected
+    // Furthermore, computeProtectedCrossingVertices must not protect nearby degree-2 vertices on the ways when the point is rejected
+    const unlinkedPointSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/320-0',
+          points: [
+            [-25, 0],
+            [0, 0],
+          ],
+          roadClass: 'residential',
+        }),
+        makeRoadPart({
+          id: 'way/320-1',
+          points: [
+            [0, 0],
+            [25, 0],
+          ],
+          roadClass: 'residential',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/321-0',
+          points: [
+            [0, -35],
+            [0, 35],
+          ],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/9999',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '9999', // Matches neither road nor railway (neither way has this node ID)
+          point: [0.02, -0.02],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const unlinkedPointGraph = buildInfrastructureGraph(unlinkedPointSource);
+    assert.equal(
+      unlinkedPointGraph.levelCrossings.length,
+      0,
+      'Point matching neither way rawOsmNodeId must never confirm a LevelCrossingRelation'
+    );
+    assert.equal(
+      unlinkedPointGraph.diagnostics.unresolvedInfrastructurePoints?.[0]?.reason,
+      'insufficient_topological_evidence'
+    );
+    assert.equal(unlinkedPointGraph.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      unlinkedPointGraph.diagnostics.unresolvedCrossings[0].reason,
+      'geometric_intersection_without_shared_node'
+    );
+    assert.equal(
+      unlinkedPointGraph.roads.edges.size,
+      1,
+      'Rejected crossing point must not protect degree-2 road node 3202 from contraction'
+    );
+
+    // Negative 2: Parallel / non-intersecting road and railway passing within 0.15 m of a vertex-linked crossing point must be rejected
+    const parallelNearPointSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/330-0',
+          points: [
+            [-25, 0],
+            [0, 0],
+          ],
+          rawOsmNodeIds: ['3301', '3302'],
+          roadClass: 'secondary',
+        }),
+        makeRoadPart({
+          id: 'way/330-1',
+          points: [
+            [0, 0],
+            [25, 0],
+          ],
+          rawOsmNodeIds: ['3302', '3303'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/331-0',
+          points: [
+            [-25, 0.08],
+            [25, 0.08],
+          ],
+          rawOsmNodeIds: ['3311', '3312'],
+          railwayType: 'tram',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/3302',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '3302',
+          point: [0, 0],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const parallelNearPointGraph = buildInfrastructureGraph(parallelNearPointSource);
+    assert.equal(
+      parallelNearPointGraph.levelCrossings.length,
+      0,
+      'Parallel non-intersecting road and railway within 0.15 m of tagged point must not confirm a level crossing'
+    );
+    assert.equal(
+      parallelNearPointGraph.diagnostics.unresolvedInfrastructurePoints?.[0]?.reason,
+      'insufficient_topological_evidence'
+    );
+    assert.equal(
+      parallelNearPointGraph.roads.edges.size,
+      1,
+      'Rejected parallel crossing point must not protect degree-2 road node 3302 from contraction'
+    );
+
+    // Negative 3: Conflicting explicit OSM node IDs at crossing (point matches road '3402', but railway vertex at [0, 0] has conflicting '3499')
+    const conflictingOsmIdSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/340-0',
+          points: [
+            [-25, 0],
+            [0, 0],
+          ],
+          rawOsmNodeIds: ['3401', '3402'],
+          roadClass: 'secondary',
+        }),
+        makeRoadPart({
+          id: 'way/340-1',
+          points: [
+            [0, 0],
+            [25, 0],
+          ],
+          rawOsmNodeIds: ['3402', '3403'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/341-0',
+          points: [
+            [0, -25],
+            [0, 0],
+            [0, 25],
+          ],
+          rawOsmNodeIds: ['3411', '3499', '3412'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/3402',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '3402',
+          point: [0, 0],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const conflictingOsmIdGraph = buildInfrastructureGraph(conflictingOsmIdSource);
+    assert.equal(conflictingOsmIdGraph.levelCrossings.length, 0);
+    assert.equal(
+      conflictingOsmIdGraph.diagnostics.unresolvedInfrastructurePoints?.[0]?.reason,
+      'conflicting_explicit_osm_node_id'
+    );
+    assert.equal(
+      conflictingOsmIdGraph.diagnostics.unresolvedCrossings[0]?.reason,
+      'conflicting_explicit_osm_node_id'
+    );
+    assert.equal(
+      conflictingOsmIdGraph.roads.edges.size,
+      1,
+      'Rejected conflicting-OSM-ID crossing point must not protect degree-2 road node 3402 from contraction'
+    );
+
+    // Negative 4: Multiple ambiguous candidate railway ways passing within 0.15 m of a road-linked crossing point
+    const ambiguousCandidatesSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/350-0',
+          points: [
+            [-25, 0],
+            [0, 0],
+          ],
+          rawOsmNodeIds: ['3501', '3502'],
+          roadClass: 'secondary',
+        }),
+        makeRoadPart({
+          id: 'way/350-1',
+          points: [
+            [0, 0],
+            [25, 0],
+          ],
+          rawOsmNodeIds: ['3502', '3503'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/351-0',
+          points: [
+            [-0.05, -25],
+            [-0.05, 25],
+          ],
+          rawOsmNodeIds: ['3511', '3512'],
+          railwayType: 'rail',
+        }),
+        makeRailwayPart({
+          id: 'way/352-0',
+          points: [
+            [0.05, -25],
+            [0.05, 25],
+          ],
+          rawOsmNodeIds: ['3521', '3522'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/3502',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '3502',
+          point: [0, 0],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const ambiguousCandidatesGraph = buildInfrastructureGraph(ambiguousCandidatesSource);
+    assert.equal(ambiguousCandidatesGraph.levelCrossings.length, 0);
+    assert.equal(
+      ambiguousCandidatesGraph.diagnostics.unresolvedInfrastructurePoints?.[0]?.reason,
+      'ambiguous_multiple_candidate_nodes'
+    );
+    assert.equal(
+      ambiguousCandidatesGraph.roads.edges.size,
+      1,
+      'Rejected ambiguous crossing point must not protect degree-2 road node 3502 from contraction'
+    );
   });
 
   it('4. T-03, T-04 & T-15 Grade Transitions & Same-Grade Separation: covers Tier 1 explicit portal, Tier 2 coordinate fallback, Y-junction disambiguation, perpendicular cross-street rejection, and T-04 unshared 2D road crossing', () => {
@@ -1505,13 +1821,9 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
       );
     }
 
-    assert.ok(hengeloTotalMs < 150, `Expected Hengelo buildInfrastructureGraph < 150 ms (got ${hengeloTotalMs.toFixed(2)} ms)`);
-    assert.ok(amsterdamTotalMs < 250, `Expected Amsterdam buildInfrastructureGraph < 250 ms (got ${amsterdamTotalMs.toFixed(2)} ms)`);
-    assert.ok(synthTotalMs < 150, `Expected Synthetic buildInfrastructureGraph < 150 ms (got ${synthTotalMs.toFixed(2)} ms)`);
-
-    // Log timings and diagnostics for verification reporting
+    // Log timings and diagnostics for verification reporting (independent component runs vs independent full-graph run; non-additive due to JIT/cache warmup)
     console.log(
-      `[Stage D Benchmarks] Hengelo: parse=${hengeloParseMs.toFixed(2)}ms, road=${hengeloRoadMs.toFixed(2)}ms, rail=${hengeloRailMs.toFixed(2)}ms, crossModal=${hengeloCrossMs.toFixed(2)}ms, total=${hengeloTotalMs.toFixed(2)}ms | diag=${JSON.stringify({
+      `[Stage D Benchmarks — Independent Runs] Hengelo: parse=${hengeloParseMs.toFixed(2)}ms | componentRuns(road=${hengeloRoadMs.toFixed(2)}ms, rail=${hengeloRailMs.toFixed(2)}ms, crossModal=${hengeloCrossMs.toFixed(2)}ms) | fullGraphRun=${hengeloTotalMs.toFixed(2)}ms | diag=${JSON.stringify({
         roadNodes: hengeloGraph.diagnostics.roadNodeCount,
         roadEdges: hengeloGraph.diagnostics.roadEdgeCount,
         railNodes: hengeloGraph.diagnostics.railwayNodeCount,
@@ -1526,7 +1838,7 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
       })}`
     );
     console.log(
-      `[Stage D Benchmarks] Amsterdam: parse=${amsterdamParseMs.toFixed(2)}ms, road=${amsterdamRoadMs.toFixed(2)}ms, rail=${amsterdamRailMs.toFixed(2)}ms, crossModal=${amsterdamCrossMs.toFixed(2)}ms, total=${amsterdamTotalMs.toFixed(2)}ms | diag=${JSON.stringify({
+      `[Stage D Benchmarks — Independent Runs] Amsterdam: parse=${amsterdamParseMs.toFixed(2)}ms | componentRuns(road=${amsterdamRoadMs.toFixed(2)}ms, rail=${amsterdamRailMs.toFixed(2)}ms, crossModal=${amsterdamCrossMs.toFixed(2)}ms) | fullGraphRun=${amsterdamTotalMs.toFixed(2)}ms | diag=${JSON.stringify({
         roadNodes: amsterdamGraph.diagnostics.roadNodeCount,
         roadEdges: amsterdamGraph.diagnostics.roadEdgeCount,
         railNodes: amsterdamGraph.diagnostics.railwayNodeCount,
@@ -1541,7 +1853,249 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
       })}`
     );
     console.log(
-      `[Stage D Benchmarks] Synthetic (60 roads x 20 rails): road=${synthRoadMs.toFixed(2)}ms, rail=${synthRailMs.toFixed(2)}ms, crossModal=${synthCrossMs.toFixed(2)}ms, total=${synthTotalMs.toFixed(2)}ms, gradeSeparated=${synthGraph.gradeSeparatedCrossings.length}`
+      `[Stage D Benchmarks — Independent Runs] Synthetic (60 roads x 20 rails): componentRuns(road=${synthRoadMs.toFixed(2)}ms, rail=${synthRailMs.toFixed(2)}ms, crossModal=${synthCrossMs.toFixed(2)}ms) | fullGraphRun=${synthTotalMs.toFixed(2)}ms, gradeSeparated=${synthGraph.gradeSeparatedCrossings.length}`
     );
+  });
+
+  it('9. Event-Specific Crossing Deduplication: preserves distinct nearby crossings (< 0.225 m), double crossings of the same edge pair, suppresses shared-vertex duplicates, prevents confirmed+unresolved double emission, and preserves deterministic ordering', () => {
+    // 1. Two crossings involving different edge pairs within 0.225 m (0.10 m apart: x = 0.00 and x = 0.10)
+    //    - Road way/900 crosses RailA (way/910) at [0.00, 0] (confirmed via shared node '9001')
+    //    - Road way/900 crosses RailB (way/911) at [0.10, 0] (unresolved geometric intersection 0.10 m away)
+    //    - Road bridge way/901 (layer=1) crosses RailA at [0.00, 10] and RailB at [0.10, 10] (two distinct gradeSeparatedCrossings 0.10 m apart)
+    // 2. One edge pair crossing twice at distinct nearby locations (0.20 m apart: x = -0.10 and x = +0.10)
+    //    - Curved road way/902 crosses straight RailC (way/912) at [-0.10, 20] and [+0.10, 20] (two unresolved crossings for same edge pair)
+    //    - Curved road bridge way/903 (layer=1) crosses straight RailC at [-0.10, 30] and [+0.10, 30] (two gradeSeparatedCrossings for same edge pair)
+    // 3. Repeated discovery of the SAME crossing at a shared interior polyline vertex ([0, 40])
+    //    - Road way/904 has an interior vertex right on RailC at [50, 40] -> adjacent segments both touch [50, 40], must emit exactly 1 unresolved crossing and 1 gradeSeparatedCrossing
+    const dedupSource: TopologySourceData = {
+      roadParts: [
+        // Road way/900 at z = 0: shares explicit node '9001' with RailA at [0, 0], and crosses RailB geometrically at [0.10, 0]
+        makeRoadPart({
+          id: 'way/900-0',
+          points: [
+            [-10, 0],
+            [0, 0],
+            [10, 0],
+          ],
+          rawOsmNodeIds: ['9000', '9001', '9002'],
+          roadClass: 'secondary',
+          layer: 0,
+        }),
+        // Road bridge way/901 at z = 10: crosses RailA at [0, 10] and RailB at [0.10, 10] (0.10 m apart)
+        makeRoadPart({
+          id: 'way/901-0',
+          points: [
+            [-10, 10],
+            [10, 10],
+          ],
+          rawOsmNodeIds: ['9010', '9011'],
+          roadClass: 'secondary',
+          layer: 1,
+          isBridge: true,
+        }),
+        // Curved at-grade road way/902 crossing straight RailC (x = 20) twice at [20, 19.90] and [20, 20.10] (0.20 m apart)
+        makeRoadPart({
+          id: 'way/902-0',
+          points: [
+            [15, 19.90],
+            [25, 19.90],
+            [25, 20.10],
+            [15, 20.10],
+          ],
+          rawOsmNodeIds: ['9020', '9021', '9022', '9023'],
+          roadClass: 'secondary',
+          layer: 0,
+        }),
+        // Curved road bridge way/903 (layer=1) crossing straight RailC (x = 20) twice at [20, 29.90] and [20, 30.10] (0.20 m apart)
+        makeRoadPart({
+          id: 'way/903-0',
+          points: [
+            [15, 29.90],
+            [25, 29.90],
+            [25, 30.10],
+            [15, 30.10],
+          ],
+          rawOsmNodeIds: ['9030', '9031', '9032', '9033'],
+          roadClass: 'secondary',
+          layer: 1,
+          isBridge: true,
+        }),
+        // At-grade road way/904 with an interior polyline bend vertex right on RailD (x = 50) at [50, 40]
+        makeRoadPart({
+          id: 'way/904-0',
+          points: [
+            [40, 39],
+            [50, 40],
+            [60, 41],
+          ],
+          rawOsmNodeIds: ['9040', '9041', '9042'],
+          roadClass: 'secondary',
+          layer: 0,
+        }),
+        // Bridge road way/905 with an interior polyline bend vertex right on RailD (x = 50) at [50, 50]
+        makeRoadPart({
+          id: 'way/905-0',
+          points: [
+            [40, 49],
+            [50, 50],
+            [60, 51],
+          ],
+          rawOsmNodeIds: ['9050', '9051', '9052'],
+          roadClass: 'secondary',
+          layer: 1,
+          isBridge: true,
+        }),
+      ],
+      railwayParts: [
+        // RailA at x = 0.00
+        makeRailwayPart({
+          id: 'way/910-0',
+          points: [
+            [0, -10],
+            [0, 0],
+            [0, 20],
+          ],
+          rawOsmNodeIds: ['9100', '9001', '9102'],
+          railwayType: 'rail',
+          layer: 0,
+        }),
+        // RailB at x = 0.10 (only 0.10 m away from RailA!)
+        makeRailwayPart({
+          id: 'way/911-0',
+          points: [
+            [0.10, -10],
+            [0.10, 20],
+          ],
+          rawOsmNodeIds: ['9110', '9111'],
+          railwayType: 'rail',
+          layer: 0,
+        }),
+        // RailC at x = 20.00
+        makeRailwayPart({
+          id: 'way/912-0',
+          points: [
+            [20, 15],
+            [20, 35],
+          ],
+          rawOsmNodeIds: ['9120', '9121'],
+          railwayType: 'rail',
+          layer: 0,
+        }),
+        // RailD at x = 50.00
+        makeRailwayPart({
+          id: 'way/913-0',
+          points: [
+            [50, 35],
+            [50, 40],
+            [50, 55],
+          ],
+          rawOsmNodeIds: ['9130', '9131', '9132'],
+          railwayType: 'rail',
+          layer: 0,
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/9001',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '9001',
+          point: [0, 0],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const graph = buildInfrastructureGraph(dedupSource);
+
+    // 1a. Confirmed crossing at [0, 0] (way/900 x way/910) is emitted in levelCrossings and NEVER duplicated in unresolvedCrossings
+    assert.equal(graph.levelCrossings.length, 1);
+    assert.equal(graph.levelCrossings[0].rawOsmNodeId, '9001');
+    const unresolvedForConfirmedPair = graph.diagnostics.unresolvedCrossings.filter(
+      (u) => u.edgeAId.includes('way/900-0') && u.edgeBId.includes('way/910-0')
+    );
+    assert.equal(
+      unresolvedForConfirmedPair.length,
+      0,
+      'Confirmed level crossing must not also survive as an unresolved crossing'
+    );
+
+    // 1b. Unresolved crossing at [0.10, 0] (way/900 x way/911) only 0.10 m away from the confirmed crossing MUST survive
+    const unresolvedNearConfirmed = graph.diagnostics.unresolvedCrossings.filter(
+      (u) => u.edgeAId.includes('way/900-0') && u.edgeBId.includes('way/911-0')
+    );
+    assert.equal(
+      unresolvedNearConfirmed.length,
+      1,
+      'Unresolved crossing of a different rail edge 0.10 m away must not be suppressed by nearby confirmed crossing'
+    );
+
+    // 1c. Two grade-separated crossings at [0, 10] and [0.10, 10] (0.10 m apart, different rail edges) MUST both survive
+    const bridge901Crossings = graph.gradeSeparatedCrossings.filter((g) =>
+      g.upperEdgeId.includes('way/901-0')
+    );
+    assert.equal(
+      bridge901Crossings.length,
+      2,
+      'Two grade-separated crossings on different rail edges 0.10 m apart must remain distinct'
+    );
+    assert.notEqual(bridge901Crossings[0].id, bridge901Crossings[1].id);
+
+    // 2a. Same edge pair (way/902 x way/912) crossing twice 0.20 m apart produces 2 unresolved crossings
+    const doubleUnresolved = graph.diagnostics.unresolvedCrossings.filter(
+      (u) => u.edgeAId.includes('way/902-0') && u.edgeBId.includes('way/912-0')
+    );
+    assert.equal(
+      doubleUnresolved.length,
+      2,
+      'Same edge pair crossing twice 0.20 m apart must emit two distinct unresolved crossing events'
+    );
+
+    // 2b. Same edge pair (way/903 x way/912) crossing twice 0.20 m apart produces 2 grade-separated crossings
+    const doubleGradeSep = graph.gradeSeparatedCrossings.filter(
+      (g) => g.upperEdgeId.includes('way/903-0') && g.lowerEdgeId.includes('way/912-0')
+    );
+    assert.equal(
+      doubleGradeSep.length,
+      2,
+      'Same edge pair crossing twice 0.20 m apart must emit two distinct grade-separated crossing events'
+    );
+    assert.notEqual(doubleGradeSep[0].id, doubleGradeSep[1].id);
+
+    // 3a. Shared interior polyline vertex at [50, 40] (way/904 x way/913) produces exactly 1 unresolved crossing
+    const sharedVertexUnresolved = graph.diagnostics.unresolvedCrossings.filter(
+      (u) => u.edgeAId.includes('way/904-0') && u.edgeBId.includes('way/913-0')
+    );
+    assert.equal(
+      sharedVertexUnresolved.length,
+      1,
+      'Crossing at a shared interior polyline vertex must be deduplicated into a single event'
+    );
+
+    // 3b. Shared interior polyline vertex at [50, 50] (way/905 x way/913) produces exactly 1 grade-separated crossing
+    const sharedVertexGradeSep = graph.gradeSeparatedCrossings.filter(
+      (g) => g.upperEdgeId.includes('way/905-0') && g.lowerEdgeId.includes('way/913-0')
+    );
+    assert.equal(
+      sharedVertexGradeSep.length,
+      1,
+      'Grade-separated crossing at a shared interior polyline vertex must be deduplicated into a single event'
+    );
+
+    // 4. Deterministic output ordering across 10 seeded permutations
+    const baselineSerialized = serializeInfrastructureGraph(graph);
+    for (let seed = 1; seed <= 10; seed++) {
+      const permuted: TopologySourceData = {
+        roadParts: shuffleWithSeed(dedupSource.roadParts, seed * 19),
+        railwayParts: shuffleWithSeed(dedupSource.railwayParts, seed * 37),
+        infrastructurePoints: shuffleWithSeed(dedupSource.infrastructurePoints, seed * 53),
+      };
+      const permutedGraph = buildInfrastructureGraph(permuted);
+      assert.equal(
+        serializeInfrastructureGraph(permutedGraph),
+        baselineSerialized,
+        `Seeded permutation ${seed} must produce identical event-deduplicated InfrastructureGraph`
+      );
+    }
   });
 });

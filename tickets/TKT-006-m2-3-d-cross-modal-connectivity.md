@@ -64,16 +64,16 @@ Prior to Stage D:
 - `TKT-006` remains `in_progress` pending project-owner review and acceptance.
 
 ## Verification
-- Status: Implemented and verified (`134 / 134` tests passing); `in_progress` pending project-owner review.
+- Status: Implemented and verified (`135 / 135` tests passing); `in_progress` pending project-owner review.
 - Verification steps:
-  - `npm test` — `134 / 134 passed` (`0` failures), including `8 / 8` in `src/world/CrossModalTopology.test.ts`.
+  - `npm test` — `135 / 135 passed` (`0` failures), including `9 / 9` in `src/world/CrossModalTopology.test.ts`.
   - `npm run lint` (`tsc --noEmit`) — `0` errors.
   - `npm run build` (`vite build`) — clean production build (`dist/`).
   - `npm run docs:api` (`typedoc`) — generated API documentation (`docs/api-reference/`).
-- Recorded Stage D Performance Benchmarks:
-  - **Station Hengelo Real OSM Extract**: `parseGeoJson = 4.02 ms`, `buildRoadNetwork = 0.02 ms`, `buildRailwayNetwork = 10.35 ms`, `analyzeCrossModal = 2.71 ms`, total `buildInfrastructureGraph = 9.90 ms` (`railNodes: 48`, `railEdges: 62`, `railwayConfirmedSwitchCount: 23`, `railwayFlatCrossingCount: 3`, `unresolvedCrossings: 9`, `unresolvedInfrastructurePoints: 1`).
-  - **Amsterdam Centraal Real OSM Extract**: `parseGeoJson = 17.68 ms`, `buildRoadNetwork = 0.71 ms`, `buildRailwayNetwork = 78.51 ms`, `analyzeCrossModal = 12.35 ms`, total `buildInfrastructureGraph = 71.93 ms` (`roadNodes: 6`, `roadEdges: 3`, `railNodes: 331`, `railEdges: 314`, `gradeTransitionCount: 70`, `gradeSeparatedCrossingCount: 114`, `unresolvedCrossings: 31`, `unresolvedInfrastructurePoints: 31`).
-  - **Synthetic Cross-Modal Dataset (`60` roads $\times$ `20` railways)**: `buildRoadNetwork = 2.89 ms`, `buildRailwayNetwork = 1.30 ms`, `analyzeCrossModal = 32.93 ms`, total `buildInfrastructureGraph = 29.32 ms` (`levelCrossingCount: 1`, `gradeSeparatedCrossingCount: 400`).
+- Recorded Stage D Performance Benchmarks (Independent Measurement Runs):
+  - **Station Hengelo Real OSM Extract**: `parseGeoJson = 4.56 ms`, component runs (`buildRoadNetwork = 0.02 ms`, `buildRailwayNetwork = 10.70 ms`, `analyzeCrossModal = 3.02 ms`), independent full-graph run `buildInfrastructureGraph = 14.96 ms` (`railNodes: 48`, `railEdges: 62`, `railwayConfirmedSwitchCount: 23`, `railwayFlatCrossingCount: 3`, `unresolvedCrossings: 9`, `unresolvedInfrastructurePoints: 1`).
+  - **Amsterdam Centraal Real OSM Extract**: `parseGeoJson = 16.85 ms`, component runs (`buildRoadNetwork = 0.62 ms`, `buildRailwayNetwork = 63.26 ms`, `analyzeCrossModal = 12.14 ms`), independent full-graph run `buildInfrastructureGraph = 73.81 ms` (`roadNodes: 6`, `roadEdges: 3`, `railNodes: 331`, `railEdges: 314`, `gradeTransitionCount: 70`, `gradeSeparatedCrossingCount: 114`, `unresolvedCrossings: 31`, `unresolvedInfrastructurePoints: 31`).
+  - **Synthetic Cross-Modal Dataset (`60` roads $\times$ `20` railways)**: component runs (`buildRoadNetwork = 2.65 ms`, `buildRailwayNetwork = 0.99 ms`, `analyzeCrossModal = 6.77 ms`), independent full-graph run `buildInfrastructureGraph = 14.25 ms` (`levelCrossingCount: 1`, `gradeSeparatedCrossingCount: 400`).
 
 ## Related files and documentation
 - Source: `src/world/infrastructure/topology/types.ts`, `src/world/infrastructure/topology/CrossModalAnalyzer.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/infrastructure/topology/RoadNetworkBuilder.ts`, `src/world/infrastructure/topology/RailwayNetworkBuilder.ts`, `src/world/LocalGeoJsonProvider.ts`

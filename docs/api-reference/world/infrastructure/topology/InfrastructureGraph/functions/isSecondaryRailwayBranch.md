@@ -8,7 +8,7 @@
 
 > **isSecondaryRailwayBranch**(`service?`, `usage?`): `boolean`
 
-Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:63
+Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:64
 
 Classifies whether a railway track is a secondary branch (`service=siding|yard|spur|crossover`
 or `usage=branch|industrial|military|test|tourism`) per ADR-0009 Section 5.2.

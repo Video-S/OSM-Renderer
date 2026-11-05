@@ -411,6 +411,9 @@ function intersectIndexedSegments2D<
   };
 }
 
+const MIN_LEVEL_CROSSING_ANGLE_RAD = (10 * Math.PI) / 180;
+const SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS = 0.02;
+
 function findRetainedNodeAtEdgeLocation<TNode extends BaseInfrastructureNode<string>>(
   edge: BaseInfrastructureEdge,
   nodes: ReadonlyMap<string, TNode>,
@@ -422,12 +425,23 @@ function findRetainedNodeAtEdgeLocation<TNode extends BaseInfrastructureNode<str
   const normOsm = stripNodePrefix(rawOsmNodeId);
 
   if (normOsm !== undefined) {
-    if (fromNode && stripNodePrefix(fromNode.rawOsmNodeId) === normOsm) {
+    if (
+      fromNode &&
+      stripNodePrefix(fromNode.rawOsmNodeId) === normOsm &&
+      Math.hypot(fromNode.x - position[0], fromNode.z - position[1]) <=
+        DEFAULT_NODE_SNAP_TOLERANCE_METERS
+    ) {
       return fromNode;
     }
-    if (toNode && stripNodePrefix(toNode.rawOsmNodeId) === normOsm) {
+    if (
+      toNode &&
+      stripNodePrefix(toNode.rawOsmNodeId) === normOsm &&
+      Math.hypot(toNode.x - position[0], toNode.z - position[1]) <=
+        DEFAULT_NODE_SNAP_TOLERANCE_METERS
+    ) {
       return toNode;
     }
+    return undefined;
   }
 
   const fromDist = fromNode
@@ -445,6 +459,119 @@ function findRetainedNodeAtEdgeLocation<TNode extends BaseInfrastructureNode<str
   }
 
   return undefined;
+}
+
+/**
+ * Checks whether the candidate edges in a single domain at a crossing represent
+ * one unambiguous continuous infrastructure line (either a single edge, or two
+ * collinear edges split at the retained degree-2 crossing node).
+ */
+function isUnambiguousWayGroupAtCrossing<
+  TNode extends BaseInfrastructureNode<string>,
+  TEdge extends BaseInfrastructureEdge,
+>(
+  candidates: readonly { edge: TEdge; proj: ClosestPointOnEdgeResult }[],
+  retainedNode?: TNode
+): boolean {
+  if (candidates.length === 0) return false;
+  if (candidates.length === 1) {
+    if (retainedNode && retainedNode.degree > 2) {
+      return false;
+    }
+    return true;
+  }
+  if (candidates.length === 2 && retainedNode !== undefined) {
+    if (retainedNode.degree !== 2) return false;
+    const e0 = candidates[0].edge;
+    const e1 = candidates[1].edge;
+    if (e0.id === e1.id) return false;
+    const e0Incident = e0.fromNodeId === retainedNode.id || e0.toNodeId === retainedNode.id;
+    const e1Incident = e1.fromNodeId === retainedNode.id || e1.toNodeId === retainedNode.id;
+    if (!e0Incident || !e1Incident) return false;
+
+    const t0 = e0.fromNodeId === retainedNode.id ? e0.startInwardTangent : e0.endInwardTangent;
+    const t1 = e1.fromNodeId === retainedNode.id ? e1.startInwardTangent : e1.endInwardTangent;
+    const dot = t0[0] * t1[0] + t0[1] * t1[1];
+    return dot <= -COS_60_DEG;
+  }
+  return false;
+}
+
+interface LocalGroupCrossingHit {
+  point: [number, number];
+  crossingAngleRad: number;
+  distanceToRef: number;
+}
+
+/**
+ * Verifies that the road edge(s) and railway edge(s) genuinely intersect in 2D
+ * within `maxDistanceMeters` of `refPoint` with an acute crossing angle >= 10 deg
+ * (rejecting parallel or non-intersecting ways that merely pass near a point).
+ */
+function findLocalEdgeGroupIntersection2D(
+  roadEdgesGroup: readonly RoadEdge[],
+  railEdgesGroup: readonly RailwayEdge[],
+  refPoint: readonly [number, number],
+  maxDistanceMeters: number
+): LocalGroupCrossingHit | undefined {
+  let bestHit: LocalGroupCrossingHit | undefined;
+
+  for (const rEdge of roadEdgesGroup) {
+    const rPts = rEdge.points;
+    for (let i = 0; i < rPts.length - 1; i++) {
+      const ax0 = rPts[i][0];
+      const az0 = rPts[i][1];
+      const ax1 = rPts[i + 1][0];
+      const az1 = rPts[i + 1][1];
+      const dax = ax1 - ax0;
+      const daz = az1 - az0;
+      const lenA = Math.hypot(dax, daz);
+      if (lenA <= 1e-9) continue;
+      const tA: [number, number] = [dax / lenA, daz / lenA];
+
+      for (const rlEdge of railEdgesGroup) {
+        const rlPts = rlEdge.points;
+        for (let j = 0; j < rlPts.length - 1; j++) {
+          const bx0 = rlPts[j][0];
+          const bz0 = rlPts[j][1];
+          const bx1 = rlPts[j + 1][0];
+          const bz1 = rlPts[j + 1][1];
+          const dbx = bx1 - bx0;
+          const dbz = bz1 - bz0;
+          const lenB = Math.hypot(dbx, dbz);
+          if (lenB <= 1e-9) continue;
+          const tB: [number, number] = [dbx / lenB, dbz / lenB];
+
+          const denom = dax * dbz - daz * dbx;
+          if (Math.abs(denom) < 1e-10) continue;
+
+          const s = ((bx0 - ax0) * dbz - (bz0 - az0) * dbx) / denom;
+          const t = ((bx0 - ax0) * daz - (bz0 - az0) * dax) / denom;
+          const eps = 1e-5;
+          if (s < -eps || s > 1 + eps || t < -eps || t > 1 + eps) continue;
+
+          const cs = Math.max(0, Math.min(1, s));
+          const ix = ax0 + cs * dax;
+          const iz = az0 + cs * daz;
+          const dist = Math.hypot(ix - refPoint[0], iz - refPoint[1]);
+          if (dist > maxDistanceMeters) continue;
+
+          const angle = computeAcuteCrossingAngleRad(tA, tB);
+          if (angle < MIN_LEVEL_CROSSING_ANGLE_RAD) continue;
+
+          if (!bestHit || dist < bestHit.distanceToRef - 1e-9) {
+            bestHit = {
+              point: [ix, iz],
+              crossingAngleRad: angle,
+              distanceToRef: dist,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return bestHit;
 }
 
 /**
@@ -1032,7 +1159,8 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     .map((pt) => ({
       id: String(pt.id),
       hasExplicitSourceId: Boolean(pt.hasExplicitSourceId),
-      rawOsmNodeId: stripNodePrefix(pt.rawOsmNodeId) ??
+      rawOsmNodeId:
+        stripNodePrefix(pt.rawOsmNodeId) ??
         (pt.hasExplicitSourceId ? stripNodePrefix(String(pt.id)) : undefined),
       point: [Number(pt.point[0]), Number(pt.point[1])] as [number, number],
       kind: pt.kind,
@@ -1066,19 +1194,131 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     });
   };
 
-  // Track spatial locations of confirmed or diagnosed road-rail crossings to avoid duplicate 2D intersection records
-  const handledRoadRailLocations: Array<{
-    position: [number, number];
-    layer: number;
-  }> = [];
+  // Event-specific tracking of confirmed or diagnosed road-rail crossings keyed by `(roadEdgeId, railEdgeId, layer)`
+  // so that separate crossings on different edge pairs within 0.225 m or separate crossings on the same edge pair
+  // at distinct locations are never suppressed.
+  const handledRoadRailPairEvents = new Map<string, Array<[number, number]>>();
 
-  const isLocationAlreadyHandledRoadRail = (pos: readonly [number, number], layer: number): boolean =>
-    handledRoadRailLocations.some(
-      (loc) =>
-        loc.layer === layer &&
-        Math.hypot(loc.position[0] - pos[0], loc.position[1] - pos[1]) <=
-          DEFAULT_NODE_SNAP_TOLERANCE_METERS * 1.5
+  const markRoadRailPairEventHandled = (
+    roadEdgeIds: readonly string[],
+    railEdgeIds: readonly string[],
+    layer: number,
+    positions: readonly (readonly [number, number])[]
+  ) => {
+    for (const rId of roadEdgeIds) {
+      for (const rlId of railEdgeIds) {
+        const key = `${rId}||${rlId}|${layer}`;
+        let list = handledRoadRailPairEvents.get(key);
+        if (!list) {
+          list = [];
+          handledRoadRailPairEvents.set(key, list);
+        }
+        for (const p of positions) {
+          if (
+            !list.some(
+              (existing) =>
+                Math.hypot(existing[0] - p[0], existing[1] - p[1]) <=
+                 SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
+            )
+          ) {
+            list.push([p[0], p[1]]);
+          }
+        }
+      }
+    }
+  };
+
+  const isRoadRailPairEventAlreadyHandled = (
+    roadEdgeId: string,
+    railEdgeId: string,
+    layer: number,
+    pos: readonly [number, number]
+  ): boolean => {
+    const key = `${roadEdgeId}||${railEdgeId}|${layer}`;
+    const list = handledRoadRailPairEvents.get(key);
+    if (!list) return false;
+    return list.some(
+      (existing) =>
+        Math.hypot(existing[0] - pos[0], existing[1] - pos[1]) <=
+        DEFAULT_NODE_SNAP_TOLERANCE_METERS
     );
+  };
+
+  // Event-specific deduplication for unresolved crossings keyed by `(kind, u, v)`
+  const unresolvedLocationsByPairKey = new Map<string, Array<[number, number]>>();
+  for (const existing of unresolvedCrossings) {
+    const u = existing.edgeAId <= existing.edgeBId ? existing.edgeAId : existing.edgeBId;
+    const v = existing.edgeAId <= existing.edgeBId ? existing.edgeBId : existing.edgeAId;
+    const pairKey = `${existing.kind}:${u}||${v}`;
+    let list = unresolvedLocationsByPairKey.get(pairKey);
+    if (!list) {
+      list = [];
+      unresolvedLocationsByPairKey.set(pairKey, list);
+    }
+    list.push([existing.position[0], existing.position[1]]);
+  }
+
+  const addUnresolvedCrossingOnce = (cand: UnresolvedCrossingCandidate) => {
+    const u = cand.edgeAId <= cand.edgeBId ? cand.edgeAId : cand.edgeBId;
+    const v = cand.edgeAId <= cand.edgeBId ? cand.edgeBId : cand.edgeAId;
+    const pairKey = `${cand.kind}:${u}||${v}`;
+    let list = unresolvedLocationsByPairKey.get(pairKey);
+    if (!list) {
+      list = [];
+      unresolvedLocationsByPairKey.set(pairKey, list);
+    }
+    if (
+      list.some(
+        (existing) =>
+          Math.hypot(existing[0] - cand.position[0], existing[1] - cand.position[1]) <=
+          SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
+      )
+    ) {
+      return;
+    }
+    list.push([cand.position[0], cand.position[1]]);
+    unresolvedCrossings.push(cand);
+  };
+
+  // Event-specific deduplication for grade-separated crossings keyed by `(upper.id, lower.id)`
+  const gradeSeparatedLocationsByPairKey = new Map<string, Array<[number, number]>>();
+
+  const addGradeSeparatedCrossingOnce = (
+    upper: BaseInfrastructureEdge,
+    lower: BaseInfrastructureEdge,
+    position: [number, number]
+  ) => {
+    const pairKey = `${upper.id}->${lower.id}`;
+    let list = gradeSeparatedLocationsByPairKey.get(pairKey);
+    if (!list) {
+      list = [];
+      gradeSeparatedLocationsByPairKey.set(pairKey, list);
+    }
+    if (
+      list.some(
+        (existing) =>
+          Math.hypot(existing[0] - position[0], existing[1] - position[1]) <=
+          SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
+      )
+    ) {
+      return;
+    }
+    list.push([position[0], position[1]]);
+
+    const id = `grade_separated:${upper.id}__over__${lower.id}@${Math.round(position[0] * 1000)},${Math.round(position[1] * 1000)}`;
+    gradeSeparatedCrossings.push({
+      id,
+      position: [position[0], position[1]],
+      upperNetwork: upper.network,
+      upperEdgeId: upper.id,
+      upperLayer: upper.layer,
+      upperIsBridge: upper.isBridge,
+      lowerNetwork: lower.network,
+      lowerEdgeId: lower.id,
+      lowerLayer: lower.layer,
+      lowerIsTunnel: lower.isTunnel,
+    });
+  };
 
   // ---------------------------------------------------------------------------
   // 1A. Confirmed Level Crossings via Shared Explicit OSM Node ID (`rawOsmNodeId`)
@@ -1142,15 +1382,13 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     const targetLayer = sameLayerRoadRefs[0].edge.layer;
     const layerRailRefs = railRefs.filter((rr) => rr.edge.layer === targetLayer);
 
-    // Find matching crossing point metadata if present
+    // Find matching crossing point metadata if present (must share verified rawOsmNodeId === osmId)
     let matchedPt = crossingPointByOsmId.get(osmId);
     if (!matchedPt) {
       const nearbyPts = crossingPointSpatialIndex
         .queryRadius(pos[0], pos[1], DEFAULT_NODE_SNAP_TOLERANCE_METERS)
         .filter(
-          (p) =>
-            !consumedCrossingPointIds.has(p.item.id) &&
-            (p.item.rawOsmNodeId === undefined || p.item.rawOsmNodeId === osmId)
+          (p) => !consumedCrossingPointIds.has(p.item.id) && p.item.rawOsmNodeId === osmId
         );
       if (nearbyPts.length === 1) {
         matchedPt = nearbyPts[0].item;
@@ -1174,41 +1412,94 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       osmId
     );
 
-    const roadCandidates = sameLayerRoadRefs.map((ref) => ({
-      edge: ref.edge,
-      proj: projectPointOntoEdge(pos, ref.edge),
+    const uniqueRoadEdges = [
+      ...new Map(sameLayerRoadRefs.map((ref) => [ref.edge.id, ref.edge])).values(),
+    ];
+    const uniqueRailEdges = [
+      ...new Map(layerRailRefs.map((ref) => [ref.edge.id, ref.edge])).values(),
+    ];
+
+    const roadCandidates = uniqueRoadEdges.map((edge) => ({
+      edge,
+      proj: projectPointOntoEdge(pos, edge),
     }));
-    const railCandidates = layerRailRefs.map((ref) => ({
-      edge: ref.edge,
-      proj: projectPointOntoEdge(pos, ref.edge),
+    const railCandidates = uniqueRailEdges.map((edge) => ({
+      edge,
+      proj: projectPointOntoEdge(pos, edge),
     }));
+
+    const candidateNodeIds: string[] = [];
+    if (roadNode) candidateNodeIds.push(roadNode.id);
+    if (railNode) candidateNodeIds.push(railNode.id);
+
+    if (
+      !isUnambiguousWayGroupAtCrossing(roadCandidates, roadNode) ||
+      !isUnambiguousWayGroupAtCrossing(railCandidates, railNode)
+    ) {
+      if (matchedPt) {
+        recordUnresolvedPoint(
+          matchedPt,
+          candidateNodeIds,
+          'ambiguous_multiple_candidate_nodes'
+        );
+      }
+      continue;
+    }
+
+    const crossingHit = findLocalEdgeGroupIntersection2D(
+      uniqueRoadEdges,
+      uniqueRailEdges,
+      pos,
+      DEFAULT_NODE_SNAP_TOLERANCE_METERS
+    );
+    if (!crossingHit) {
+      if (matchedPt) {
+        recordUnresolvedPoint(
+          matchedPt,
+          candidateNodeIds,
+          'insufficient_topological_evidence'
+        );
+      }
+      continue;
+    }
 
     const chosenRoad = pickCanonicalEdgeForNodeCrossing(roadCandidates, roadNode?.id);
     const chosenRail = pickCanonicalEdgeForNodeCrossing(railCandidates, railNode?.id);
 
     // Check for material conflict between point tag and road tier
     if (matchedPt) {
+      const ptScope = extractPointExplicitVerticalScope(matchedPt.osmTags);
+      if (
+        !isEdgeCompatibleWithPointScope(chosenRoad.edge, ptScope) ||
+        !isEdgeCompatibleWithPointScope(chosenRail.edge, ptScope)
+      ) {
+        recordUnresolvedPoint(matchedPt, candidateNodeIds, 'vertical_scope_mismatch');
+        continue;
+      }
+
       const tierConflict =
         (matchedPt.kind === 'railway_level_crossing' && chosenRoad.edge.tier !== 'vehicular') ||
         (matchedPt.kind === 'railway_ped_crossing' && chosenRoad.edge.tier !== 'path');
 
       if (tierConflict) {
-        const candidateNodeIds: string[] = [];
-        if (roadNode) candidateNodeIds.push(roadNode.id);
-        if (railNode) candidateNodeIds.push(railNode.id);
         recordUnresolvedPoint(
           matchedPt,
           candidateNodeIds,
           'conflicting_crossing_tag_and_road_tier'
         );
-        unresolvedCrossings.push({
+        addUnresolvedCrossingOnce({
           kind: chosenRoad.edge.tier === 'path' ? 'pedestrian_rail' : 'road_rail',
           position: [pos[0], pos[1]],
           edgeAId: chosenRoad.edge.id,
           edgeBId: chosenRail.edge.id,
           reason: 'conflicting_crossing_tag_and_road_tier',
         });
-        handledRoadRailLocations.push({ position: [pos[0], pos[1]], layer: targetLayer });
+        markRoadRailPairEventHandled(
+          uniqueRoadEdges.map((e) => e.id),
+          uniqueRailEdges.map((e) => e.id),
+          targetLayer,
+          [pos, crossingHit.point]
+        );
         continue;
       }
     }
@@ -1220,10 +1511,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     const confidence: LevelCrossingRelation['confidence'] = matchedPt
       ? 'explicit_osm_crossing_tag'
       : 'shared_explicit_osm_node';
-    const crossingAngleRad = computeAcuteCrossingAngleRad(
-      chosenRoad.proj.tangent,
-      chosenRail.proj.tangent
-    );
+    const crossingAngleRad = crossingHit.crossingAngleRad;
 
     const relId = `level_crossing:${chosenRoad.edge.id}__${chosenRail.edge.id}:osm_${osmId}`;
     const pointOsmTags = matchedPt ? cloneOsmTags(matchedPt.osmTags) : undefined;
@@ -1251,7 +1539,12 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       confirmedRailwayLevelCrossingNodeTags.set(railNode.id, pointOsmTags);
     }
 
-    handledRoadRailLocations.push({ position: [pos[0], pos[1]], layer: targetLayer });
+    markRoadRailPairEventHandled(
+      uniqueRoadEdges.map((e) => e.id),
+      uniqueRailEdges.map((e) => e.id),
+      targetLayer,
+      [pos, crossingHit.point]
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1298,11 +1591,11 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     const gatherCandidateNodeIds = (): string[] => {
       const ids: string[] = [];
       for (const { edge } of roadProjByEdge.values()) {
-        const rn = findRetainedNodeAtEdgeLocation(edge, roads.nodes, ptMeta.point, ptMeta.rawOsmNodeId);
+        const rn = findRetainedNodeAtEdgeLocation(edge, roads.nodes, ptMeta.point);
         if (rn) ids.push(rn.id);
       }
       for (const { edge } of railProjByEdge.values()) {
-        const rln = findRetainedNodeAtEdgeLocation(edge, railways.nodes, ptMeta.point, ptMeta.rawOsmNodeId);
+        const rln = findRetainedNodeAtEdgeLocation(edge, railways.nodes, ptMeta.point);
         if (rln) ids.push(rln.id);
       }
       return ids;
@@ -1332,32 +1625,6 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       continue;
     }
 
-    // Check for conflicting explicit OSM node IDs on nearest vertices
-    if (ptMeta.rawOsmNodeId !== undefined) {
-      const hasConflict =
-        atGradeRoads.some(
-          (r) =>
-            r.proj.nearestVertexDistanceMeters <= DEFAULT_NODE_SNAP_TOLERANCE_METERS &&
-            r.proj.nearestVertexRawOsmNodeId !== undefined &&
-            r.proj.nearestVertexRawOsmNodeId !== ptMeta.rawOsmNodeId
-        ) ||
-        atGradeRails.some(
-          (r) =>
-            r.proj.nearestVertexDistanceMeters <= DEFAULT_NODE_SNAP_TOLERANCE_METERS &&
-            r.proj.nearestVertexRawOsmNodeId !== undefined &&
-            r.proj.nearestVertexRawOsmNodeId !== ptMeta.rawOsmNodeId
-        );
-
-      if (hasConflict) {
-        recordUnresolvedPoint(
-          ptMeta,
-          gatherCandidateNodeIds(),
-          'conflicting_explicit_osm_node_id'
-        );
-        continue;
-      }
-    }
-
     // Pair road and rail on the same layer
     const sameLayerPairs: Array<{
       road: { edge: RoadEdge; proj: ClosestPointOnEdgeResult };
@@ -1377,22 +1644,146 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       continue;
     }
 
+    const distinctLayers = new Set(sameLayerPairs.map((p) => p.road.edge.layer));
+    if (distinctLayers.size !== 1) {
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'ambiguous_multiple_candidate_nodes'
+      );
+      continue;
+    }
+
     const targetLayer = sameLayerPairs[0].road.edge.layer;
     const layerRoads = atGradeRoads.filter((r) => r.edge.layer === targetLayer);
     const layerRails = atGradeRails.filter((rl) => rl.edge.layer === targetLayer);
 
-    const roadNode = findRetainedNodeAtEdgeLocation(
-      layerRoads[0].edge,
-      roads.nodes,
+    // ADR-0009 Section 6.2: Point-based confirmation requires a verified rawOsmNodeId on the point
+    if (ptMeta.rawOsmNodeId === undefined) {
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'insufficient_topological_evidence'
+      );
+      continue;
+    }
+
+    // Check for conflicting explicit OSM node IDs on nearby vertices and verify at least one way matches ptMeta.rawOsmNodeId
+    let hasConflict = false;
+    let matchesRoadVertexOsmId = false;
+    let matchesRailVertexOsmId = false;
+
+    for (const r of layerRoads) {
+      for (let i = 0; i < r.edge.points.length; i++) {
+        const vd = Math.hypot(
+          r.edge.points[i][0] - ptMeta.point[0],
+          r.edge.points[i][1] - ptMeta.point[1]
+        );
+        if (vd <= DEFAULT_NODE_SNAP_TOLERANCE_METERS) {
+          const vOsm = stripNodePrefix(r.edge.vertexRawOsmNodeIds[i]);
+          if (vOsm !== undefined && vOsm !== ptMeta.rawOsmNodeId) {
+            hasConflict = true;
+          } else if (vOsm === ptMeta.rawOsmNodeId) {
+            matchesRoadVertexOsmId = true;
+          }
+        }
+      }
+    }
+
+    for (const rl of layerRails) {
+      for (let i = 0; i < rl.edge.points.length; i++) {
+        const vd = Math.hypot(
+          rl.edge.points[i][0] - ptMeta.point[0],
+          rl.edge.points[i][1] - ptMeta.point[1]
+        );
+        if (vd <= DEFAULT_NODE_SNAP_TOLERANCE_METERS) {
+          const vOsm = stripNodePrefix(rl.edge.vertexRawOsmNodeIds[i]);
+          if (vOsm !== undefined && vOsm !== ptMeta.rawOsmNodeId) {
+            hasConflict = true;
+          } else if (vOsm === ptMeta.rawOsmNodeId) {
+            matchesRailVertexOsmId = true;
+          }
+        }
+      }
+    }
+
+    if (hasConflict) {
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'conflicting_explicit_osm_node_id'
+      );
+      const chosenRoad = pickCanonicalEdgeForNodeCrossing(layerRoads);
+      const chosenRail = pickCanonicalEdgeForNodeCrossing(layerRails);
+      addUnresolvedCrossingOnce({
+        kind: chosenRoad.edge.tier === 'path' ? 'pedestrian_rail' : 'road_rail',
+        position: [ptMeta.point[0], ptMeta.point[1]],
+        edgeAId: chosenRoad.edge.id,
+        edgeBId: chosenRail.edge.id,
+        reason: 'conflicting_explicit_osm_node_id',
+      });
+      markRoadRailPairEventHandled(
+        layerRoads.map((r) => r.edge.id),
+        layerRails.map((rl) => rl.edge.id),
+        targetLayer,
+        [ptMeta.point]
+      );
+      continue;
+    }
+
+    if (!matchesRoadVertexOsmId && !matchesRailVertexOsmId) {
+      // Point OSM node ID matches neither the road nor the railway vertices
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'insufficient_topological_evidence'
+      );
+      continue;
+    }
+
+    const roadNode = matchesRoadVertexOsmId
+      ? findRetainedNodeAtEdgeLocation(
+          layerRoads[0].edge,
+          roads.nodes,
+          ptMeta.point,
+          ptMeta.rawOsmNodeId
+        )
+      : undefined;
+    const railNode = matchesRailVertexOsmId
+      ? findRetainedNodeAtEdgeLocation(
+          layerRails[0].edge,
+          railways.nodes,
+          ptMeta.point,
+          ptMeta.rawOsmNodeId
+        )
+      : undefined;
+
+    if (
+      !isUnambiguousWayGroupAtCrossing(layerRoads, roadNode) ||
+      !isUnambiguousWayGroupAtCrossing(layerRails, railNode)
+    ) {
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'ambiguous_multiple_candidate_nodes'
+      );
+      continue;
+    }
+
+    const crossingHit = findLocalEdgeGroupIntersection2D(
+      layerRoads.map((r) => r.edge),
+      layerRails.map((rl) => rl.edge),
       ptMeta.point,
-      ptMeta.rawOsmNodeId
+      DEFAULT_NODE_SNAP_TOLERANCE_METERS
     );
-    const railNode = findRetainedNodeAtEdgeLocation(
-      layerRails[0].edge,
-      railways.nodes,
-      ptMeta.point,
-      ptMeta.rawOsmNodeId
-    );
+    if (!crossingHit) {
+      recordUnresolvedPoint(
+        ptMeta,
+        gatherCandidateNodeIds(),
+        'insufficient_topological_evidence'
+      );
+      continue;
+    }
 
     const chosenRoad = pickCanonicalEdgeForNodeCrossing(layerRoads, roadNode?.id);
     const chosenRail = pickCanonicalEdgeForNodeCrossing(layerRails, railNode?.id);
@@ -1408,17 +1799,19 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
         gatherCandidateNodeIds(),
         'conflicting_crossing_tag_and_road_tier'
       );
-      unresolvedCrossings.push({
+      addUnresolvedCrossingOnce({
         kind: chosenRoad.edge.tier === 'path' ? 'pedestrian_rail' : 'road_rail',
-        position: [ptMeta.point[0], ptMeta.point[1]],
+        position: [crossingHit.point[0], crossingHit.point[1]],
         edgeAId: chosenRoad.edge.id,
         edgeBId: chosenRail.edge.id,
         reason: 'conflicting_crossing_tag_and_road_tier',
       });
-      handledRoadRailLocations.push({
-        position: [ptMeta.point[0], ptMeta.point[1]],
-        layer: targetLayer,
-      });
+      markRoadRailPairEventHandled(
+        layerRoads.map((r) => r.edge.id),
+        layerRails.map((rl) => rl.edge.id),
+        targetLayer,
+        [ptMeta.point, crossingHit.point]
+      );
       continue;
     }
 
@@ -1426,24 +1819,23 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       ptMeta.kind === 'railway_ped_crossing'
         ? 'pedestrian_rail_crossing'
         : 'road_rail_level_crossing';
-    const crossingAngleRad = computeAcuteCrossingAngleRad(
-      chosenRoad.proj.tangent,
-      chosenRail.proj.tangent
-    );
+    const roadProjAtCrossing = projectPointOntoEdge(crossingHit.point, chosenRoad.edge);
+    const railProjAtCrossing = projectPointOntoEdge(crossingHit.point, chosenRail.edge);
+    const crossingAngleRad = crossingHit.crossingAngleRad;
     const pointOsmTags = cloneOsmTags(ptMeta.osmTags);
     const relId = `level_crossing:${chosenRoad.edge.id}__${chosenRail.edge.id}:pt_${ptMeta.id}`;
 
     levelCrossings.push({
       id: relId,
       crossingKind,
-      position: [ptMeta.point[0], ptMeta.point[1]],
+      position: [crossingHit.point[0], crossingHit.point[1]],
       rawOsmNodeId: ptMeta.rawOsmNodeId,
       roadEdgeId: chosenRoad.edge.id,
       roadNodeId: roadNode?.id,
-      roadArcLengthMeters: chosenRoad.proj.arcLengthMeters,
+      roadArcLengthMeters: roadProjAtCrossing.arcLengthMeters,
       railwayEdgeId: chosenRail.edge.id,
       railwayNodeId: railNode?.id,
-      railwayArcLengthMeters: chosenRail.proj.arcLengthMeters,
+      railwayArcLengthMeters: railProjAtCrossing.arcLengthMeters,
       crossingAngleRad,
       confidence: 'explicit_osm_crossing_tag',
       pointOsmTags,
@@ -1456,10 +1848,12 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       confirmedRailwayLevelCrossingNodeTags.set(railNode.id, pointOsmTags);
     }
 
-    handledRoadRailLocations.push({
-      position: [ptMeta.point[0], ptMeta.point[1]],
-      layer: targetLayer,
-    });
+    markRoadRailPairEventHandled(
+      layerRoads.map((r) => r.edge.id),
+      layerRails.map((rl) => rl.edge.id),
+      targetLayer,
+      [ptMeta.point, crossingHit.point]
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1499,51 +1893,9 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Cross-Modal Road x Railway 2D Segment Intersections & Coincident Vertices
-  //    (Unresolved At-Grade Crossings & Grade-Separated Crossings)
+  // 3A. Cross-Modal Road x Railway 2D Segment Intersections & Coincident Vertices
+  //     (Unresolved At-Grade Crossings & Grade-Separated Crossings)
   // ---------------------------------------------------------------------------
-  const seenGradeSeparatedKeys = new Set<string>();
-  const seenUnresolvedCrossingKeys = new Set<string>();
-
-  for (const existing of unresolvedCrossings) {
-    const key = `${existing.kind}:${existing.edgeAId}||${existing.edgeBId}:${Math.round(existing.position[0] * 2)},${Math.round(existing.position[1] * 2)}`;
-    seenUnresolvedCrossingKeys.add(key);
-  }
-
-  const addUnresolvedCrossingOnce = (cand: UnresolvedCrossingCandidate) => {
-    const u = cand.edgeAId <= cand.edgeBId ? cand.edgeAId : cand.edgeBId;
-    const v = cand.edgeAId <= cand.edgeBId ? cand.edgeBId : cand.edgeAId;
-    const key = `${cand.kind}:${u}||${v}:${Math.round(cand.position[0] * 2)},${Math.round(cand.position[1] * 2)}`;
-    if (seenUnresolvedCrossingKeys.has(key)) return;
-    seenUnresolvedCrossingKeys.add(key);
-    unresolvedCrossings.push(cand);
-  };
-
-  const addGradeSeparatedCrossingOnce = (
-    upper: BaseInfrastructureEdge,
-    lower: BaseInfrastructureEdge,
-    position: [number, number]
-  ) => {
-    const locKey = `${upper.id}->${lower.id}:${Math.round(position[0])},${Math.round(position[1])}`;
-    if (seenGradeSeparatedKeys.has(locKey)) return;
-    seenGradeSeparatedKeys.add(locKey);
-
-    const id = `grade_separated:${upper.id}__over__${lower.id}@${Math.round(position[0] * 100)},${Math.round(position[1] * 100)}`;
-    gradeSeparatedCrossings.push({
-      id,
-      position: [position[0], position[1]],
-      upperNetwork: upper.network,
-      upperEdgeId: upper.id,
-      upperLayer: upper.layer,
-      upperIsBridge: upper.isBridge,
-      lowerNetwork: lower.network,
-      lowerEdgeId: lower.id,
-      lowerLayer: lower.layer,
-      lowerIsTunnel: lower.isTunnel,
-    });
-  };
-
-  // 3A. Road x Railway segment queries via spatial index
   for (const roadSeg of roadSegmentIndex.allSegments) {
     const pad = DEFAULT_NODE_SNAP_TOLERANCE_METERS;
     const candidateRailSegs = railSegmentIndex.queryBox(
@@ -1605,7 +1957,14 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
               (rv.pt[0] + rlv.pt[0]) * 0.5,
               (rv.pt[1] + rlv.pt[1]) * 0.5,
             ];
-            if (!isLocationAlreadyHandledRoadRail(midPt, roadEdge.layer)) {
+            if (
+              !isRoadRailPairEventAlreadyHandled(
+                roadEdge.id,
+                railEdge.id,
+                roadEdge.layer,
+                midPt
+              )
+            ) {
               addUnresolvedCrossingOnce({
                 kind: roadEdge.tier === 'path' ? 'pedestrian_rail' : 'road_rail',
                 position: midPt,
@@ -1613,7 +1972,6 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
                 edgeBId: railEdge.id,
                 reason: 'coincident_vertex_without_osm_id',
               });
-              handledRoadRailLocations.push({ position: midPt, layer: roadEdge.layer });
             }
           }
         }
@@ -1624,7 +1982,15 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       }
 
       const hit = intersectIndexedSegments2D(roadSeg, railSeg);
-      if (hit && !isLocationAlreadyHandledRoadRail(hit.point, roadEdge.layer)) {
+      if (
+        hit &&
+        !isRoadRailPairEventAlreadyHandled(
+          roadEdge.id,
+          railEdge.id,
+          roadEdge.layer,
+          hit.point
+        )
+      ) {
         addUnresolvedCrossingOnce({
           kind: roadEdge.tier === 'path' ? 'pedestrian_rail' : 'road_rail',
           position: hit.point,
@@ -1632,7 +1998,6 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
           edgeBId: railEdge.id,
           reason: 'geometric_intersection_without_shared_node',
         });
-        handledRoadRailLocations.push({ position: hit.point, layer: roadEdge.layer });
       }
     }
   }
@@ -1708,13 +2073,18 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
         }
         if (isAtSharedTopologicalNode) continue;
 
-        // For rail_rail, check if already resolved as a Stage C RailwayFlatCrossingRelation
+        // For rail_rail, check if already resolved as a Stage C RailwayFlatCrossingRelation on this edge pair
         if (domainKind === 'rail_rail') {
-          const isConfirmedFlat = confirmedFlatCrossings.some(
-            (fc) =>
+          const isConfirmedFlat = confirmedFlatCrossings.some((fc) => {
+            const matchesPair =
+              (fc.trackAEdgeId === edgeA.id && fc.trackBEdgeId === edgeB.id) ||
+              (fc.trackAEdgeId === edgeB.id && fc.trackBEdgeId === edgeA.id);
+            return (
+              matchesPair &&
               Math.hypot(fc.position[0] - hit.point[0], fc.position[1] - hit.point[1]) <=
-              DEFAULT_NODE_SNAP_TOLERANCE_METERS * 2
-          );
+                DEFAULT_NODE_SNAP_TOLERANCE_METERS * 2
+            );
+          });
           if (isConfirmedFlat) continue;
         }
 
@@ -1747,7 +2117,12 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     if (aCmp !== 0) return aCmp;
     const bCmp = compareStringsCodeUnit(a.edgeBId, b.edgeBId);
     if (bCmp !== 0) return bCmp;
-    return compareStringsCodeUnit(a.reason, b.reason);
+    const rCmp = compareStringsCodeUnit(a.reason, b.reason);
+    if (rCmp !== 0) return rCmp;
+    if (Math.abs(a.position[0] - b.position[0]) > 1e-6) {
+      return a.position[0] - b.position[0];
+    }
+    return a.position[1] - b.position[1];
   });
   unresolvedInfrastructurePoints.sort((a, b) => compareStringsCodeUnit(a.pointId, b.pointId));
 

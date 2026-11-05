@@ -6,8 +6,14 @@
 
 # world/infrastructure/topology/InfrastructureGraph
 
+## Variables
+
+- [GRADE\_TRANSITION\_DIAGNOSTIC\_RADIUS\_METERS](variables/GRADE_TRANSITION_DIAGNOSTIC_RADIUS_METERS.md)
+
 ## Functions
 
+- [analyzeCrossModal](functions/analyzeCrossModal.md)
+- [buildInfrastructureGraph](functions/buildInfrastructureGraph.md)
 - [buildRailwayNetwork](functions/buildRailwayNetwork.md)
 - [isSecondaryRailwayBranch](functions/isSecondaryRailwayBranch.md)
 
@@ -76,6 +82,18 @@ Re-exports [computeStartInwardTangent](../RoadNetworkBuilder/functions/computeSt
 ### COORD\_ALIGNMENT\_TOLERANCE\_DEG
 
 Re-exports [COORD_ALIGNMENT_TOLERANCE_DEG](../OsmNodeIdEnricher/variables/COORD_ALIGNMENT_TOLERANCE_DEG.md)
+
+***
+
+### CrossModalAnalysisInput
+
+Re-exports [CrossModalAnalysisInput](../types/interfaces/CrossModalAnalysisInput.md)
+
+***
+
+### CrossModalAnalysisResult
+
+Re-exports [CrossModalAnalysisResult](../types/interfaces/CrossModalAnalysisResult.md)
 
 ***
 
@@ -217,6 +235,12 @@ Re-exports [RailwayNetwork](../types/type-aliases/RailwayNetwork.md)
 
 ***
 
+### RailwayNetworkBuildOptions
+
+Re-exports [RailwayNetworkBuildOptions](../types/interfaces/RailwayNetworkBuildOptions.md)
+
+***
+
 ### RailwayNetworkBuildResult
 
 Re-exports [RailwayNetworkBuildResult](../types/interfaces/RailwayNetworkBuildResult.md)
@@ -250,6 +274,12 @@ Re-exports [RoadEdge](../types/interfaces/RoadEdge.md)
 ### RoadNetwork
 
 Re-exports [RoadNetwork](../types/type-aliases/RoadNetwork.md)
+
+***
+
+### RoadNetworkBuildOptions
+
+Re-exports [RoadNetworkBuildOptions](../types/interfaces/RoadNetworkBuildOptions.md)
 
 ***
 

@@ -6,9 +6,9 @@
 
 # Function: buildRailwayNetwork()
 
-> **buildRailwayNetwork**(`input`, `infrastructurePoints?`): [`RailwayNetworkBuildResult`](../../types/interfaces/RailwayNetworkBuildResult.md)
+> **buildRailwayNetwork**(`input`, `optionsOrPoints?`): [`RailwayNetworkBuildResult`](../../types/interfaces/RailwayNetworkBuildResult.md)
 
-Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:855
+Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:864
 
 Pure, deterministic Stage C Railway Network Graph builder (`ADR-0009`).
 Constructs `RailwayNetwork`, `RailwayFlatCrossingRelation[]`, and `RailwayNetworkDiagnostics`
@@ -20,9 +20,9 @@ without mutating inputs and with zero React, Three.js, renderer, or WebGL depend
 
 [`TopologySourceData`](../../types/interfaces/TopologySourceData.md) \| readonly [`UnchainedRailwayPart`](../../types/interfaces/UnchainedRailwayPart.md)[] \| [`ProcessedMapData`](../../../../../types/MapFeature/interfaces/ProcessedMapData.md)
 
-### infrastructurePoints?
+### optionsOrPoints?
 
-readonly [`InfrastructurePointMetadata`](../../types/interfaces/InfrastructurePointMetadata.md)[]
+readonly [`InfrastructurePointMetadata`](../../types/interfaces/InfrastructurePointMetadata.md)[] \| [`RailwayNetworkBuildOptions`](../../types/interfaces/RailwayNetworkBuildOptions.md)
 
 ## Returns
 

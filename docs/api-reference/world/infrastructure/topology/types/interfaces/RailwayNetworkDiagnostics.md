@@ -6,7 +6,7 @@
 
 # Interface: RailwayNetworkDiagnostics
 
-Defined in: world/infrastructure/topology/types.ts:485
+Defined in: world/infrastructure/topology/types.ts:517
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:485
 
 > **boundaryClippedNodeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:497
+Defined in: world/infrastructure/topology/types.ts:529
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:497
 
 > **closedLoopEdgeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:498
+Defined in: world/infrastructure/topology/types.ts:530
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:498
 
 > **exactDeduplicatedCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:487
+Defined in: world/infrastructure/topology/types.ts:519
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:487
 
 > **inputPartCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:486
+Defined in: world/infrastructure/topology/types.ts:518
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:486
 
 > **railwayConfirmedSwitchCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:490
+Defined in: world/infrastructure/topology/types.ts:522
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:490
 
 > **railwayEdgeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:489
+Defined in: world/infrastructure/topology/types.ts:521
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:489
 
 > **railwayFlatCrossingCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:492
+Defined in: world/infrastructure/topology/types.ts:524
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/infrastructure/topology/types.ts:492
 
 > **railwayInteriorSplitCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:495
+Defined in: world/infrastructure/topology/types.ts:527
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/infrastructure/topology/types.ts:495
 
 > **railwayNodeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:488
+Defined in: world/infrastructure/topology/types.ts:520
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: world/infrastructure/topology/types.ts:488
 
 > **railwayParallelEdgePairCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:496
+Defined in: world/infrastructure/topology/types.ts:528
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/infrastructure/topology/types.ts:496
 
 > **railwaySimplifiedDegree2Count**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:494
+Defined in: world/infrastructure/topology/types.ts:526
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/infrastructure/topology/types.ts:494
 
 > **railwayUnresolvedJunctionCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:493
+Defined in: world/infrastructure/topology/types.ts:525
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: world/infrastructure/topology/types.ts:493
 
 > **railwayUnresolvedSwitchCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:491
+Defined in: world/infrastructure/topology/types.ts:523
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: world/infrastructure/topology/types.ts:491
 
 > **unresolvedCrossings**: readonly [`UnresolvedCrossingCandidate`](UnresolvedCrossingCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:499
+Defined in: world/infrastructure/topology/types.ts:531
 
 ***
 
@@ -126,4 +126,4 @@ Defined in: world/infrastructure/topology/types.ts:499
 
 > **unresolvedInfrastructurePoints**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:500
+Defined in: world/infrastructure/topology/types.ts:532

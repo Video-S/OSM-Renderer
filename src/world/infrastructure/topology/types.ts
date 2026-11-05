@@ -492,7 +492,8 @@ export interface UnresolvedCrossingCandidate {
     | 'geometric_intersection_without_shared_node'
     | 'missing_railway_crossing_tag_at_degree_4_node'
     | 'ambiguous_railway_crossing_track_pairing'
-    | 'conflicting_crossing_tag_and_road_tier';
+    | 'conflicting_crossing_tag_and_road_tier'
+    | 'conflicting_explicit_osm_node_id';
 }
 
 export type UnresolvedInfrastructurePointReason =

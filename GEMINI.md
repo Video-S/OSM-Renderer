@@ -28,8 +28,10 @@ When working on this codebase, adhere strictly to the following instructions:
    - **Never claim** that tests, compilation, or visual verification were performed or succeeded unless they were actually executed in the environment.
 
 5. **Scope Boundary**:
-   - Keep the product scope limited to **Goalpost 1: 3D map rendering and camera controls**, unless explicitly instructed otherwise.
-   - Do not introduce gameplay, combat, physics simulations, zombies, backend databases, or speculative streaming architectures.
+   - The active project scope is **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings**.
+   - Work only on milestones and tasks explicitly approved by the project owner; an active goalpost does not automatically authorize implementation of every planned milestone.
+   - Milestone 2.2 (`M2.2`) is complete. Milestone 2.3 (`M2.3`) is planned and requires explicit project-owner approval before implementation begins.
+   - Do not introduce gameplay, combat, zombie simulation, physics simulations, backend databases, or speculative streaming architectures.
 
 6. **Ticket System & Workflow**:
    - Follow the procedures detailed in [`docs/ticket-workflow.md`](docs/ticket-workflow.md) and [`tickets/README.md`](tickets/README.md).

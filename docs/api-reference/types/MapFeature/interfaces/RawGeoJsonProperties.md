@@ -6,7 +6,7 @@
 
 # Interface: RawGeoJsonProperties
 
-Defined in: types/MapFeature.ts:166
+Defined in: types/MapFeature.ts:182
 
 ## Indexable
 
@@ -18,7 +18,15 @@ Defined in: types/MapFeature.ts:166
 
 > `optional` **\_nodeIds?**: (`string` \| `number`)[]
 
-Defined in: types/MapFeature.ts:190
+Defined in: types/MapFeature.ts:206
+
+***
+
+### \_nodeIdsByPart?
+
+> `optional` **\_nodeIdsByPart?**: (`string` \| `number`)[][]
+
+Defined in: types/MapFeature.ts:207
 
 ***
 
@@ -26,7 +34,7 @@ Defined in: types/MapFeature.ts:190
 
 > `optional` **amenity?**: `string`
 
-Defined in: types/MapFeature.ts:182
+Defined in: types/MapFeature.ts:198
 
 ***
 
@@ -34,7 +42,7 @@ Defined in: types/MapFeature.ts:182
 
 > `optional` **bridge?**: `string` \| `boolean`
 
-Defined in: types/MapFeature.ts:180
+Defined in: types/MapFeature.ts:196
 
 ***
 
@@ -42,7 +50,7 @@ Defined in: types/MapFeature.ts:180
 
 > `optional` **building?**: `string` \| `boolean`
 
-Defined in: types/MapFeature.ts:169
+Defined in: types/MapFeature.ts:185
 
 ***
 
@@ -50,7 +58,7 @@ Defined in: types/MapFeature.ts:169
 
 > `optional` **building:levels?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:170
+Defined in: types/MapFeature.ts:186
 
 ***
 
@@ -58,7 +66,7 @@ Defined in: types/MapFeature.ts:170
 
 > `optional` **electrified?**: `string` \| `boolean`
 
-Defined in: types/MapFeature.ts:186
+Defined in: types/MapFeature.ts:202
 
 ***
 
@@ -66,7 +74,7 @@ Defined in: types/MapFeature.ts:186
 
 > `optional` **gauge?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:185
+Defined in: types/MapFeature.ts:201
 
 ***
 
@@ -74,7 +82,7 @@ Defined in: types/MapFeature.ts:185
 
 > `optional` **height?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:171
+Defined in: types/MapFeature.ts:187
 
 ***
 
@@ -82,7 +90,7 @@ Defined in: types/MapFeature.ts:171
 
 > `optional` **highway?**: `string`
 
-Defined in: types/MapFeature.ts:173
+Defined in: types/MapFeature.ts:189
 
 ***
 
@@ -90,7 +98,7 @@ Defined in: types/MapFeature.ts:173
 
 > `optional` **id?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:167
+Defined in: types/MapFeature.ts:183
 
 ***
 
@@ -98,7 +106,7 @@ Defined in: types/MapFeature.ts:167
 
 > `optional` **landuse?**: `string`
 
-Defined in: types/MapFeature.ts:179
+Defined in: types/MapFeature.ts:195
 
 ***
 
@@ -106,7 +114,7 @@ Defined in: types/MapFeature.ts:179
 
 > `optional` **layer?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:183
+Defined in: types/MapFeature.ts:199
 
 ***
 
@@ -114,7 +122,7 @@ Defined in: types/MapFeature.ts:183
 
 > `optional` **leisure?**: `string`
 
-Defined in: types/MapFeature.ts:178
+Defined in: types/MapFeature.ts:194
 
 ***
 
@@ -122,7 +130,7 @@ Defined in: types/MapFeature.ts:178
 
 > `optional` **min\_height?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:172
+Defined in: types/MapFeature.ts:188
 
 ***
 
@@ -130,7 +138,7 @@ Defined in: types/MapFeature.ts:172
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:168
+Defined in: types/MapFeature.ts:184
 
 ***
 
@@ -138,7 +146,7 @@ Defined in: types/MapFeature.ts:168
 
 > `optional` **natural?**: `string`
 
-Defined in: types/MapFeature.ts:176
+Defined in: types/MapFeature.ts:192
 
 ***
 
@@ -146,7 +154,7 @@ Defined in: types/MapFeature.ts:176
 
 > `optional` **nodeIds?**: (`string` \| `number`)[]
 
-Defined in: types/MapFeature.ts:189
+Defined in: types/MapFeature.ts:205
 
 ***
 
@@ -154,7 +162,7 @@ Defined in: types/MapFeature.ts:189
 
 > `optional` **nodes?**: (`string` \| `number`)[]
 
-Defined in: types/MapFeature.ts:188
+Defined in: types/MapFeature.ts:204
 
 ***
 
@@ -162,7 +170,7 @@ Defined in: types/MapFeature.ts:188
 
 > `optional` **railway?**: `string`
 
-Defined in: types/MapFeature.ts:174
+Defined in: types/MapFeature.ts:190
 
 ***
 
@@ -170,7 +178,7 @@ Defined in: types/MapFeature.ts:174
 
 > `optional` **surface?**: `string`
 
-Defined in: types/MapFeature.ts:187
+Defined in: types/MapFeature.ts:203
 
 ***
 
@@ -178,7 +186,7 @@ Defined in: types/MapFeature.ts:187
 
 > `optional` **tunnel?**: `string` \| `boolean`
 
-Defined in: types/MapFeature.ts:181
+Defined in: types/MapFeature.ts:197
 
 ***
 
@@ -186,7 +194,7 @@ Defined in: types/MapFeature.ts:181
 
 > `optional` **water?**: `string`
 
-Defined in: types/MapFeature.ts:177
+Defined in: types/MapFeature.ts:193
 
 ***
 
@@ -194,7 +202,7 @@ Defined in: types/MapFeature.ts:177
 
 > `optional` **waterway?**: `string`
 
-Defined in: types/MapFeature.ts:175
+Defined in: types/MapFeature.ts:191
 
 ***
 
@@ -202,4 +210,4 @@ Defined in: types/MapFeature.ts:175
 
 > `optional` **width?**: `string` \| `number`
 
-Defined in: types/MapFeature.ts:184
+Defined in: types/MapFeature.ts:200

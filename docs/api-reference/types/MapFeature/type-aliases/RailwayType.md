@@ -8,4 +8,4 @@
 
 > **RailwayType** = `"rail"` \| `"light_rail"` \| `"subway"` \| `"tram"` \| `"narrow_gauge"` \| `"monorail"` \| `"funicular"` \| `"miniature"` \| `"construction"` \| `"disused"` \| `"turntable"` \| `"roller_coaster"` \| `"aerialway"` \| `"unclassified"`
 
-Defined in: types/MapFeature.ts:40
+Defined in: types/MapFeature.ts:56

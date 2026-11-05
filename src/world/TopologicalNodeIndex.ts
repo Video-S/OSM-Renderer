@@ -130,6 +130,7 @@ export class TopologicalNodeIndex {
 
     let bestNodeId: string | null = null;
     let bestDist = this.snapTolerance;
+    let bestIsExplicit = false;
 
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
@@ -138,9 +139,19 @@ export class TopologicalNodeIndex {
         if (cell) {
           for (const node of cell) {
             const dist = Math.hypot(node.x - x, node.z - z);
-            if (dist <= bestDist) {
-              bestDist = dist;
-              bestNodeId = node.id;
+            if (dist <= this.snapTolerance) {
+              const resolvedId = this.resolveCanonicalNodeId(node.id);
+              if (
+                bestNodeId === null ||
+                dist < bestDist - 1e-9 ||
+                (Math.abs(dist - bestDist) <= 1e-9 &&
+                  ((node.isExplicit && !bestIsExplicit) ||
+                    (node.isExplicit === bestIsExplicit && resolvedId < bestNodeId)))
+              ) {
+                bestDist = dist;
+                bestNodeId = resolvedId;
+                bestIsExplicit = node.isExplicit;
+              }
             }
           }
         }
@@ -193,4 +204,24 @@ export class TopologicalNodeIndex {
     const canonical = this.resolveCanonicalNodeId(nodeId);
     return this.nodePositions.get(canonical) ?? this.nodePositions.get(nodeId);
   }
+
+  /**
+   * Returns true if the canonical node ID corresponds to an explicit OSM node ID.
+   */
+  isExplicitNode(nodeId: string): boolean {
+    const canonical = this.resolveCanonicalNodeId(nodeId);
+    return this.explicitOsmNodes.has(canonical) || canonical.includes('|osm_');
+  }
+
+  /**
+   * Extracts the unprefixed raw OSM node ID if the canonical node is grounded in an explicit OSM node.
+   */
+  extractRawOsmNodeId(nodeId: string): string | undefined {
+    const canonical = this.resolveCanonicalNodeId(nodeId);
+    if (canonical.includes('|osm_')) {
+      return canonical.split('|osm_').pop();
+    }
+    return undefined;
+  }
 }
+

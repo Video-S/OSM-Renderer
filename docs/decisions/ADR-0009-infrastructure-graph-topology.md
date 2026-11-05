@@ -3,7 +3,7 @@
 ## Metadata
 
 - **Decision ID**: `ADR-0009`
-- **Status**: `Proposed` *(Stage A Architecture — Pending Project Owner Review prior to Stage B implementation)*
+- **Status**: `Accepted` *(Approved by Project Owner on 2026-11-05; Stage A `TKT-003` closed; Stage B `M2.3-B` authorized)*
 - **Date**: `2026-11-05`
 - **Deciders**: Project Owner, Architecture & Rendering Engineering
 - **Consulted**: OSMnx Conceptual Reference (`osmnx.simplification`, `osmnx.graph`), Goalpost 1 & M2.1/M2.2 Codebase Audit (`TKT-003`)
@@ -807,14 +807,14 @@ Grade transitions connect an at-grade edge endpoint (`!isBridge && !isTunnel`) a
 
 ---
 
-## Recommended Resolutions to Open Questions (`Proposed` — Pending Project-Owner Sign-Off)
+## Accepted Resolutions to Open Questions (`Accepted` — Approved by Project Owner on 2026-11-05)
 
 1. **Non-Destructive Pre-Deduplication & Pre-Chaining Input vs. Legacy `mapData.roads` (Stages B–D vs. Stage E)**:
-   - *Recommended Resolution*: Preserve `LocalGeoJsonProvider.parseGeoJson()`'s existing `mapData.roads` pipeline (`seenRoadSegments` heuristic deduplication + `chainContiguousRoads`) unchanged during Stages B–D so all 92 existing tests remain untouched, and attach a separate, non-destructive `mapData.topologySource: TopologySourceData` collection captured **before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads`** for `buildInfrastructureGraph`.
+   - *Accepted Resolution*: Preserve `LocalGeoJsonProvider.parseGeoJson()`'s existing `mapData.roads` pipeline (`seenRoadSegments` heuristic deduplication + `chainContiguousRoads`) unchanged during Stages B–D so all 92 existing tests remain untouched, and attach a separate, non-destructive `mapData.topologySource: TopologySourceData` collection captured **before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads`** for `buildInfrastructureGraph`.
 2. **Explicit Per-Vertex OSM Node ID Preservation in `server.ts` and `LocalGeoJsonProvider.ts`**:
-   - *Recommended Resolution*: Preserve explicit per-vertex OSM node IDs for live Overpass JSON (`way.nodes`) and OSM 0.6 XML fallback (`<nd ref="...">`) responses when the node reference count aligns 1:1 with the extracted geometry coordinates. Handle `MultiLineString` and `clipPolylineToBox` split parts carefully by propagating vertex node IDs only where vertex alignment is exact, without claiming 100% ID recovery a priori, and keep the conservative `0.15 m` coordinate fallback when explicit IDs are absent.
+   - *Accepted Resolution*: Preserve explicit per-vertex OSM node IDs for live Overpass JSON (`way.nodes`) and OSM 0.6 XML fallback (`<nd ref="...">`) responses when the node reference count aligns 1:1 with the extracted geometry coordinates. Handle `MultiLineString` and `clipPolylineToBox` split parts carefully by propagating vertex node IDs only where vertex alignment is exact, without claiming 100% ID recovery a priori, and keep the conservative `0.15 m` coordinate fallback when explicit IDs are absent.
 3. **Cross-Tier (`vehicular` vs. `path`) Road/Path Topology**:
-   - *Recommended Resolution*: Represent shared nodes between `vehicular` and `path` ways in `RoadNetwork` (`roles` containing `'cross_tier'`, `isCrossTier: true`, and `'highway_crossing'` where tagged) without automatically altering Stage 6 vehicular asphalt junction polygon trimming (`ADR-0002`), leaving carriageway-vs-path 2D Boolean clipping responsible for visual surface layering.
+   - *Accepted Resolution*: Represent shared nodes between `vehicular` and `path` ways in `RoadNetwork` (`roles` containing `'cross_tier'`, `isCrossTier: true`, and `'highway_crossing'` where tagged) without automatically altering Stage 6 vehicular asphalt junction polygon trimming (`ADR-0002`), leaving carriageway-vs-path 2D Boolean clipping responsible for visual surface layering.
 
 ---
 

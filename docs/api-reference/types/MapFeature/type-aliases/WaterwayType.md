@@ -8,4 +8,4 @@
 
 > **WaterwayType** = `"river"` \| `"stream"` \| `"canal"` \| `"drain"` \| `"ditch"` \| `"dock"` \| `"weir"` \| `"dam"` \| `"water_slide"` \| `"waterway"`
 
-Defined in: types/MapFeature.ts:56
+Defined in: types/MapFeature.ts:72

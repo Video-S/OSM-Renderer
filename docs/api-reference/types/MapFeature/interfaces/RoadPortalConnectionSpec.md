@@ -6,7 +6,7 @@
 
 # Interface: RoadPortalConnectionSpec
 
-Defined in: types/MapFeature.ts:194
+Defined in: types/MapFeature.ts:211
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:194
 
 > **endpoint**: `"end"` \| `"start"`
 
-Defined in: types/MapFeature.ts:197
+Defined in: types/MapFeature.ts:214
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:197
 
 > **left**: \[`number`, `number`\]
 
-Defined in: types/MapFeature.ts:198
+Defined in: types/MapFeature.ts:215
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:198
 
 > **right**: \[`number`, `number`\]
 
-Defined in: types/MapFeature.ts:199
+Defined in: types/MapFeature.ts:216
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:199
 
 > **roadFeatureId**: `string`
 
-Defined in: types/MapFeature.ts:195
+Defined in: types/MapFeature.ts:212
 
 ***
 
@@ -46,4 +46,4 @@ Defined in: types/MapFeature.ts:195
 
 > **sourceFeatureId**: `string`
 
-Defined in: types/MapFeature.ts:196
+Defined in: types/MapFeature.ts:213

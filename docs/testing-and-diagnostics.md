@@ -61,15 +61,23 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **Production Railway Tunnel Regression**: Verifies subterranean track elevation profiles (`getRailwayElevations` for `layer = -1` and `layer = -2`), `Railway_Tunnel_Portals` (portal structure and recessed mouth), `Railway_Tunnel_Traces`, absence of surface ballast/rail meshes for subterranean tunnel spans, `resolveInspectedFeature` provenance (including subterranean `elevation = -2.0 m`), and deterministic disposal.
    - **Bridge & Tunnel 4-Theme Updates & Disposal**: Verifies in-place `.material.color` updates across all four themes (`tactical`, `daylight`, `dusk`, `blueprint`) on bridge substructure, parapets, tunnel portals, tunnel traces, ballast, 3D sleepers, and 3D rails without geometry buffer reallocation, followed by deterministic disposal.
    - **OSM Preset & Cache Separation Regression**: Verifies that `server.ts` never seeds the general-purpose `osmCache` with `realOsmRailwayExtracts.json`, ensuring railway-only benchmark extracts cannot contaminate normal regional OSM preset data.
+8. **`RoadNetworkTopology.test.ts`** (`M2.3-B` / `TKT-004` Road Network Graph & Non-Destructive Topology Suite — 14 tests):
+   - **`T-01` through `T-10`**: Verifies curved degree-2 chain simplification and reversed middle segment provenance (`reversedRelativeToSource === true`), true T-junctions (`degree === 3`) vs. interior curve vertices, 4-way shared-node intersections (`degree === 4`), unconnected 2D geometric crossings and grade-separated bridge overpasses (`0` shared junction nodes), interior OSM junction splitting (explicit node ID and `0.15 m` coordinate fallback) and cross-tier (`vehicular` + `path`) node tagging, parallel multi-edges (`parallelIndex: 0, 1`) and qualified input-order determinism, P-loops (`degree === 3`, `incidentHalfEdges.length === 3`, `incidentEdgeIds.length === 2`) and isolated closed loops (`loop_anchor`), road attribute and one-way (`oneway=yes`, `oneway=-1`, `oneway=reversible` $\to$ `'unknown'`) simplification guards, explicit OSM node ID precedence over `0.15 m` proximity, and boundary-clipped endpoint isolation (`nodeIdOrigin: 'boundary_clip'`).
+   - **`T-16` (Heuristic Hash Collision Survival vs. Exact `1 mm` Deduplication)**: Verifies that distinct mirror S-curve geometries colliding under legacy `seenRoadSegments` survive in `ProcessedMapData.topologySource` and remain `2` distinct `RoadEdge`s, while forward and bidirectional-reverse `<= 1 mm` exact duplicates collapse and record `deduplicatedFeatureIds`.
+   - **`T-17` (Stage B Pre-Chaining Survival, Immutability & Renderer Regression)**: Verifies pre-chaining road part capture, `@id` support, zero mutation of `topologySource` during graph construction or `mapData.roads` mutation, and unchanged `GeometryBuilder.buildScene()` output.
+   - **Offline Overpass JSON & OSM 0.6 XML Node-ID Enrichment**: Verifies `enrichGeoJsonWithOverpassNodeIds` and `enrichGeoJsonWithOsmXmlNodeIds` on valid 1:1 coordinate-aligned ways, rejection on vertex count or coordinate misalignment, `MultiLineString` `_nodeIdsByPart` propagation, and `server.ts` preset/cache separation.
+   - **Parser vs. Road-Graph Performance Benchmark**: Measures and logs `LocalGeoJsonProvider.parseGeoJson` vs. `buildRoadNetwork` construction times across a 270-way synthetic urban road grid (`parseGeoJson = 12.61 ms`, `buildRoadNetwork = 11.85 ms`), Station Hengelo real OSM + urban roads (`parseGeoJson = 7.52 ms`, `buildRoadNetwork = 6.41 ms`), and Amsterdam Centraal real OSM + urban roads (`parseGeoJson = 27.78 ms`, `buildRoadNetwork = 10.50 ms`).
 
-### Recorded Verification Status (2026-11-04)
+### Recorded Verification Status (2026-11-05 — Stage B `M2.3-B` Verification)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **92 / 92 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts`) |
+| `npm test` | **106 / 106 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `14` in `RoadNetworkTopology.test.ts`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |
+
+*(Historical M2.2 closeout record on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 
 ---
 

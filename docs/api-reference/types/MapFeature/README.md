@@ -37,3 +37,33 @@
 - [SurfaceAreaFeature](type-aliases/SurfaceAreaFeature.md)
 - [WaterBodyType](type-aliases/WaterBodyType.md)
 - [WaterwayType](type-aliases/WaterwayType.md)
+
+## References
+
+### InfrastructurePointKind
+
+Re-exports [InfrastructurePointKind](../../world/infrastructure/topology/types/type-aliases/InfrastructurePointKind.md)
+
+***
+
+### InfrastructurePointMetadata
+
+Re-exports [InfrastructurePointMetadata](../../world/infrastructure/topology/types/interfaces/InfrastructurePointMetadata.md)
+
+***
+
+### TopologySourceData
+
+Re-exports [TopologySourceData](../../world/infrastructure/topology/types/interfaces/TopologySourceData.md)
+
+***
+
+### UnchainedRailwayPart
+
+Re-exports [UnchainedRailwayPart](../../world/infrastructure/topology/types/interfaces/UnchainedRailwayPart.md)
+
+***
+
+### UnchainedRoadPart
+
+Re-exports [UnchainedRoadPart](../../world/infrastructure/topology/types/interfaces/UnchainedRoadPart.md)

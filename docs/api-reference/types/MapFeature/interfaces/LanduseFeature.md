@@ -6,7 +6,7 @@
 
 # Interface: LanduseFeature
 
-Defined in: types/MapFeature.ts:332
+Defined in: types/MapFeature.ts:349
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:332
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:340
+Defined in: types/MapFeature.ts:357
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:340
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:333
+Defined in: types/MapFeature.ts:350
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:333
 
 > **landuseType**: [`LanduseType`](../type-aliases/LanduseType.md)
 
-Defined in: types/MapFeature.ts:338
+Defined in: types/MapFeature.ts:355
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:338
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:336
+Defined in: types/MapFeature.ts:353
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:336
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:342
+Defined in: types/MapFeature.ts:359
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:342
 
 > **polygon**: \[`number`, `number`\][][]
 
-Defined in: types/MapFeature.ts:337
+Defined in: types/MapFeature.ts:354
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:337
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:341
+Defined in: types/MapFeature.ts:358
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:341
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:334
+Defined in: types/MapFeature.ts:351
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:334
 
 > `optional` **subtype?**: `string`
 
-Defined in: types/MapFeature.ts:339
+Defined in: types/MapFeature.ts:356
 
 ***
 
@@ -86,4 +86,4 @@ Defined in: types/MapFeature.ts:339
 
 > **type**: `"landuse"`
 
-Defined in: types/MapFeature.ts:335
+Defined in: types/MapFeature.ts:352

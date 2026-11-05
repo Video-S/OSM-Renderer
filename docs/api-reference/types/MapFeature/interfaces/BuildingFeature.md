@@ -6,7 +6,7 @@
 
 # Interface: BuildingFeature
 
-Defined in: types/MapFeature.ts:228
+Defined in: types/MapFeature.ts:245
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:228
 
 > `optional` **amenity?**: `string`
 
-Defined in: types/MapFeature.ts:240
+Defined in: types/MapFeature.ts:257
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:240
 
 > `optional` **buildingArchetype?**: `"residential"` \| `"commercial"` \| `"industrial"` \| `"civic"` \| `"religious"` \| `"transit"` \| `"historic"`
 
-Defined in: types/MapFeature.ts:238
+Defined in: types/MapFeature.ts:255
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:238
 
 > **buildingType**: `string`
 
-Defined in: types/MapFeature.ts:237
+Defined in: types/MapFeature.ts:254
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:237
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:241
+Defined in: types/MapFeature.ts:258
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:241
 
 > **footprint**: \[`number`, `number`\][][]
 
-Defined in: types/MapFeature.ts:233
+Defined in: types/MapFeature.ts:250
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:233
 
 > **height**: `number`
 
-Defined in: types/MapFeature.ts:234
+Defined in: types/MapFeature.ts:251
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:234
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:229
+Defined in: types/MapFeature.ts:246
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:229
 
 > `optional` **isRoofOnly?**: `boolean`
 
-Defined in: types/MapFeature.ts:239
+Defined in: types/MapFeature.ts:256
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:239
 
 > `optional` **levels?**: `number`
 
-Defined in: types/MapFeature.ts:236
+Defined in: types/MapFeature.ts:253
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:236
 
 > **minHeight**: `number`
 
-Defined in: types/MapFeature.ts:235
+Defined in: types/MapFeature.ts:252
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:235
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:232
+Defined in: types/MapFeature.ts:249
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:232
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:243
+Defined in: types/MapFeature.ts:260
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: types/MapFeature.ts:243
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:242
+Defined in: types/MapFeature.ts:259
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: types/MapFeature.ts:242
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:230
+Defined in: types/MapFeature.ts:247
 
 ***
 
@@ -126,4 +126,4 @@ Defined in: types/MapFeature.ts:230
 
 > **type**: `"building"`
 
-Defined in: types/MapFeature.ts:231
+Defined in: types/MapFeature.ts:248

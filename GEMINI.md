@@ -30,7 +30,7 @@ When working on this codebase, adhere strictly to the following instructions:
 5. **Scope Boundary**:
    - The active project scope is **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings**.
    - Work only on milestones, stages, and tasks explicitly approved by the project owner; an active goalpost or milestone does not automatically authorize implementation of every planned milestone or stage.
-   - Milestones 2.1 (`M2.1`) and 2.2 (`M2.2`) are complete. Milestone 2.3 (`M2.3: Infrastructure Topology and Connectivity`) has received project-owner approval to begin in staged increments (`Stage A` architecture and contract authorized; implementation Stages `B–E` require explicit project-owner approval after architectural review).
+   - Milestones 2.1 (`M2.1`), 2.2 (`M2.2`), and Milestone 2.3 Stage A (`M2.3-A` / `TKT-003`, `ADR-0009`) are complete and accepted. Milestone 2.3 Stage B (`M2.3-B` / `TKT-004`: Road Network Graph Construction) is authorized; Stages `C–E` remain unauthorized pending project-owner review of Stage B.
    - Do not introduce gameplay, combat, zombie simulation, physics simulations, backend databases, or speculative streaming architectures.
 
 6. **Ticket System & Workflow**:

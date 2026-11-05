@@ -6,7 +6,7 @@
 
 # Interface: BarrierFeature
 
-Defined in: types/MapFeature.ts:345
+Defined in: types/MapFeature.ts:362
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:345
 
 > **barrierType**: [`BarrierType`](../type-aliases/BarrierType.md)
 
-Defined in: types/MapFeature.ts:351
+Defined in: types/MapFeature.ts:368
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:351
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:354
+Defined in: types/MapFeature.ts:371
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:354
 
 > **height**: `number`
 
-Defined in: types/MapFeature.ts:353
+Defined in: types/MapFeature.ts:370
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:353
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:346
+Defined in: types/MapFeature.ts:363
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:346
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:349
+Defined in: types/MapFeature.ts:366
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:349
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:356
+Defined in: types/MapFeature.ts:373
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:356
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: types/MapFeature.ts:350
+Defined in: types/MapFeature.ts:367
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:350
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:355
+Defined in: types/MapFeature.ts:372
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:355
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:347
+Defined in: types/MapFeature.ts:364
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:347
 
 > **type**: `"barrier"`
 
-Defined in: types/MapFeature.ts:348
+Defined in: types/MapFeature.ts:365
 
 ***
 
@@ -94,4 +94,4 @@ Defined in: types/MapFeature.ts:348
 
 > **width**: `number`
 
-Defined in: types/MapFeature.ts:352
+Defined in: types/MapFeature.ts:369

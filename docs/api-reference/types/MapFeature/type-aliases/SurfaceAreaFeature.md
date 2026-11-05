@@ -8,4 +8,4 @@
 
 > **SurfaceAreaFeature** = [`WaterBodyFeature`](../interfaces/WaterBodyFeature.md) \| [`ParkFeature`](../interfaces/ParkFeature.md)
 
-Defined in: types/MapFeature.ts:374
+Defined in: types/MapFeature.ts:391

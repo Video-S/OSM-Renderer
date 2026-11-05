@@ -36,11 +36,31 @@ Defined in: world/TopologicalNodeIndex.ts:33
 
 ## Methods
 
+### extractRawOsmNodeId()
+
+> **extractRawOsmNodeId**(`nodeId`): `string`
+
+Defined in: world/TopologicalNodeIndex.ts:219
+
+Extracts the unprefixed raw OSM node ID if the canonical node is grounded in an explicit OSM node.
+
+#### Parameters
+
+##### nodeId
+
+`string`
+
+#### Returns
+
+`string`
+
+***
+
 ### getNodePosition()
 
 > **getNodePosition**(`nodeId`): \[`number`, `number`\]
 
-Defined in: world/TopologicalNodeIndex.ts:192
+Defined in: world/TopologicalNodeIndex.ts:203
 
 #### Parameters
 
@@ -95,6 +115,26 @@ Resolves a canonical node ID for a point [x, z].
 
 ***
 
+### isExplicitNode()
+
+> **isExplicitNode**(`nodeId`): `boolean`
+
+Defined in: world/TopologicalNodeIndex.ts:211
+
+Returns true if the canonical node ID corresponds to an explicit OSM node ID.
+
+#### Parameters
+
+##### nodeId
+
+`string`
+
+#### Returns
+
+`boolean`
+
+***
+
 ### resolveCanonicalNodeId()
 
 > **resolveCanonicalNodeId**(`nodeId`): `string`
@@ -119,7 +159,7 @@ Resolves a canonical node ID if a fallback coordinate node was later promoted to
 
 > **resolveWayNodeIds**(`points`, `layerScope?`, `rawOsmNodeIds?`): `string`[]
 
-Defined in: world/TopologicalNodeIndex.ts:174
+Defined in: world/TopologicalNodeIndex.ts:185
 
 Resolves an array of node IDs for a polyline, preserving per-vertex OSM node IDs
 when available in the source feature properties and falling back to spatial snapping.

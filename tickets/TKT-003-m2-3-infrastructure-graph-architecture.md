@@ -2,7 +2,7 @@
 id: TKT-003
 title: M2.3-A Infrastructure Graph Architecture, Source Audit, and Domain Contracts
 type: docs
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-05
 updated: 2026-11-05
@@ -15,13 +15,13 @@ Complete **Stage A (`M2.3-A`)** of Milestone 2.3 (*Infrastructure Topology and C
 
 ## Context
 Goalpost 1, Milestone 2.1 (`TKT-002`), and Milestone 2.2 (`TKT-001`) are complete and closed. The project owner has approved starting **Milestone 2.3: Infrastructure Topology and Connectivity** in five deliberate stages:
-- **Stage A (`M2.3-A`)**: Architecture, source audit, domain contracts, and implementation planning only *(authorized in this task)*.
+- **Stage A (`M2.3-A`)**: Architecture, source audit, domain contracts, and implementation planning only *(completed and approved)*.
 - **Stage B (`M2.3-B`)**: Road network graph construction (`RoadNetworkBuilder`).
 - **Stage C (`M2.3-C`)**: Independent railway network graph construction (`RailwayNetworkBuilder`).
 - **Stage D (`M2.3-D`)**: Crossings and grade transitions (`CrossModalAnalyzer` + point crossing/switch metadata survival).
 - **Stage E (`M2.3-E`)**: Renderer integration (`GeometryBuilder` junction trimming and portal transition consumption).
 
-Stage A deliberately stops before writing application code or modifying tests so the project owner can review and approve the proposed `ADR-0009` contracts and recommended resolutions first.
+Stage A deliberately stopped before writing application code or modifying tests so the project owner could review and approve the `ADR-0009` contracts and recommended resolutions first.
 
 ## Observed behavior
 Audit of the current codebase (`LocalGeoJsonProvider.ts`, `FeatureCatalogue.ts`, `TopologicalNodeIndex.ts`, `GeometryBuilder.ts`, `RailwayTopology.ts`, `RailwayGeometryBuilder.ts`, and `server.ts`) confirmed eight concrete source facts and associated architectural gaps for M2.3:
@@ -35,7 +35,7 @@ Audit of the current codebase (`LocalGeoJsonProvider.ts`, `FeatureCatalogue.ts`,
 8. **Boundary-Clipped Synthetic Endpoints**: `clipPolylineToBox` (`LocalGeoJsonProvider.ts` lines 208, 219) pushes `undefined` into `osmNodes` at Liang-Barsky boundary cut points without flagging them as boundary-clipped endpoints, allowing `topoNodeIndex` to snap unrelated ways cut within `0.15 m` of the same boundary edge.
 
 ## Expected behavior
-A formal, source-verified architectural specification (`ADR-0009`, marked `Proposed`) defines:
+A formal, source-verified architectural specification (`ADR-0009`, `Accepted`) defines:
 - A minimal, non-destructive data handoff (`ProcessedMapData.topologySource: TopologySourceData`) capturing `UnchainedRoadPart[]` **before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads`** (alongside `UnchainedRailwayPart[]` and `InfrastructurePointMetadata[]`), while keeping the legacy `mapData.roads` pipeline unchanged during Stages B–D.
 - Strict geometric (`<= 1 mm` at every vertex, matching vertex count and non-conflicting `rawOsmNodeIds`) and semantic equality rules for exact duplicate detection inside the graph builder so distinct parallel or S-curved ways sharing approximate endpoint/centroid/length keys are never dropped.
 - Qualified input-order determinism: graph structure, node coordinates, edge geometries, and `parallelIndex` ordering are invariant across input permutations for all inputs, while full stability of `sourceFeatureId`-derived string identifiers holds when input features carry explicit IDs (`hasExplicitSourceId: true`, as opposed to `feat-${featureIndex}`).
@@ -46,29 +46,20 @@ A formal, source-verified architectural specification (`ADR-0009`, marked `Propo
 
 ## Acceptance criteria
 - [x] Source audit completed across `TopologicalNodeIndex.ts`, `LocalGeoJsonProvider.ts`, `FeatureCatalogue.ts`, `GeometryBuilder.ts`, `RailwayTopology.ts`, `RailwayGeometryBuilder.ts`, `BridgeAndTunnelBuilder.ts`, `ElevationPolicy.ts`, `MapFeature.ts`, `JunctionAndTopology.test.ts`, and `RailwayRendering.test.ts`, separating confirmed source facts from architectural risks.
-- [x] `docs/decisions/ADR-0009-infrastructure-graph-topology.md` authored and revised with status `Proposed`, specifying the pre-deduplication/pre-chaining `TopologySourceData` handoff, strict duplicate detection, qualified input-order determinism, railway crossing/switch semantics, tightened grade-transition/crossing inference, clarified node/edge/provenance contracts, 17-test specification (`tsx --test`), and recommended resolutions for owner sign-off.
+- [x] `docs/decisions/ADR-0009-infrastructure-graph-topology.md` authored, revised, and accepted (`Status: Accepted`), specifying the pre-deduplication/pre-chaining `TopologySourceData` handoff, strict duplicate detection, qualified input-order determinism, railway crossing/switch semantics, tightened grade-transition/crossing inference, clarified node/edge/provenance contracts, 17-test specification (`tsx --test`), and accepted resolutions.
 - [x] `tickets/TKT-003-m2-3-infrastructure-graph-architecture.md` created and maintained in sync with `ADR-0009`.
 - [x] `docs/STATUS.md`, `GEMINI.md`, `docs/README.md`, and `docs/decisions/README.md` updated accurately while preserving the recorded 2026-11-04 verification results (`92 / 92 passed`).
 - [x] Zero application source files (`src/**`), test files (`src/**/*.test.ts`), generated API docs (`docs/api-reference/**`), benchmark artifacts, or closed tickets (`TKT-001`, `TKT-002`) modified during Stage A.
-- [ ] Project owner reviews and approves `ADR-0009` (and signs off on the recommended resolutions) to close `TKT-003` and authorize Stage B (`M2.3-B`).
+- [x] Project owner reviewed and approved `ADR-0009` (including the three recommended resolutions) on 2026-11-05, closing `TKT-003` and authorizing Stage B (`M2.3-B` / `TKT-004`).
 
 ## Implementation notes
-- **Ticket Status**: Remains `in_progress` pending project-owner approval of `ADR-0009`.
-- **Planned Stage B–E Sequence**:
-  1. **Stage B (`M2.3-B` — Road Network Graph)**: Populate non-destructive `ProcessedMapData.topologySource` in `LocalGeoJsonProvider.ts` prior to `seenRoadSegments` and `chainContiguousRoads` (keeping legacy `mapData.roads` unchanged), enrich per-vertex OSM node IDs where aligned, implement `src/world/infrastructure/topology/types.ts` and `RoadNetworkBuilder.ts`, and verify road topology tests `T-01` through `T-10` and `T-16` via `npm test` (`tsx --test`).
-  2. **Stage C (`M2.3-C` — Railway Network Graph)**: Implement `RailwayNetworkBuilder.ts` (independent railway graph, `railway=switch` `1-to-2` throat/branch classification with `TurnoutClassificationStatus`, `railway=railway_crossing` non-interconnecting `RailwayFlatCrossingRelation`, parallel passing loops) and verify tests `T-11` and `T-12`.
-  3. **Stage D (`M2.3-D` — Crossings & Grade Transitions)**: Preserve point infrastructure metadata (`railway=switch`, `railway=railway_crossing`, `railway=level_crossing`, `railway=crossing`, `highway=crossing`) during ingestion, implement `CrossModalAnalyzer.ts` and `InfrastructureGraph.ts` (`GradeTransitionRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`, plus `UnresolvedGradeTransitionCandidate` and `UnresolvedCrossingCandidate` diagnostics), and verify tests `T-13` through `T-15`.
-  4. **Stage E (`M2.3-E` — Renderer Integration & Benchmarking)**: Wire `GeometryBuilder.ts` road junction trimming and bridge/tunnel portal detection to consume `InfrastructureGraph`, verify `T-17` non-regression, record reproducible graph-construction benchmarks on synthetic and real OSM extracts (`Station Hengelo`, `Amsterdam Centraal`), and run `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api`.
+- **Ticket Status**: `closed` — Project owner reviewed and approved the `ADR-0009` architecture and all three recommended resolutions on 2026-11-05. Stage B (`M2.3-B`) is tracked separately in `tickets/TKT-004-m2-3-b-road-network-graph.md`.
 
 ## Verification
-- Status: Unverified (Documentation & Architecture Stage A only — no application code or test files were modified, so automated test/build commands were not required or executed for this stage per `GEMINI.md` Section 4).
-- Verification steps (to be executed in Stages B–E when code changes occur):
-  - `npm test` (`tsx --test`)
-  - `npm run lint` (`tsc --noEmit`)
-  - `npm run build` (`vite build`)
-  - `npm run docs:api` (`typedoc`)
+- Status: Verified by Project-Owner Architectural Review (2026-11-05).
+- Notes: Stage A (`TKT-003`) was strictly an architecture, source-audit, and documentation task with zero application code or test changes; per `GEMINI.md` Section 4 and `docs/ticket-workflow.md` Section 4.A.5, no automated test or build commands were required or executed during Stage A.
 
 ## Related files and documentation
-- Source (audited, unchanged): `src/world/TopologicalNodeIndex.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/world/FeatureCatalogue.ts`, `src/world/GeometryBuilder.ts`, `src/world/infrastructure/railways/RailwayTopology.ts`, `src/world/infrastructure/railways/RailwayGeometryBuilder.ts`, `src/world/BridgeAndTunnelBuilder.ts`, `src/world/ElevationPolicy.ts`, `src/types/MapFeature.ts`, `server.ts`
-- Tests (audited, unchanged): `src/world/JunctionAndTopology.test.ts`, `src/world/RailwayRendering.test.ts`
+- Source (audited, unchanged in Stage A): `src/world/TopologicalNodeIndex.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/world/FeatureCatalogue.ts`, `src/world/GeometryBuilder.ts`, `src/world/infrastructure/railways/RailwayTopology.ts`, `src/world/infrastructure/railways/RailwayGeometryBuilder.ts`, `src/world/BridgeAndTunnelBuilder.ts`, `src/world/ElevationPolicy.ts`, `src/types/MapFeature.ts`, `server.ts`
+- Tests (audited, unchanged in Stage A): `src/world/JunctionAndTopology.test.ts`, `src/world/RailwayRendering.test.ts`
 - Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/decisions/README.md`, `docs/STATUS.md`, `docs/README.md`, `GEMINI.md`

@@ -19,7 +19,8 @@ The 3D Map Viewer is a client-side WebGL application built on **React 19**, **Ty
 | **Data Ingestion & Providers** | `src/world/MapDataProvider.ts`<br>`src/world/LocalGeoJsonProvider.ts`<br>`src/world/OsmApiProvider.ts` | Ingests GeoJSON or Overpass OSM data, clips polylines and polygons to the region bounding box, extracts raw OSM node IDs, and parses features into typed collections with provenance diagnostics. |
 | **Feature Classification** | `src/types/MapFeature.ts`<br>`src/world/FeatureCatalogue.ts` | Defines data structures for roads, buildings, railways, waterways, parks, and land-use. Resolves ambiguous OSM tags into concrete rendering categories. |
 | **Coordinate Projection** | `src/world/WorldCoordinates.ts` | Converts WGS84 coordinates `[lon, lat]` into local metric Euclidean coordinates `[x, z]` centered around the dataset origin `(lon0, lat0)`. Provides haversine distance and inverse projection. |
-| **Topological Indexing** | `src/world/TopologicalNodeIndex.ts` | Clusters road endpoints within a 15 cm tolerance or resolves explicit OSM node IDs. Enforces `layerScope` isolation so bridges and tunnels do not merge with at-grade roads. |
+| **Topological Indexing** | `src/world/TopologicalNodeIndex.ts` | Clusters road and railway endpoints within a 15 cm tolerance or resolves explicit OSM node IDs with deterministic tie-breaking. Enforces `layerScope` isolation so bridges and tunnels do not merge with at-grade roads. |
+| **Infrastructure Topology & Graph Construction** | `src/world/infrastructure/topology/types.ts`<br>`src/world/infrastructure/topology/OsmNodeIdEnricher.ts`<br>`src/world/infrastructure/topology/RoadNetworkBuilder.ts`<br>`src/world/infrastructure/topology/InfrastructureGraph.ts` | Enriches converted Overpass/XML GeoJSON features with verified per-vertex OSM node IDs (`_nodeIds`, `_nodeIdsByPart`) and constructs pure-TypeScript OSMnx-style road topology graphs (`RoadNetwork`) from non-destructive `ProcessedMapData.topologySource` records (`ADR-0009`). |
 | **Procedural Geometry Generation** | `src/world/GeometryBuilder.ts`<br>`src/world/BridgeAndTunnelBuilder.ts`<br>`src/world/ElevationPolicy.ts`<br>`src/world/infrastructure/railways/RailwayGeometryBuilder.ts`<br>`src/world/infrastructure/railways/RailwayTopology.ts`<br>`src/world/infrastructure/rendering/UvRibbonBuilder.ts`<br>`src/world/infrastructure/rendering/InfrastructureShaderChunks.ts` | Synthesizes road ribbons, boundary-derived junction polygons with miter limits, extruded building prisms with courtyard holes, hybrid 3D/UV-ribbon railways with turnout bearer support, bridges with approach ramps, and 3D tunnel portals. |
 | **Scene & Resource Management** | `src/world/SceneResourceManager.ts`<br>`src/scene/MapScene.tsx` | Manages Three.js scene graphs, materials, instanced meshes, and immediate disposal of intermediate BufferGeometries during generation. |
 | **Camera & Viewport Controls** | `src/scene/CameraController.tsx` | Controls the Three.js OrthographicCamera, computes bounding-box framing for rotated views, clamps near/far planes, and manages pan/zoom/tilt interactions. |
@@ -34,10 +35,13 @@ The runtime pipeline flows monotonically from geographic data ingestion to WebGL
 
 ```mermaid
 flowchart TD
-    A[OSM XML / GeoJSON Data] --> B[Data Provider: LocalGeoJsonProvider / OsmApiProvider]
+    A[OSM XML / Overpass JSON / GeoJSON Data] --> A1[OsmNodeIdEnricher: Verified Per-Vertex _nodeIds / _nodeIdsByPart]
+    A1 --> B[Data Provider: LocalGeoJsonProvider / OsmApiProvider]
     B --> C[WorldCoordinates Projection: WGS84 to Local Meters]
     C --> D[Region Boundary Clipping: Liang-Barsky & Topology-Aware Polygon Clip]
     D --> E[Feature Classification & Diagnostic Accounting]
+    E --> E1[ProcessedMapData.topologySource: Pre-Deduplication & Pre-Chaining Road Parts]
+    E1 --> E2[RoadNetworkBuilder: Pure-TS RoadNetwork Graph & Provenance]
     E --> F[TopologicalNodeIndex: OSM Node IDs & 15cm Spatial Snapping]
     F --> G[GeometryBuilder: Multi-Stage Procedural Synthesis]
     
@@ -73,8 +77,9 @@ flowchart TD
 ## 5. Architectural Boundaries
 
 1. **UI vs. Renderer Boundary**: React components (`App.tsx`, `AddressSearchModal.tsx`) never directly manipulate Three.js buffer attributes or mesh vertex arrays. Communication happens through props passed into `MapScene` and standard event handlers (`onInspectFeature`).
-2. **Provider vs. Geometry Boundary**: `MapDataProvider` outputs purely mathematical and semantic representations (`ProcessedMapData` containing metric coordinate arrays, metadata tags, and bounding boxes). Providers do not create Three.js objects or materials.
-3. **Geometry vs. Camera Boundary**: `GeometryBuilder` constructs world-space meshes positioned relative to the dataset origin `(0, 0, 0)`. It exposes bounding boxes (`bounds`) to `CameraController.tsx`, which uses purely projective math to adjust orthographic zoom and target offsets.
+2. **Provider vs. Geometry Boundary**: `MapDataProvider` outputs purely mathematical and semantic representations (`ProcessedMapData` containing metric coordinate arrays, metadata tags, bounding boxes, and non-destructive `topologySource` records). Providers do not create Three.js objects or materials.
+3. **Topology vs. Renderer Boundary (`ADR-0009`)**: `RoadNetworkBuilder` (`src/world/infrastructure/topology/`) operates on pure TypeScript data structures with zero React, Three.js, renderer, or WebGL imports. During Stages B–D, `GeometryBuilder` continues to consume `mapData.roads` unchanged until Stage E renderer integration is explicitly authorized.
+4. **Geometry vs. Camera Boundary**: `GeometryBuilder` constructs world-space meshes positioned relative to the dataset origin `(0, 0, 0)`. It exposes bounding boxes (`bounds`) to `CameraController.tsx`, which uses purely projective math to adjust orthographic zoom and target offsets.
 
 ---
 
@@ -82,5 +87,6 @@ flowchart TD
 
 - **Client-Side Single-Threaded Processing**: All polygon clipping (`polygon-clipping`), triangulation (`THREE.ShapeUtils.triangulateShape`), and ribbon generation run synchronously on the main JavaScript thread. Large queries (> 5,000 features) must be budgeted carefully to avoid frame drops.
 - **Bounded Local Coordinate Frame**: Projections use an equirectangular flat-Earth projection tangent to the dataset center `(originLon, originLat)`. Metric accuracy degrades as distance from the origin exceeds ~25 km; the viewer is optimized for urban neighborhood tiles up to ~5 km across.
-- **Goalpost 2 Scope Boundary**: The active project scope is Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings. The architecture includes OSM-derived infrastructure connectivity and topology, including road and railway networks (with M2.2 complete and M2.3 planned, requiring explicit project-owner approval before implementation begins). While infrastructure topology models connectivity that may provide a foundation for future pathfinding, this does not authorize implementation of gameplay movement, game-agent AI, physics, entity collision, or dynamic traffic simulation. Speculative streaming architectures and unrelated gameplay systems remain strictly out of scope.
+- **Goalpost 2 Scope Boundary**: The active project scope is Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings. The architecture includes OSM-derived infrastructure connectivity and topology, including road and railway networks (with M2.1, M2.2, and M2.3-A complete, M2.3-B implemented and pending project-owner review, and Stages C–E requiring explicit project-owner approval). While infrastructure topology models connectivity that may provide a foundation for future pathfinding, this does not authorize implementation of gameplay movement, game-agent AI, physics, entity collision, or dynamic traffic simulation. Speculative streaming architectures and unrelated gameplay systems remain strictly out of scope.
+
 

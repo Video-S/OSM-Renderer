@@ -6,7 +6,7 @@
 
 # Interface: PointLandmarkFeature
 
-Defined in: types/MapFeature.ts:359
+Defined in: types/MapFeature.ts:376
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:359
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:368
+Defined in: types/MapFeature.ts:385
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:368
 
 > **height**: `number`
 
-Defined in: types/MapFeature.ts:366
+Defined in: types/MapFeature.ts:383
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:366
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:360
+Defined in: types/MapFeature.ts:377
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:360
 
 > **landmarkType**: [`LandmarkType`](../type-aliases/LandmarkType.md)
 
-Defined in: types/MapFeature.ts:365
+Defined in: types/MapFeature.ts:382
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:365
 
 > `optional` **leafType?**: `"broadleaved"` \| `"needleleaved"` \| `"mixed"` \| `"leafless"`
 
-Defined in: types/MapFeature.ts:367
+Defined in: types/MapFeature.ts:384
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:367
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:363
+Defined in: types/MapFeature.ts:380
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:363
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:370
+Defined in: types/MapFeature.ts:387
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:370
 
 > **position**: \[`number`, `number`\]
 
-Defined in: types/MapFeature.ts:364
+Defined in: types/MapFeature.ts:381
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:364
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:369
+Defined in: types/MapFeature.ts:386
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:369
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:361
+Defined in: types/MapFeature.ts:378
 
 ***
 
@@ -94,4 +94,4 @@ Defined in: types/MapFeature.ts:361
 
 > **type**: `"landmark"`
 
-Defined in: types/MapFeature.ts:362
+Defined in: types/MapFeature.ts:379

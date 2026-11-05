@@ -8,7 +8,7 @@
 
 > **clipPolygonWithTopologyAwareFallback**(`rings`, `minX`, `minZ`, `maxX`, `maxZ`): \[`number`, `number`\][][][]
 
-Defined in: world/LocalGeoJsonProvider.ts:461
+Defined in: world/LocalGeoJsonProvider.ts:533
 
 Topology-aware fallback for polygon-to-box clipping.
 Decomposes concave and holed polygons into convex planar triangles via THREE.ShapeUtils.triangulateShape,

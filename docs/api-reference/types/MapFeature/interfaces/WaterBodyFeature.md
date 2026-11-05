@@ -6,7 +6,7 @@
 
 # Interface: WaterBodyFeature
 
-Defined in: types/MapFeature.ts:285
+Defined in: types/MapFeature.ts:302
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:285
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:296
+Defined in: types/MapFeature.ts:313
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:296
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:286
+Defined in: types/MapFeature.ts:303
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:286
 
 > `optional` **intermittent?**: `boolean`
 
-Defined in: types/MapFeature.ts:295
+Defined in: types/MapFeature.ts:312
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:295
 
 > `optional` **isBridge?**: `boolean`
 
-Defined in: types/MapFeature.ts:292
+Defined in: types/MapFeature.ts:309
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:292
 
 > `optional` **isTunnel?**: `boolean`
 
-Defined in: types/MapFeature.ts:293
+Defined in: types/MapFeature.ts:310
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:293
 
 > `optional` **layer?**: `number`
 
-Defined in: types/MapFeature.ts:294
+Defined in: types/MapFeature.ts:311
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:294
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:289
+Defined in: types/MapFeature.ts:306
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:289
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:298
+Defined in: types/MapFeature.ts:315
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:298
 
 > **polygon**: \[`number`, `number`\][][]
 
-Defined in: types/MapFeature.ts:290
+Defined in: types/MapFeature.ts:307
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:290
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:297
+Defined in: types/MapFeature.ts:314
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:297
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:287
+Defined in: types/MapFeature.ts:304
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:287
 
 > **type**: `"water"`
 
-Defined in: types/MapFeature.ts:288
+Defined in: types/MapFeature.ts:305
 
 ***
 
@@ -110,4 +110,4 @@ Defined in: types/MapFeature.ts:288
 
 > **waterType**: [`WaterBodyType`](../type-aliases/WaterBodyType.md)
 
-Defined in: types/MapFeature.ts:291
+Defined in: types/MapFeature.ts:308

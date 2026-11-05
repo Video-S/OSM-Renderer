@@ -1,3 +1,19 @@
+import type {
+  InfrastructurePointKind,
+  InfrastructurePointMetadata,
+  TopologySourceData,
+  UnchainedRailwayPart,
+  UnchainedRoadPart,
+} from '../world/infrastructure/topology/types';
+
+export type {
+  InfrastructurePointKind,
+  InfrastructurePointMetadata,
+  TopologySourceData,
+  UnchainedRailwayPart,
+  UnchainedRoadPart,
+};
+
 export type FeatureType =
   | 'building'
   | 'road'
@@ -188,6 +204,7 @@ export interface RawGeoJsonProperties {
   nodes?: Array<string | number>;
   nodeIds?: Array<string | number>;
   _nodeIds?: Array<string | number>;
+  _nodeIdsByPart?: Array<Array<string | number>>;
   [key: string]: unknown;
 }
 
@@ -539,6 +556,8 @@ export interface ProcessedMapData {
   landuse: LanduseFeature[];
   barriers: BarrierFeature[];
   landmarks: PointLandmarkFeature[];
+  /** Non-destructive pre-deduplication and pre-chaining topology inputs (ADR-0009). */
+  topologySource?: TopologySourceData;
   diagnostics: MapFeatureDiagnostics;
   stats: {
     totalBuildings: number;

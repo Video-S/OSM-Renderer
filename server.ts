@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import osmtogeojson from 'osmtogeojson';
 import { DOMParser } from 'xmldom';
+import {
+  enrichGeoJsonWithOverpassNodeIds,
+  enrichGeoJsonWithOsmXmlNodeIds,
+} from './src/world/infrastructure/topology/OsmNodeIdEnricher';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,6 +161,7 @@ app.get('/api/osm-data', async (req, res) => {
       if (overpassRes.ok) {
         const overpassJson = await overpassRes.json();
         geojson = osmtogeojson(overpassJson);
+        enrichGeoJsonWithOverpassNodeIds(geojson, overpassJson);
       }
     } catch {
       // Fall back to OSM 0.6 XML map endpoint if Overpass is unreachable
@@ -180,6 +185,7 @@ app.get('/api/osm-data', async (req, res) => {
       const xmlText = await osmRes.text();
       const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
       geojson = osmtogeojson(xmlDoc);
+      enrichGeoJsonWithOsmXmlNodeIds(geojson, xmlDoc);
     }
 
     // Attach metadata

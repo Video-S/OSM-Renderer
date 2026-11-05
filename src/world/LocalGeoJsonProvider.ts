@@ -17,6 +17,8 @@ import {
   RailwayType,
   RoadClass,
   RoadFeature,
+  TopologySourceData,
+  UnchainedRoadPart,
   WaterBodyFeature,
   WaterBodyType,
   WaterwayType,
@@ -112,7 +114,7 @@ function polylinesCross2D(
 /**
  * Clips a 2D polyline to an axis-aligned bounding box [minX, minZ, maxX, maxZ] using Liang-Barsky.
  * Preserves per-vertex OSM node IDs for unclipped original vertices and sets `undefined` on
- * newly interpolated boundary intersection endpoints.
+ * newly interpolated boundary intersection endpoints, recording `clippedAtStart` and `clippedAtEnd`.
  */
 export function clipPolylineToBox(
   points: [number, number][],
@@ -125,6 +127,8 @@ export function clipPolylineToBox(
   lines: Array<{
     points: [number, number][];
     osmNodes?: Array<string | number | undefined>;
+    clippedAtStart?: boolean;
+    clippedAtEnd?: boolean;
   }>;
   wasClipped: boolean;
 } {
@@ -146,6 +150,8 @@ export function clipPolylineToBox(
           points,
           osmNodes:
             rawOsmNodes && rawOsmNodes.length === points.length ? [...rawOsmNodes] : undefined,
+          clippedAtStart: false,
+          clippedAtEnd: false,
         },
       ],
       wasClipped: false,
@@ -156,20 +162,28 @@ export function clipPolylineToBox(
   const result: Array<{
     points: [number, number][];
     osmNodes?: Array<string | number | undefined>;
+    clippedAtStart?: boolean;
+    clippedAtEnd?: boolean;
   }> = [];
 
   let curPts: [number, number][] = [];
   let curNodes: Array<string | number | undefined> = [];
+  let curClippedAtStart = false;
+  let curClippedAtEnd = false;
 
   const flushCurrent = () => {
     if (curPts.length >= 2) {
       result.push({
         points: curPts,
         osmNodes: hasValidNodes ? curNodes : undefined,
+        clippedAtStart: curClippedAtStart,
+        clippedAtEnd: curClippedAtEnd,
       });
     }
     curPts = [];
     curNodes = [];
+    curClippedAtStart = false;
+    curClippedAtEnd = false;
   };
 
   for (let i = 0; i < points.length - 1; i++) {
@@ -206,9 +220,11 @@ export function clipPolylineToBox(
         flushCurrent();
         curPts.push([p0[0] + t0 * dx, p0[1] + t0 * dz]);
         curNodes.push(undefined);
+        curClippedAtStart = true;
       } else if (curPts.length === 0) {
         curPts.push(p0);
         curNodes.push(hasValidNodes ? rawOsmNodes![i] : undefined);
+        curClippedAtStart = false;
       }
 
       if (t1 < 1) {
@@ -217,7 +233,10 @@ export function clipPolylineToBox(
         if (!prev || Math.hypot(exitPt[0] - prev[0], exitPt[1] - prev[1]) > 1e-3) {
           curPts.push(exitPt);
           curNodes.push(undefined);
+        } else if (curNodes.length > 0) {
+          curNodes[curNodes.length - 1] = undefined;
         }
+        curClippedAtEnd = true;
         flushCurrent();
       } else {
         const prev = curPts[curPts.length - 1];
@@ -403,6 +422,59 @@ function extractRawOsmNodeIds(props: RawGeoJsonProperties): Array<string | numbe
   if (Array.isArray(props.nodeIds)) return props.nodeIds;
   if (Array.isArray(props._nodeIds)) return props._nodeIds;
   return undefined;
+}
+
+function extractVerifiedPartOsmNodeIds(
+  props: RawGeoJsonProperties,
+  partIndex: number,
+  totalParts: number,
+  expectedVertexCount: number
+): Array<string | number> | undefined {
+  if (expectedVertexCount < 2) return undefined;
+
+  if (Array.isArray(props._nodeIdsByPart) && props._nodeIdsByPart.length === totalParts) {
+    const partNodes = props._nodeIdsByPart[partIndex];
+    if (Array.isArray(partNodes) && partNodes.length === expectedVertexCount) {
+      return [...partNodes];
+    }
+    return undefined;
+  }
+
+  const raw = extractRawOsmNodeIds(props);
+  if (!raw) return undefined;
+
+  if (totalParts === 1 && raw.length === expectedVertexCount && !Array.isArray(raw[0])) {
+    return [...raw];
+  }
+
+  if (
+    raw.length === totalParts &&
+    Array.isArray(raw[partIndex]) &&
+    (raw[partIndex] as unknown as Array<string | number>).length === expectedVertexCount
+  ) {
+    return [...(raw[partIndex] as unknown as Array<string | number>)];
+  }
+
+  return undefined;
+}
+
+function cloneRawGeoJsonProperties(props: RawGeoJsonProperties): RawGeoJsonProperties {
+  const copy: RawGeoJsonProperties = { ...props };
+  if (Array.isArray(copy.nodes)) {
+    copy.nodes = [...copy.nodes];
+  }
+  if (Array.isArray(copy.nodeIds)) {
+    copy.nodeIds = [...copy.nodeIds];
+  }
+  if (Array.isArray(copy._nodeIds)) {
+    copy._nodeIds = [...copy._nodeIds];
+  }
+  if (Array.isArray(copy._nodeIdsByPart)) {
+    copy._nodeIdsByPart = copy._nodeIdsByPart.map((part) =>
+      Array.isArray(part) ? [...part] : part
+    );
+  }
+  return copy;
 }
 
 export interface ClipBoxOptions {
@@ -899,7 +971,11 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       const rf = rawFeatures[idx];
       if (!rf.geometry || !rf.geometry.coordinates) continue;
       const rProps: RawGeoJsonProperties = { ...(rf.properties || {}) };
-      const rId = String(rProps.id || rf.id || `feat-${idx + 1}`);
+      const rRawId = rProps.id ?? rf.id ?? rProps['@id'];
+      const rId =
+        rRawId !== undefined && rRawId !== null && String(rRawId).trim() !== ''
+          ? String(rRawId)
+          : `feat-${idx + 1}`;
       rProps.id = rId;
       const ww = String(rProps.waterway || '').toLowerCase();
       if (ww === 'stream' || ww === 'ditch' || ww === 'drain') {
@@ -968,6 +1044,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
     const buildings: BuildingFeature[] = [];
     const roads: RoadFeature[] = [];
+    const topologyRoadParts: UnchainedRoadPart[] = [];
     const railways: RailwayFeature[] = [];
     const waterBodies: WaterBodyFeature[] = [];
     const linearWaterways: LinearWaterwayFeature[] = [];
@@ -1001,7 +1078,12 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       }
 
       const props: RawGeoJsonProperties = { ...(f.properties || {}) };
-      const id = String(props.id || f.id || `feat-${featureIndex}`);
+      const rawExplicitId = props.id ?? f.id ?? props['@id'];
+      const hasExplicitSourceId =
+        rawExplicitId !== undefined &&
+        rawExplicitId !== null &&
+        String(rawExplicitId).trim() !== '';
+      const id = hasExplicitSourceId ? String(rawExplicitId) : `feat-${featureIndex}`;
       props.id = id;
 
       const classification = classifyGeoJsonFeature(props, geomType);
@@ -1022,15 +1104,22 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         }
 
         const railGradeScope = `${classification.layer}|${classification.isBridge}|${classification.isTunnel}`;
-        const rawOsmNodes = extractRawOsmNodeIds(props);
 
         const candidateLines: Array<{
           points: [number, number][];
           osmNodes?: Array<string | number | undefined>;
+          clippedAtStart?: boolean;
+          clippedAtEnd?: boolean;
         }> = [];
         let wasFeatureClipped = false;
 
         for (let i = 0; i < rawLines.length; i++) {
+          const partOsmNodes = extractVerifiedPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
           if (shouldClipToRegion) {
             const clipped = clipPolylineToBox(
               rawLines[i],
@@ -1038,14 +1127,16 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               -clipExtent,
               clipExtent,
               clipExtent,
-              rawLines.length === 1 ? rawOsmNodes : undefined
+              partOsmNodes
             );
             if (clipped.wasClipped) wasFeatureClipped = true;
             candidateLines.push(...clipped.lines);
           } else {
             candidateLines.push({
               points: rawLines[i],
-              osmNodes: rawLines.length === 1 ? rawOsmNodes : undefined,
+              osmNodes: partOsmNodes,
+              clippedAtStart: false,
+              clippedAtEnd: false,
             });
           }
         }
@@ -1422,15 +1513,21 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         const roadClass = (classification.subtype as RoadClass) || 'residential';
         const width = classification.defaultWidth || this.getRoadWidth(roadClass, props);
 
-        const rawOsmNodes = extractRawOsmNodeIds(props);
-
         const candidateLines: Array<{
           points: [number, number][];
           osmNodes?: Array<string | number | undefined>;
+          clippedAtStart?: boolean;
+          clippedAtEnd?: boolean;
         }> = [];
         let wasFeatureClipped = false;
 
         for (let i = 0; i < rawLines.length; i++) {
+          const partOsmNodes = extractVerifiedPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
           if (shouldClipToRegion) {
             const clipped = clipPolylineToBox(
               rawLines[i],
@@ -1438,14 +1535,16 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               -clipExtent,
               clipExtent,
               clipExtent,
-              rawLines.length === 1 ? rawOsmNodes : undefined
+              partOsmNodes
             );
             if (clipped.wasClipped) wasFeatureClipped = true;
             candidateLines.push(...clipped.lines);
           } else {
             candidateLines.push({
               points: rawLines[i],
-              osmNodes: rawLines.length === 1 ? rawOsmNodes : undefined,
+              osmNodes: partOsmNodes,
+              clippedAtStart: false,
+              clippedAtEnd: false,
             });
           }
         }
@@ -1460,7 +1559,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
         let addedAny = false;
         for (let partIdx = 0; partIdx < candidateLines.length; partIdx++) {
-          const { points: line, osmNodes } = candidateLines[partIdx];
+          const { points: line, osmNodes, clippedAtStart, clippedAtEnd } = candidateLines[partIdx];
           if (line.length >= 2) {
             let totalLen = 0;
             for (let j = 0; j < line.length - 1; j++) {
@@ -1477,6 +1576,31 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             const effectiveIsTunnel = isShortCulvert ? false : classification.isTunnel;
             const effectiveLayer = isShortCulvert ? 0 : classification.layer;
             const partGradeScope = `${effectiveLayer}|${effectiveIsBridge}|${effectiveIsTunnel}`;
+
+            // Capture unchained, undeduplicated road part for M2.3 topology construction
+            // before legacy heuristic seenRoadSegments deduplication and before chainContiguousRoads.
+            topologyRoadParts.push({
+              id: `${id}-${partIdx}`,
+              sourceFeatureId: id,
+              hasExplicitSourceId,
+              partIndex: partIdx,
+              name: props.name,
+              points: line.map((pt) => [pt[0], pt[1]] as [number, number]),
+              rawOsmNodeIds: line.map((_, vIdx) =>
+                osmNodes && osmNodes[vIdx] !== undefined && osmNodes[vIdx] !== null
+                  ? String(osmNodes[vIdx])
+                  : undefined
+              ),
+              clippedAtStart: Boolean(clippedAtStart),
+              clippedAtEnd: Boolean(clippedAtEnd),
+              roadClass,
+              width,
+              isBridge: effectiveIsBridge,
+              isTunnel: effectiveIsTunnel,
+              isCulvert: isShortCulvert,
+              layer: effectiveLayer,
+              osmTags: cloneRawGeoJsonProperties(props),
+            });
 
             const nodeIds = topoNodeIndex.resolveWayNodeIds(
               line,
@@ -1519,7 +1643,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               sourceFeatureIds: [id],
               type: 'road',
               name: props.name,
-              points: line,
+              points: line.map((pt) => [pt[0], pt[1]] as [number, number]),
               nodeIds,
               roadClass,
               subtype: classification.subtype,
@@ -1529,7 +1653,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               layer: effectiveLayer,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cloneRawGeoJsonProperties(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.roads++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1811,6 +1935,12 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     const widthMeters = Math.max(Math.abs(maxX - minX), 50);
     const depthMeters = Math.max(Math.abs(maxZ - minZ), 50);
 
+    const topologySource: TopologySourceData = {
+      roadParts: topologyRoadParts,
+      railwayParts: [],
+      infrastructurePoints: [],
+    };
+
     return {
       regionName: explicitRegionName || geojson.name || 'OpenStreetMap Region',
       centerLonLat: [centerLon, centerLat],
@@ -1833,6 +1963,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       barriers,
       landmarks,
       diagnostics,
+      topologySource,
       stats: {
         totalBuildings: buildings.length,
         totalRoads: chainedRoads.length,

@@ -1097,18 +1097,30 @@ describe('M2.3-C Railway Network Graph Topology (ADR-0009)', () => {
     const amsterdamGraph = buildRailwayNetwork(amsterdamData);
     const amsterdamGraphMs = performance.now() - t0AmsterdamGraph;
 
-    // Verify Hengelo real extract metrics: 67 clipped railway parts, 30 switch points + 3 flat crossing points
+    // Verify Hengelo real extract metrics: 67 clipped railway parts, 30 switch points + 3 flat crossing points (+ 1 level_crossing in Stage D)
     assert.equal(hengeloData.topologySource?.railwayParts.length, 67);
     assert.equal(hengeloData.topologySource?.railwayParts.length, hengeloData.railways.length);
-    assert.equal(hengeloData.topologySource?.infrastructurePoints.length, 33);
+    assert.equal(
+      hengeloData.topologySource?.infrastructurePoints.filter(
+        (pt) => pt.kind === 'railway_switch' || pt.kind === 'railway_crossing_flat'
+      ).length,
+      33
+    );
+    assert.equal(hengeloData.topologySource?.infrastructurePoints.length, 34);
     assert.ok(hengeloGraph.diagnostics.railwayConfirmedSwitchCount >= 20);
     assert.equal(hengeloGraph.diagnostics.railwayFlatCrossingCount, 3);
 
-    // Verify Amsterdam Centraal real extract metrics: 325 clipped in-bounds railway parts, 104 switch points + 15 flat crossing points
+    // Verify Amsterdam Centraal real extract metrics: 325 clipped in-bounds railway parts, 104 switch points + 15 flat crossing points (+ 2 railway=crossing + 19 highway=crossing in Stage D)
     // (13 single-scope diamond crossings resolved; node/5017068574 spans a bridge/at-grade scope boundary and node/5319252866 has only 1 surviving track)
     assert.equal(amsterdamData.topologySource?.railwayParts.length, 325);
     assert.equal(amsterdamData.topologySource?.railwayParts.length, amsterdamData.railways.length);
-    assert.equal(amsterdamData.topologySource?.infrastructurePoints.length, 119);
+    assert.equal(
+      amsterdamData.topologySource?.infrastructurePoints.filter(
+        (pt) => pt.kind === 'railway_switch' || pt.kind === 'railway_crossing_flat'
+      ).length,
+      119
+    );
+    assert.equal(amsterdamData.topologySource?.infrastructurePoints.length, 140);
     assert.ok(amsterdamGraph.diagnostics.railwayConfirmedSwitchCount >= 75);
     assert.equal(amsterdamGraph.diagnostics.railwayFlatCrossingCount, 13);
 

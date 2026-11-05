@@ -562,15 +562,33 @@ function isSecondaryRailwayBranch(service?: string, usage?: string): boolean {
 function normalizeExtractedOsmNodeId(raw: string): string | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
+  if (/^feat-\d+(?:-\d+)?$/i.test(trimmed)) return undefined;
   if (trimmed.startsWith('node/')) {
     const rest = trimmed.slice(5).trim();
-    return rest.length > 0 ? rest : undefined;
+    if (!rest || /^feat-\d+(?:-\d+)?$/i.test(rest)) return undefined;
+    return rest;
   }
   if (trimmed.startsWith('osm_')) {
     const rest = trimmed.slice(4).trim();
-    return rest.length > 0 ? rest : undefined;
+    if (!rest || /^feat-\d+(?:-\d+)?$/i.test(rest)) return undefined;
+    return rest;
   }
   return trimmed;
+}
+
+function classifyInfrastructurePointKind(
+  props: RawGeoJsonProperties
+): InfrastructurePointKind | undefined {
+  const railwayTag = String(props.railway || '').trim().toLowerCase();
+  if (railwayTag === 'switch') return 'railway_switch';
+  if (railwayTag === 'railway_crossing') return 'railway_crossing_flat';
+  if (railwayTag === 'level_crossing') return 'railway_level_crossing';
+  if (railwayTag === 'crossing') return 'railway_ped_crossing';
+
+  const highwayTag = String(props.highway || '').trim().toLowerCase();
+  if (highwayTag === 'crossing') return 'highway_crossing';
+
+  return undefined;
 }
 
 function extractPointRawOsmNodeId(
@@ -596,12 +614,15 @@ function extractPointRawOsmNodeId(
   }
   if (hasExplicitSourceId) {
     const trimmedId = id.trim();
+    if (/^feat-\d+(?:-\d+)?$/i.test(trimmedId)) {
+      return undefined;
+    }
     if (trimmedId.startsWith('node/')) {
       const rest = trimmedId.slice(5).trim();
-      if (rest.length > 0) return rest;
+      if (rest.length > 0 && !/^feat-\d+(?:-\d+)?$/i.test(rest)) return rest;
     } else if (trimmedId.startsWith('osm_')) {
       const rest = trimmedId.slice(4).trim();
-      if (rest.length > 0) return rest;
+      if (rest.length > 0 && !/^feat-\d+(?:-\d+)?$/i.test(rest)) return rest;
     } else if (!trimmedId.startsWith('way/') && !trimmedId.startsWith('relation/')) {
       return trimmedId;
     }
@@ -1222,33 +1243,32 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
       const classification = classifyGeoJsonFeature(props, geomType);
 
-      if (classification.category === 'unsupported') {
-        if (geomType === 'Point' || geomType === 'MultiPoint') {
-          const railwayPointTag = String(props.railway || '').trim().toLowerCase();
-          if (railwayPointTag === 'switch' || railwayPointTag === 'railway_crossing') {
-            const rawPts = this.extractPoints(geom, coords);
-            const retainedPts = shouldClipToRegion
-              ? rawPts.filter(([x, z]) => Math.abs(x) <= clipExtent && Math.abs(z) <= clipExtent)
-              : rawPts;
-            const kind: InfrastructurePointKind =
-              railwayPointTag === 'switch' ? 'railway_switch' : 'railway_crossing_flat';
-            for (let ptIdx = 0; ptIdx < retainedPts.length; ptIdx++) {
-              const pointId = retainedPts.length === 1 ? id : `${id}-${ptIdx}`;
-              const rawOsmNodeId =
-                retainedPts.length === 1
-                  ? extractPointRawOsmNodeId(props, id, hasExplicitSourceId)
-                  : undefined;
-              topologyInfrastructurePoints.push({
-                id: pointId,
-                hasExplicitSourceId,
-                rawOsmNodeId,
-                point: [retainedPts[ptIdx][0], retainedPts[ptIdx][1]],
-                kind,
-                osmTags: cloneRawGeoJsonProperties(props),
-              });
-            }
+      if (geomType === 'Point' || geomType === 'MultiPoint') {
+        const infraPointKind = classifyInfrastructurePointKind(props);
+        if (infraPointKind) {
+          const rawPts = this.extractPoints(geom, coords);
+          const retainedPts = shouldClipToRegion
+            ? rawPts.filter(([x, z]) => Math.abs(x) <= clipExtent && Math.abs(z) <= clipExtent)
+            : rawPts;
+          for (let ptIdx = 0; ptIdx < retainedPts.length; ptIdx++) {
+            const pointId = retainedPts.length === 1 ? id : `${id}-${ptIdx}`;
+            const rawOsmNodeId =
+              retainedPts.length === 1
+                ? extractPointRawOsmNodeId(props, id, hasExplicitSourceId)
+                : undefined;
+            topologyInfrastructurePoints.push({
+              id: pointId,
+              hasExplicitSourceId,
+              rawOsmNodeId,
+              point: [retainedPts[ptIdx][0], retainedPts[ptIdx][1]],
+              kind: infraPointKind,
+              osmTags: cloneRawGeoJsonProperties(props),
+            });
           }
         }
+      }
+
+      if (classification.category === 'unsupported') {
         recordSkipped(classification.primaryTag, id);
         continue;
       }

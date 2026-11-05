@@ -6,7 +6,7 @@
 
 # Interface: ClipBoxOptions
 
-Defined in: world/LocalGeoJsonProvider.ts:612
+Defined in: world/LocalGeoJsonProvider.ts:633
 
 ## Properties
 
@@ -14,4 +14,4 @@ Defined in: world/LocalGeoJsonProvider.ts:612
 
 > `optional` **forceFallback?**: `boolean`
 
-Defined in: world/LocalGeoJsonProvider.ts:613
+Defined in: world/LocalGeoJsonProvider.ts:634

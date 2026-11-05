@@ -26,6 +26,7 @@ import {
   RailwayEdge,
   RailwayFlatCrossingRelation,
   RailwayNetwork,
+  RailwayNetworkBuildOptions,
   RailwayNetworkBuildResult,
   RailwayNetworkDiagnostics,
   RailwayNode,
@@ -200,11 +201,17 @@ function extractInputRailwayParts(
 
 function extractInputInfrastructurePoints(
   input: ProcessedMapData | TopologySourceData | readonly UnchainedRailwayPart[],
-  explicitPoints?: readonly InfrastructurePointMetadata[]
+  optionsOrPoints?: RailwayNetworkBuildOptions | readonly InfrastructurePointMetadata[]
 ): InfrastructurePointMetadata[] {
   let rawPoints: readonly InfrastructurePointMetadata[] = [];
-  if (Array.isArray(explicitPoints)) {
-    rawPoints = explicitPoints;
+  if (Array.isArray(optionsOrPoints)) {
+    rawPoints = optionsOrPoints;
+  } else if (
+    optionsOrPoints &&
+    'infrastructurePoints' in optionsOrPoints &&
+    Array.isArray(optionsOrPoints.infrastructurePoints)
+  ) {
+    rawPoints = optionsOrPoints.infrastructurePoints;
   } else if (!Array.isArray(input)) {
     if ('infrastructurePoints' in input && Array.isArray(input.infrastructurePoints)) {
       rawPoints = input.infrastructurePoints;
@@ -329,8 +336,10 @@ interface InternalRailwayNodeRecord {
   isAttributeBreak: boolean;
   isLoopAnchor: boolean;
   isDecoupledFlatCrossingTrackNode: boolean;
+  isProtectedNode: boolean;
   switchPointMeta?: InfrastructurePointMetadata;
   flatCrossingPointMeta?: InfrastructurePointMetadata;
+  additionalRoles: Set<RailwayNodeRole>;
 }
 
 interface DraftRailwayEdge {
@@ -469,7 +478,7 @@ function canContractDegree2RailwayNode(
   e1: DraftRailwayEdge,
   e2: DraftRailwayEdge
 ): boolean {
-  if (node.isBoundaryClipped || node.isLoopAnchor) {
+  if (node.isBoundaryClipped || node.isLoopAnchor || node.isProtectedNode) {
     return false;
   }
   if (e1.draftId === e2.draftId) {
@@ -854,10 +863,14 @@ function evaluateDegree3TurnoutTopology(
  */
 export function buildRailwayNetwork(
   input: ProcessedMapData | TopologySourceData | readonly UnchainedRailwayPart[],
-  infrastructurePoints?: readonly InfrastructurePointMetadata[]
+  optionsOrPoints?: RailwayNetworkBuildOptions | readonly InfrastructurePointMetadata[]
 ): RailwayNetworkBuildResult {
   const extractedParts = extractInputRailwayParts(input);
-  const extractedPoints = extractInputInfrastructurePoints(input, infrastructurePoints);
+  const extractedPoints = extractInputInfrastructurePoints(input, optionsOrPoints);
+  const options: RailwayNetworkBuildOptions | undefined =
+    optionsOrPoints && !Array.isArray(optionsOrPoints)
+      ? (optionsOrPoints as RailwayNetworkBuildOptions)
+      : undefined;
 
   const unresolvedCrossings: UnresolvedCrossingCandidate[] = [];
   const unresolvedInfrastructurePoints: UnresolvedInfrastructurePointCandidate[] = [];
@@ -1062,6 +1075,8 @@ export function buildRailwayNetwork(
             isAttributeBreak: false,
             isLoopAnchor: false,
             isDecoupledFlatCrossingTrackNode: false,
+            isProtectedNode: false,
+            additionalRoles: new Set<RailwayNodeRole>(),
           });
         }
         resolvedIds.push(clipNodeId);
@@ -1097,6 +1112,8 @@ export function buildRailwayNetwork(
           isAttributeBreak: false,
           isLoopAnchor: false,
           isDecoupledFlatCrossingTrackNode: false,
+          isProtectedNode: false,
+          additionalRoles: new Set<RailwayNodeRole>(),
         });
       }
 
@@ -1690,6 +1707,46 @@ export function buildRailwayNetwork(
     }
   }
 
+  // Apply Stage D cross-modal node protection options
+  if (options?.protectedRawOsmNodeIds && options.protectedRawOsmNodeIds.size > 0) {
+    for (const node of internalNodes.values()) {
+      const normOsm = stripNodePrefix(node.rawOsmNodeId);
+      if (normOsm && options.protectedRawOsmNodeIds.has(normOsm) && !node.isDecoupledFlatCrossingTrackNode) {
+        node.isProtectedNode = true;
+      }
+    }
+  }
+
+  if (options?.additionalNodeRolesByOsmId && options.additionalNodeRolesByOsmId.size > 0) {
+    for (const node of internalNodes.values()) {
+      const normOsm = stripNodePrefix(node.rawOsmNodeId);
+      if (normOsm && !node.isDecoupledFlatCrossingTrackNode) {
+        const extra = options.additionalNodeRolesByOsmId.get(normOsm);
+        if (extra) {
+          for (const r of extra) {
+            node.additionalRoles.add(r);
+          }
+        }
+      }
+    }
+  }
+
+  if (options?.protectedPartVertices && options.protectedPartVertices.size > 0) {
+    for (const item of retainedParts) {
+      const protectedIndices = options.protectedPartVertices.get(item.part.id);
+      if (!protectedIndices) continue;
+      const nodeIds = partVertexNodeIds.get(item.part.id)!;
+      for (const vIdx of protectedIndices) {
+        if (vIdx >= 0 && vIdx < nodeIds.length) {
+          const nodeRec = internalNodes.get(nodeIds[vIdx]);
+          if (nodeRec && !nodeRec.isDecoupledFlatCrossingTrackNode) {
+            nodeRec.isProtectedNode = true;
+          }
+        }
+      }
+    }
+  }
+
   // Recompute node occurrence counts after flat-crossing track decoupling
   const nodeOccurrenceCount = new Map<string, number>();
   for (const item of retainedParts) {
@@ -1700,7 +1757,7 @@ export function buildRailwayNetwork(
     }
   }
 
-  // 5. Split parts at shared interior nodes (including self-loops and P-loops)
+  // 5. Split parts at shared interior nodes (including self-loops, P-loops, switches, and protected level crossings)
   const draftEdges = new Map<number, DraftRailwayEdge>();
   let nextDraftId = 1;
 
@@ -1711,6 +1768,7 @@ export function buildRailwayNetwork(
     const n = mutablePoints.length;
     if (n < 2) continue;
 
+    const protectedIndices = options?.protectedPartVertices?.get(part.id);
     const splitIndices: number[] = [0];
     for (let i = 1; i < n - 1; i++) {
       const nid = nodeIds[i];
@@ -1718,7 +1776,9 @@ export function buildRailwayNetwork(
       if (
         (nodeOccurrenceCount.get(nid) ?? 0) >= 2 ||
         nodeRec?.switchPointMeta !== undefined ||
-        (nodeRec?.flatCrossingPointMeta !== undefined && !nodeRec.isDecoupledFlatCrossingTrackNode)
+        (nodeRec?.flatCrossingPointMeta !== undefined && !nodeRec.isDecoupledFlatCrossingTrackNode) ||
+        nodeRec?.isProtectedNode === true ||
+        protectedIndices?.has(i) === true
       ) {
         splitIndices.push(i);
       }
@@ -2187,6 +2247,10 @@ export function buildRailwayNetwork(
       rolesSet.add('junction');
     } else if (rec.switchPointMeta !== undefined) {
       rolesSet.add('switch');
+    }
+
+    for (const extraRole of rec.additionalRoles) {
+      rolesSet.add(extraRole);
     }
 
     if (rolesSet.size === 0) {

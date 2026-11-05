@@ -381,6 +381,21 @@ export interface RoadNetworkDiagnostics {
   boundaryClippedNodeCount: number;
   crossTierNodeCount: number;
   closedLoopEdgeCount: number;
+  unresolvedInfrastructurePoints?: readonly UnresolvedInfrastructurePointCandidate[];
+}
+
+/**
+ * Optional configuration for `buildRoadNetwork` (Stage D cross-modal node protection & highway_crossing ingestion).
+ */
+export interface RoadNetworkBuildOptions {
+  /** Point-level infrastructure metadata (`highway=crossing`, etc.) to match against road nodes. */
+  infrastructurePoints?: readonly InfrastructurePointMetadata[];
+  /** Explicit raw OSM node IDs (`rawOsmNodeId`) that must be preserved as topological nodes and never contracted at degree 2. */
+  protectedRawOsmNodeIds?: ReadonlySet<string>;
+  /** Specific `(partId, vertexIndex)` pairs that must be split at interior vertices and never contracted at degree 2. */
+  protectedPartVertices?: ReadonlyMap<string, ReadonlySet<number>>;
+  /** Additional topological roles to attach to retained road nodes keyed by `rawOsmNodeId`. */
+  additionalNodeRolesByOsmId?: ReadonlyMap<string, readonly RoadNodeRole[]>;
 }
 
 /**
@@ -389,6 +404,20 @@ export interface RoadNetworkDiagnostics {
 export interface RoadNetworkBuildResult {
   roads: RoadNetwork;
   diagnostics: RoadNetworkDiagnostics;
+}
+
+/**
+ * Optional configuration for `buildRailwayNetwork` (Stage C/D point ingestion & cross-modal node protection).
+ */
+export interface RailwayNetworkBuildOptions {
+  /** Point-level infrastructure metadata (`railway=switch`, `railway=railway_crossing`, etc.). */
+  infrastructurePoints?: readonly InfrastructurePointMetadata[];
+  /** Explicit raw OSM node IDs (`rawOsmNodeId`) that must be preserved as topological nodes and never contracted at degree 2. */
+  protectedRawOsmNodeIds?: ReadonlySet<string>;
+  /** Specific `(partId, vertexIndex)` pairs that must be split at interior vertices and never contracted at degree 2. */
+  protectedPartVertices?: ReadonlyMap<string, ReadonlySet<number>>;
+  /** Additional topological roles to attach to retained railway nodes keyed by `rawOsmNodeId`. */
+  additionalNodeRolesByOsmId?: ReadonlyMap<string, readonly RailwayNodeRole[]>;
 }
 
 export interface GradeTransitionRelation {
@@ -462,7 +491,8 @@ export interface UnresolvedCrossingCandidate {
     | 'coincident_vertex_without_osm_id'
     | 'geometric_intersection_without_shared_node'
     | 'missing_railway_crossing_tag_at_degree_4_node'
-    | 'ambiguous_railway_crossing_track_pairing';
+    | 'ambiguous_railway_crossing_track_pairing'
+    | 'conflicting_crossing_tag_and_road_tier';
 }
 
 export type UnresolvedInfrastructurePointReason =
@@ -470,7 +500,8 @@ export type UnresolvedInfrastructurePointReason =
   | 'conflicting_explicit_osm_node_id'
   | 'ambiguous_multiple_candidate_nodes'
   | 'vertical_scope_mismatch'
-  | 'insufficient_topological_evidence';
+  | 'insufficient_topological_evidence'
+  | 'conflicting_crossing_tag_and_road_tier';
 
 export interface UnresolvedInfrastructurePointCandidate {
   pointId: string;
@@ -519,6 +550,27 @@ export interface GradeSeparatedCrossingRelation {
   lowerIsTunnel: boolean;
 }
 
+export interface CrossModalAnalysisInput {
+  roads: RoadNetwork;
+  railways: RailwayNetwork;
+  infrastructurePoints?: readonly InfrastructurePointMetadata[];
+  railwayFlatCrossings?: readonly RailwayFlatCrossingRelation[];
+  railwayUnresolvedCrossings?: readonly UnresolvedCrossingCandidate[];
+  roadUnresolvedInfrastructurePoints?: readonly UnresolvedInfrastructurePointCandidate[];
+  railwayUnresolvedInfrastructurePoints?: readonly UnresolvedInfrastructurePointCandidate[];
+}
+
+export interface CrossModalAnalysisResult {
+  levelCrossings: readonly LevelCrossingRelation[];
+  gradeTransitions: readonly GradeTransitionRelation[];
+  gradeSeparatedCrossings: readonly GradeSeparatedCrossingRelation[];
+  unresolvedCrossings: readonly UnresolvedCrossingCandidate[];
+  unresolvedGradeTransitions: readonly UnresolvedGradeTransitionCandidate[];
+  unresolvedInfrastructurePoints: readonly UnresolvedInfrastructurePointCandidate[];
+  confirmedRoadLevelCrossingNodeTags: ReadonlyMap<string, RawGeoJsonProperties>;
+  confirmedRailwayLevelCrossingNodeTags: ReadonlyMap<string, RawGeoJsonProperties>;
+}
+
 export interface TopologyDiagnostics {
   roadNodeCount: number;
   roadEdgeCount: number;
@@ -541,6 +593,7 @@ export interface TopologyDiagnostics {
   boundaryClippedNodeCount: number;
   unresolvedGradeTransitions: readonly UnresolvedGradeTransitionCandidate[];
   unresolvedCrossings: readonly UnresolvedCrossingCandidate[];
+  unresolvedInfrastructurePoints?: readonly UnresolvedInfrastructurePointCandidate[];
 }
 
 export interface InfrastructureGraph {

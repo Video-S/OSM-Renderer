@@ -11,10 +11,12 @@ import {
   EdgeProvenance,
   EdgeSegmentProvenance,
   IncidentHalfEdge,
+  InfrastructurePointMetadata,
   NodeIdOrigin,
   NormalizedOneWay,
   RoadEdge,
   RoadNetwork,
+  RoadNetworkBuildOptions,
   RoadNetworkBuildResult,
   RoadNetworkDiagnostics,
   RoadNode,
@@ -22,6 +24,8 @@ import {
   RoadTier,
   TopologySourceData,
   UnchainedRoadPart,
+  UnresolvedInfrastructurePointCandidate,
+  UnresolvedInfrastructurePointReason,
 } from './types';
 
 export const EXACT_DUPLICATE_VERTEX_TOLERANCE_METERS = 1e-3; // 1 mm
@@ -347,6 +351,174 @@ interface InternalNodeRecord {
   isBoundaryClipped: boolean;
   isAttributeBreak: boolean;
   isLoopAnchor: boolean;
+  isProtectedNode: boolean;
+  highwayCrossingPointMeta?: InfrastructurePointMetadata;
+  additionalRoles: Set<RoadNodeRole>;
+}
+
+function stripRoadNodePrefix(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('node/')) {
+    const rest = trimmed.slice(5).trim();
+    return rest.length > 0 ? rest : undefined;
+  }
+  if (trimmed.startsWith('osm_')) {
+    const rest = trimmed.slice(4).trim();
+    return rest.length > 0 ? rest : undefined;
+  }
+  return trimmed;
+}
+
+interface ExplicitPointVerticalScope {
+  hasExplicitScope: boolean;
+  layer?: number;
+  isBridge?: boolean;
+  isTunnel?: boolean;
+}
+
+function extractPointExplicitVerticalScope(
+  osmTags?: RawGeoJsonProperties
+): ExplicitPointVerticalScope {
+  if (!osmTags) {
+    return { hasExplicitScope: false };
+  }
+
+  const rawBridge =
+    osmTags.bridge !== undefined && osmTags.bridge !== null
+      ? String(osmTags.bridge).trim().toLowerCase()
+      : '';
+  const hasBridgeTag = rawBridge.length > 0;
+  const isBridge = hasBridgeTag ? !['no', 'false', '0'].includes(rawBridge) : undefined;
+
+  const rawTunnel =
+    osmTags.tunnel !== undefined && osmTags.tunnel !== null
+      ? String(osmTags.tunnel).trim().toLowerCase()
+      : '';
+  const rawCovered =
+    osmTags.covered !== undefined && osmTags.covered !== null
+      ? String(osmTags.covered).trim().toLowerCase()
+      : '';
+  const hasTunnelTag = rawTunnel.length > 0 || rawCovered.length > 0;
+  const isTunnel = hasTunnelTag
+    ? (rawTunnel.length > 0 && !['no', 'false', '0'].includes(rawTunnel)) ||
+      (rawCovered.length > 0 && !['no', 'false', '0'].includes(rawCovered))
+    : undefined;
+
+  const rawLayer =
+    osmTags.layer !== undefined && osmTags.layer !== null ? String(osmTags.layer).trim() : '';
+  const parsedLayer = rawLayer.length > 0 ? Number(rawLayer) : Number.NaN;
+  const hasLayerTag = Number.isFinite(parsedLayer);
+
+  let layer: number | undefined;
+  if (hasLayerTag) {
+    layer = Math.trunc(parsedLayer);
+  } else if (isBridge === true) {
+    layer = 1;
+  } else if (isTunnel === true) {
+    layer = -1;
+  }
+
+  return {
+    hasExplicitScope: hasBridgeTag || hasTunnelTag || hasLayerTag,
+    layer,
+    isBridge,
+    isTunnel,
+  };
+}
+
+function isRoadNodeCompatibleWithPointScope(
+  node: InternalNodeRecord,
+  ptScope: ExplicitPointVerticalScope
+): boolean {
+  if (!ptScope.hasExplicitScope) return true;
+  if (ptScope.isBridge !== undefined && node.isBridge !== ptScope.isBridge) return false;
+  if (ptScope.isTunnel !== undefined && node.isTunnel !== ptScope.isTunnel) return false;
+  if (ptScope.layer !== undefined && node.layer !== ptScope.layer) return false;
+  return true;
+}
+
+function distancePointToPolyline2D(
+  pt: readonly [number, number],
+  polyline: readonly [number, number][]
+): number {
+  if (polyline.length === 0) return Infinity;
+  if (polyline.length === 1) {
+    return Math.hypot(pt[0] - polyline[0][0], pt[1] - polyline[0][1]);
+  }
+  let minDist = Infinity;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const ax = polyline[i][0];
+    const az = polyline[i][1];
+    const bx = polyline[i + 1][0];
+    const bz = polyline[i + 1][1];
+    const vx = bx - ax;
+    const vz = bz - az;
+    const lenSq = vx * vx + vz * vz;
+    let t = 0;
+    if (lenSq > 1e-12) {
+      t = Math.max(0, Math.min(1, ((pt[0] - ax) * vx + (pt[1] - az) * vz) / lenSq));
+    }
+    const projX = ax + t * vx;
+    const projZ = az + t * vz;
+    const d = Math.hypot(pt[0] - projX, pt[1] - projZ);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+function extractInputHighwayCrossingPoints(
+  input: ProcessedMapData | TopologySourceData | readonly UnchainedRoadPart[],
+  optionsOrPoints?: RoadNetworkBuildOptions | readonly InfrastructurePointMetadata[]
+): InfrastructurePointMetadata[] {
+  let rawPoints: readonly InfrastructurePointMetadata[] = [];
+  if (Array.isArray(optionsOrPoints)) {
+    rawPoints = optionsOrPoints;
+  } else if (optionsOrPoints && 'infrastructurePoints' in optionsOrPoints && Array.isArray(optionsOrPoints.infrastructurePoints)) {
+    rawPoints = optionsOrPoints.infrastructurePoints;
+  } else if (!Array.isArray(input)) {
+    if ('infrastructurePoints' in input && Array.isArray(input.infrastructurePoints)) {
+      rawPoints = input.infrastructurePoints;
+    } else if (
+      'topologySource' in input &&
+      input.topologySource &&
+      Array.isArray(input.topologySource.infrastructurePoints)
+    ) {
+      rawPoints = input.topologySource.infrastructurePoints;
+    }
+  }
+
+  return rawPoints
+    .filter(
+      (pt) =>
+        pt &&
+        pt.kind === 'highway_crossing' &&
+        Array.isArray(pt.point) &&
+        pt.point.length >= 2 &&
+        Number.isFinite(pt.point[0]) &&
+        Number.isFinite(pt.point[1])
+    )
+    .map((pt) => ({
+      id: String(pt.id),
+      hasExplicitSourceId: Boolean(pt.hasExplicitSourceId),
+      rawOsmNodeId: pt.rawOsmNodeId ? String(pt.rawOsmNodeId).trim() : undefined,
+      point: [Number(pt.point[0]), Number(pt.point[1])] as [number, number],
+      kind: pt.kind,
+      osmTags: cloneOsmTags(pt.osmTags),
+    }))
+    .sort((a, b) => {
+      const aExp = a.hasExplicitSourceId ? 0 : 1;
+      const bExp = b.hasExplicitSourceId ? 0 : 1;
+      if (aExp !== bExp) return aExp - bExp;
+      const osmCmp = compareStringsCodeUnit(a.rawOsmNodeId ?? '', b.rawOsmNodeId ?? '');
+      if (osmCmp !== 0) return osmCmp;
+      const dx = Math.round(a.point[0] * 1000) - Math.round(b.point[0] * 1000);
+      if (dx !== 0) return dx;
+      const dz = Math.round(a.point[1] * 1000) - Math.round(b.point[1] * 1000);
+      if (dz !== 0) return dz;
+      return compareStringsCodeUnit(a.id, b.id);
+    });
 }
 
 interface DraftRoadEdge {
@@ -474,20 +646,11 @@ function areParallelDraftEdges(e1: DraftRoadEdge, e2: DraftRoadEdge): boolean {
   );
 }
 
-function canContractDegree2RoadNode(
+function haveCompatibleRoadAttributesAndFlow(
   node: InternalNodeRecord,
   e1: DraftRoadEdge,
   e2: DraftRoadEdge
 ): boolean {
-  if (node.isBoundaryClipped) return false;
-  if (e1.draftId === e2.draftId) return false;
-  if (e1.fromNodeId === e1.toNodeId || e2.fromNodeId === e2.toNodeId) return false;
-
-  // Never contract two parallel multi-edges connecting the same pair of nodes into a self-loop
-  if (areParallelDraftEdges(e1, e2)) {
-    return false;
-  }
-
   // Vertical scope guard
   if (
     e1.layer !== e2.layer ||
@@ -533,6 +696,25 @@ function canContractDegree2RoadNode(
   return e1InE2Out || e2InE1Out;
 }
 
+function canContractDegree2RoadNode(
+  node: InternalNodeRecord,
+  e1: DraftRoadEdge,
+  e2: DraftRoadEdge
+): boolean {
+  if (node.isBoundaryClipped || node.isProtectedNode || node.highwayCrossingPointMeta !== undefined) {
+    return false;
+  }
+  if (e1.draftId === e2.draftId) return false;
+  if (e1.fromNodeId === e1.toNodeId || e2.fromNodeId === e2.toNodeId) return false;
+
+  // Never contract two parallel multi-edges connecting the same pair of nodes into a self-loop
+  if (areParallelDraftEdges(e1, e2)) {
+    return false;
+  }
+
+  return haveCompatibleRoadAttributesAndFlow(node, e1, e2);
+}
+
 function compareAnchorCandidateNodes(a: InternalNodeRecord, b: InternalNodeRecord): number {
   const aExp = a.nodeIdOrigin === 'explicit_osm' ? 0 : 1;
   const bExp = b.nodeIdOrigin === 'explicit_osm' ? 0 : 1;
@@ -575,10 +757,17 @@ function selectPrimaryRoadNodeRole(roles: readonly RoadNodeRole[]): RoadNodeRole
  * and with zero React, Three.js, renderer, or WebGL dependencies.
  */
 export function buildRoadNetwork(
-  input: ProcessedMapData | TopologySourceData | readonly UnchainedRoadPart[]
+  input: ProcessedMapData | TopologySourceData | readonly UnchainedRoadPart[],
+  optionsOrPoints?: RoadNetworkBuildOptions | readonly InfrastructurePointMetadata[]
 ): RoadNetworkBuildResult {
   const extractedParts = extractInputRoadParts(input);
+  const extractedHighwayCrossingPoints = extractInputHighwayCrossingPoints(input, optionsOrPoints);
+  const options: RoadNetworkBuildOptions | undefined =
+    optionsOrPoints && !Array.isArray(optionsOrPoints)
+      ? (optionsOrPoints as RoadNetworkBuildOptions)
+      : undefined;
 
+  const unresolvedInfrastructurePoints: UnresolvedInfrastructurePointCandidate[] = [];
   const diagnostics: RoadNetworkDiagnostics = {
     inputPartCount: extractedParts.length,
     exactDeduplicatedCount: 0,
@@ -590,9 +779,21 @@ export function buildRoadNetwork(
     boundaryClippedNodeCount: 0,
     crossTierNodeCount: 0,
     closedLoopEdgeCount: 0,
+    unresolvedInfrastructurePoints,
   };
 
   if (extractedParts.length === 0) {
+    for (const ptMeta of extractedHighwayCrossingPoints) {
+      unresolvedInfrastructurePoints.push({
+        pointId: ptMeta.id,
+        rawOsmNodeId: ptMeta.rawOsmNodeId,
+        kind: ptMeta.kind,
+        position: [ptMeta.point[0], ptMeta.point[1]],
+        candidateNodeIds: [],
+        reason: 'no_candidate_node_within_snap_tolerance',
+        osmTags: cloneOsmTags(ptMeta.osmTags),
+      });
+    }
     return {
       roads: {
         nodes: new Map(),
@@ -769,6 +970,8 @@ export function buildRoadNetwork(
             isBoundaryClipped: true,
             isAttributeBreak: false,
             isLoopAnchor: false,
+            isProtectedNode: false,
+            additionalRoles: new Set<RoadNodeRole>(),
           });
         }
         resolvedIds.push(clipNodeId);
@@ -803,11 +1006,9 @@ export function buildRoadNetwork(
           isBoundaryClipped: false,
           isAttributeBreak: false,
           isLoopAnchor: false,
+          isProtectedNode: false,
+          additionalRoles: new Set<RoadNodeRole>(),
         });
-      } else if (mutableRawOsmNodeIds[i] === undefined) {
-        // Propagate resolved explicit OSM node ID if snapped to an explicit node?
-        // No: keep vertexRawOsmNodeIds faithful to the vertex's own raw OSM ID if any,
-        // while the graph node itself holds rawOsmNodeId.
       }
 
       resolvedIds.push(canonicalNodeId);
@@ -846,7 +1047,185 @@ export function buildRoadNetwork(
     }
   }
 
-  // 5. Split parts at shared interior nodes (including self-loops and P-loops)
+  // 4B. Associate `highway=crossing` point features and cross-modal protected node options
+  const allInternalNodesList = [...internalNodes.values()].filter((n) =>
+    nodeOccurrenceCount.has(n.id)
+  );
+
+  const recordUnresolvedHighwayCrossingPoint = (
+    ptMeta: InfrastructurePointMetadata,
+    candidateNodeIds: readonly string[],
+    reason: UnresolvedInfrastructurePointReason
+  ) => {
+    unresolvedInfrastructurePoints.push({
+      pointId: ptMeta.id,
+      rawOsmNodeId: ptMeta.rawOsmNodeId,
+      kind: ptMeta.kind,
+      position: [ptMeta.point[0], ptMeta.point[1]],
+      candidateNodeIds: [...candidateNodeIds].sort(compareStringsCodeUnit),
+      reason,
+      osmTags: cloneOsmTags(ptMeta.osmTags),
+    });
+  };
+
+  for (const ptMeta of extractedHighwayCrossingPoints) {
+    const ptNormOsmId =
+      stripRoadNodePrefix(ptMeta.rawOsmNodeId) ??
+      (ptMeta.hasExplicitSourceId ? stripRoadNodePrefix(ptMeta.id) : undefined);
+    const ptScope = extractPointExplicitVerticalScope(ptMeta.osmTags);
+
+    let targetNode: InternalNodeRecord | undefined;
+
+    const exactIdNodes =
+      ptNormOsmId !== undefined
+        ? allInternalNodesList.filter((n) => stripRoadNodePrefix(n.rawOsmNodeId) === ptNormOsmId)
+        : [];
+
+    if (exactIdNodes.length > 0) {
+      const scopeCompatibleExact = exactIdNodes.filter((n) =>
+        isRoadNodeCompatibleWithPointScope(n, ptScope)
+      );
+      if (scopeCompatibleExact.length !== 1) {
+        recordUnresolvedHighwayCrossingPoint(
+          ptMeta,
+          exactIdNodes.map((n) => n.id),
+          'vertical_scope_mismatch'
+        );
+        continue;
+      }
+      targetNode = scopeCompatibleExact[0];
+    } else {
+      const nearbyNodes = allInternalNodesList.filter(
+        (n) =>
+          !n.isBoundaryClipped &&
+          Math.hypot(n.x - ptMeta.point[0], n.z - ptMeta.point[1]) <=
+            DEFAULT_NODE_SNAP_TOLERANCE_METERS
+      );
+
+      if (nearbyNodes.length === 0) {
+        recordUnresolvedHighwayCrossingPoint(
+          ptMeta,
+          [],
+          'no_candidate_node_within_snap_tolerance'
+        );
+        continue;
+      }
+
+      const conflictingIdNodes =
+        ptNormOsmId !== undefined
+          ? nearbyNodes.filter(
+              (n) =>
+                n.rawOsmNodeId !== undefined &&
+                stripRoadNodePrefix(n.rawOsmNodeId) !== ptNormOsmId
+            )
+          : [];
+
+      if (conflictingIdNodes.length > 0) {
+        recordUnresolvedHighwayCrossingPoint(
+          ptMeta,
+          nearbyNodes.map((n) => n.id),
+          'conflicting_explicit_osm_node_id'
+        );
+        continue;
+      }
+
+      const scopeCompatibleNearby = nearbyNodes.filter((n) =>
+        isRoadNodeCompatibleWithPointScope(n, ptScope)
+      );
+
+      if (scopeCompatibleNearby.length === 0) {
+        recordUnresolvedHighwayCrossingPoint(
+          ptMeta,
+          nearbyNodes.map((n) => n.id),
+          'vertical_scope_mismatch'
+        );
+        continue;
+      }
+
+      if (!ptScope.hasExplicitScope) {
+        const nearbyVerticalScopes = new Set<string>();
+        for (const n of nearbyNodes) {
+          nearbyVerticalScopes.add(`${n.layer}|${n.isBridge ? 1 : 0}|${n.isTunnel ? 1 : 0}`);
+        }
+        for (const item of retainedParts) {
+          const scopeKey = getScopeKey(item.part);
+          if (nearbyVerticalScopes.has(scopeKey)) continue;
+          if (
+            distancePointToPolyline2D(ptMeta.point, item.mutablePoints) <=
+            DEFAULT_NODE_SNAP_TOLERANCE_METERS
+          ) {
+            nearbyVerticalScopes.add(scopeKey);
+          }
+        }
+        if (nearbyVerticalScopes.size > 1) {
+          recordUnresolvedHighwayCrossingPoint(
+            ptMeta,
+            nearbyNodes.map((n) => n.id),
+            'vertical_scope_mismatch'
+          );
+          continue;
+        }
+      }
+
+      if (scopeCompatibleNearby.length > 1) {
+        recordUnresolvedHighwayCrossingPoint(
+          ptMeta,
+          scopeCompatibleNearby.map((n) => n.id),
+          'ambiguous_multiple_candidate_nodes'
+        );
+        continue;
+      }
+
+      targetNode = scopeCompatibleNearby[0];
+    }
+
+    if (targetNode && !targetNode.highwayCrossingPointMeta) {
+      targetNode.highwayCrossingPointMeta = ptMeta;
+      targetNode.isProtectedNode = true;
+      targetNode.additionalRoles.add('highway_crossing');
+    }
+  }
+
+  if (options?.protectedRawOsmNodeIds && options.protectedRawOsmNodeIds.size > 0) {
+    for (const node of internalNodes.values()) {
+      const normOsm = stripRoadNodePrefix(node.rawOsmNodeId);
+      if (normOsm && options.protectedRawOsmNodeIds.has(normOsm)) {
+        node.isProtectedNode = true;
+      }
+    }
+  }
+
+  if (options?.additionalNodeRolesByOsmId && options.additionalNodeRolesByOsmId.size > 0) {
+    for (const node of internalNodes.values()) {
+      const normOsm = stripRoadNodePrefix(node.rawOsmNodeId);
+      if (normOsm) {
+        const extra = options.additionalNodeRolesByOsmId.get(normOsm);
+        if (extra) {
+          for (const r of extra) {
+            node.additionalRoles.add(r);
+          }
+        }
+      }
+    }
+  }
+
+  if (options?.protectedPartVertices && options.protectedPartVertices.size > 0) {
+    for (const item of retainedParts) {
+      const protectedIndices = options.protectedPartVertices.get(item.part.id);
+      if (!protectedIndices) continue;
+      const nodeIds = partVertexNodeIds.get(item.part.id)!;
+      for (const vIdx of protectedIndices) {
+        if (vIdx >= 0 && vIdx < nodeIds.length) {
+          const nodeRec = internalNodes.get(nodeIds[vIdx]);
+          if (nodeRec) {
+            nodeRec.isProtectedNode = true;
+          }
+        }
+      }
+    }
+  }
+
+  // 5. Split parts at shared interior nodes (including self-loops, P-loops, highway_crossing, and protected level crossings)
   const draftEdges = new Map<number, DraftRoadEdge>();
   let nextDraftId = 1;
 
@@ -857,10 +1236,17 @@ export function buildRoadNetwork(
     const n = mutablePoints.length;
     if (n < 2) continue;
 
+    const protectedIndices = options?.protectedPartVertices?.get(part.id);
     const splitIndices: number[] = [0];
     for (let i = 1; i < n - 1; i++) {
       const nid = nodeIds[i];
-      if ((nodeOccurrenceCount.get(nid) ?? 0) >= 2) {
+      const nodeRec = internalNodes.get(nid);
+      if (
+        (nodeOccurrenceCount.get(nid) ?? 0) >= 2 ||
+        nodeRec?.isProtectedNode === true ||
+        nodeRec?.highwayCrossingPointMeta !== undefined ||
+        protectedIndices?.has(i) === true
+      ) {
         splitIndices.push(i);
       }
     }
@@ -966,7 +1352,9 @@ export function buildRoadNetwork(
     if (canContractDegree2RoadNode(node, e1, e2)) {
       contractibleDegree2Nodes.add(nodeId);
     } else if (!node.isBoundaryClipped && !areParallelDraftEdges(e1, e2)) {
-      node.isAttributeBreak = true;
+      if (!haveCompatibleRoadAttributesAndFlow(node, e1, e2)) {
+        node.isAttributeBreak = true;
+      }
     }
   }
 
@@ -1325,6 +1713,12 @@ export function buildRoadNetwork(
     if (rec.isAttributeBreak) {
       rolesSet.add('attribute_break');
     }
+    if (rec.highwayCrossingPointMeta !== undefined) {
+      rolesSet.add('highway_crossing');
+    }
+    for (const extraRole of rec.additionalRoles) {
+      rolesSet.add(extraRole);
+    }
     if (isCrossTier) {
       rolesSet.add('cross_tier');
       diagnostics.crossTierNodeCount++;
@@ -1354,6 +1748,9 @@ export function buildRoadNetwork(
       incidentEdgeIds,
       incidentHalfEdges: halfEdges,
       isCrossTier,
+      pointOsmTags: rec.highwayCrossingPointMeta?.osmTags
+        ? cloneOsmTags(rec.highwayCrossingPointMeta.osmTags)
+        : undefined,
     });
   }
 

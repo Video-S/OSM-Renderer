@@ -6,7 +6,7 @@
 
 # Interface: LocalGeoJsonProviderOptions
 
-Defined in: world/LocalGeoJsonProvider.ts:865
+Defined in: world/LocalGeoJsonProvider.ts:886
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/LocalGeoJsonProvider.ts:865
 
 > `optional` **defaultBuildingHeight?**: `number`
 
-Defined in: world/LocalGeoJsonProvider.ts:867
+Defined in: world/LocalGeoJsonProvider.ts:888
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/LocalGeoJsonProvider.ts:867
 
 > `optional` **levelHeightMeters?**: `number`
 
-Defined in: world/LocalGeoJsonProvider.ts:868
+Defined in: world/LocalGeoJsonProvider.ts:889
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: world/LocalGeoJsonProvider.ts:868
 
 > `optional` **sourceUrl?**: `string`
 
-Defined in: world/LocalGeoJsonProvider.ts:866
+Defined in: world/LocalGeoJsonProvider.ts:887

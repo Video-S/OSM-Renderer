@@ -2,7 +2,7 @@
 id: TKT-005
 title: M2.3-C Railway Network Graph Construction, Turnout Semantics, and Flat Crossings
 type: feature
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-05
 updated: 2026-11-05
@@ -28,7 +28,7 @@ Prior to Stage C:
    - `LocalGeoJsonProvider.parseGeoJson()` captures point features with `railway=switch` (`kind: 'railway_switch'`) and `railway=railway_crossing` (`kind: 'railway_crossing_flat'`) in `ProcessedMapData.topologySource.infrastructurePoints` (`InfrastructurePointMetadata[]`) without altering legacy `mapData.railways`, `mapData.landmarks`, skipped-feature diagnostics, or rendered 3D scene geometry.
 2. **Pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`)**:
    - Exposes `buildRailwayNetwork(input: ProcessedMapData | TopologySourceData | readonly UnchainedRailwayPart[]): RailwayNetworkBuildResult` with zero React, Three.js, renderer, or WebGL dependencies.
-   - Enforces domain-isolated node IDs (`railway_node:${layer}|${isBridge ? 1 : 0}|${isTunnel ? 1 : 0}:*`), explicit OSM node ID precedence over `0.15 m` coordinate fallback, boundary-clipped endpoint isolation, interior junction splitting, parallel tracks (`parallelIndex`), passing loops, self-loops and P-loops (`incidentHalfEdges` vs. `incidentEdgeIds` degree invariants), non-interstitial degree-2 simplification with railway attribute guards (`railwayType`, `width`, `gauge`, `electrified`, `service`, `usage`, `isSecondaryBranch`, and `osmTags`), strict `1 mm` exact duplicate detection, and input immutability.
+   - Enforces domain-isolated node IDs (`rail_node:${layer}|${isBridge ? 1 : 0}|${isTunnel ? 1 : 0}:*`), explicit OSM node ID precedence over `0.15 m` coordinate fallback, boundary-clipped endpoint isolation, interior junction splitting, parallel tracks (`parallelIndex`), passing loops, self-loops and P-loops (`incidentHalfEdges` vs. `incidentEdgeIds` degree invariants), non-interstitial degree-2 simplification with railway attribute guards (`railwayType`, `width`, `gauge`, `electrified`, `service`, `usage`, `isSecondaryBranch`, and `osmTags`), strict `1 mm` exact duplicate detection, and input immutability.
 3. **Conservative Turnout Classification (`ADR-0009` Section 5.2)**:
    - At degree-3 railway nodes, evaluates `1-to-2` throat geometry ($\vec{t}_{\text{trunk}} \cdot \vec{t}_a \le -\cos(45^\circ)$, $\vec{t}_{\text{trunk}} \cdot \vec{t}_b \le -\cos(45^\circ)$, $\vec{t}_a \cdot \vec{t}_b \ge \cos(60^\circ) = 0.5$) and disambiguates `mainBranchEdgeId` vs. `divergingBranchEdgeId` using `isSecondaryBranch` rank and deflection angles ($\ge 3^\circ$ difference).
    - Emits `status: 'confirmed'` only when unambiguous; emits `'unresolved_main_vs_diverging'` for symmetric Y-switches and `'unresolved_throat'` when no valid `1-to-2` throat exists, preserving shared-node connectivity and incrementing `railwayUnresolvedSwitchCount`.
@@ -46,17 +46,17 @@ Prior to Stage C:
 - [x] Comprehensive automated test suite (`src/world/RailwayNetworkTopology.test.ts` — `18` tests) passing via `npm test`, covering `T-11` (confirmed & ambiguous turnouts), `T-12` (continuous and 4-segment flat diamond crossings with non-interchange assertions, plus unresolved 4-arm diagnostics across 2-interior, 1-interior+2-endpoint, and 4-endpoint arrangements), conservative point annotation matching (unique coordinate fallback, multiple nearby nodes, conflicting explicit IDs, vertical-scope isolation), interior shared nodes, curved shape vertices, parallel tracks & passing loops, self-loops & P-loops, degree-2 simplification with reversed provenance, railway attribute breaks, bridge vs. at-grade isolation, boundary-clipped endpoints, Overpass JSON / OSM XML / MultiLineString node-ID preservation, semantic duplicate preservation, determinism, input immutability, and renderer isolation.
 - [x] Reproducible parser vs. railway-graph performance benchmark recorded on synthetic railway networks and real Station Hengelo / Amsterdam Centraal OSM extracts.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
-- [ ] Project owner reviews Stage C implementation to close `TKT-005`.
+- [x] Project owner reviews Stage C implementation to close `TKT-005`.
 
 ## Implementation notes
 - Stage C scope strictly excludes Stage D (`CrossModalAnalyzer`, `LevelCrossingRelation`, `GradeTransitionRelation`, `highway=crossing`, `railway=level_crossing`, `railway=crossing`) and Stage E (renderer integration).
 - `RailwayNetworkBuilder` decouples confirmed flat diamond crossings (`railway=railway_crossing` or shared explicit interior OSM nodes with crossing angle $\ge 10^\circ$) into independent track-scoped nodes prior to splitting and degree-2 simplification so crossing tracks remain topologically non-interconnecting while emitting `RailwayFlatCrossingRelation` records with exact arc-length offsets and acute crossing angles.
 - Unresolved 4-arm meetings across all three arrangements (`2` interior occurrences, `1` interior + `2` endpoint occurrences, and `4` endpoint occurrences) remain undecoupled (`degree === 4`, `primaryRole: 'junction'`, `roles: ['junction']`, `turnoutTopology: undefined`), increment `railwayUnresolvedJunctionCount`, and record `UnresolvedCrossingCandidate` entries in `diagnostics.unresolvedCrossings`.
 - Point annotations (`railway=switch`, `railway=railway_crossing`) never split a 2-arm interior way or cross vertical scopes (`layer`, `isBridge`, `isTunnel`); unmatched or ambiguous points are recorded in `diagnostics.unresolvedInfrastructurePoints`.
-- `TKT-005` remains `in_progress` pending project-owner review and acceptance.
+- Project owner reviewed and accepted `M2.3-C` on `2026-11-05`; `TKT-005` closed with `126 / 126` passing tests.
 
 ## Verification
-- Status: Verified (`126 / 126` automated tests passing, including `18 / 18` Stage C tests in `src/world/RailwayNetworkTopology.test.ts`; pending project-owner review)
+- Status: Verified & Closed (`126 / 126` automated tests passing at Stage C closeout, including `18 / 18` Stage C tests in `src/world/RailwayNetworkTopology.test.ts`; accepted by project owner on 2026-11-05)
 - Verification steps:
   - `npm test`: `126 passed, 0 failed`
   - `npm run lint`: `0 errors` (`tsc --noEmit`)

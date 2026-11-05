@@ -6,7 +6,7 @@
 
 # Class: LocalGeoJsonProvider
 
-Defined in: world/LocalGeoJsonProvider.ts:871
+Defined in: world/LocalGeoJsonProvider.ts:892
 
 Common provider interface for geographic features.
 In this version, LocalGeoJsonProvider provides the data.
@@ -22,7 +22,7 @@ Future implementations could fetch vector tiles (MVT/PMTiles) or Overpass API qu
 
 > **new LocalGeoJsonProvider**(`options?`): `LocalGeoJsonProvider`
 
-Defined in: world/LocalGeoJsonProvider.ts:879
+Defined in: world/LocalGeoJsonProvider.ts:900
 
 #### Parameters
 
@@ -40,7 +40,7 @@ Defined in: world/LocalGeoJsonProvider.ts:879
 
 > `readonly` **id**: `"local-geojson"` = `'local-geojson'`
 
-Defined in: world/LocalGeoJsonProvider.ts:872
+Defined in: world/LocalGeoJsonProvider.ts:893
 
 #### Implementation of
 
@@ -52,7 +52,7 @@ Defined in: world/LocalGeoJsonProvider.ts:872
 
 > `readonly` **name**: `"Local GeoJSON Provider"` = `'Local GeoJSON Provider'`
 
-Defined in: world/LocalGeoJsonProvider.ts:873
+Defined in: world/LocalGeoJsonProvider.ts:894
 
 #### Implementation of
 
@@ -64,7 +64,7 @@ Defined in: world/LocalGeoJsonProvider.ts:873
 
 > **loadRegion**(`query?`): `Promise`\<[`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)\>
 
-Defined in: world/LocalGeoJsonProvider.ts:885
+Defined in: world/LocalGeoJsonProvider.ts:906
 
 #### Parameters
 
@@ -86,7 +86,7 @@ Defined in: world/LocalGeoJsonProvider.ts:885
 
 > **parseGeoJson**(`geojson`, `explicitRegionName?`, `explicitCenter?`, `clipRadiusMeters?`): [`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)
 
-Defined in: world/LocalGeoJsonProvider.ts:908
+Defined in: world/LocalGeoJsonProvider.ts:929
 
 Parses a GeoJSON object into ProcessedMapData with strict, unambiguous diagnostic accounting.
 

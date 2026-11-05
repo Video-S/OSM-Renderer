@@ -72,7 +72,7 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **106 / 106 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `14` in `RoadNetworkTopology.test.ts`) |
+| `npm test` | **108 / 108 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |

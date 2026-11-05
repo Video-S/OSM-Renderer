@@ -68,7 +68,7 @@
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1, M2.2 & M2.3-B Tests** | `npm test` | **106 / 106 passed** (0 failures) |
+| **Unit, Integration, M2.1, M2.2 & M2.3-B Tests** | `npm test` | **108 / 108 passed** (0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
@@ -82,8 +82,8 @@
 | Core suites (WorldCoordinates, FeatureCoverage, GeometryBuilder, ElevationAndZIndex, JunctionAndTopology) | 66 |
 | `PerformanceBaseline.test.ts` | 17 |
 | `RailwayRendering.test.ts` | 9 |
-| `RoadNetworkTopology.test.ts` (`M2.3-B`) | 14 |
-| **Total** | **106** |
+| `RoadNetworkTopology.test.ts` (`M2.3-B`) | 16 |
+| **Total** | **108** |
 
 ---
 
@@ -91,7 +91,7 @@
 
 1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage B Implemented, Pending Owner Review`)**:
    - **Stage A (`M2.3-A` / `TKT-003` — `closed`)**: Source audit completed and **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Accepted`) approved by project owner.
-   - **Stage B (`M2.3-B` / `TKT-004` — `in_progress`, pending project-owner review)**: Implemented non-destructive `ProcessedMapData.topologySource` capture before `seenRoadSegments` and `chainContiguousRoads`, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `14` automated tests in `src/world/RoadNetworkTopology.test.ts`.
+   - **Stage B (`M2.3-B` / `TKT-004` — `in_progress`, pending project-owner review)**: Implemented non-destructive `ProcessedMapData.topologySource` capture before `seenRoadSegments` and `chainContiguousRoads`, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts`.
    - **Stage C (`M2.3-C` — Planned, requires explicit approval)**: Independent railway network graph construction (`RailwayNetworkBuilder`), turnout (`1-to-2` switch) and crossover classification, and parallel track multi-edge support.
    - **Stage D (`M2.3-D` — Planned, requires explicit approval)**: Crossings and grade transitions (`CrossModalAnalyzer`), preserving point-level OSM crossing/switch metadata and distinguishing level crossings, bridge/tunnel portal transitions, and grade-separated overpasses.
    - **Stage E (`M2.3-E` — Planned, requires explicit approval)**: Renderer integration (`GeometryBuilder` road junction trimming and portal transition consumption) with full regression preservation.

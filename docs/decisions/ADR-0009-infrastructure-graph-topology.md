@@ -12,79 +12,88 @@
 
 ## Context and Problem
 
-Milestone 2.3 (`M2.3: Infrastructure Topology and Connectivity`) establishes a clean, deterministic, pure-TypeScript infrastructure topology layer between GeoJSON feature parsing (`LocalGeoJsonProvider`) and 3D procedural geometry synthesis (`GeometryBuilder`, `RailwayGeometryBuilder`, and future `M2.4` surface markings).
+Milestone 2.3 (`M2.3: Infrastructure Topology and Connectivity`) establishes a deterministic, pure-TypeScript infrastructure topology layer between GeoJSON feature ingestion (`LocalGeoJsonProvider`) and 3D procedural geometry synthesis (`GeometryBuilder`, `RailwayGeometryBuilder`, and future `M2.4` surface markings).
 
 ### 1. Conceptual Distinction: Three Levels of Infrastructure Relationship
 
-A core requirement of M2.3 is separating three distinct concepts that are currently conflated across ingestion and rendering heuristics:
+M2.3 enforces a strict separation between three concepts that must never be conflated:
 
-1. **Geometric Intersection (2D Planimetric Crossing / Proximity)**:
-   - Two polyline segments cross or pass near each other in the horizontal $(X, Z)$ plane (e.g., an elevated bridge passing over an at-grade street, a subterranean tunnel passing beneath a rail yard, or an unsplit footpath crossing a carriageway).
-   - **Rule**: Planimetric crossing or spatial proximity alone **never** implies physical connectivity unless explicitly authorized by shared node topology or bounded fallback rules in the same domain and vertical scope.
+1. **Geometric Intersection (2D Planimetric Crossing or Proximity)**:
+   - Two polyline segments cross or pass near each other in the horizontal $(X, Z)$ plane (e.g., an elevated bridge passing over an at-grade street, a subterranean tunnel beneath a rail yard, two non-interconnecting railway tracks crossing at a flat diamond, or an unsplit footpath crossing a carriageway).
+   - **Rule**: Planimetric crossing or spatial proximity alone **never** creates a topological junction node or edge split.
 2. **Physical / Topological Connectivity (M2.3 Primary Scope)**:
-   - Two or more infrastructure segments share a physical junction, switch/turnout, grade-transition portal (`at_grade <-> bridge` or `at_grade <-> tunnel`), or at-grade road/rail level crossing.
-   - Represented by explicit graph nodes (`RoadNode`, `RailwayNode`), simplified polyline edges (`RoadEdge`, `RailwayEdge`), and typed cross-infrastructure relations (`GradeTransitionRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`).
+   - Two or more infrastructure segments share a verified physical connection: a road intersection, a railway turnout switch (`railway=switch`), a validated grade-transition portal (`at_grade <-> bridge` or `at_grade <-> tunnel`), or an explicit cross-infrastructure crossing relation (`railway=level_crossing`, `railway=crossing`, `railway=railway_crossing`, `highway=crossing`).
+   - Represented by domain-isolated graph nodes (`RoadNode`, `RailwayNode`), simplified polyline edges (`RoadEdge`, `RailwayEdge`), and typed crossing/transition relations (`GradeTransitionRelation`, `LevelCrossingRelation`, `RailwayFlatCrossingRelation`, `GradeSeparatedCrossingRelation`).
+   - Where spatial proximity suggests a possible transition or crossing but explicit topological evidence is missing or ambiguous, the relationship is recorded as an **unresolved diagnostic candidate** (`UnresolvedGradeTransitionCandidate`, `UnresolvedCrossingCandidate`, `unresolvedSwitchCount`) rather than silently promoted into network connectivity.
 3. **Traversability / Movement Permissions (Downstream Metadata Only)**:
    - Legal routing rules (`oneway`, `access`, turn restrictions, signaling).
-   - **Rule**: M2.3 preserves directional and lane attributes (`oneway`, `lanes`, `reversed`) on graph edges so downstream `M2.4` lane/arrow markings and future consumers have accurate orientation metadata, **without** implementing pathfinding, turn-restriction enforcement, traffic simulation, or agent movement.
+   - **Rule**: M2.3 preserves raw and normalized directional/lane attributes (`rawOnewayTag`, `normalizedOneway`, `lanes`, `reversedRelativeToSource`) on graph edges so downstream `M2.4` lane/arrow markings have faithful orientation metadata, **without** implementing pathfinding, turn-restriction enforcement, switching simulation, or traffic movement.
 
 ---
 
 ### 2. Source Audit of Current Codebase (`M2.3-A` Step 1 Findings)
 
-An exhaustive audit of the current codebase (`LocalGeoJsonProvider.ts`, `FeatureCatalogue.ts`, `TopologicalNodeIndex.ts`, `GeometryBuilder.ts`, `RailwayTopology.ts`, `RailwayGeometryBuilder.ts`, `BridgeAndTunnelBuilder.ts`, `ElevationPolicy.ts`, and `server.ts`) identified both reusable foundations and material architectural gaps:
+An audit of `LocalGeoJsonProvider.ts`, `FeatureCatalogue.ts`, `TopologicalNodeIndex.ts`, `GeometryBuilder.ts`, `RailwayTopology.ts`, `RailwayGeometryBuilder.ts`, `BridgeAndTunnelBuilder.ts`, `ElevationPolicy.ts`, and `server.ts` established the reusable foundations and current architectural gaps.
 
 #### 2.1 Reusable Foundations
 - **`TopologicalNodeIndex` (`src/world/TopologicalNodeIndex.ts`)**:
-  - Provides a fast $O(1)$ spatial grid (`cellSize = 0.15 m`, `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15`) and explicit OSM node ID registry (`${layerScope}|osm_${cleanId}` vs. fallback `tn_${layerScope}_${counter}`).
-  - Enforces non-merging of distinct explicit OSM node IDs (`osm_A !== osm_B` even at distance `0.00 m`, lines 89–93).
+  - Implements a spatial grid (`cellSize = 0.15 m`, `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15`) and explicit OSM node ID registry (`${layerScope}|osm_${cleanId}` vs. coordinate fallback `tn_${layerScope}_${counter}`).
+  - Enforces non-merging of distinct explicit OSM node IDs (`osm_A !== osm_B` even at `0.00 m` distance, lines 89–93).
   - Supports retroactive promotion of a fallback node (`tn_...`) to an explicit node (`osm_...`) when an explicit node arrives later within `0.15 m` in the same `layerScope`, recording aliases in `fallbackToExplicitAlias` and resolving them via `resolveCanonicalNodeId()`.
 - **Source Provenance & Lineage Accounting (`ADR-0005`, `src/types/MapFeature.ts`, `src/world/LocalGeoJsonProvider.ts`)**:
-  - `RoadFeature` and `RailwayFeature` preserve `id`, `sourceFeatureId`, `sourceFeatureIds: string[]`, and `nodeIds?: (string | number | undefined)[]`.
-  - `diagnostics.featureLineage` records `deduplicatedMap` and `chainingMap` for end-to-end feature auditability.
+  - `RoadFeature` and `RailwayFeature` carry `id`, `sourceFeatureId`, `sourceFeatureIds: string[]`, and `nodeIds?: (string | number | undefined)[]`.
+  - `diagnostics.featureLineage` records `deduplicatedMap` and `chainingMap`.
 - **Boundary-Derived Road Junction Trimming (`ADR-0002`, `src/world/GeometryBuilder.ts` Stage 6)**:
-  - The geometric portal-trimming math (`computePolylineSubsegment`, adjacent boundary ray-cast intersection, radial miter clamping, and `RoadPortalConnectionSpec`) is mature and verified by 92 automated tests, but currently relies on an ad-hoc inline node-clustering and splitting pass inside `GeometryBuilder.ts`.
+  - Polyline arc-length trimming (`computePolylineSubsegment`), adjacent boundary ray-cast intersection, radial miter clamping, and `RoadPortalConnectionSpec` remain the geometric meshing foundation in `GeometryBuilder`.
 - **Railway Spatial Indexing & Phase Continuity (`ADR-0008`, `src/world/infrastructure/railways/RailwayTopology.ts`)**:
-  - `HostTrackSpatialIndex` (`8 m x 8 m` spatial grid), `sortRailwaysMainlineFirst`, `computeContinuousTrackPhases`, and `isTurnoutThroatPair` provide proven geometric utilities for sleeper placement and clipping, but currently operate without a topological railway graph.
+  - `HostTrackSpatialIndex` (`8 m x 8 m` cells), `sortRailwaysMainlineFirst`, `computeContinuousTrackPhases`, and `isTurnoutThroatPair` provide geometric utilities for sleeper placement and clipping.
 
-#### 2.2 Material Gaps Discovered in Source Audit
+#### 2.2 Confirmed Source Facts vs. Architectural Risks
 
-| # | Focus Area | Observed Source Behavior | Architectural Gap / Risk |
+To keep confirmed implementation behavior strictly separate from architectural risks, the table below distinguishes exact source facts from their downstream consequences:
+
+| # | Area | Confirmed Source Fact (Current Implementation) | Architectural Risk / Gap for M2.3 |
 | :--- | :--- | :--- | :--- |
-| **G1** | **Per-Vertex OSM Node ID Survival (`server.ts` & `LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.extractRawOsmNodeIds` (lines 401–406) reads `props.nodes`, `props.nodeIds`, or `props._nodeIds`. However, `server.ts` (lines 159, 182) calls `osmtogeojson(overpassJson)` with default options, which strips OSM way `nodes` arrays from output GeoJSON `LineString` properties. Additionally, `LocalGeoJsonProvider.ts` (lines 1041, 1441) drops `rawOsmNodes` whenever a `MultiLineString` has `rawLines.length > 1`. | Live Overpass datasets currently lose explicit per-vertex OSM node IDs and rely 100% on `0.15 m` coordinate fallback. `MultiLineString` features with per-part node arrays also lose explicit IDs. |
-| **G2** | **Cross-Domain Contamination in Shared `TopologicalNodeIndex` (`LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.ts` (line 871) instantiates a **single** `topoNodeIndex` shared by both railways (line 1030) and roads (line 1480) using `partGradeScope = "${layer}|${isBridge}|${isTunnel}"`. | At-grade roads and railways sharing an OSM level-crossing vertex receive the **same** canonical node ID and increment `globalNodeDegree` in `chainContiguousRoads` (line 2149), coupling road chaining to railway vertices before domain separation. |
-| **G3** | **Double-Scoping & Interior Splitting Bugs (`GeometryBuilder.ts`)** | `GeometryBuilder.ts` creates a second `TopologicalNodeIndex` (line 2583). In `splitRoadsAtSharedInteriorNodes` (lines 907–987): (a) splitting occurs only within `tierScope` (`veh` vs. `path`), so footpaths meeting vehicular roads at shared interior nodes never split the road; (b) `uniqueInRoad = new Set(keys)` (line 946) counts self-intersecting P-loops (`keys[0] === keys[i]`) only once (`nodeUsageCount === 1`), failing to split P-loops; (c) line 2636 prepends `veh_` to `road.nodeIds[0]` which already received `veh|` in `splitRoadsAtSharedInteriorNodes`, yielding `veh_veh|osm_...`. | Inconsistent node ID scoping between ingestion and rendering; unsplit P-loops; lack of cross-tier (`veh` vs. `path`) topological awareness. |
-| **G4** | **Premature & Direction-Blind Road Chaining (`LocalGeoJsonProvider.ts`)** | `chainContiguousRoads` (lines 2084–2276) runs *before* graph construction, uses greedy array-order iteration (`while (pool.length > 0)`), omits `oneway` from `groupKey` (line 2131) despite documentation claiming otherwise, reverses `other.points` when `curEndKey === otherEndKey` or `curStartKey === otherStartKey` (lines 2226–2258) regardless of `oneway` tags, and retains only the first way's `osmTags`. | Corrupts one-way directionality when opposite one-way ways meet; loses per-segment `osmTags` (`lanes`, `surface`, `maxspeed`); depends on input feature ordering. |
-| **G5** | **Ad-Hoc Railway & Grade-Transition Proximity Heuristics** | `RailwayTopology.ts` (`computeContinuousTrackPhases`, `isTurnoutThroatPair`) ignores `RailwayFeature.nodeIds` and relies on `<= 0.65 m` distance + `dot > 0.7`. Bridge/tunnel grade transitions in `GeometryBuilder.ts` (lines 2587–2613, 3595–3608) and `RailwayGeometryBuilder.ts` (lines 566–579) use raw `0.65 m` / `0.80 m` radius scans across all endpoints without checking shared node IDs, tangent alignment, or road class. | An unrelated cross-street or footpath endpoint within `0.80 m` of a bridge abutment falsely triggers `connectsStartAtGrade = true` or suppresses end-caps. |
-| **G6** | **Point Crossing & Switch Nodes Discarded at Ingestion (`FeatureCatalogue.ts`)** | In `FeatureCatalogue.ts`, point features (`!isLine`) with `railway=level_crossing`, `railway=crossing`, `railway=switch`, or `highway=crossing` fall through to `category: 'unsupported'` (lines 546, 841) and are skipped in `LocalGeoJsonProvider.ts` (line 1009). | Zero point-level OSM crossing or switch tags (`railway=level_crossing`, `crossing=*`, `railway=switch`) survive into `ProcessedMapData`. |
-| **G7** | **Boundary-Clipped Synthetic Endpoints (`LocalGeoJsonProvider.ts`)** | `clipPolylineToBox` (lines 117–236) pushes `undefined` into `osmNodes` at Liang-Barsky boundary cut points (lines 208, 219), which `topoNodeIndex` converts into synthetic fallback nodes `tn_...`. | Two converging roads or tracks cut near the same bounding-box corner within `0.15 m` snap together into a false synthetic junction on the region boundary. |
+| **G1** | **Destructive Pre-Chaining of `mapData.roads` (`LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.parseGeoJson()` calls `chainContiguousRoads(roads, diagnostics)` at line 1742 *before* returning `ProcessedMapData`. Inside `chainContiguousRoads` (lines 2153–2268), `current` is mutated in place: `current.id` becomes `${current.id}+${other.id}`, `current.points` and `current.nodeIds` are concatenated, `other.points` may be reversed (lines 2227, 2244), and `other.osmTags` is discarded (`current.osmTags` retains only the first way's tags). | A graph builder that only receives `mapData.roads` cannot recover original unchained way boundaries, secondary way `osmTags` (`lanes`, `surface`, `oneway`), or original per-way digitization direction. Graph construction requires a non-destructive pre-chaining input handoff. |
+| **G2** | **Per-Vertex OSM Node ID Survival (`server.ts` & `LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.extractRawOsmNodeIds` (lines 401–406) reads `props.nodes`, `props.nodeIds`, or `props._nodeIds`. In `server.ts` (lines 159, 182), `osmtogeojson` is invoked with default options on Overpass JSON and OSM 0.6 XML fallback documents, which does not copy way `nodes` / `<nd ref>` lists onto output GeoJSON `LineString` `properties`. Additionally, `LocalGeoJsonProvider.ts` (lines 1041, 1441) passes `rawLines.length === 1 ? rawOsmNodes : undefined` to `clipPolylineToBox`. | Live `/api/osm-data` responses currently lack explicit per-vertex OSM node IDs and rely entirely on `0.15 m` coordinate fallback. `MultiLineString` features (`rawLines.length > 1`) also drop `rawOsmNodes`. |
+| **G3** | **Shared `topoNodeIndex` & Unprotected Level Crossings (`LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.ts` (line 871) instantiates one `topoNodeIndex` shared by railways (line 1030) and roads (line 1480) using `partGradeScope = "${layer}|${isBridge}|${isTunnel}"`. Later, `chainContiguousRoads` (lines 2112–2119) computes `globalNodeDegree` by iterating **only over `roads`** (`for (const r of roads)`), not `railways`. | (1) Sharing `topoNodeIndex` couples road and railway coordinate-fallback centroids and aliases within `0.15 m` on the same `partGradeScope`. (2) Because `globalNodeDegree` only counts `roads`, a degree-2 road node that is also a shared road/rail level crossing has `globalNodeDegree === 2` and gets chained *through* by `chainContiguousRoads`, demoting the crossing node to an interior vertex. |
+| **G4** | **Interior Splitting & Node Prefixing (`GeometryBuilder.ts`)** | In `splitRoadsAtSharedInteriorNodes` (`GeometryBuilder.ts`, lines 907–987): (a) vertices are scoped by `tierScope = isPath ? 'path' : 'veh'` (line 919); (b) line 946 computes `const uniqueInRoad = new Set(keys)` before incrementing `nodeUsageCount`; (c) line 942 writes `canonicalNodeIds` (`veh|osm_...`) back to `r.nodeIds`, and line 2636 prepends `tierPrefix` (`veh_`) again, producing `startNodeId = "veh_veh|osm_..."`. | (a) Cross-tier (`veh` vs. `path`) shared interior nodes are not linked topologically. (b) Confirmed bug for self-intersecting single-way P-loops: `new Set(keys)` counts a repeated vertex within the same way only once (`nodeUsageCount === 1`), so an isolated P-loop way does not split at its own self-junction. (c) The `veh_veh|osm_...` double prefix is an internal naming-consistency defect (not a functional connectivity bug, since all branches in the same tier receive the same prefix). |
+| **G5** | **One-Way Handling in `chainContiguousRoads` (`LocalGeoJsonProvider.ts`)** | `chainContiguousRoads` (line 2124) groups roads by `${roadClass}|${layer}|${isBridge}|${isTunnel}|${nameKey}|${Math.round(width * 10)}` (omitting `oneway`, contrary to `docs/data-pipeline-and-feature-support.md` Section 6) and merges `other` via point reversal when `curEndKey === otherEndKey` or `curStartKey === otherStartKey` (lines 2226–2258). | Two ways with incompatible `oneway` tags (e.g., `oneway=yes` meeting `oneway=no` or opposing `oneway` segments) can be chained together and have their vertex order reversed. |
+| **G6** | **Proximity-Based Grade Transitions & Railway Topology (`GeometryBuilder.ts`, `RailwayTopology.ts`, `RailwayGeometryBuilder.ts`)** | `RailwayTopology.ts` (`computeContinuousTrackPhases`, `isTurnoutThroatPair`) checks `<= 0.65 m` endpoint distance + `dot > 0.7` without consulting `RailwayFeature.nodeIds`. Bridge/tunnel portal checks in `GeometryBuilder.ts` (lines 2587–2613, 3595–3608) and `RailwayGeometryBuilder.ts` (lines 566–579) scan all endpoints within `0.65 m` or `0.80 m` Euclidean distance. | Unrelated nearby or parallel roads/paths within `0.65 m`–`0.80 m` of a bridge/tunnel portal can falsely trigger `connectsStartAtGrade` or suppress end-caps. Railway diamond crossings (`railway=railway_crossing`) are not distinguished from switches (`railway=switch`). |
+| **G7** | **Point Crossing & Switch Features Skipped (`FeatureCatalogue.ts`)** | In `FeatureCatalogue.ts`, point features (`!isLine`) with `railway=level_crossing`, `railway=crossing`, `railway=railway_crossing`, `railway=switch`, or `highway=crossing` hit lines 546 or 841 (`category: 'unsupported'`) and are skipped in `LocalGeoJsonProvider.ts` (line 1009). | Point-level OSM tags on switches, flat rail crossings, road/rail level crossings, and pedestrian crossings do not survive into `ProcessedMapData`. |
+| **G8** | **Boundary-Clipped Endpoints (`LocalGeoJsonProvider.ts`)** | `clipPolylineToBox` (lines 208, 219) pushes `undefined` into `osmNodes` at Liang-Barsky boundary cut points, and does not record which endpoints were created by boundary clipping. | Coordinate-only boundary cut endpoints within `0.15 m` of another way's boundary cut on the same `partGradeScope` can be snapped together into a synthetic boundary node by `topoNodeIndex`. |
 
 ---
 
 ## Decision
 
-We will implement a lightweight, deterministic, pure-TypeScript **Infrastructure Graph Architecture** under `src/world/infrastructure/topology/` using **OSMnx** (`osmnx.graph` and `osmnx.simplification`) as our conceptual and algorithmic reference, without introducing any external graph library dependencies.
+We will implement a deterministic, pure-TypeScript **Infrastructure Graph Architecture** under `src/world/infrastructure/topology/` using **OSMnx** (`osmnx.graph` and `osmnx.simplification`) as our conceptual reference, with zero external graph library dependencies.
 
 ### 1. Module Boundaries and File Layout
 
-All new topology contracts and builders will live under `src/world/infrastructure/topology/`:
-
 ```text
 src/world/infrastructure/topology/
-├── types.ts                   # Pure TypeScript domain interfaces (Nodes, Edges, Provenance, Relations, Diagnostics)
-├── InfrastructureGraph.ts     # Top-level orchestrator: buildInfrastructureGraph(mapData) -> InfrastructureGraph
-├── RoadNetworkBuilder.ts      # Stage B: Road node/edge extraction, interior splitting, non-interstitial degree-2 simplification
-├── RailwayNetworkBuilder.ts   # Stage C: Independent railway graph construction, turnout/switch & crossover classification
-└── CrossModalAnalyzer.ts      # Stage D: Road/rail level crossings, grade transitions (at-grade <-> bridge/tunnel), overpasses
+├── types.ts                   # Pure TypeScript domain contracts (Source handoff, Nodes, Edges, Provenance, Relations, Diagnostics)
+├── InfrastructureGraph.ts     # Top-level pure orchestrator: buildInfrastructureGraph(input) -> InfrastructureGraph
+├── RoadNetworkBuilder.ts      # Stage B: Road node/edge extraction, interior/P-loop splitting, non-interstitial degree-2 simplification
+├── RailwayNetworkBuilder.ts   # Stage C: Independent railway graph construction, turnout switch & flat diamond crossing semantics
+└── CrossModalAnalyzer.ts      # Stage D: Confirmed vs. candidate grade transitions, level crossings, pedestrian crossings, overpasses
 ```
 
-#### Relationship to Existing `TopologicalNodeIndex`
-- `src/world/TopologicalNodeIndex.ts` is **retained and extended** as the foundational low-level spatial and explicit-ID canonicalizer rather than replaced or duplicated.
-- It will be instantiated **per network domain** (`road` vs. `railway`) during graph construction so road and railway node degrees never cross-contaminate each other, while explicit OSM node IDs (`osmNodeId`) remain comparable across domains in `CrossModalAnalyzer` for shared level-crossing detection.
+- `src/world/TopologicalNodeIndex.ts` is retained and instantiated **separately per network domain** (`road` vs. `railway`) so road and railway coordinate-fallback clustering and node degrees never cross-contaminate each other.
 
 ---
 
-### 2. Proposed TypeScript Domain Contracts (`src/world/infrastructure/topology/types.ts`)
+### 2. Non-Destructive Ingestion-to-Graph Data Handoff (`TopologySourceData`)
+
+To resolve **Gap G1** without breaking `GeometryBuilder` or any of the 92 existing tests during Stages B–D:
+
+1. **Why `mapData.roads` Alone Is Insufficient**:
+   - `LocalGeoJsonProvider.parseGeoJson()` currently mutates and chains `RoadFeature` objects inside `chainContiguousRoads()` before returning `ProcessedMapData`. Once chained, secondary way `osmTags`, original per-way vertex directions, and unchained part boundaries are irreversibly lost.
+2. **Minimal Non-Destructive Handoff Contract (`ProcessedMapData.topologySource`)**:
+   - During `LocalGeoJsonProvider.parseGeoJson()`, immediately after `clipPolylineToBox` and exact-segment deduplication (`seenRoadSegments`)—and **before** `chainContiguousRoads` runs—`LocalGeoJsonProvider` records an immutable `topologySource: TopologySourceData` field on `ProcessedMapData`.
+   - `chainContiguousRoads` then operates on shallow-cloned `RoadFeature` records to produce the legacy `mapData.roads` array expected by `GeometryBuilder` during Stages B–D.
+   - `buildInfrastructureGraph(input: ProcessedMapData | TopologySourceData)` reads `input.topologySource` when passed a `ProcessedMapData` object (with a fallback adapter converting `mapData.roads` / `mapData.railways` into `UnchainedRoadPart` / `UnchainedRailwayPart` records only for legacy unit tests that construct synthetic `ProcessedMapData` literals directly without calling `LocalGeoJsonProvider`).
 
 ```typescript
 import {
@@ -93,73 +102,221 @@ import {
   RailwayType,
 } from '../../../types/MapFeature';
 
+export type InfrastructurePointKind =
+  | 'railway_switch'          // railway=switch
+  | 'railway_crossing_flat'   // railway=railway_crossing (rail-over-rail flat diamond crossing)
+  | 'railway_level_crossing'  // railway=level_crossing (vehicular road across rail)
+  | 'railway_ped_crossing'    // railway=crossing (pedestrian/path across rail)
+  | 'highway_crossing';       // highway=crossing (pedestrian crosswalk on road)
+
+/**
+ * Point-level OSM infrastructure node metadata preserved during GeoJSON ingestion.
+ */
+export interface InfrastructurePointMetadata {
+  /** Feature ID from GeoJSON (e.g. "node/98765"). */
+  id: string;
+  /** Explicit raw OSM node ID if extractable (e.g. "98765"), otherwise undefined. */
+  rawOsmNodeId?: string;
+  /** Local metric world coordinates [x, z]. */
+  point: [number, number];
+  /** Classified point infrastructure role. */
+  kind: InfrastructurePointKind;
+  /** Original raw OSM tags on the point feature (`crossing=*`, `railway:switch=*`, `turnout_side=*`, etc.). */
+  osmTags: RawGeoJsonProperties;
+}
+
+/**
+ * Non-destructive, pre-chaining road way part captured after bounding-box clipping
+ * and exact-segment deduplication, prior to `chainContiguousRoads`.
+ */
+export interface UnchainedRoadPart {
+  /** Unique part ID (e.g. "way/100-0"). */
+  id: string;
+  /** Original unsplit feature ID (e.g. "way/100"). */
+  sourceFeatureId: string;
+  /** Zero-based index of this clipped/multi-line part within `sourceFeatureId`. */
+  partIndex: number;
+  /** Ordered 2D metric vertices [x, z][] in original digitized way orientation. */
+  points: readonly [number, number][];
+  /**
+   * Raw unprefixed OSM node IDs aligned 1:1 with `points` where verified,
+   * or `undefined` at vertices lacking an explicit OSM node ID (including boundary cuts).
+   */
+  rawOsmNodeIds: readonly (string | undefined)[];
+  /** True if `points[0]` was synthesized by Liang-Barsky bounding-box clipping. */
+  clippedAtStart: boolean;
+  /** True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box clipping. */
+  clippedAtEnd: boolean;
+  roadClass: RoadClass;
+  width: number;
+  layer: number;
+  isBridge: boolean;
+  isTunnel: boolean;
+  isCulvert: boolean;
+  name?: string;
+  /** Original unmodified OSM tags for this specific way. */
+  osmTags: RawGeoJsonProperties;
+}
+
+/**
+ * Non-destructive railway way part captured after bounding-box clipping.
+ */
+export interface UnchainedRailwayPart {
+  id: string;
+  sourceFeatureId: string;
+  partIndex: number;
+  points: readonly [number, number][];
+  rawOsmNodeIds: readonly (string | undefined)[];
+  clippedAtStart: boolean;
+  clippedAtEnd: boolean;
+  railwayType: RailwayType;
+  width: number;
+  layer: number;
+  isBridge: boolean;
+  isTunnel: boolean;
+  name?: string;
+  gauge?: string;
+  electrified?: string;
+  service?: string;
+  usage?: string;
+  isSecondaryBranch: boolean;
+  osmTags: RawGeoJsonProperties;
+}
+
+/**
+ * Non-destructive topology input attached to `ProcessedMapData.topologySource`.
+ */
+export interface TopologySourceData {
+  roadParts: readonly UnchainedRoadPart[];
+  railwayParts: readonly UnchainedRailwayPart[];
+  infrastructurePoints: readonly InfrastructurePointMetadata[];
+  /** Maps canonical retained part/source ID -> array of deduplicated duplicate feature IDs. */
+  deduplicatedRoadMap: Readonly<Record<string, readonly string[]>>;
+}
+```
+
+---
+
+### 3. Proposed TypeScript Graph Domain Contracts (`src/world/infrastructure/topology/types.ts`)
+
+```typescript
 export type InfrastructureNetworkKind = 'road' | 'railway';
 
 export type RoadTier = 'vehicular' | 'path';
 
-export type OneWayDirection = 'yes' | '-1' | 'no';
-
-export type RoadNodeRole =
-  | 'junction'          // True intersection (degree >= 3, or self-loop anchor)
-  | 'dead_end'          // Terminal endpoint (degree === 1, not boundary-clipped)
-  | 'boundary_clip'     // Synthetic endpoint created by Liang-Barsky bounding-box clipping
-  | 'grade_transition'  // Portal boundary where at-grade meets bridge or tunnel
-  | 'attribute_break'   // Degree-2 node preserved due to roadClass/width/oneway/layer change
-  | 'level_crossing';   // Degree-2 road node preserved because it coincides with a railway level crossing
-
-export type RailwayNodeRole =
-  | 'junction'          // General multi-track node (degree >= 3)
-  | 'switch'            // Turnout point (1 trunk edge splitting into 2 diverging branch edges: 1-to-2 tangent topology)
-  | 'crossover'         // Diamond crossing or double-slip (degree >= 4 with 2-to-2 opposing tangent pairs)
-  | 'dead_end'          // Buffer stop / terminal track end (degree === 1, not boundary-clipped)
-  | 'boundary_clip'     // Synthetic endpoint created by Liang-Barsky bounding-box clipping
-  | 'grade_transition'  // Portal boundary where at-grade track meets railway bridge or tunnel
-  | 'attribute_break'   // Degree-2 node preserved due to railwayType/gauge/electrified/layer change
-  | 'level_crossing';   // Degree-2 rail node preserved because it coincides with a road level crossing
+/**
+ * Normalized directionality relative to an edge's `fromNodeId -> toNodeId` vertex order.
+ * - 'forward': one-way traversal permitted in `fromNodeId -> toNodeId` direction (`oneway=yes|1|true`)
+ * - 'reverse': one-way traversal permitted in `toNodeId -> fromNodeId` direction (`oneway=-1|reverse`)
+ * - 'bidirectional': two-way (`oneway=no|0|false` or default when omitted)
+ * - 'unknown': unusual/conditional OSM value (`oneway=reversible|alternating|<custom>`); preserved verbatim in `rawOnewayTag`
+ */
+export type NormalizedOneWay = 'forward' | 'reverse' | 'bidirectional' | 'unknown';
 
 /**
- * Provenance for a single unmerged constituent way segment inside a simplified graph edge.
+ * Origin of a graph node's identity.
  */
-export interface EdgeSegmentProvenance {
-  /** Original feature ID in ProcessedMapData (e.g. "way/12345-0"). */
-  featureId: string;
-  /** Original OSM way/feature ID prior to part splitting. */
-  sourceFeatureId: string;
-  /** Start arc-length (meters) along the simplified parent edge's polyline. */
-  startArcLength: number;
-  /** End arc-length (meters) along the simplified parent edge's polyline. */
-  endArcLength: number;
-  /** Start vertex index (inclusive) in the parent edge's `points` array. */
-  startVertexIndex: number;
-  /** End vertex index (inclusive) in the parent edge's `points` array. */
-  endVertexIndex: number;
-  /** True if the constituent feature's digitized point order was reversed when merged into this edge. */
-  reversed: boolean;
-  /** Preserved raw OSM tags of this constituent way segment. */
-  osmTags?: RawGeoJsonProperties;
+export type NodeIdOrigin =
+  | 'explicit_osm'         // Grounded in an explicit OSM node ID (`rawOsmNodeId` is defined)
+  | 'coordinate_fallback'  // Synthesized by 0.15 m spatial clustering of coordinate-only vertices
+  | 'boundary_clip';       // Isolated synthetic endpoint created by region bounding-box clipping
+
+/**
+ * Non-exclusive topological roles that a RoadNode may hold simultaneously.
+ * A single RoadNode can be e.g. both `'junction'` and `'level_crossing'`, or `'grade_transition'` and `'attribute_break'`.
+ */
+export type RoadNodeRole =
+  | 'junction'          // Topological intersection (degree >= 3, or degree >= 2 with distinct branches)
+  | 'dead_end'          // Terminal unclipped road endpoint (degree === 1)
+  | 'boundary_clip'     // Synthetic endpoint created by Liang-Barsky bounding-box clipping
+  | 'grade_transition'  // Confirmed portal boundary where at-grade road meets bridge or tunnel
+  | 'attribute_break'   // Degree-2 node retained due to roadClass/width/oneway/layer/culvert change
+  | 'level_crossing'    // Confirmed road/rail level crossing (`railway=level_crossing` or `railway=crossing`)
+  | 'highway_crossing'  // Pedestrian crosswalk node (`highway=crossing`)
+  | 'cross_tier'        // Shared node between 'vehicular' and 'path' road tiers
+  | 'loop_anchor';      // Deterministic anchor node retained on an isolated closed ring (`isClosedLoop`)
+
+/**
+ * Non-exclusive topological roles that a RailwayNode may hold simultaneously.
+ */
+export type RailwayNodeRole =
+  | 'switch'            // Turnout allowing branch divergence (`railway=switch` or verified 1-to-2 throat topology)
+  | 'railway_crossing'  // Non-interconnecting flat rail-over-rail crossing (`railway=railway_crossing`)
+  | 'junction'          // Multi-track node (degree >= 3) where switch/flat-crossing semantics are unresolved
+  | 'dead_end'          // Terminal track end / buffer stop (degree === 1, not boundary-clipped)
+  | 'boundary_clip'     // Synthetic endpoint created by Liang-Barsky bounding-box clipping
+  | 'grade_transition'  // Confirmed portal boundary where at-grade track meets bridge or tunnel
+  | 'attribute_break'   // Degree-2 node retained due to railwayType/gauge/electrified/service change
+  | 'level_crossing'    // Confirmed road/rail or pedestrian/rail crossing on this track
+  | 'loop_anchor';      // Deterministic anchor node retained on an isolated closed track loop
+
+/**
+ * Represents a single attached edge endpoint (half-edge) at a node.
+ * For a closed self-loop edge (`fromNodeId === toNodeId`), two IncidentHalfEdge entries
+ * exist at the anchor node (one with `endpoint: 'start'`, one with `endpoint: 'end'`),
+ * while `incidentEdgeIds` contains the unique edge ID once.
+ */
+export interface IncidentHalfEdge {
+  edgeId: string;
+  endpoint: 'start' | 'end';
+  /** Unit tangent [dx, dz] pointing from the node into the interior of the edge along this half-edge. */
+  inwardTangent: [number, number];
 }
 
 /**
- * Complete OSMnx-style lineage for a graph edge after degree-2 path simplification.
+ * Provenance for a single constituent unchained source part inside a simplified graph edge.
+ */
+export interface EdgeSegmentProvenance {
+  /** Unchained part ID (e.g. "way/100-0"). */
+  partId: string;
+  /** Original OSM feature ID (e.g. "way/100") plus any exact duplicates mapped to it. */
+  sourceFeatureId: string;
+  /** Additional duplicate feature IDs merged into this segment during exact deduplication. */
+  deduplicatedFeatureIds: readonly string[];
+  /** Start arc-length (meters) along the parent simplified edge in `fromNodeId -> toNodeId` order. */
+  startArcLength: number;
+  /** End arc-length (meters) along the parent simplified edge in `fromNodeId -> toNodeId` order. */
+  endArcLength: number;
+  /** Start vertex index (inclusive) in the parent simplified edge's `points` array. */
+  startVertexIndex: number;
+  /** End vertex index (inclusive) in the parent simplified edge's `points` array (`startVertexIndex < endVertexIndex`). */
+  endVertexIndex: number;
+  /** Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailwayPart` at `startVertexIndex`. */
+  sourceStartVertexIndex: number;
+  /** Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailwayPart` at `endVertexIndex`. */
+  sourceEndVertexIndex: number;
+  /**
+   * True if this constituent part's traversal along the parent edge (`fromNodeId -> toNodeId`)
+   * runs opposite to its original digitized point order (`sourceStartVertexIndex > sourceEndVertexIndex`).
+   */
+  reversedRelativeToSource: boolean;
+  /** Original unmodified OSM tags for this constituent way segment. */
+  osmTags: RawGeoJsonProperties;
+}
+
+/**
+ * Complete OSMnx-style lineage for a simplified graph edge.
  */
 export interface EdgeProvenance {
-  /** Primary feature ID (deterministic canonical representative). */
-  primaryFeatureId: string;
-  /** Ordered list of all original ProcessedMapData feature IDs merged into this edge. */
-  mergedFeatureIds: string[];
-  /** Deduplicated list of all raw OSM sourceFeatureIds represented by this edge. */
-  sourceFeatureIds: string[];
-  /** Ordered per-segment provenance intervals covering [0, lengthMeters]. */
-  segments: EdgeSegmentProvenance[];
+  /** Deterministic primary part ID (`segments[0].partId`). */
+  primaryPartId: string;
+  /** Ordered list of unchained part IDs along `fromNodeId -> toNodeId`. */
+  mergedPartIds: readonly string[];
+  /** Deduplicated, canonically sorted list of all raw OSM `sourceFeatureId`s (including exact duplicates). */
+  sourceFeatureIds: readonly string[];
+  /** Contiguous, non-overlapping segment intervals covering `[0, lengthMeters]` in parent edge traversal order. */
+  segments: readonly EdgeSegmentProvenance[];
 }
 
 export interface BaseInfrastructureNode<TRole extends string> {
-  /** Deterministic domain-scoped canonical node ID (e.g., "road_node:0|0|0:osm_5001" or "road_node:0|0|0:pt_120_-45"). */
+  /** Deterministic domain-and-scope canonical node ID (e.g. "road_node:0|0|0:osm_5001" or "road_node:0|0|0:fb_1"). */
   id: string;
   /** Network domain ('road' | 'railway'). */
   network: InfrastructureNetworkKind;
-  /** Explicit raw OSM node ID if known (e.g., "5001"), undefined for coordinate-fallback nodes. */
-  osmNodeId?: string;
+  /** Explicit raw unprefixed OSM node ID if grounded in OSM data (e.g. "5001"); `undefined` for coordinate fallback or boundary clip. */
+  rawOsmNodeId?: string;
+  /** Explicit provenance of how this node's identity was established. */
+  nodeIdOrigin: NodeIdOrigin;
   /** Local East-West world coordinate in meters (+X East). */
   x: number;
   /** Local North-South world coordinate in meters (+Z South). */
@@ -170,49 +327,80 @@ export interface BaseInfrastructureNode<TRole extends string> {
   isBridge: boolean;
   /** True if node belongs to a tunnel/underpass structure scope. */
   isTunnel: boolean;
-  /** True if this node was synthesized by region bounding-box clipping. */
+  /** True if synthesized by region bounding-box clipping (`nodeIdOrigin === 'boundary_clip'`). */
   isBoundaryClipped: boolean;
-  /** Topological degree (count of incident edge endpoints; self-loop contributes +2). */
+  /**
+   * Topological degree: exact count of attached edge endpoints (`incidentHalfEdges.length`).
+   * An ordinary incident edge contributes +1; a closed self-loop edge attaches both endpoints and contributes +2.
+   */
   degree: number;
-  /** Primary topological classification of this node. */
-  role: TRole;
-  /** Deterministically sorted IDs of all edges incident to this node. */
-  incidentEdgeIds: string[];
-  /** Optional point-level OSM tags if an OSM point feature (e.g. railway=switch, railway=level_crossing) matched this node. */
-  osmTags?: RawGeoJsonProperties;
+  /** Primary role selected by deterministic precedence rules for summary inspection. */
+  primaryRole: TRole;
+  /**
+   * Non-exclusive, canonically sorted list of all topological roles held by this node
+   * (e.g. `['junction', 'level_crossing']` or `['attribute_break', 'grade_transition']`).
+   */
+  roles: readonly TRole[];
+  /**
+   * Deduplicated, canonically sorted list of unique incident edge IDs.
+   * A closed self-loop edge appears once in `incidentEdgeIds` and twice in `incidentHalfEdges`.
+   */
+  incidentEdgeIds: readonly string[];
+  /** All attached half-edges (`incidentHalfEdges.length === degree`). */
+  incidentHalfEdges: readonly IncidentHalfEdge[];
+  /** Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matched this node. */
+  pointOsmTags?: RawGeoJsonProperties;
 }
 
 export interface RoadNode extends BaseInfrastructureNode<RoadNodeRole> {
   network: 'road';
-  /** True if incident to both 'vehicular' and 'path' road edges. */
+  /** True if incident to both 'vehicular' and 'path' road edges (`roles.includes('cross_tier')`). */
   isCrossTier: boolean;
+}
+
+export type TurnoutClassificationStatus =
+  | 'confirmed'                    // Unambiguous 1-to-2 throat with identified trunk, main continuation, and diverging branch
+  | 'unresolved_main_vs_diverging' // Valid 1-to-2 throat (`trunkEdgeId` known), but symmetric branches/tags prevent distinguishing main vs. diverging
+  | 'unresolved_throat';           // Degree-3+ geometry or conflicting tags do not form a valid 1-to-2 turnout throat
+
+export interface TurnoutTopologySpec {
+  status: TurnoutClassificationStatus;
+  /** Defined when `status === 'confirmed'` or `'unresolved_main_vs_diverging'`. */
+  trunkEdgeId?: string;
+  /** Defined only when `status === 'confirmed'`. */
+  mainBranchEdgeId?: string;
+  /** Defined only when `status === 'confirmed'`. */
+  divergingBranchEdgeId?: string;
+  /** All incident branch edge IDs at the switch node. */
+  candidateEdgeIds: readonly string[];
 }
 
 export interface RailwayNode extends BaseInfrastructureNode<RailwayNodeRole> {
   network: 'railway';
-  /** For 'switch' nodes: the trunk edge ID entering the switch throat, and the two diverging branch edge IDs. */
-  turnoutTopology?: {
-    trunkEdgeId: string;
-    mainBranchEdgeId: string;
-    divergingBranchEdgeId: string;
-  };
+  /** Populated when `roles.includes('switch')` or `degree === 3`. */
+  turnoutTopology?: TurnoutTopologySpec;
 }
 
 export interface BaseInfrastructureEdge {
-  /** Deterministic edge ID (supports parallel multi-edges via parallelIndex). */
+  /** Deterministic canonical edge ID. */
   id: string;
   /** Network domain ('road' | 'railway'). */
   network: InfrastructureNetworkKind;
-  /** Start topological node ID. */
+  /** Start topological node ID (`points[0]`). */
   fromNodeId: string;
-  /** End topological node ID. */
+  /** End topological node ID (`points[points.length - 1]`). */
   toNodeId: string;
-  /** Parallel multi-edge discriminator (0 for single edge between (fromNodeId, toNodeId), 1+ for parallel ways). */
+  /**
+   * Zero-based parallel multi-edge index among all edges sharing the unordered node pair `{fromNodeId, toNodeId}`
+   * (`0` when unique, `0..k-1` when multiple distinct parallel edges connect the same two nodes).
+   */
   parallelIndex: number;
-  /** Full 2D metric polyline geometry [x, z][] preserving all intermediate shape vertices. */
-  points: [number, number][];
-  /** Per-vertex canonical or raw OSM node IDs aligned 1:1 with `points` (preserved for diagnostics/crossings). */
-  vertexOsmNodeIds: (string | undefined)[];
+  /** Full 2D metric polyline geometry [x, z][] preserving all intermediate curve/shape vertices. */
+  points: readonly [number, number][];
+  /**
+   * Raw unprefixed OSM node IDs aligned 1:1 with `points` (`undefined` where a vertex had no explicit OSM node ID).
+   */
+  vertexRawOsmNodeIds: readonly (string | undefined)[];
   /** Cumulative Euclidean arc-length in meters. */
   lengthMeters: number;
   /** Effective OSM vertical layer. */
@@ -221,17 +409,22 @@ export interface BaseInfrastructureEdge {
   isBridge: boolean;
   /** True if edge is a tunnel structure. */
   isTunnel: boolean;
-  /** True if fromNodeId === toNodeId. */
+  /** True if `fromNodeId === toNodeId`. */
   isClosedLoop: boolean;
-  /** True if the start vertex was created by region bounding-box clipping. */
+  /** True if `points[0]` was synthesized by region bounding-box clipping. */
   clippedAtStart: boolean;
-  /** True if the end vertex was created by region bounding-box clipping. */
+  /** True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box clipping. */
   clippedAtEnd: boolean;
-  /** Unit tangent [dx, dz] pointing away from `fromNodeId` at the start of the edge. */
-  startTangent: [number, number];
-  /** Unit tangent [dx, dz] pointing away from `toNodeId` (into the edge) at the end of the edge. */
-  endTangent: [number, number];
-  /** Full OSMnx-style provenance and constituent segment mapping. */
+  /**
+   * Unit tangent [dx, dz] at `points[0]` pointing INWARD along the edge (`fromNodeId -> points[1]`).
+   */
+  startInwardTangent: [number, number];
+  /**
+   * Unit tangent [dx, dz] at `points[N-1]` pointing INWARD along the edge (`toNodeId -> points[N-2]`).
+   * Note: Forward traversal tangent at `toNodeId` is `[-endInwardTangent[0], -endInwardTangent[1]]`.
+   */
+  endInwardTangent: [number, number];
+  /** Complete per-segment OSM provenance and arc-length mapping. */
   provenance: EdgeProvenance;
 }
 
@@ -241,7 +434,10 @@ export interface RoadEdge extends BaseInfrastructureEdge {
   tier: RoadTier;
   width: number;
   lanes?: number;
-  oneway: OneWayDirection;
+  /** Normalized directionality relative to `fromNodeId -> toNodeId`. */
+  normalizedOneway: NormalizedOneWay;
+  /** Exact raw `oneway` tag value from OSM if present (e.g. "yes", "-1", "reversible"), or `undefined`. */
+  rawOnewayTag?: string;
   name?: string;
   surface?: string;
   isCulvert: boolean;
@@ -255,7 +451,6 @@ export interface RailwayEdge extends BaseInfrastructureEdge {
   electrified?: string;
   service?: string;
   usage?: string;
-  /** True if classified as a siding/yard/spur/crossover secondary branch. */
   isSecondaryBranch: boolean;
   name?: string;
 }
@@ -265,7 +460,7 @@ export interface InfrastructureNetwork<TNode, TEdge> {
   nodes: ReadonlyMap<string, TNode>;
   /** Map from canonical edge ID to edge record. */
   edges: ReadonlyMap<string, TEdge>;
-  /** Map from ProcessedMapData feature ID to the simplified edge ID(s) that contain it. */
+  /** Map from original `sourceFeatureId` (or unchained part ID) to the simplified edge ID(s) containing it. */
   featureToEdgeIds: ReadonlyMap<string, readonly string[]>;
 }
 
@@ -273,7 +468,7 @@ export type RoadNetwork = InfrastructureNetwork<RoadNode, RoadEdge>;
 export type RailwayNetwork = InfrastructureNetwork<RailwayNode, RailwayEdge>;
 
 /**
- * Explicit portal connection between an at-grade edge and a bridge or tunnel edge
+ * Confirmed portal connection between an at-grade edge and a bridge or tunnel edge
  * within the same network domain ('road' or 'railway').
  */
 export interface GradeTransitionRelation {
@@ -282,51 +477,101 @@ export interface GradeTransitionRelation {
   transitionType: 'bridge_approach' | 'tunnel_portal';
   /** Shared world position [x, z] of the portal transition. */
   position: [number, number];
-  /** Explicit OSM node ID if the at-grade and bridge/tunnel endpoints share an OSM node. */
-  osmNodeId?: string;
+  /** Explicit raw OSM node ID if the at-grade and bridge/tunnel endpoints share an OSM node. */
+  rawOsmNodeId?: string;
   atGradeNodeId: string;
   atGradeEdgeId: string;
   atGradeEndpoint: 'start' | 'end';
   gradeSeparatedNodeId: string;
   gradeSeparatedEdgeId: string;
   gradeSeparatedEndpoint: 'start' | 'end';
-  /** Cosine of the tangent alignment angle across the portal (1.0 = collinear). */
-  tangentAlignmentDot: number;
-  /** How the transition was established. */
-  confidence: 'explicit_osm_node' | 'endpoint_snap_aligned';
+  /**
+   * Cosine of the continuous traversal angle across the portal:
+   * `dot(-inwardTangent(atGrade), inwardTangent(gradeSeparated))` where `1.0` = perfectly collinear continuation.
+   */
+  continuousTraversalDot: number;
+  /** Provenance of how the transition was confirmed. */
+  confidence: 'explicit_osm_node' | 'coordinate_fallback_confirmed';
 }
 
 /**
- * Explicit at-grade crossing between a RoadEdge and a RailwayEdge.
+ * Diagnostic record when a potential grade transition is rejected or ambiguous
+ * (never silently promoted to `GradeTransitionRelation`).
+ */
+export interface UnresolvedGradeTransitionCandidate {
+  network: InfrastructureNetworkKind;
+  position: [number, number];
+  gradeSeparatedEdgeId: string;
+  gradeSeparatedEndpoint: 'start' | 'end';
+  candidateAtGradeEdgeIds: readonly string[];
+  distanceMeters: number;
+  continuousTraversalDot?: number;
+  reason:
+    | 'ambiguous_multiple_candidates'
+    | 'misaligned_tangent'
+    | 'non_terminal_endpoint'
+    | 'incompatible_class_or_tier'
+    | 'distinct_explicit_osm_nodes'
+    | 'exceeds_snap_tolerance';
+}
+
+/**
+ * Confirmed non-interconnecting rail-over-rail flat crossing (`railway=railway_crossing`
+ * or two distinct railway tracks crossing at grade without switching capability).
+ */
+export interface RailwayFlatCrossingRelation {
+  id: string;
+  position: [number, number];
+  rawOsmNodeId?: string;
+  trackAEdgeId: string;
+  trackAArcLengthMeters: number;
+  trackBEdgeId: string;
+  trackBArcLengthMeters: number;
+  /** Acute crossing angle in radians (0..pi/2]. */
+  crossingAngleRad: number;
+  confidence: 'explicit_railway_crossing_tag' | 'shared_osm_node_flat_crossing';
+  pointOsmTags?: RawGeoJsonProperties;
+}
+
+/**
+ * Confirmed at-grade crossing between a RoadEdge (vehicular or pedestrian path) and a RailwayEdge.
  */
 export interface LevelCrossingRelation {
   id: string;
-  /** World coordinates [x, z] of the crossing point. */
+  /** Distinguishes vehicular `railway=level_crossing` from pedestrian/path `railway=crossing`. */
+  crossingKind: 'road_rail_level_crossing' | 'pedestrian_rail_crossing';
   position: [number, number];
-  /** Shared explicit OSM node ID if tagged/connected in OSM. */
-  osmNodeId?: string;
+  rawOsmNodeId?: string;
   roadEdgeId: string;
-  /** Road node ID if the crossing occurs at a road graph node, or undefined if interior. */
   roadNodeId?: string;
-  /** Arc-length in meters along `roadEdgeId` from `fromNodeId`. */
   roadArcLengthMeters: number;
   railwayEdgeId: string;
-  /** Railway node ID if the crossing occurs at a railway graph node, or undefined if interior. */
   railwayNodeId?: string;
-  /** Arc-length in meters along `railwayEdgeId` from `fromNodeId`. */
   railwayArcLengthMeters: number;
-  /** Acute intersection angle in radians (0..pi/2] between road and rail tangents. */
+  /** Acute intersection angle in radians (0..pi/2]. */
   crossingAngleRad: number;
-  /** Provenance of crossing detection. */
-  confidence: 'explicit_osm_crossing_tag' | 'shared_osm_node' | 'coincident_at_grade_vertex';
-  /** Point-level OSM tags (e.g., railway=level_crossing, crossing:barrier=yes) if available. */
-  osmTags?: RawGeoJsonProperties;
+  confidence: 'explicit_osm_crossing_tag' | 'shared_explicit_osm_node';
+  pointOsmTags?: RawGeoJsonProperties;
 }
 
 /**
- * Planimetric crossing where two edges (road/road, rail/rail, or road/rail) cross in 2D (X, Z)
- * at different vertical scopes (bridge over at-grade, tunnel under at-grade, or distinct layers)
- * WITHOUT physical connectivity.
+ * Diagnostic record for unconfirmed/candidate crossings inferred only from coordinate proximity
+ * or 2D geometric segment intersection without shared OSM node identity or crossing tags.
+ */
+export interface UnresolvedCrossingCandidate {
+  kind: 'road_rail' | 'pedestrian_rail' | 'rail_rail' | 'road_road';
+  position: [number, number];
+  edgeAId: string;
+  edgeBId: string;
+  reason:
+    | 'coincident_vertex_without_osm_id'
+    | 'geometric_intersection_without_shared_node'
+    | 'missing_railway_crossing_tag_at_degree_4_node';
+}
+
+/**
+ * Planimetric 2D crossing where two edges cross at different vertical scopes
+ * (bridge over at-grade, tunnel under at-grade, or distinct layers) WITHOUT physical connectivity.
  */
 export interface GradeSeparatedCrossingRelation {
   id: string;
@@ -349,15 +594,20 @@ export interface TopologyDiagnostics {
   roadParallelEdgePairCount: number;
   railwayNodeCount: number;
   railwayEdgeCount: number;
-  railwaySwitchCount: number;
-  railwayCrossoverCount: number;
+  railwayConfirmedSwitchCount: number;
+  railwayUnresolvedSwitchCount: number;
+  railwayFlatCrossingCount: number;
+  railwayUnresolvedJunctionCount: number;
   railwaySimplifiedDegree2Count: number;
   gradeTransitionCount: number;
+  unresolvedGradeTransitionCount: number;
   levelCrossingCount: number;
+  pedestrianRailCrossingCount: number;
+  unresolvedCrossingCount: number;
   gradeSeparatedCrossingCount: number;
   boundaryClippedNodeCount: number;
-  /** Count of geometric 2D road/rail or same-layer crossings that lacked a shared node and were NOT connected. */
-  unconnectedGeometricCrossingCount: number;
+  unresolvedGradeTransitions: readonly UnresolvedGradeTransitionCandidate[];
+  unresolvedCrossings: readonly UnresolvedCrossingCandidate[];
 }
 
 /**
@@ -368,155 +618,184 @@ export interface InfrastructureGraph {
   roads: RoadNetwork;
   railways: RailwayNetwork;
   gradeTransitions: readonly GradeTransitionRelation[];
+  railwayFlatCrossings: readonly RailwayFlatCrossingRelation[];
   levelCrossings: readonly LevelCrossingRelation[];
   gradeSeparatedCrossings: readonly GradeSeparatedCrossingRelation[];
   diagnostics: TopologyDiagnostics;
 }
 ```
 
-#### Optional Metadata Extension on `ProcessedMapData` (`src/types/MapFeature.ts`)
-To resolve **Gap G6** (discarded point-level OSM crossing and switch nodes), `ProcessedMapData` will gain an optional array populated during GeoJSON ingestion in Stage C/D:
+---
 
-```typescript
-export interface InfrastructurePointMetadata {
-  id: string;
-  osmNodeId?: string;
-  point: [number, number];
-  kind: 'railway_level_crossing' | 'railway_crossing' | 'railway_switch' | 'highway_crossing';
-  osmTags: RawGeoJsonProperties;
-}
-```
+### 4. Graph Construction, Semantics, and Simplification Specification
+
+#### 4.1 Determinism Across Input Reordering & Node Identity Rules
+1. **Canonical Input Sorting**:
+   - Before registering vertices in `TopologicalNodeIndex` or creating edges, `roadParts` and `railwayParts` are sorted deterministically by:
+     1. Vertical scope key `(layer, isBridge ? 1 : 0, isTunnel ? 1 : 0)`,
+     2. `sourceFeatureId` (standard UTF-16 code-unit comparison),
+     3. `partIndex` (ascending integer),
+     4. Initial vertex coordinates `(points[0][0], points[0][1], points[1][0], points[1][1])`.
+   - **Guarantee**: Reordering the input `GeoJSON.features` array produces the exact same canonical node IDs, fallback node centroids, simplified edge orientations, `parallelIndex` assignments, and provenance arrays.
+2. **Three-Part Node Identity Separation**:
+   - **Explicit OSM Node (`nodeIdOrigin: 'explicit_osm'`)**: Has a defined `rawOsmNodeId` (e.g. `"5001"`) and canonical ID `${network}_node:${scope}:osm_${rawOsmNodeId}`. Two vertices with distinct `rawOsmNodeId` values (`"5001" !== "5002"`) **never** merge, even at `0.00 m` distance.
+   - **Coordinate Fallback Node (`nodeIdOrigin: 'coordinate_fallback'`)**: Created when `rawOsmNodeId` is `undefined` and no existing node in the same domain and vertical scope lies within `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15` (`15 cm`). Assigned canonical ID `${network}_node:${scope}:fb_${seq}` (deterministic because inputs are canonically sorted prior to registration). If an explicit OSM node in the same domain and vertical scope lies within `0.15 m`, the coordinate-only vertex resolves to that explicit node's canonical ID (`nodeIdOrigin: 'explicit_osm'`). If multiple distinct explicit OSM nodes lie within `0.15 m` of a coordinate-only vertex, it snaps to the strictly closest one, breaking exact distance ties by lexicographically smallest `rawOsmNodeId`.
+   - **Boundary-Clipped Node (`nodeIdOrigin: 'boundary_clip'`)**: Any endpoint where `clippedAtStart` or `clippedAtEnd` is `true` and `rawOsmNodeId` is `undefined` receives a unique, non-snapping node ID `${network}_node:${scope}:clip_${partId}_${endpoint}`. It is never merged with any other way's boundary-clipped or fallback node.
+
+#### 4.2 Interior Node Splitting, Self-Loops, and Multi-Edge Adjacency
+1. **True Network Split Nodes vs. Ordinary Polyline Shape Vertices**:
+   - Within each domain (`road` vs. `railway`) and vertical scope, a vertex is a **topological split node** if and only if:
+     - It is the start (`0`) or end (`N - 1`) vertex of any part, **or**
+     - Its total vertex occurrence count across all parts in the domain/vertical scope—counting multiple occurrences within the **same** part separately—is $\ge 2$, **or**
+     - It matches an explicit cross-infrastructure node (`railway=level_crossing`, `railway=crossing`, `railway=railway_crossing`, `railway=switch`, or `highway=crossing`).
+   - All other interior vertices (occurrence count $=== 1$ and not a way endpoint or tagged infrastructure node) remain **ordinary polyline shape vertices** inside their edge's `points` array.
+2. **P-Loops and Isolated Closed Loops**:
+   - **P-Loop**: Because repeated vertices within the same way part are counted per occurrence (`occurrenceCount >= 2` rather than deduplicated via `new Set(keys)`), a way whose endpoint meets one of its own interior vertices splits at that shared vertex into a stem edge (`u -> v`) and a closed-loop edge (`v -> v`, `isClosedLoop: true`), giving node `v` `degree === 3`.
+   - **Isolated Closed Ring**: If a closed ring (`points[0] === points[N - 1]`) has no incident external branches (all vertices have degree 2), a single deterministic anchor vertex (the vertex with the lexicographically smallest `rawOsmNodeId`, or minimum `(x, z)` if untagged) is retained with role `'loop_anchor'` so the closed loop is preserved as a single `isClosedLoop: true` edge (`degree === 2` at the anchor node) rather than discarded.
+3. **Multi-Edge Adjacency & Self-Loop Degree Invariant**:
+   - Every `RoadNode` and `RailwayNode` maintains both:
+     - `incidentHalfEdges: readonly IncidentHalfEdge[]` — contains one entry per attached edge endpoint (`'start'` or `'end'`). A closed self-loop edge (`fromNodeId === toNodeId`) contributes **two** entries to `incidentHalfEdges` (`endpoint: 'start'` and `endpoint: 'end'`) and therefore contributes **`+2` to `node.degree`** (`node.degree === node.incidentHalfEdges.length`).
+     - `incidentEdgeIds: readonly string[]` — deduplicated, canonically sorted unique edge IDs. A self-loop edge ID appears **once** in `incidentEdgeIds`.
+
+#### 4.3 OSMnx-Style Degree-2 Simplification, One-Way Preservation, and Provenance
+1. **When a Degree-2 Node Is Simplified vs. Retained**:
+   - A node $v$ with `degree === 2` incident to two distinct edges $e_1 \neq e_2$ is contracted into a single simplified edge if and only if:
+     - $v$ does **not** hold any of the roles `'grade_transition'`, `'level_crossing'`, `'highway_crossing'`, `'switch'`, `'railway_crossing'`, `'boundary_clip'`, or `'loop_anchor'`.
+     - $e_1$ and $e_2$ share identical vertical scope (`layer`, `isBridge`, `isTunnel`).
+     - **For Roads**: $e_1$ and $e_2$ have identical `(roadClass, tier, Math.round(width * 10), isCulvert, nameKey, lanes)` **and** compatible one-way semantics:
+       - If both edges are `'bidirectional'` and have identical `rawOnewayTag` (both `undefined` or both `'no'`), they may be concatenated (reversing one part's vertex order if they meet start-to-start or end-to-end, while setting `reversedRelativeToSource: true` on its `EdgeSegmentProvenance`).
+       - If either edge has `normalizedOneway !== 'bidirectional'`, they may be merged **only** if both have the exact same `rawOnewayTag` and `normalizedOneway`, **and** their directed flow across $v$ is continuous without reversing either edge (`e1.toNodeId === v && e2.fromNodeId === v`). Otherwise $v$ is retained and assigned role `'attribute_break'`.
+     - **For Railways**: $e_1$ and $e_2$ have identical `(railwayType, Math.round(width * 10), gauge, electrified, service, usage, isSecondaryBranch)`.
+2. **Unambiguous Segment Provenance After Reversal and Simplification**:
+   - Each simplified edge orientates its `fromNodeId -> toNodeId` direction deterministically (preserving directed flow for one-way edges; for bidirectional edges, orienting from the lexicographically smaller endpoint node ID to the larger endpoint node ID, or by initial tangent angle for self-loops).
+   - Every `EdgeSegmentProvenance` entry in `edge.provenance.segments` records:
+     - `startVertexIndex`, `endVertexIndex`, `startArcLength`, `endArcLength` in the **parent simplified edge's** `fromNodeId -> toNodeId` coordinate order ($0 = \text{segments}[0].\text{startArcLength} < \dots < \text{segments}[k-1].\text{endArcLength} = \text{edge.lengthMeters}$).
+     - `sourceStartVertexIndex`, `sourceEndVertexIndex` in the **original `UnchainedRoadPart` / `UnchainedRailwayPart`**, along with `reversedRelativeToSource: boolean` (`true` iff `sourceStartVertexIndex > sourceEndVertexIndex`).
+3. **Parallel Multi-Edges (`parallelIndex`)**:
+   - Distinct simplified edges connecting the same unordered node pair `{u, v}` are never collapsed together. They are sorted deterministically by `(min(sourceFeatureIds), startInwardTangentAngle, lengthMeters, primaryPartId)` and assigned `parallelIndex = 0, 1, ..., k - 1`.
 
 ---
 
-### 3. Graph Construction and Simplification Specification
+### 5. Railway Crossing and Switch Semantics (`Stage C` & `Stage D`)
 
-#### 3.1 Ingestion & Explicit OSM Node ID Preservation (Addressing Gaps G1 & G6)
-1. **Explicit Per-Vertex OSM Node IDs**:
-   - When `props.nodes`, `props.nodeIds`, or `props._nodeIds` are present on a GeoJSON `LineString` (or per-part arrays on a `MultiLineString`), each vertex $i$ is associated with its explicit stringified OSM node ID `osmNodeId`.
-   - For live Overpass queries in `server.ts`, Stage B will preserve way `nodes` arrays on GeoJSON feature properties (e.g., via a lightweight pre/post enrichment pass on `overpassJson.elements` before/after `osmtogeojson(overpassJson)`) so real OSM extracts carry authentic per-vertex OSM node IDs alongside their metric coordinates.
-2. **Coordinate Fallback (`0.15 m`)**:
-   - When `osmNodeId` is absent (`undefined`), vertex snapping falls back to `TopologicalNodeIndex` with `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15` (`15 cm`).
-   - **Strict Non-Merging of Distinct Explicit IDs**: Two vertices with distinct explicit OSM node IDs (`osm_A !== osm_B`) are **never** merged into the same node, even if their 2D coordinates are identical (`0.00 m` apart).
-   - **Fallback-to-Explicit Promotion**: A coordinate-only vertex within `0.15 m` of an explicit OSM node in the same domain and vertical scope resolves deterministically to that explicit node's canonical ID regardless of feature iteration order.
+M2.3 explicitly distinguishes all five OSM crossing and switch concepts without implementing train routing or switch simulation:
 
-#### 3.2 Deterministic Pre-Sorting and Stable Canonical IDs
-- To eliminate input-order sensitivity (`Gap G4`), input `RoadFeature[]` and `RailwayFeature[]` arrays are sorted canonically by `(layer, isBridge, isTunnel, id)` before indexing nodes or constructing raw edges.
-- **Canonical Node ID Format**:
-  - Explicit OSM node: `${network}_node:${layer}|${isBridge ? 1 : 0}|${isTunnel ? 1 : 0}:osm_${osmNodeId}`
-  - Coordinate fallback node: `${network}_node:${layer}|${isBridge ? 1 : 0}|${isTunnel ? 1 : 0}:pt_${Math.round(x * 100)}_${Math.round(z * 100)}_${seq}`
-- **Canonical Edge ID Format**:
-  - `${network}_edge:${primaryFeatureId}:seg_${segmentIdx}:p_${parallelIndex}`
+| OSM Tag / Concept | Network Scope | Meaning & Graph Representation in M2.3 |
+| :--- | :--- | :--- |
+| **`railway=switch`** | `RailwayNetwork` | Physical railway turnout allowing a branch relationship (`1-to-2` throat topology). Represented as a `RailwayNode` with role `'switch'` and a `TurnoutTopologySpec`. |
+| **`railway=railway_crossing`** | `RailwayNetwork` + `railwayFlatCrossings` | Rail-over-rail flat diamond crossing **without** switching capability (`2-to-2` non-interconnecting tracks). Does **not** create a switch or interchangeable branch junction. |
+| **`railway=level_crossing`** | `RoadNetwork` $\times$ `RailwayNetwork` (`levelCrossings`) | At-grade **vehicular road** crossing a railway (`crossingKind: 'road_rail_level_crossing'`). Road and railway remain in their separate networks; linked via `LevelCrossingRelation`. |
+| **`railway=crossing`** | `RoadNetwork` $\times$ `RailwayNetwork` (`levelCrossings`) | At-grade **pedestrian/path/cycleway** crossing a railway (`crossingKind: 'pedestrian_rail_crossing'`). Linked via `LevelCrossingRelation`. |
+| **`highway=crossing`** | `RoadNetwork` | Pedestrian crosswalk node on a road (`RoadNode` role `'highway_crossing'` with preserved `pointOsmTags`, e.g. `crossing=zebra`, `crossing:markings=*`). |
 
-#### 3.3 Boundary-Clipped Endpoint Isolation (Addressing Gap G7)
-- When `clipPolylineToBox` clips a polyline against `[-clipExtent, +clipExtent]`, any vertex synthesized by a Liang-Barsky boundary cut is marked as a boundary-clipped endpoint (`clippedAtStart` / `clippedAtEnd`).
-- Boundary-clipped endpoints without an explicit `osmNodeId` are assigned isolated `role: 'boundary_clip'` nodes and **excluded from `0.15 m` coordinate fallback snapping with other ways**. This guarantees that two converging roads or tracks cut near the same bounding-box edge are never falsely merged into a synthetic boundary junction.
+#### 5.1 Representing Non-Interconnecting Railway Crossings (`railway=railway_crossing`)
+A degree-4 railway node must **never** automatically be treated as an interchangeable junction or double-slip switch:
+1. **Shared Interior Vertex on Two Crossing Railway Ways**:
+   - When two railway ways share a common interior OSM vertex that is either tagged `railway=railway_crossing` or consists of two collinear through-tracks crossing at an angle ($|\vec{t}_A \cdot \vec{t}_B| < \cos(10^\circ)$) without a `railway=switch` (`railway:switch=double_slip | single_slip`) tag:
+   - The two tracks are **not** welded into an interchangeable 4-branch junction node. Each track remains continuous across its own through-path (receiving its own track-scoped node or remaining unsplit if degree-2 compatible along its own track), and a **`RailwayFlatCrossingRelation`** is emitted recording `rawOsmNodeId`, `position`, `trackAEdgeId`, `trackAArcLengthMeters`, `trackBEdgeId`, `trackBArcLengthMeters`, and `crossingAngleRad`.
+2. **Four Separate Railway Way Endpoints Meeting at One Node**:
+   - If 4 separate railway way parts terminate at a shared OSM node:
+     - If tagged `railway=railway_crossing`, opposite collinear pairs `(A1, A2)` and `(B1, B2)` ($\vec{t}_{\text{inward}, 1} \cdot \vec{t}_{\text{inward}, 2} \le -\cos(15^\circ)$) are paired along their respective continuous tracks, the node is assigned role `'railway_crossing'` (not `'switch'`), and a `RailwayFlatCrossingRelation` is recorded.
+     - If untagged or tagged with complex slip-switch tags where branch interchange cannot be disambiguated from a flat crossing, the node is retained in `RailwayNetwork` with `primaryRole: 'junction'` (`roles: ['junction']`) and counted in `diagnostics.railwayUnresolvedJunctionCount` + `diagnostics.unresolvedCrossings` (`reason: 'missing_railway_crossing_tag_at_degree_4_node'`).
 
-#### 3.4 Interior Node Splitting & Self-Loop / P-Loop Handling (Addressing Gap G3)
-1. **True Network Nodes vs. Ordinary Polyline Shape Vertices**:
-   - Every way vertex is registered in the domain's `TopologicalNodeIndex`.
-   - A vertex is a **true topological split node** if and only if:
-     - It is the start or end vertex of any way, **or**
-     - Its total vertex occurrence count across all ways in the domain/vertical scope (counting multiple occurrences within the **same** way separately, fixing the `new Set(keys)` P-loop bug in `GeometryBuilder.ts` line 946) is $\ge 2$, **or**
-     - It coincides with an explicit cross-modal level crossing or point switch node.
-   - All other interior vertices (occurrence count $=== 1$ and not a way endpoint or crossing) remain **ordinary polyline shape vertices** embedded inside the edge's `points` array.
-2. **Splitting at Shared Interior Nodes**:
-   - Any way containing a true topological split node at interior vertex index $0 < i < N-1$ is split at index $i$ into contiguous sub-edges $[0 \dots i]$ and $[i \dots N-1]$, preserving sub-segment arc-length provenance.
-3. **Closed Loops and P-Loops**:
-   - **P-Loop** (endpoint meets an interior vertex of the same way): Because vertex occurrences are counted per vertex index rather than per unique set per way, the shared interior vertex has occurrence count $\ge 2$, splitting the P-loop into a stem edge and a closed-loop ring edge at a degree-3 junction node.
-   - **Pure Closed Ring** (e.g., an isolated roundabout or loop track with `points[0] === points[N-1]` and no incident branches): If it has at least one junction with an external road, it splits at the external junction node(s). If it is completely isolated (all vertices have degree 2), a single deterministic anchor vertex (minimum lexicographical `osmNodeId` or minimum `(x, z)`) is retained with `role: 'junction'` so the closed ring remains a valid edge (`isClosedLoop: true`) rather than evaporating during degree-2 simplification.
-
-#### 3.5 OSMnx-Style Non-Interstitial Degree-2 Simplification (Addressing Gap G4)
-Instead of chaining roads *before* graph construction (`chainContiguousRoads` in `LocalGeoJsonProvider.ts`), raw edges are constructed first from unchained ways, split at interior junctions, and then simplified via **OSMnx-style degree-2 path simplification**:
-- A node $v$ with topological degree $=== 2$ (incident to two distinct edges $e_1, e_2$) is contracted into a single simplified edge **if and only if** all compatibility invariants hold:
-  1. $v$ is not a `grade_transition`, `level_crossing`, `switch`, or `boundary_clip` node.
-  2. $e_1$ and $e_2$ belong to the same vertical scope (`layer`, `isBridge`, `isTunnel`).
-  3. **For Roads**: $e_1$ and $e_2$ have identical `(roadClass, tier, Math.round(width * 10), isCulvert, nameKey)` **and** compatible `oneway` directionality:
-     - If either edge has `oneway !== 'no'`, their directed traversal across $v$ must be continuous (`e1.toNodeId === v && e2.fromNodeId === v` for `oneway === 'yes'`). Two opposing one-way edges (`-> v <-` or `<- v ->`) or a `oneway=yes` meeting `oneway=no` are **never** merged (`v` is retained with `role: 'attribute_break'`).
-  4. **For Railways**: $e_1$ and $e_2$ have identical `(railwayType, Math.round(width * 10), gauge, electrified, service, isSecondaryBranch)`.
-- When contracted, the simplified edge concatenates the full `points` and `vertexOsmNodeIds` arrays and merges their `EdgeSegmentProvenance[]` lists in exact traversal order, preserving per-segment `osmTags` (`lanes`, `surface`, etc.) and `reversed` flags.
-
-#### 3.6 Parallel Edges Between the Same Node Pair (MultiGraph Support)
-- Following OSMnx's `MultiDiGraph` / `MultiGraph` model, two or more distinct edges connecting the exact same `(fromNodeId, toNodeId)` pair (e.g., a Crescent loop joining a main street at two junctions, or a railway passing loop parallel to a main track between two switches) are **both preserved** as distinct `InfrastructureEdge` records with `parallelIndex: 0`, `parallelIndex: 1`, etc.
-- Simplification never collapses parallel edges into a single edge and never drops a degree-2 path if collapsing it would destroy distinct geometry; in fact, under OSMnx simplification, each branch between the two degree-3 junction nodes simplifies independently into its own curved `InfrastructureEdge` with distinct `parallelIndex` and full intermediate polyline geometry.
-
-#### 3.7 Grade Transitions and Cross-Modal Relations (Addressing Gap G5)
-1. **Grade Transitions (`GradeTransitionRelation`)**:
-   - Built per network (`road` or `railway`) at endpoints where an at-grade edge (`!isBridge && !isTunnel`) meets a grade-separated edge (`isBridge || isTunnel`).
-   - **Primary Match**: Shared explicit `osmNodeId` between the at-grade endpoint and the bridge/tunnel endpoint.
-   - **Fallback Match**: Endpoint Euclidean distance $\le 0.15\text{ m}$ (or $\le 0.65\text{ m}$ only when both endpoints are terminal degree-1 endpoints in their respective scopes **and** their tangent vectors align with $|\text{dot}| \ge 0.707$, i.e. $\le 45^\circ$, **and** their `roadClass`/`tier` or `railwayType` are compatible). This eliminates false grade transitions triggered by perpendicular cross-streets or footpaths passing near bridge abutments.
-2. **Road/Rail Level Crossings (`LevelCrossingRelation`)**:
-   - A `LevelCrossingRelation` is created **only** when an at-grade `RoadEdge` and an at-grade `RailwayEdge` on the same `layer` either:
-     - Share an explicit OSM node ID (`osmNodeId`) at a vertex, **or**
-     - Intersect at a point matched within `0.50 m` of an ingested OSM point feature tagged `railway=level_crossing` or `railway=crossing`, **or**
-     - Share a coincident vertex (`<= 0.15 m`) when neither way has explicit OSM node IDs.
-   - Pure 2D segment crossings without a shared vertex or explicit OSM crossing node are recorded as `unconnectedGeometricCrossingCount` (or `GradeSeparatedCrossingRelation` if on different layers/structures) and **never** create false topological connectivity.
+#### 5.2 Conservative Turnout (`railway=switch`) Trunk / Main / Diverging Inference
+At a degree-3 `RailwayNode` (with half-edges $h_0, h_1, h_2$ and inward unit tangents $\vec{t}_0, \vec{t}_1, \vec{t}_2$):
+1. **Throat Verification (`1-to-2` Split)**:
+   - A degree-3 node forms a valid `1-to-2` turnout throat if and only if exactly one half-edge $h_{\text{trunk}}$ opposes both other half-edges $h_a, h_b$ ($\vec{t}_{\text{trunk}} \cdot \vec{t}_a \le -\cos(45^\circ) \approx -0.707$ and $\vec{t}_{\text{trunk}} \cdot \vec{t}_b \le -0.707$), while $h_a$ and $h_b$ point into the same forward hemisphere ($\vec{t}_a \cdot \vec{t}_b \ge \cos(60^\circ) = 0.5$).
+   - If this geometric throat invariant fails, `turnoutTopology` is set to `{ status: 'unresolved_throat', candidateEdgeIds }` and `diagnostics.railwayUnresolvedSwitchCount` is incremented.
+2. **Main vs. Diverging Branch Disambiguation**:
+   - Given a verified `trunkEdgeId`, let $\delta_a = \arccos(\text{clamp}(-\vec{t}_{\text{trunk}} \cdot \vec{t}_a, -1, 1))$ and $\delta_b = \arccos(\text{clamp}(-\vec{t}_{\text{trunk}} \cdot \vec{t}_b, -1, 1))$ be the deflection angles of branches $a$ and $b$ from the straight trunk continuation:
+     - If one branch is a mainline (`!isSecondaryBranch`) and the other is a secondary branch (`isSecondaryBranch`, e.g. `service=siding|yard|spur|crossover`), and the mainline branch deflection does not exceed the secondary branch deflection by more than $5^\circ$, the mainline is `mainBranchEdgeId` and the secondary branch is `divergingBranchEdgeId` (`status: 'confirmed'`).
+     - Otherwise, if $|\delta_a - \delta_b| \ge 3^\circ$ ($0.052\text{ rad}$), the straighter branch ($\min(\delta_a, \delta_b)$) is `mainBranchEdgeId` and the more deflected branch is `divergingBranchEdgeId` (`status: 'confirmed'`).
+     - If both branches have identical secondary/main rank and nearly symmetric deflection ($|\delta_a - \delta_b| < 3^\circ$, a symmetric Y-switch without distinguishing tags), `turnoutTopology` is set to `{ status: 'unresolved_main_vs_diverging', trunkEdgeId, candidateEdgeIds }` and `diagnostics.railwayUnresolvedSwitchCount` is incremented.
 
 ---
 
-### 4. Renderer Integration Boundary (`ProcessedMapData -> InfrastructureGraph -> GeometryBuilder`)
+### 6. Tightened Grade-Transition and Level-Crossing Inference (`Stage D`)
 
-1. **Where the Graph is Constructed**:
-   - `buildInfrastructureGraph(mapData: ProcessedMapData): InfrastructureGraph` is a pure, deterministic domain function in `src/world/infrastructure/topology/InfrastructureGraph.ts`.
-   - `ProcessedMapData` in `src/types/MapFeature.ts` may optionally cache `infrastructureGraph?: InfrastructureGraph` (computed at the end of `LocalGeoJsonProvider.parseGeoJson()` or lazily on first access in `GeometryBuilder`), while keeping `buildInfrastructureGraph` directly callable in unit tests on synthetic `ProcessedMapData` fixtures.
-2. **What `GeometryBuilder` and `RailwayGeometryBuilder` Consume vs. Own**:
-   - **Graph Owns (Topological Truth)**:
-     - Which roads/tracks are connected at which junction/switch nodes (`RoadNode`, `RailwayNode`).
-     - Simplified edge polylines (`RoadEdge.points`, `RailwayEdge.points`) already split at all interior junctions and P-loops.
-     - Explicit portal pairings (`GradeTransitionRelation`) between at-grade roads/tracks and bridges/tunnels.
-     - Validated railway switch throat/branch topology (`RailwayNode.turnoutTopology`) and level crossings (`LevelCrossingRelation`).
-   - **Renderers Own (3D Metric & Visual Synthesis)**:
-     - `GeometryBuilder`: 2D offset ribbon generation, boundary-derived junction polygon synthesis (`ADR-0002` portal trimming and miter clamping at `RoadNode`s), carriageway-vs-path 2D Boolean clipping, `ElevationPolicy` Y-coordinates, and 3D bridge/tunnel substructure meshes.
-     - `RailwayGeometryBuilder`: 3D ballast, instanced sleeper placement/clipping (`HostTrackSpatialIndex`), extruded steel rails, close/far UV-ribbon LOD chunks (`ADR-0008`), and turnout bearer placement.
-3. **Incremental Stage B–E Migration Without Regressing 92 Existing Tests**:
-   - **Stage B (`RoadNetworkBuilder`)**: Build and unit-test `RoadNetwork` in isolation against synthetic and real fixtures. In `LocalGeoJsonProvider.ts`, retain `mapData.roads` compatibility so existing `GeometryBuilder` tests continue passing unchanged until Stage E.
-   - **Stage C (`RailwayNetworkBuilder`)**: Build and unit-test `RailwayNetwork` (including turnout `1-to-2` switch role and crossover classification) in isolation without altering `RailwayGeometryBuilder` mesh output.
-   - **Stage D (`CrossModalAnalyzer`)**: Build and unit-test `GradeTransitionRelation`, `LevelCrossingRelation`, and `GradeSeparatedCrossingRelation` (plus point crossing/switch metadata ingestion in `FeatureCatalogue.ts` / `LocalGeoJsonProvider.ts`).
-   - **Stage E (`Renderer Integration`)**: Wire `GeometryBuilder` Stage 6 road junction trimming and bridge/tunnel portal detection (and `RailwayTopology` phase/turnout helpers where beneficial) to consume `InfrastructureGraph`, removing the redundant inline `splitRoadsAtSharedInteriorNodes` and raw `0.80 m` distance scans while verifying that all 92 existing tests + all new M2.3 topology tests pass with zero coplanar overlap or portal regressions.
+#### 6.1 Grade-Transition Matching (`GradeTransitionRelation` vs. `UnresolvedGradeTransitionCandidate`)
+Grade transitions connect an at-grade edge endpoint (`!isBridge && !isTunnel`) and a bridge or tunnel edge endpoint (`isBridge || isTunnel`) within the same network domain (`road` or `railway`).
+
+1. **Explicit Directed Tangent Definition**:
+   - For any edge endpoint $p \in \{\text{'start'}, \text{'end'}\}$, let $\vec{t}_{\text{inward}}(e, p)$ be the unit tangent pointing from the endpoint **into the interior of edge $e$** (`startInwardTangent` for `'start'`, `endInwardTangent` for `'end'`).
+   - Across a valid portal between an at-grade edge $(e_{\text{ag}}, p_{\text{ag}})$ and a grade-separated structure edge $(e_{\text{gs}}, p_{\text{gs}})$, continuous travel exits one edge and enters the other, so their inward tangents must point in **opposite** directions. Define:
+     $$\text{continuousTraversalDot} = (-\vec{t}_{\text{inward}}(e_{\text{ag}}, p_{\text{ag}})) \cdot \vec{t}_{\text{inward}}(e_{\text{gs}}, p_{\text{gs}}) = -(\vec{t}_{\text{inward}}(e_{\text{ag}}, p_{\text{ag}}) \cdot \vec{t}_{\text{inward}}(e_{\text{gs}}, p_{\text{gs}}))$$
+   - A collinear continuation has $\text{continuousTraversalDot} \approx +1.0$, whereas a parallel loopback / adjacent U-turn road entering from the same side has $\text{continuousTraversalDot} \approx -1.0$ and is **rejected** (unlike an unsigned $|\text{dot}|$ check).
+2. **Tier 1 — Explicit Shared OSM Node (`confidence: 'explicit_osm_node'`)**:
+   - Both $(e_{\text{ag}}, p_{\text{ag}})$ and $(e_{\text{gs}}, p_{\text{gs}})$ have the exact same defined `rawOsmNodeId`, compatible domain/tier (`RoadTier` for roads; `RailwayType` for railways), and $\text{continuousTraversalDot} \ge \cos(60^\circ) = 0.5$.
+   - If multiple at-grade branches share that explicit OSM node (e.g., an intersection directly at the foot of a bridge), the at-grade edge with the maximum $\text{continuousTraversalDot} \ge 0.5$ is linked, provided the best match exceeds any runner-up by at least $0.10$; otherwise it is recorded as `UnresolvedGradeTransitionCandidate` (`reason: 'ambiguous_multiple_candidates'`).
+3. **Tier 2 — Conservative `0.15 m` Coordinate Fallback (`confidence: 'coordinate_fallback_confirmed'`)**:
+   - Considered **only** when at least one of the two endpoints lacks a `rawOsmNodeId` (if both have distinct `rawOsmNodeId`s, they are immediately rejected with `reason: 'distinct_explicit_osm_nodes'`).
+   - Uses only the existing `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15` (`15 cm`) threshold—no `0.65 m` or `0.80 m` automatic connection radius is permitted.
+   - All of the following guards must hold simultaneously:
+     1. Euclidean distance $d \le 0.15\text{ m}$.
+     2. Both endpoints are unclipped **terminal (`degree === 1`)** nodes within their respective scopes (`!isBoundaryClipped`).
+     3. Compatible domain and tier/class (`e_ag.tier === e_gs.tier` for roads).
+     4. Directed tangent alignment $\text{continuousTraversalDot} \ge \cos(30^\circ) \approx 0.866$.
+     5. **Uniqueness (No Arbitrary Tie-Breaking)**: Exactly **one** candidate endpoint satisfies rules (1)–(4) within `0.15 m`. If $\ge 2$ candidates exist within `0.15 m`, none is connected and an `UnresolvedGradeTransitionCandidate` (`reason: 'ambiguous_multiple_candidates'`) is emitted.
+   - Any unshared endpoint pair with $0.15\text{ m} < d \le 0.80\text{ m}$ (the legacy renderer scan radius) is never connected; it is logged as an `UnresolvedGradeTransitionCandidate` (`reason: 'exceeds_snap_tolerance'`) for diagnostic visibility.
+
+#### 6.2 Confirmed vs. Candidate Road/Rail Crossings
+1. **Confirmed `LevelCrossingRelation`**:
+   - Created **only** when an at-grade `RoadEdge` and an at-grade `RailwayEdge` on the same `layer` share:
+     - The same explicit `rawOsmNodeId` at a vertex (`confidence: 'shared_explicit_osm_node'`, upgraded to `'explicit_osm_crossing_tag'` if an ingested `railway=level_crossing` or `railway=crossing` point feature also matches that `rawOsmNodeId`), **or**
+     - An ingested `railway=level_crossing` or `railway=crossing` point feature whose `rawOsmNodeId` matches a vertex on one way and whose position lies within `0.15 m` of the other way (`confidence: 'explicit_osm_crossing_tag'`).
+   - Classified as `crossingKind: 'pedestrian_rail_crossing'` when `roadEdge.tier === 'path'` or the point tag is `railway=crossing`, and `'road_rail_level_crossing'` when `roadEdge.tier === 'vehicular'` or tagged `railway=level_crossing`.
+2. **Unconfirmed `UnresolvedCrossingCandidate`**:
+   - If an at-grade road and at-grade railway on the same `layer` intersect geometrically in 2D $(X, Z)$ or share a `0.15 m` coordinate-only vertex **without** a shared `rawOsmNodeId` or explicit OSM crossing point feature, they do **not** produce a `LevelCrossingRelation`. Instead, an `UnresolvedCrossingCandidate` is recorded in `diagnostics.unresolvedCrossings`.
+
+---
+
+### 7. Renderer Integration Boundary (`Stage E`)
+
+1. **Stages B–D Isolation**:
+   - Stages B, C, and D construct and unit-test `InfrastructureGraph` from `ProcessedMapData.topologySource` without altering `GeometryBuilder.ts`, `RailwayGeometryBuilder.ts`, or `mapData.roads`.
+2. **Stage E Renderer Migration**:
+   - In Stage E, `GeometryBuilder` Stage 6 road junction trimming and bridge/tunnel portal matching consume `InfrastructureGraph.roads` and `InfrastructureGraph.gradeTransitions` (and `diagnostics.featureLineage.chainingMap` is populated from `RoadEdge.provenance`), while `RoadNode`s whose only multi-edge interaction is `isCrossTier: true` (`vehicular` vs. `path`) do not trigger vehicular carriageway asphalt trimming (preserving `ADR-0002` and 2D carriageway-vs-path Boolean clipping).
 
 ---
 
 ## Alternatives Considered
 
-1. **Adopt an External Graph Library (`graphology` or `ngraph.graph`)**:
-   - *Description*: Install an npm graph package to store nodes, multi-edges, and attributes.
-   - *Pros*: Built-in traversal helpers.
-   - *Cons / Why Rejected*: Adds third-party runtime bundle weight and untyped generic attribute bags (`any`), whereas our domain requires strongly typed metric polyline geometry, per-segment OSM provenance intervals, vertical scope keys, and custom OSMnx-style degree-2 simplification rules that must be written in domain code anyway. Native TypeScript interfaces + `Map` and `Set` are faster, zero-dependency, and strictly typed.
+1. **Build the Graph Directly From Already-Chained `mapData.roads`**:
+   - *Description*: Pass the existing `ProcessedMapData.roads` array (after `chainContiguousRoads`) into `RoadNetworkBuilder`.
+   - *Pros*: Zero changes to `LocalGeoJsonProvider.ts`.
+   - *Cons / Why Rejected*: `chainContiguousRoads` destructively mutates `RoadFeature`s in place—reversing point arrays across opposing one-way ways, dropping secondary way `osmTags`, chaining across shared road/rail level-crossing nodes, and erasing per-part boundary-clip provenance. Capturing `ProcessedMapData.topologySource` prior to `chainContiguousRoads` is minimal and non-destructive.
 
-2. **Perform Planar Subdivision at All 2D Segment Intersections**:
-   - *Description*: Automatically split and connect any two roads or railways whose 2D line segments cross in $(X, Z)$ on the same `layer`.
-   - *Pros*: Compensates for missing shared nodes in poorly digitized GeoJSON.
-   - *Cons / Why Rejected*: Violates OSM topological semantics and OSMnx principles. In real OSM data, bridges lacking `layer` tags, service tunnels, or unsplit footpaths crossing carriageways would be falsely welded into 4-way intersections. Connectivity must require shared explicit OSM nodes or bounded (`0.15 m`) endpoint snapping within compatible scopes.
+2. **Treat Every Degree-4 Railway Node as an Interchangeable Switch / Crossover**:
+   - *Description*: Classify any degree-4 node in `RailwayNetwork` as a switchable crossover.
+   - *Pros*: Simple degree check.
+   - *Cons / Why Rejected*: Confuses non-interconnecting flat diamond crossings (`railway=railway_crossing`) with switches (`railway=switch`), creating false track-to-track connectivity where rails only cross physically at grade.
 
-3. **Keep Road Chaining Inside `LocalGeoJsonProvider` Before Graph Construction**:
-   - *Description*: Continue running `chainContiguousRoads` during GeoJSON parsing and build the graph afterward.
-   - *Pros*: No change to `LocalGeoJsonProvider.ts`.
-   - *Cons / Why Rejected*: `chainContiguousRoads` runs before interior junction splitting and before cross-modal level crossings are known, causing it to either merge across unsplit interior junctions or fail to chain across railway level crossings (Gap G2/G4). Moving degree-2 simplification into `RoadNetworkBuilder` *after* interior junction splitting matches OSMnx's exact algorithmic order.
+3. **Retain the Legacy `0.65 m` / `0.80 m` Proximity Radius for Automatic Grade Transitions**:
+   - *Description*: Automatically connect any at-grade road/rail endpoint within `0.65 m` or `0.80 m` of a bridge/tunnel endpoint using `|dot| >= 0.7`.
+   - *Pros*: Tolerates large coordinate gaps in hand-edited GeoJSON.
+   - *Cons / Why Rejected*: Falsely connects nearby cross-streets, parallel footpaths, or U-turn loopbacks (`dot <= -0.7` when unsigned). Restricting automatic fallback to `0.15 m` with signed `continuousTraversalDot >= 0.866`, terminal `degree === 1` endpoints, and uniqueness checks prevents false connections while surfacing wider gaps in `diagnostics.unresolvedGradeTransitions`.
 
 ---
 
 ## Consequences and Trade-Offs
 
 ### Positive
-- Eliminates dual/inconsistent `TopologicalNodeIndex` scoping between `LocalGeoJsonProvider` and `GeometryBuilder`.
-- Preserves full per-segment OSM tag provenance (`oneway`, `lanes`, `surface`, `sourceFeatureId`) across simplified degree-2 edges, directly enabling `M2.4` road surface markings (lane dividers, directional arrows, crosswalks, stop bars).
-- Distinguishes true topological junctions, switches, grade transitions, and level crossings from accidental 2D geometric crossings and bounding-box clip cuts.
+- Preserves 100% of pre-chaining per-way `osmTags`, `oneway` directionality, and boundary-clipping provenance via `ProcessedMapData.topologySource` without regressing legacy `mapData.roads` consumers during Stages B–D.
+- Accurately distinguishes `railway=switch`, `railway=railway_crossing`, `railway=level_crossing`, `railway=crossing`, and `highway=crossing`.
+- Replaces silent proximity guesses with explicit confidence levels and diagnostic candidate queues (`UnresolvedGradeTransitionCandidate`, `UnresolvedCrossingCandidate`, `TurnoutClassificationStatus`).
 - Zero external runtime dependencies.
 
 ### Negative / Neutral
-- Introducing `InfrastructureGraph` adds a fast $O(V + E)$ in-memory graph construction pass (~1–3 ms for typical 500–2,000 way neighborhood tiles).
-- Deprecating or refactoring `chainContiguousRoads` in Stage E requires updating or preserving `diagnostics.featureLineage.chainingMap` so existing provenance diagnostic tests in `FeatureCoverage.test.ts` and `JunctionAndTopology.test.ts` continue to pass.
+- Adding `topologySource` to `ProcessedMapData` requires shallow-cloning `RoadFeature` records before `chainContiguousRoads` runs in `LocalGeoJsonProvider.parseGeoJson()`.
+- Graph construction has $O(V \log V + E)$ complexity (dominated by canonical input sorting and grid-indexed lookup); actual execution time must be measured via reproducible benchmarks against the repository's synthetic and real OSM fixtures (`Station Hengelo`, `Amsterdam Centraal`) during Stages B–E rather than assumed from unmeasured estimates.
 
 ---
 
-## Open Questions for Project Owner Approval (`Proposed` — Gate Before Stage B)
+## Recommended Resolutions to Open Questions (`Proposed` — Pending Project-Owner Sign-Off)
 
-1. **`LocalGeoJsonProvider.roads` Output vs. `RoadNetwork` Simplification (Stage B vs. Stage E)**:
-   - *Proposal*: During **Stage B**, `LocalGeoJsonProvider.parseGeoJson()` continues producing `mapData.roads` as today so all 92 existing tests remain untouched, while `RoadNetworkBuilder` constructs `InfrastructureGraph.roads` from the unchained pre-simplification ways (or splits/simplifies deterministically). In **Stage E**, `RoadNetworkBuilder`'s simplified edges populate `diagnostics.featureLineage.chainingMap` and drive `GeometryBuilder`.
-2. **Live Overpass Per-Vertex Node ID Enrichment (`server.ts`)**:
-   - *Proposal*: In **Stage B**, enrich the GeoJSON features produced by `osmtogeojson(overpassJson)` in `server.ts` with `properties._nodeIds` copied from `overpassJson.elements` (`type === 'way' -> element.nodes`) so live Overpass presets have 100% explicit OSM node IDs, while keeping the `0.15 m` coordinate fallback fully active for arbitrary local GeoJSON files without node arrays.
-3. **Cross-Tier (`vehicular` vs. `path`) Interior Splitting Rule**:
-   - *Proposal*: In `RoadNetwork`, when a `path`-tier way (`footway`, `cycleway`, `path`, `pedestrian`) shares an explicit OSM node with an interior vertex of a `vehicular` road, record the shared node in `RoadNetwork` (`isCrossTier: true`) so crosswalks/connections are topologically known for `M2.4`, **without** forcing Stage 6 vehicular asphalt junction polygon trimming (`ADR-0002`) to carve vehicular carriageways at narrow footpath connections (carriageway-vs-path 2D Boolean clipping continues handling visual layering).
+1. **Non-Destructive Pre-Chaining Input vs. Legacy `mapData.roads` (Stages B–D vs. Stage E)**:
+   - *Recommended Resolution*: Preserve `LocalGeoJsonProvider.parseGeoJson()`'s existing `mapData.roads` output unchanged during Stages B–D so all 92 existing tests remain untouched, and attach a separate, non-destructive `mapData.topologySource: TopologySourceData` collection captured prior to `chainContiguousRoads` for `buildInfrastructureGraph`.
+2. **Explicit Per-Vertex OSM Node ID Preservation in `server.ts` and `LocalGeoJsonProvider.ts`**:
+   - *Recommended Resolution*: Preserve explicit per-vertex OSM node IDs for live Overpass JSON (`way.nodes`) and OSM 0.6 XML fallback (`<nd ref="...">`) responses when the node reference count aligns 1:1 with the extracted geometry coordinates. Handle `MultiLineString` and `clipPolylineToBox` split parts carefully by propagating vertex node IDs only where vertex alignment is exact, without claiming 100% ID recovery a priori, and keep the conservative `0.15 m` coordinate fallback when explicit IDs are absent.
+3. **Cross-Tier (`vehicular` vs. `path`) Road/Path Topology**:
+   - *Recommended Resolution*: Represent shared nodes between `vehicular` and `path` ways in `RoadNetwork` (`roles` containing `'cross_tier'`, `isCrossTier: true`, and `'highway_crossing'` where tagged) without automatically altering Stage 6 vehicular asphalt junction polygon trimming (`ADR-0002`), leaving carriageway-vs-path 2D Boolean clipping responsible for visual surface layering.
 
 ---
 
@@ -529,38 +808,45 @@ Instead of chaining roads *before* graph construction (`chainContiguousRoads` in
 - `src/world/infrastructure/railways/RailwayTopology.ts`
 - `src/world/infrastructure/railways/RailwayGeometryBuilder.ts`
 - `src/types/MapFeature.ts`
+- `server.ts`
 - `src/world/infrastructure/topology/*` *(planned for Stages B–E)*
 
 ---
 
 ## Tests and Evidence (Planned Acceptance Fixtures for Stages B–E)
 
-All graph stages will be verified via deterministic `vitest` unit/integration tests without browser/WebGL dependencies:
+All graph stages will be verified using Node's built-in test runner via `tsx --test` (`npm test`), plus a reproducible graph-construction benchmark across synthetic and real OSM extracts:
 
-1. **T-01 (`Degree-2 Simplification With Curved Polyline Geometry`)**: 3 collinear/curved ways sharing degree-2 nodes with identical road attributes merge into 1 `RoadEdge` whose `points` array preserves every intermediate curve vertex and whose `provenance.segments` maps all 3 original `sourceFeatureId`s.
-2. **T-02 (`True T-Junction vs. Ordinary Bend Vertex`)**: A main road with 5 interior curve vertices where a side street connects only at vertex 2 splits *only* at vertex 2 (`degree === 3`, `role: 'junction'`), keeping vertices 1, 3, 4 as internal shape points on the two resulting main-road edges.
-3. **T-03 (`4-Way Shared-Node Road Intersection`)**: Two roads sharing a central OSM node split into 4 incident `RoadEdge`s meeting at a single `RoadNode` with `degree === 4`, `role: 'junction'`.
-4. **T-04 (`Unconnected 2D Geometric Crossing — Overpass / Unshared Crossing`)**: Two roads whose segments cross at `(0, 0)` without a shared OSM node (or on different layers `layer=0` vs. `layer=1`) produce 2 unsplit `RoadEdge`s, `0` shared junction nodes, and `1` `GradeSeparatedCrossingRelation` (or `unconnectedGeometricCrossingCount === 1`).
-5. **T-05 (`Interior Node Split Where Side Road Meets Main Road Mid-Way`)**: Side road endpoint sharing explicit OSM node `osm_200` (or `<= 0.15 m` fallback) with interior vertex of main road splits main road into 2 edges and forms a degree-3 junction node.
-6. **T-06 (`Parallel Edges Between Same Two Nodes — MultiGraph`)**: A main road and a crescent/loop road connecting at the exact same start and end junction nodes `(u, v)` produce 2 distinct `RoadEdge` records with `parallelIndex: 0` and `parallelIndex: 1`, preserving both full geometries.
-7. **T-07 (`Self-Loop and P-Loop Handling`)**: A cul-de-sac P-loop where way endpoint `points[N-1]` reconnects to interior vertex `points[2]` splits at `points[2]` into 1 stem edge (`u -> v`) and 1 closed-loop edge (`v -> v`, `isClosedLoop: true`), with node `v` having `degree === 3`.
-8. **T-08 (`Attribute Discontinuity Blocks Degree-2 Simplification`)**: Two contiguous ways meeting at a degree-2 node with different `roadClass` (`primary` vs. `residential`), different `width`, or incompatible `oneway` tags (`oneway=yes` vs. `oneway=no` or opposing `oneway=-1`) are **not** merged; the degree-2 node is retained with `role: 'attribute_break'`.
-9. **T-09 (`Explicit OSM Node ID Precedence Over Coordinate Fallback`)**: Two vertices at identical coordinates `(10, 10)` with distinct explicit IDs `osm_1` and `osm_2` remain 2 separate nodes (`0` false merge), whereas a coordinate-only vertex at `(10.05, 10.05)` snaps to a nearby explicit node within `0.15 m` regardless of feature insertion order.
-10. **T-10 (`Boundary-Clipped Endpoints Excluded From False Junction Snapping`)**: Two converging roads clipped by `clipPolylineToBox` within `0.10 m` of each other on the `+clipExtent` boundary receive distinct `role: 'boundary_clip'` nodes and are **not** snapped into a synthetic degree-2 or degree-3 junction.
-11. **T-11 (`Independent Railway Network With Turnout 1-to-2 Switch Topology`)**: Mainline track and diverging siding sharing a turnout node `osm_900` split the mainline if interior and classify the shared `RailwayNode` as `role: 'switch'` (`degree === 3`) with populated `turnoutTopology: { trunkEdgeId, mainBranchEdgeId, divergingBranchEdgeId }`.
-12. **T-12 (`Railway Diamond Crossover Topology`)**: Two tracks crossing at a shared OSM node `osm_950` split into 4 incident `RailwayEdge`s at a single `RailwayNode` with `degree === 4`, `role: 'crossover'`.
-13. **T-13 (`At-Grade Road/Rail Level Crossing`)**: An at-grade road and at-grade railway sharing an explicit OSM node (or an ingested `railway=level_crossing` point node) remain in their separate `roads` and `railways` networks while generating a `LevelCrossingRelation` with exact arc-length offsets and crossing angle, and preserving the crossing node against degree-2 erasure.
+1. **T-01 (`Degree-2 Simplification With Curved Polyline & Reversed Segment Provenance`)**: 3 contiguous curved road ways (with the middle way digitized in reverse order and `oneway` omitted/`bidirectional`) simplify into 1 `RoadEdge` preserving all intermediate curve vertices, where `provenance.segments[1]` has `reversedRelativeToSource === true`, unambiguous `startArcLength`/`endArcLength`, and preserved per-segment `osmTags`.
+2. **T-02 (`True T-Junction vs. Ordinary Bend Vertex`)**: A main road with 5 interior curve vertices where a side street connects only at vertex 2 splits *only* at vertex 2 (`degree === 3`, `roles: ['junction']`), keeping vertices 1, 3, 4 as internal shape vertices.
+3. **T-03 (`4-Way Shared-Node Road Intersection & Multi-Role Node`)**: Two roads sharing a central OSM node that is also tagged `highway=crossing` split into 4 incident `RoadEdge`s at a single `RoadNode` with `degree === 4` and non-exclusive `roles: ['highway_crossing', 'junction']`.
+4. **T-04 (`Unconnected 2D Geometric Crossing — Overpass & Unshared Same-Layer Crossing`)**: Two roads crossing at `(0, 0)` on `layer=0` vs. `layer=1` produce `1` `GradeSeparatedCrossingRelation`; two same-layer roads crossing in 2D without a shared vertex produce `0` junction nodes and `1` `UnresolvedCrossingCandidate` (`reason: 'geometric_intersection_without_shared_node'`).
+5. **T-05 (`Interior Node Split Where Side Road Meets Main Road Mid-Way`)**: Side road endpoint sharing explicit `rawOsmNodeId: "200"` with an interior vertex of a main road splits the main road into 2 edges at a degree-3 junction node.
+6. **T-06 (`Parallel Edges Between Same Two Nodes & Input-Order Determinism`)**: A main road and a crescent loop connecting the same nodes `(u, v)` produce 2 distinct `RoadEdge`s with `parallelIndex: 0` and `parallelIndex: 1`; shuffling the input feature array produces identical node IDs, edge IDs, and `parallelIndex` assignments.
+7. **T-07 (`Self-Loop and P-Loop Handling — Half-Edge Degree Invariant`)**: A P-loop where way endpoint `points[N-1]` reconnects to interior vertex `points[2]` splits into 1 stem edge (`u -> v`) and 1 closed-loop edge (`v -> v`, `isClosedLoop: true`), where node `v` has `degree === 3`, `incidentHalfEdges.length === 3`, and `incidentEdgeIds.length === 2`. An isolated closed loop retains a deterministic `'loop_anchor'` node (`degree === 2`, `incidentEdgeIds.length === 1`, `incidentHalfEdges.length === 2`).
+8. **T-08 (`Attribute & One-Way Discontinuity Blocks Degree-2 Simplification`)**: Contiguous ways meeting at a degree-2 node with different `roadClass`, different `width`, opposing `oneway` directions (`oneway=yes` meeting `oneway=-1`), or unusual `oneway=reversible` tags are **not** merged (`roles: ['attribute_break']`), and `rawOnewayTag` is preserved verbatim.
+9. **T-09 (`Explicit OSM Node ID Precedence Over Coordinate Fallback`)**: Two vertices at `(10, 10)` with distinct `rawOsmNodeId` `"1"` and `"2"` remain 2 separate nodes (`nodeIdOrigin: 'explicit_osm'`), whereas an untagged vertex at `(10.05, 10.05)` within `0.15 m` resolves deterministically to `"1"`.
+10. **T-10 (`Boundary-Clipped Endpoints Excluded From False Junction Snapping`)**: Two converging roads clipped by `clipPolylineToBox` within `0.10 m` of each other on the `+clipExtent` boundary receive distinct `nodeIdOrigin: 'boundary_clip'` nodes and never merge.
+11. **T-11 (`Confirmed Railway Turnout Switch vs. Ambiguous Y-Split`)**: A mainline and siding meeting at `railway=switch` (`rawOsmNodeId: "900"`) with a clear `1-to-2` throat produces a `RailwayNode` with `roles: ['switch']` and `turnoutTopology.status === 'confirmed'` (`trunkEdgeId`, `mainBranchEdgeId`, `divergingBranchEdgeId`). A symmetric untagged Y-split produces `turnoutTopology.status === 'unresolved_main_vs_diverging'` and increments `diagnostics.railwayUnresolvedSwitchCount`.
+12. **T-12 (`Railway Diamond Flat Crossing Without Switching Capability`)**: Two railway tracks sharing an interior node tagged `railway=railway_crossing` (`rawOsmNodeId: "950"`) produce `1` `RailwayFlatCrossingRelation` and `0` switch nodes, without allowing branch interchange between the two crossing tracks. An untagged degree-4 endpoint meeting is flagged in `diagnostics.railwayUnresolvedJunctionCount`.
+13. **T-13 (`Vehicular Road/Rail Level Crossing vs. Pedestrian/Rail Crossing vs. Unconfirmed Proximity`)**:
+    - Vehicular road + rail sharing `rawOsmNodeId: "700"` (tagged `railway=level_crossing`) $\to$ `LevelCrossingRelation` with `crossingKind: 'road_rail_level_crossing'`, preserving the crossing node against degree-2 simplification (`roles` includes `'level_crossing'`).
+    - Footpath (`highway=footway`) + rail sharing `rawOsmNodeId: "701"` (tagged `railway=crossing`) $\to$ `LevelCrossingRelation` with `crossingKind: 'pedestrian_rail_crossing'`.
+    - Coincident untagged road and rail vertices without shared `rawOsmNodeId` $\to$ `0` `LevelCrossingRelation`s and `1` `UnresolvedCrossingCandidate` (`reason: 'coincident_vertex_without_osm_id'`).
 14. **T-14 (`Road Overpass Above Railway — Grade-Separated Crossing`)**: A road with `bridge=yes, layer=1` crossing above an at-grade railway (`layer=0`) generates `0` `LevelCrossingRelation`s and `1` `GradeSeparatedCrossingRelation`.
-15. **T-15 (`Bridge and Tunnel Approach Grade Transitions — No False Proximity Trigger`)**: An at-grade road connected to a bridge road via shared node (or collinear endpoint snap) generates `1` `GradeTransitionRelation`, whereas an unrelated perpendicular footpath or cross-street endpoint `0.50 m` from the bridge abutment generates `0` false grade transitions.
-16. **T-16 (`Provenance Preservation & Stage E Renderer Non-Regression`)**: Across all simplified edges, `provenance.sourceFeatureIds` and `provenance.segments` account for 100% of constituent ways, and in Stage E all 92 existing tests (`JunctionAndTopology.test.ts`, `RailwayRendering.test.ts`, `ElevationAndZIndex.test.ts`, etc.) pass with zero coplanar triangle overlaps.
+15. **T-15 (`Conservative Grade Transitions — Directed Tangents, Ambiguity & Proximity Rejection`)**:
+    - Shared `rawOsmNodeId` between collinear at-grade and bridge road endpoints $\to$ `1` `GradeTransitionRelation` (`confidence: 'explicit_osm_node'`).
+    - Untagged terminal endpoints `0.10 m` apart with $\text{continuousTraversalDot} \ge 0.866$ and unique match $\to$ `1` `GradeTransitionRelation` (`confidence: 'coordinate_fallback_confirmed'`).
+    - Parallel loopback edge (`continuousTraversalDot <= -0.866`), perpendicular cross-street `0.50 m` away, or two ambiguous parallel candidates within `0.15 m` $\to$ `0` `GradeTransitionRelation`s and `1` `UnresolvedGradeTransitionCandidate`.
+16. **T-16 (`Pre-Chaining Handoff & Stage E Renderer Non-Regression`)**: Verifies that `ProcessedMapData.topologySource` preserves unchained parts while `mapData.roads` remains compatible during Stages B–D, and in Stage E all 92 existing tests pass with zero coplanar overlap or portal regressions.
 
 ---
 
 ## Superseded or Related Decisions
 
 - **Related to**:
-  - [ADR-0002: Boundary-Derived Road Junction Polygon Synthesis and Coplanar Overlap Resolution](./ADR-0002-boundary-derived-road-junction-meshing.md) *(Stage E refines the topological node/edge input consumed by ADR-0002's portal trimmer)*
-  - [ADR-0003: Loaded Region Boundary Clipping and Bounded Scene Sizing](./ADR-0003-loaded-region-boundary-clipping.md) *(Defines Liang-Barsky boundary cut points flagged as `boundary_clip` nodes)*
-  - [ADR-0004: Grade-Separated Infrastructure, Elevation Policy, and Bridge/Culvert Disambiguation](./ADR-0004-grade-separated-infrastructure-and-elevation-policy.md) *(Defines vertical structure scopes connected via `GradeTransitionRelation`)*
-  - [ADR-0005: Source-Feature Provenance Tracking and Diagnostic Accounting](./ADR-0005-source-feature-provenance-and-diagnostics.md) *(Extended by `EdgeProvenance` and `EdgeSegmentProvenance`)*
-  - [ADR-0008: Hybrid Railway Rendering, Multi-Interval Turnout Support, and UV-Ribbon Architecture](./ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) *(Complemented by `RailwayNetwork` switch/crossover topology)*
+  - [ADR-0002: Boundary-Derived Road Junction Polygon Synthesis and Coplanar Overlap Resolution](./ADR-0002-boundary-derived-road-junction-meshing.md)
+  - [ADR-0003: Loaded Region Boundary Clipping and Bounded Scene Sizing](./ADR-0003-loaded-region-boundary-clipping.md)
+  - [ADR-0004: Grade-Separated Infrastructure, Elevation Policy, and Bridge/Culvert Disambiguation](./ADR-0004-grade-separated-infrastructure-and-elevation-policy.md)
+  - [ADR-0005: Source-Feature Provenance Tracking and Diagnostic Accounting](./ADR-0005-source-feature-provenance-and-diagnostics.md)
+  - [ADR-0008: Hybrid Railway Rendering, Multi-Interval Turnout Support, and UV-Ribbon Architecture](./ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md)

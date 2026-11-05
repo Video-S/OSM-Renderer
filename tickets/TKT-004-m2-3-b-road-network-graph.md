@@ -2,7 +2,7 @@
 id: TKT-004
 title: M2.3-B Road Network Graph Construction and Non-Destructive Topology Input
 type: feature
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-05
 updated: 2026-11-05
@@ -41,7 +41,7 @@ Prior to Stage B:
 - [x] Automated test suite (`src/world/RoadNetworkTopology.test.ts`) passing via `npm test` (`tsx --test`), covering fixtures `T-01` through `T-10`, `T-16`, Stage B of `T-17`, clipping node-ID propagation, forward/reverse `1 mm` duplicate detection, input immutability, offline Overpass/XML node-ID enrichment (valid and invalid alignment), and M2.2 preset/cache separation.
 - [x] Reproducible parser vs. road-graph construction performance measurements recorded on synthetic and real OSM extracts.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
-- [ ] Project owner reviews Stage B implementation to close `TKT-004`.
+- [x] Project owner reviews Stage B implementation to close `TKT-004`.
 
 ## Implementation notes
 - Implemented `src/world/infrastructure/topology/types.ts`, `OsmNodeIdEnricher.ts`, `RoadNetworkBuilder.ts`, and `InfrastructureGraph.ts` with zero React, Three.js, renderer, or WebGL imports.
@@ -57,10 +57,10 @@ Prior to Stage B:
   1. *Complete renderer-facing metadata isolation*: Added `cleanLegacyOsmTags` in `LocalGeoJsonProvider.ts` to sanitize all legacy features (`roads`, `railways`, `linearWaterways`, `waterBodies`, `parks`, `buildings`, `landuse`, `barriers`, `landmarks`) by stripping server-side enriched `_nodeIds` and `_nodeIdsByPart`. Ensured legacy feature objects and `osmTags` remain 100% equivalent (byte-for-byte `deepEqual`) between raw and enriched GeoJSON while preserving explicit IDs in `topologySource.roadParts.rawOsmNodeIds`.
   2. *Strengthened renderer regression test*: Upgraded test #102 in `RoadNetworkTopology.test.ts` to compare complete `mapData.roads` and `mapData.railways` arrays (`assert.deepEqual`), verify scene mesh hierarchy, transforms, render orders, and inspectable provenance (`userData.faceRanges`), and perform byte-for-byte buffer equality assertions (`positions`, `normals`, `uvs`, `indices`, and `instanceMatrix`). Added full OSM 0.6 XML enrichment coverage verifying identical legacy feature output and scene mesh buffers.
   3. *Preserved edge-level surface semantics*: Added surface attribute guard `(e1.surface ?? '').trim().toLowerCase() !== (e2.surface ?? '').trim().toLowerCase()` to `canContractDegree2RoadNode` in `RoadNetworkBuilder.ts`. Added focused test verifying that asphalt meeting paving stones blocks degree-2 simplification, assigns role `attribute_break` to the retained node, retains edge-level `surface` values, and preserves original per-segment provenance without causing unrelated tag changes to split edges.
-- Per project instructions, `TKT-004` remains `in_progress` pending project-owner review.
+- Approved and accepted by project owner on 2026-11-05 (`status: closed`).
 
 ## Verification
-- Status: Implemented and verified (2026-11-05); awaiting project-owner review to close.
+- Status: Verified and accepted by project owner (2026-11-05) — `closed`.
 - Executed verification commands:
   - `npm test` (`tsx --test src/world/*.test.ts`): Exit code `0` — **108 / 108 tests passed** (`0` failures), including all Stage B tests in `src/world/RoadNetworkTopology.test.ts`.
   - `npm run lint` (`tsc --noEmit`): Exit code `0` — `0` TypeScript errors.

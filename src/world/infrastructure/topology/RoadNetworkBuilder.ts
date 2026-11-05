@@ -24,7 +24,7 @@ import {
   UnchainedRoadPart,
 } from './types';
 
-const EXACT_DUPLICATE_VERTEX_TOLERANCE_METERS = 1e-3; // 1 mm
+export const EXACT_DUPLICATE_VERTEX_TOLERANCE_METERS = 1e-3; // 1 mm
 
 const NON_VEHICULAR_ROAD_CLASSES = new Set<string>([
   'footway',
@@ -93,7 +93,7 @@ function parseSurfaceTag(osmTags?: RawGeoJsonProperties): string | undefined {
   return str.length > 0 ? str : undefined;
 }
 
-function computeStartInwardTangent(points: readonly [number, number][]): [number, number] {
+export function computeStartInwardTangent(points: readonly [number, number][]): [number, number] {
   for (let i = 1; i < points.length; i++) {
     const dx = points[i][0] - points[0][0];
     const dz = points[i][1] - points[0][1];
@@ -105,7 +105,7 @@ function computeStartInwardTangent(points: readonly [number, number][]): [number
   return [1, 0];
 }
 
-function computeEndInwardTangent(points: readonly [number, number][]): [number, number] {
+export function computeEndInwardTangent(points: readonly [number, number][]): [number, number] {
   const lastIdx = points.length - 1;
   for (let i = lastIdx - 1; i >= 0; i--) {
     const dx = points[i][0] - points[lastIdx][0];
@@ -118,7 +118,7 @@ function computeEndInwardTangent(points: readonly [number, number][]): [number, 
   return [-1, 0];
 }
 
-function computeCumulativeLengths(points: readonly [number, number][]): number[] {
+export function computeCumulativeLengths(points: readonly [number, number][]): number[] {
   const cum: number[] = [0];
   let total = 0;
   for (let i = 0; i < points.length - 1; i++) {
@@ -128,7 +128,7 @@ function computeCumulativeLengths(points: readonly [number, number][]): number[]
   return cum;
 }
 
-function cloneOsmTags(tags?: RawGeoJsonProperties): RawGeoJsonProperties {
+export function cloneOsmTags(tags?: RawGeoJsonProperties): RawGeoJsonProperties {
   if (!tags) return {};
   const copy: RawGeoJsonProperties = { ...tags };
   if (Array.isArray(tags.nodes)) copy.nodes = [...tags.nodes];
@@ -212,11 +212,11 @@ function extractInputRoadParts(
     });
 }
 
-function compareStringsCodeUnit(a: string, b: string): number {
+export function compareStringsCodeUnit(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function comparePointArraysMillimeter(
+export function comparePointArraysMillimeter(
   a: readonly [number, number][],
   b: readonly [number, number][]
 ): number {
@@ -310,7 +310,7 @@ interface DeduplicatedRoadPart {
   mutableRawOsmNodeIds: (string | undefined)[];
 }
 
-function areVerticesAndNodeIdsEqual(
+export function areVerticesAndNodeIdsEqual(
   ptsA: readonly [number, number][],
   nodesA: readonly (string | undefined)[],
   ptsB: readonly [number, number][],

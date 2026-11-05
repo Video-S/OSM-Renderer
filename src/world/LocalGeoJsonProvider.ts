@@ -4,6 +4,8 @@ import {
   BarrierFeature,
   BarrierType,
   BuildingFeature,
+  InfrastructurePointKind,
+  InfrastructurePointMetadata,
   LanduseFeature,
   LanduseType,
   LandmarkType,
@@ -18,6 +20,7 @@ import {
   RoadClass,
   RoadFeature,
   TopologySourceData,
+  UnchainedRailwayPart,
   UnchainedRoadPart,
   WaterBodyFeature,
   WaterBodyType,
@@ -535,6 +538,75 @@ function cleanLegacyOsmTags(props: RawGeoJsonProperties): RawGeoJsonProperties {
     copy.nodeIds = [...copy.nodeIds];
   }
   return copy;
+}
+
+const SECONDARY_RAILWAY_SERVICE_VALUES = new Set<string>(['siding', 'yard', 'spur', 'crossover']);
+const SECONDARY_RAILWAY_USAGE_VALUES = new Set<string>([
+  'branch',
+  'industrial',
+  'military',
+  'test',
+  'tourism',
+]);
+
+function isSecondaryRailwayBranch(service?: string, usage?: string): boolean {
+  if (service && SECONDARY_RAILWAY_SERVICE_VALUES.has(service.trim().toLowerCase())) {
+    return true;
+  }
+  if (usage && SECONDARY_RAILWAY_USAGE_VALUES.has(usage.trim().toLowerCase())) {
+    return true;
+  }
+  return false;
+}
+
+function normalizeExtractedOsmNodeId(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('node/')) {
+    const rest = trimmed.slice(5).trim();
+    return rest.length > 0 ? rest : undefined;
+  }
+  if (trimmed.startsWith('osm_')) {
+    const rest = trimmed.slice(4).trim();
+    return rest.length > 0 ? rest : undefined;
+  }
+  return trimmed;
+}
+
+function extractPointRawOsmNodeId(
+  props: RawGeoJsonProperties,
+  id: string,
+  hasExplicitSourceId: boolean
+): string | undefined {
+  if ((props as any).rawOsmNodeId !== undefined && (props as any).rawOsmNodeId !== null) {
+    const norm = normalizeExtractedOsmNodeId(String((props as any).rawOsmNodeId));
+    if (norm) return norm;
+  }
+  if (Array.isArray(props._nodeIds) && props._nodeIds.length > 0 && props._nodeIds[0] !== undefined) {
+    const norm = normalizeExtractedOsmNodeId(String(props._nodeIds[0]));
+    if (norm) return norm;
+  }
+  if (Array.isArray(props.nodes) && props.nodes.length > 0 && props.nodes[0] !== undefined) {
+    const norm = normalizeExtractedOsmNodeId(String(props.nodes[0]));
+    if (norm) return norm;
+  }
+  if (Array.isArray(props.nodeIds) && props.nodeIds.length > 0 && props.nodeIds[0] !== undefined) {
+    const norm = normalizeExtractedOsmNodeId(String(props.nodeIds[0]));
+    if (norm) return norm;
+  }
+  if (hasExplicitSourceId) {
+    const trimmedId = id.trim();
+    if (trimmedId.startsWith('node/')) {
+      const rest = trimmedId.slice(5).trim();
+      if (rest.length > 0) return rest;
+    } else if (trimmedId.startsWith('osm_')) {
+      const rest = trimmedId.slice(4).trim();
+      if (rest.length > 0) return rest;
+    } else if (!trimmedId.startsWith('way/') && !trimmedId.startsWith('relation/')) {
+      return trimmedId;
+    }
+  }
+  return undefined;
 }
 
 export interface ClipBoxOptions {
@@ -1106,6 +1178,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     const roads: RoadFeature[] = [];
     const topologyRoadParts: UnchainedRoadPart[] = [];
     const railways: RailwayFeature[] = [];
+    const topologyRailwayParts: UnchainedRailwayPart[] = [];
+    const topologyInfrastructurePoints: InfrastructurePointMetadata[] = [];
     const waterBodies: WaterBodyFeature[] = [];
     const linearWaterways: LinearWaterwayFeature[] = [];
     const parks: ParkFeature[] = [];
@@ -1149,6 +1223,32 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       const classification = classifyGeoJsonFeature(props, geomType);
 
       if (classification.category === 'unsupported') {
+        if (geomType === 'Point' || geomType === 'MultiPoint') {
+          const railwayPointTag = String(props.railway || '').trim().toLowerCase();
+          if (railwayPointTag === 'switch' || railwayPointTag === 'railway_crossing') {
+            const rawPts = this.extractPoints(geom, coords);
+            const retainedPts = shouldClipToRegion
+              ? rawPts.filter(([x, z]) => Math.abs(x) <= clipExtent && Math.abs(z) <= clipExtent)
+              : rawPts;
+            const kind: InfrastructurePointKind =
+              railwayPointTag === 'switch' ? 'railway_switch' : 'railway_crossing_flat';
+            for (let ptIdx = 0; ptIdx < retainedPts.length; ptIdx++) {
+              const pointId = retainedPts.length === 1 ? id : `${id}-${ptIdx}`;
+              const rawOsmNodeId =
+                retainedPts.length === 1
+                  ? extractPointRawOsmNodeId(props, id, hasExplicitSourceId)
+                  : undefined;
+              topologyInfrastructurePoints.push({
+                id: pointId,
+                hasExplicitSourceId,
+                rawOsmNodeId,
+                point: [retainedPts[ptIdx][0], retainedPts[ptIdx][1]],
+                kind,
+                osmTags: cloneRawGeoJsonProperties(props),
+              });
+            }
+          }
+        }
         recordSkipped(classification.primaryTag, id);
         continue;
       }
@@ -1164,16 +1264,46 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         }
 
         const railGradeScope = `${classification.layer}|${classification.isBridge}|${classification.isTunnel}`;
+        const railwayType = (classification.subtype as RailwayType) || 'rail';
+        const width = classification.defaultWidth || 4.8;
+        const rawGauge =
+          props.gauge !== undefined && props.gauge !== null && String(props.gauge).trim() !== ''
+            ? String(props.gauge).trim()
+            : undefined;
+        const rawElectrified =
+          props.electrified !== undefined &&
+          props.electrified !== null &&
+          String(props.electrified).trim() !== ''
+            ? String(props.electrified).trim()
+            : undefined;
+        const rawService =
+          props.service !== undefined &&
+          props.service !== null &&
+          String(props.service).trim() !== ''
+            ? String(props.service).trim()
+            : undefined;
+        const rawUsage =
+          props.usage !== undefined && props.usage !== null && String(props.usage).trim() !== ''
+            ? String(props.usage).trim()
+            : undefined;
+        const isSecondaryBranch = isSecondaryRailwayBranch(rawService, rawUsage);
 
         const candidateLines: Array<{
           points: [number, number][];
-          osmNodes?: Array<string | number | undefined>;
+          topologyOsmNodes?: Array<string | number | undefined>;
+          legacyOsmNodes?: Array<string | number | undefined>;
           clippedAtStart?: boolean;
           clippedAtEnd?: boolean;
         }> = [];
         let wasFeatureClipped = false;
 
         for (let i = 0; i < rawLines.length; i++) {
+          const partTopologyOsmNodes = extractVerifiedTopologyPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
           const partLegacyOsmNodes = extractLegacyPartOsmNodeIds(
             props,
             i,
@@ -1187,14 +1317,38 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               -clipExtent,
               clipExtent,
               clipExtent,
-              partLegacyOsmNodes
+              partTopologyOsmNodes
             );
             if (clipped.wasClipped) wasFeatureClipped = true;
-            candidateLines.push(...clipped.lines);
+
+            let legacyClippedNodes: Array<Array<string | number | undefined> | undefined> = [];
+            if (partLegacyOsmNodes) {
+              const legacyClipped = clipPolylineToBox(
+                rawLines[i],
+                -clipExtent,
+                -clipExtent,
+                clipExtent,
+                clipExtent,
+                partLegacyOsmNodes
+              );
+              legacyClippedNodes = legacyClipped.lines.map((l) => l.osmNodes);
+            }
+
+            for (let cIdx = 0; cIdx < clipped.lines.length; cIdx++) {
+              const cl = clipped.lines[cIdx];
+              candidateLines.push({
+                points: cl.points,
+                topologyOsmNodes: cl.osmNodes,
+                legacyOsmNodes: legacyClippedNodes[cIdx],
+                clippedAtStart: cl.clippedAtStart,
+                clippedAtEnd: cl.clippedAtEnd,
+              });
+            }
           } else {
             candidateLines.push({
               points: rawLines[i],
-              osmNodes: partLegacyOsmNodes,
+              topologyOsmNodes: partTopologyOsmNodes,
+              legacyOsmNodes: partLegacyOsmNodes,
               clippedAtStart: false,
               clippedAtEnd: false,
             });
@@ -1211,7 +1365,13 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
         let addedAny = false;
         for (let partIdx = 0; partIdx < candidateLines.length; partIdx++) {
-          const { points: line, osmNodes } = candidateLines[partIdx];
+          const {
+            points: line,
+            topologyOsmNodes,
+            legacyOsmNodes,
+            clippedAtStart,
+            clippedAtEnd,
+          } = candidateLines[partIdx];
           if (line.length >= 2) {
             let totalLen = 0;
             for (let j = 0; j < line.length - 1; j++) {
@@ -1219,10 +1379,39 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             }
             if (totalLen < 0.2) continue;
 
+            topologyRailwayParts.push({
+              id: `${id}-${partIdx}`,
+              sourceFeatureId: id,
+              hasExplicitSourceId,
+              partIndex: partIdx,
+              name: props.name,
+              points: line.map((pt) => [pt[0], pt[1]] as [number, number]),
+              rawOsmNodeIds: line.map((_, vIdx) =>
+                topologyOsmNodes &&
+                topologyOsmNodes[vIdx] !== undefined &&
+                topologyOsmNodes[vIdx] !== null
+                  ? String(topologyOsmNodes[vIdx])
+                  : undefined
+              ),
+              clippedAtStart: Boolean(clippedAtStart),
+              clippedAtEnd: Boolean(clippedAtEnd),
+              railwayType,
+              width,
+              isBridge: classification.isBridge,
+              isTunnel: classification.isTunnel,
+              layer: classification.layer,
+              gauge: rawGauge,
+              electrified: rawElectrified,
+              service: rawService,
+              usage: rawUsage,
+              isSecondaryBranch,
+              osmTags: cloneRawGeoJsonProperties(props),
+            });
+
             const nodeIds = topoNodeIndex.resolveWayNodeIds(
               line,
               railGradeScope,
-              osmNodes as Array<string | number> | undefined
+              legacyOsmNodes as Array<string | number> | undefined
             );
             railways.push({
               id: `${id}-${partIdx}`,
@@ -1230,10 +1419,10 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               sourceFeatureIds: [id],
               type: 'railway',
               name: props.name,
-              points: line,
+              points: line.map((pt) => [pt[0], pt[1]] as [number, number]),
               nodeIds,
-              railwayType: (classification.subtype as RailwayType) || 'rail',
-              width: classification.defaultWidth || 4.8,
+              railwayType,
+              width,
               isBridge: classification.isBridge,
               isTunnel: classification.isTunnel,
               layer: classification.layer,
@@ -2036,8 +2225,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
     const topologySource: TopologySourceData = {
       roadParts: topologyRoadParts,
-      railwayParts: [],
-      infrastructurePoints: [],
+      railwayParts: topologyRailwayParts,
+      infrastructurePoints: topologyInfrastructurePoints,
     };
 
     return {

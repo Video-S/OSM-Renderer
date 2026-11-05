@@ -272,6 +272,8 @@ export interface TurnoutTopologySpec {
   trunkEdgeId?: string;
   mainBranchEdgeId?: string;
   divergingBranchEdgeId?: string;
+  turnoutSide?: 'left' | 'right';
+  divergenceAngleRad?: number;
   candidateEdgeIds: readonly string[];
 }
 
@@ -460,6 +462,29 @@ export interface UnresolvedCrossingCandidate {
     | 'coincident_vertex_without_osm_id'
     | 'geometric_intersection_without_shared_node'
     | 'missing_railway_crossing_tag_at_degree_4_node';
+}
+
+export interface RailwayNetworkDiagnostics {
+  inputPartCount: number;
+  exactDeduplicatedCount: number;
+  railwayNodeCount: number;
+  railwayEdgeCount: number;
+  railwayConfirmedSwitchCount: number;
+  railwayUnresolvedSwitchCount: number;
+  railwayFlatCrossingCount: number;
+  railwayUnresolvedJunctionCount: number;
+  railwaySimplifiedDegree2Count: number;
+  railwayInteriorSplitCount: number;
+  railwayParallelEdgePairCount: number;
+  boundaryClippedNodeCount: number;
+  closedLoopEdgeCount: number;
+  unresolvedCrossings: readonly UnresolvedCrossingCandidate[];
+}
+
+export interface RailwayNetworkBuildResult {
+  railways: RailwayNetwork;
+  railwayFlatCrossings: readonly RailwayFlatCrossingRelation[];
+  diagnostics: RailwayNetworkDiagnostics;
 }
 
 export interface GradeSeparatedCrossingRelation {

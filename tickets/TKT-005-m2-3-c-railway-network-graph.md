@@ -1,0 +1,64 @@
+---
+id: TKT-005
+title: M2.3-C Railway Network Graph Construction, Turnout Semantics, and Flat Crossings
+type: feature
+status: in_progress
+priority: high
+created: 2026-11-05
+updated: 2026-11-05
+---
+
+# TKT-005: M2.3-C Railway Network Graph Construction, Turnout Semantics, and Flat Crossings
+
+## Summary
+Implement **Stage C (`M2.3-C`)** of Milestone 2.3 (*Infrastructure Topology and Connectivity*) per accepted **[ADR-0009](../docs/decisions/ADR-0009-infrastructure-graph-topology.md)**: populate non-destructive pre-rendering railway topology inputs (`ProcessedMapData.topologySource.railwayParts`) and railway switch/crossing point annotations (`railway=switch`, `railway=railway_crossing` in `ProcessedMapData.topologySource.infrastructurePoints`), implement pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`) with conservative turnout (`1-to-2` throat) classification and non-interconnecting flat diamond crossing (`RailwayFlatCrossingRelation`) support, and verify via `src/world/RailwayNetworkTopology.test.ts`.
+
+## Context
+Following project-owner acceptance of `M2.3-B` (`TKT-004` closed), `M2.3-C` is authorized to construct the authoritative `RailwayNetwork` topology layer in isolation without modifying `RailwayTopology.ts` (rendering helper), `RailwayGeometryBuilder.ts`, `GeometryBuilder.ts`, `RoadNetworkBuilder.ts`, or implementing Stages D–E (`CrossModalAnalyzer`, `LevelCrossingRelation`, `GradeTransitionRelation`, or renderer integration).
+
+## Observed behavior
+Prior to Stage C:
+1. `ProcessedMapData.topologySource.railwayParts` and `ProcessedMapData.topologySource.infrastructurePoints` are empty arrays (`[]`).
+2. Point features with `railway=switch` and `railway=railway_crossing` are skipped during `LocalGeoJsonProvider.parseGeoJson()` without preserving their metadata for railway topology analysis.
+3. No standalone, pure-TypeScript `RailwayNetworkBuilder` exists under `src/world/infrastructure/topology/` to build `RailwayNetwork`, classify `1-to-2` turnouts (`TurnoutTopologySpec`), or distinguish non-interconnecting flat diamond crossings (`RailwayFlatCrossingRelation`) from switchable junctions.
+
+## Expected behavior
+1. **Non-Destructive `topologySource.railwayParts` and Railway Point Capture**:
+   - `LocalGeoJsonProvider.parseGeoJson()` populates `ProcessedMapData.topologySource.railwayParts` (`UnchainedRailwayPart[]`) after metric projection and region bounding-box clipping, preserving original feature/part IDs, `hasExplicitSourceId`, ordered metric polyline coordinates, verified per-vertex raw OSM node IDs (`_nodeIds`, `_nodeIdsByPart`, `nodes`, `nodeIds`), synthetic boundary-cut flags (`clippedAtStart`, `clippedAtEnd`), `railwayType`, `width`, raw string `gauge`, raw string `electrified`, `service`, `usage`, `name`, `isSecondaryBranch`, vertical scope (`layer`, `isBridge`, `isTunnel`), and deep-cloned `osmTags`.
+   - `LocalGeoJsonProvider.parseGeoJson()` captures point features with `railway=switch` (`kind: 'railway_switch'`) and `railway=railway_crossing` (`kind: 'railway_crossing_flat'`) in `ProcessedMapData.topologySource.infrastructurePoints` (`InfrastructurePointMetadata[]`) without altering legacy `mapData.railways`, `mapData.landmarks`, skipped-feature diagnostics, or rendered 3D scene geometry.
+2. **Pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`)**:
+   - Exposes `buildRailwayNetwork(input: ProcessedMapData | TopologySourceData | readonly UnchainedRailwayPart[]): RailwayNetworkBuildResult` with zero React, Three.js, renderer, or WebGL dependencies.
+   - Enforces domain-isolated node IDs (`railway_node:${layer}|${isBridge ? 1 : 0}|${isTunnel ? 1 : 0}:*`), explicit OSM node ID precedence over `0.15 m` coordinate fallback, boundary-clipped endpoint isolation, interior junction splitting, parallel tracks (`parallelIndex`), passing loops, self-loops and P-loops (`incidentHalfEdges` vs. `incidentEdgeIds` degree invariants), non-interstitial degree-2 simplification with railway attribute guards (`railwayType`, `width`, `gauge`, `electrified`, `service`, `usage`, `isSecondaryBranch`, and `osmTags`), strict `1 mm` exact duplicate detection, and input immutability.
+3. **Conservative Turnout Classification (`ADR-0009` Section 5.2)**:
+   - At degree-3 railway nodes, evaluates `1-to-2` throat geometry ($\vec{t}_{\text{trunk}} \cdot \vec{t}_a \le -\cos(45^\circ)$, $\vec{t}_{\text{trunk}} \cdot \vec{t}_b \le -\cos(45^\circ)$, $\vec{t}_a \cdot \vec{t}_b \ge \cos(60^\circ) = 0.5$) and disambiguates `mainBranchEdgeId` vs. `divergingBranchEdgeId` using `isSecondaryBranch` rank and deflection angles ($\ge 3^\circ$ difference).
+   - Emits `status: 'confirmed'` only when unambiguous; emits `'unresolved_main_vs_diverging'` for symmetric Y-switches and `'unresolved_throat'` when no valid `1-to-2` throat exists, preserving shared-node connectivity and incrementing `railwayUnresolvedSwitchCount`.
+4. **Non-Interconnecting Flat Diamond Crossings (`ADR-0009` Section 5.1)**:
+   - Handles both (a) two continuous railway ways sharing a vertex tagged `railway=railway_crossing` and (b) four railway way segments meeting at a tagged `railway=railway_crossing` node with unambiguous opposite collinear through-track pairs ($\vec{t}_{\text{inward},1} \cdot \vec{t}_{\text{inward},2} \le -\cos(15^\circ)$).
+   - Preserves each track's independent through-continuity without creating a graph path that allows turning from one crossing track onto the other, and emits a `RailwayFlatCrossingRelation` with both track edge IDs, crossing position, arc-length offsets, and acute crossing angle.
+   - Retains untagged or ambiguous degree-4 railway meetings as unresolved junctions (`primaryRole: 'junction'`, `railwayUnresolvedJunctionCount`, and `UnresolvedCrossingCandidate` with `reason: 'missing_railway_crossing_tag_at_degree_4_node'`).
+
+## Acceptance criteria
+- [ ] `LocalGeoJsonProvider.parseGeoJson()` populates `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints` (`railway=switch`, `railway=railway_crossing`) with zero shared mutable references and zero changes to legacy `mapData.railways`, `diagnostics`, or rendered geometry.
+- [ ] `RailwayNetworkBuilder.ts` implemented in pure TypeScript under `src/world/infrastructure/topology/` with `RailwayNetworkBuildResult` and `RailwayNetworkDiagnostics`, without modifying `RailwayTopology.ts` or implementing Stage D/E features.
+- [ ] Conservative turnout classification (`confirmed`, `unresolved_main_vs_diverging`, `unresolved_throat`) and non-interconnecting flat diamond crossing (`RailwayFlatCrossingRelation` with strict non-interchange between crossing tracks) implemented per `ADR-0009` Sections 5.1 and 5.2.
+- [ ] Comprehensive automated test suite (`src/world/RailwayNetworkTopology.test.ts`) passing via `npm test`, covering `T-11` (confirmed & ambiguous turnouts), `T-12` (continuous and 4-segment flat diamond crossings with non-interchange assertions, plus untagged degree-4 ambiguity), interior shared nodes, curved shape vertices, parallel tracks & passing loops, self-loops & P-loops, degree-2 simplification with reversed provenance, railway attribute breaks, bridge vs. at-grade isolation, boundary-clipped endpoints, Overpass JSON / OSM XML / MultiLineString node-ID preservation, semantic duplicate preservation, determinism, input immutability, and renderer isolation.
+- [ ] Reproducible parser vs. railway-graph performance benchmark recorded on synthetic railway networks and real Station Hengelo / Amsterdam Centraal OSM extracts.
+- [ ] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
+- [ ] Project owner reviews Stage C implementation to close `TKT-005`.
+
+## Implementation notes
+- Stage C scope strictly excludes Stage D (`CrossModalAnalyzer`, `LevelCrossingRelation`, `GradeTransitionRelation`, `highway=crossing`, `railway=level_crossing`, `railway=crossing`) and Stage E (renderer integration).
+- `TKT-005` remains `in_progress` pending project-owner review and acceptance.
+
+## Verification
+- Status: In progress
+- Verification steps:
+  - `npm test`
+  - `npm run lint`
+  - `npm run build`
+  - `npm run docs:api`
+
+## Related files and documentation
+- Source: `src/world/infrastructure/topology/types.ts`, `src/world/infrastructure/topology/RailwayNetworkBuilder.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/LocalGeoJsonProvider.ts`
+- Tests: `src/world/RailwayNetworkTopology.test.ts`
+- Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`

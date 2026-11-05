@@ -10,5 +10,6 @@
 
 - [buildRoadNetwork](functions/buildRoadNetwork.md)
 - [extractRawOnewayTag](functions/extractRawOnewayTag.md)
+- [getCanonicalMeaningfulOsmTagsString](functions/getCanonicalMeaningfulOsmTagsString.md)
 - [getRoadTier](functions/getRoadTier.md)
 - [normalizeOnewayTag](functions/normalizeOnewayTag.md)

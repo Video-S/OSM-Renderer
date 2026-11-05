@@ -13,6 +13,7 @@ import {
   buildRoadNetwork,
   enrichGeoJsonWithOverpassNodeIds,
   enrichGeoJsonWithOsmXmlNodeIds,
+  COORD_ALIGNMENT_TOLERANCE_DEG,
   UnchainedRoadPart,
 } from './infrastructure/topology/InfrastructureGraph';
 
@@ -597,79 +598,186 @@ test('M2.3-B T-08: blocks degree-2 simplification across road attribute breaks a
     assert.ok(breakNode);
     assert.deepEqual(breakNode.roles, ['attribute_break']);
 
-    // 2. Opposing one-way head-to-head (A -> B with oneway=yes, C -> B with oneway=yes) must NOT simplify
-    const onewayEast = makeRoadPart({
-      id: 'way/803-0',
-      sourceFeatureId: 'way/803',
+    // Case 1: Two compatible oneway=yes segments with continuous traffic flow (A -> B, B -> C)
+    const onewayA = makeRoadPart({
+      id: 'way/810-0',
+      sourceFeatureId: 'way/810',
       oneway: 'yes',
       points: [
         [0, 0],
         [10, 0],
       ],
-      rawOsmNodeIds: ['811', '812'],
+      rawOsmNodeIds: ['810', '811'],
     });
-    const onewayWestIntoB = makeRoadPart({
-      id: 'way/804-0',
-      sourceFeatureId: 'way/804',
+    const onewayB = makeRoadPart({
+      id: 'way/811-0',
+      sourceFeatureId: 'way/811',
       oneway: 'yes',
       points: [
+        [10, 0],
         [20, 0],
+      ],
+      rawOsmNodeIds: ['811', '812'],
+    });
+    const forwardMergeRes = buildRoadNetwork([onewayA, onewayB]);
+    assert.equal(
+      forwardMergeRes.roads.edges.size,
+      1,
+      'Two compatible oneway=yes segments with continuous flow must simplify into 1 edge'
+    );
+    const [mergedForward] = [...forwardMergeRes.roads.edges.values()];
+    assert.equal(mergedForward.normalizedOneway, 'forward');
+    assert.equal(mergedForward.rawOnewayTag, 'yes');
+    assert.equal(mergedForward.points.length, 3);
+    assert.equal(mergedForward.provenance.segments.length, 2);
+    assert.equal(mergedForward.provenance.segments[0].reversedRelativeToSource, false);
+    assert.equal(mergedForward.provenance.segments[1].reversedRelativeToSource, false);
+
+    // Case 2: Two compatible oneway=-1 segments with continuous traffic flow
+    // Way 1 digitized A -> B (traffic B -> A); Way 2 digitized B -> C (traffic C -> B).
+    // Continuous traffic flow is C -> B -> A.
+    const onewayRevA = makeRoadPart({
+      id: 'way/820-0',
+      sourceFeatureId: 'way/820',
+      oneway: '-1',
+      points: [
+        [0, 0],
         [10, 0],
       ],
-      rawOsmNodeIds: ['813', '812'],
+      rawOsmNodeIds: ['820', '821'],
     });
-
-    const opposingOnewayRes = buildRoadNetwork([onewayEast, onewayWestIntoB]);
+    const onewayRevB = makeRoadPart({
+      id: 'way/821-0',
+      sourceFeatureId: 'way/821',
+      oneway: '-1',
+      points: [
+        [10, 0],
+        [20, 0],
+      ],
+      rawOsmNodeIds: ['821', '822'],
+    });
+    const reverseMergeRes = buildRoadNetwork([onewayRevA, onewayRevB]);
     assert.equal(
-      opposingOnewayRes.roads.edges.size,
-      2,
-      'Opposing one-way segments (both flowing into node 812) must not simplify'
+      reverseMergeRes.roads.edges.size,
+      1,
+      'Two compatible oneway=-1 segments with continuous flow must simplify into 1 edge'
     );
-    const opposingNode = opposingOnewayRes.roads.nodes.get('road_node:0|0|0:osm_812');
-    assert.ok(opposingNode?.roles.includes('attribute_break'));
+    const [mergedReverse] = [...reverseMergeRes.roads.edges.values()];
+    assert.equal(mergedReverse.normalizedOneway, 'reverse');
+    assert.equal(mergedReverse.rawOnewayTag, '-1');
+    assert.equal(mergedReverse.points.length, 3);
+    assert.equal(mergedReverse.provenance.segments.length, 2);
+    assert.equal(mergedReverse.provenance.segments[0].reversedRelativeToSource, false);
+    assert.equal(mergedReverse.provenance.segments[1].reversedRelativeToSource, false);
 
-    // 3. Compatible one-way chain where second way is digitized in reverse with oneway=-1 (A -> B oneway=yes, C -> B oneway=-1)
-    // Flow on second way is B -> C, which is continuous with A -> B!
-    const onewayReverseTag = makeRoadPart({
-      id: 'way/805-0',
-      sourceFeatureId: 'way/805',
+    // Case 3: oneway=yes meeting oneway=-1: must NOT simplify (differs in rawOnewayTag per ADR-0009 Sec 4.3)
+    const onewayYesMeetingRev = makeRoadPart({
+      id: 'way/830-0',
+      sourceFeatureId: 'way/830',
+      oneway: 'yes',
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      rawOsmNodeIds: ['830', '831'],
+    });
+    const onewayRevMeetingYes = makeRoadPart({
+      id: 'way/831-0',
+      sourceFeatureId: 'way/831',
       oneway: '-1',
       points: [
         [20, 0],
         [10, 0],
       ],
-      rawOsmNodeIds: ['813', '812'],
+      rawOsmNodeIds: ['832', '831'],
     });
-
-    const compatibleOnewayRes = buildRoadNetwork([onewayEast, onewayReverseTag]);
+    const yesMeetingRevRes = buildRoadNetwork([onewayYesMeetingRev, onewayRevMeetingYes]);
     assert.equal(
-      compatibleOnewayRes.roads.edges.size,
-      1,
-      'Consistent flow direction (A->B oneway=yes followed by C->B oneway=-1) must simplify into 1 forward edge'
+      yesMeetingRevRes.roads.edges.size,
+      2,
+      'oneway=yes meeting oneway=-1 must NOT simplify (differs in rawOnewayTag)'
     );
-    const [mergedOnewayEdge] = [...compatibleOnewayRes.roads.edges.values()];
-    assert.equal(mergedOnewayEdge.normalizedOneway, 'forward');
-    assert.equal(mergedOnewayEdge.provenance.segments[1].reversedRelativeToSource, true);
+    const node831 = yesMeetingRevRes.roads.nodes.get('road_node:0|0|0:osm_831');
+    assert.ok(node831?.roles.includes('attribute_break'));
 
-    // 4. Special oneway=reversible maps to normalizedOneway: 'unknown' and blocks merging with oneway=yes
+    // Case 4: Omitted oneway meeting explicit oneway=no: must NOT simplify
+    const omittedOneway = makeRoadPart({
+      id: 'way/840-0',
+      sourceFeatureId: 'way/840',
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      rawOsmNodeIds: ['840', '841'],
+    });
+    const explicitOnewayNo = makeRoadPart({
+      id: 'way/841-0',
+      sourceFeatureId: 'way/841',
+      oneway: 'no',
+      points: [
+        [10, 0],
+        [20, 0],
+      ],
+      rawOsmNodeIds: ['841', '842'],
+    });
+    const omittedVsNoRes = buildRoadNetwork([omittedOneway, explicitOnewayNo]);
+    assert.equal(
+      omittedVsNoRes.roads.edges.size,
+      2,
+      'Omitted oneway meeting explicit oneway=no must NOT simplify (differs in rawOnewayTag)'
+    );
+    const node841 = omittedVsNoRes.roads.nodes.get('road_node:0|0|0:osm_841');
+    assert.ok(node841?.roles.includes('attribute_break'));
+
+    // Case 5: Opposing one-way traffic: must NOT simplify (head-to-head collision at node 851)
+    const opposingEast = makeRoadPart({
+      id: 'way/850-0',
+      sourceFeatureId: 'way/850',
+      oneway: 'yes',
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      rawOsmNodeIds: ['850', '851'],
+    });
+    const opposingWest = makeRoadPart({
+      id: 'way/851-0',
+      sourceFeatureId: 'way/851',
+      oneway: 'yes',
+      points: [
+        [20, 0],
+        [10, 0],
+      ],
+      rawOsmNodeIds: ['852', '851'],
+    });
+    const opposingRes = buildRoadNetwork([opposingEast, opposingWest]);
+    assert.equal(
+      opposingRes.roads.edges.size,
+      2,
+      'Opposing one-way traffic (both entering node 851) must NOT simplify'
+    );
+    const node851 = opposingRes.roads.nodes.get('road_node:0|0|0:osm_851');
+    assert.ok(node851?.roles.includes('attribute_break'));
+
+    // Case 6: Unknown/conditional one-way tags: retain original data and do NOT simplify
     const reversibleWay = makeRoadPart({
-      id: 'way/806-0',
-      sourceFeatureId: 'way/806',
+      id: 'way/860-0',
+      sourceFeatureId: 'way/860',
       oneway: 'reversible',
       points: [
         [10, 0],
         [20, 0],
       ],
-      rawOsmNodeIds: ['812', '813'],
+      rawOsmNodeIds: ['861', '862'],
     });
-    const reversibleRes = buildRoadNetwork([onewayEast, reversibleWay]);
+    const reversibleRes = buildRoadNetwork([onewayA, reversibleWay]);
     assert.equal(
       reversibleRes.roads.edges.size,
       2,
       'oneway=reversible must not merge with oneway=yes'
     );
     const revEdge = [...reversibleRes.roads.edges.values()].find(
-      (e) => e.provenance.primaryPartId === 'way/806-0'
+      (e) => e.provenance.primaryPartId === 'way/860-0'
     );
     assert.equal(revEdge?.normalizedOneway, 'unknown');
     assert.equal(revEdge?.rawOnewayTag, 'reversible');
@@ -939,6 +1047,92 @@ test('M2.3-B T-16: retains distinct parallel geometries colliding under legacy h
       'way/1611',
       'way/1612',
     ]);
+
+    // Semantic attribute preservation during duplicate detection:
+    // Geometrically identical ways with differing surface, lane markings, or directional attributes must NOT collapse!
+    const asphaltRoad = makeRoadPart({
+      id: 'way/1620-0',
+      sourceFeatureId: 'way/1620',
+      points: [
+        [30, 0],
+        [40, 0],
+      ],
+      rawOsmNodeIds: ['20', '21'],
+      surface: 'asphalt',
+    });
+    const pavingStonesRoad = makeRoadPart({
+      id: 'way/1621-0',
+      sourceFeatureId: 'way/1621',
+      points: [
+        [30, 0],
+        [40, 0],
+      ],
+      rawOsmNodeIds: ['20', '21'],
+      surface: 'paving_stones',
+    });
+    const surfaceDiffGraph = buildRoadNetwork([asphaltRoad, pavingStonesRoad]);
+    assert.equal(
+      surfaceDiffGraph.roads.edges.size,
+      2,
+      'Geometrically identical ways with differing surface must remain distinct edges'
+    );
+    assert.equal(surfaceDiffGraph.diagnostics.exactDeduplicatedCount, 0);
+
+    const laneMarkedRoadA = makeRoadPart({
+      id: 'way/1622-0',
+      sourceFeatureId: 'way/1622',
+      points: [
+        [50, 0],
+        [60, 0],
+      ],
+      rawOsmNodeIds: ['30', '31'],
+      osmTags: { 'turn:lanes': 'left|through' },
+    });
+    const laneMarkedRoadB = makeRoadPart({
+      id: 'way/1623-0',
+      sourceFeatureId: 'way/1623',
+      points: [
+        [50, 0],
+        [60, 0],
+      ],
+      rawOsmNodeIds: ['30', '31'],
+      osmTags: { 'turn:lanes': 'through|right' },
+    });
+    const laneDiffGraph = buildRoadNetwork([laneMarkedRoadA, laneMarkedRoadB]);
+    assert.equal(
+      laneDiffGraph.roads.edges.size,
+      2,
+      'Geometrically identical ways with differing turn:lanes markings must remain distinct edges'
+    );
+    assert.equal(laneDiffGraph.diagnostics.exactDeduplicatedCount, 0);
+
+    const directionalRoadA = makeRoadPart({
+      id: 'way/1624-0',
+      sourceFeatureId: 'way/1624',
+      points: [
+        [70, 0],
+        [80, 0],
+      ],
+      rawOsmNodeIds: ['40', '41'],
+      oneway: 'yes',
+    });
+    const directionalRoadB = makeRoadPart({
+      id: 'way/1625-0',
+      sourceFeatureId: 'way/1625',
+      points: [
+        [70, 0],
+        [80, 0],
+      ],
+      rawOsmNodeIds: ['40', '41'],
+      oneway: 'no',
+    });
+    const onewayDiffGraph = buildRoadNetwork([directionalRoadA, directionalRoadB]);
+    assert.equal(
+      onewayDiffGraph.roads.edges.size,
+      2,
+      'Geometrically identical ways with differing directional attributes (oneway=yes vs no) must remain distinct edges'
+    );
+    assert.equal(onewayDiffGraph.diagnostics.exactDeduplicatedCount, 0);
   });
 
 test('M2.3-B T-17 (Stage B): preserves pre-chaining road parts, guarantees input immutability, and leaves mapData.roads & GeometryBuilder unchanged', () => {
@@ -1027,6 +1221,12 @@ test('M2.3-B T-17 (Stage B): preserves pre-chaining road parts, guarantees input
   });
 
 test('M2.3-B enriches Overpass JSON and OSM 0.6 XML ways with verified per-vertex OSM node IDs and rejects misaligned geometries', () => {
+    assert.equal(
+      COORD_ALIGNMENT_TOLERANCE_DEG,
+      1e-7,
+      'Coordinate alignment tolerance must be tightened to 1e-7 deg (~1.1 cm), strictly below 0.15m snap threshold'
+    );
+
     // 1. Overpass JSON -> osmtogeojson -> enrichGeoJsonWithOverpassNodeIds
     const overpassPayload = {
       version: 0.6,
@@ -1050,10 +1250,21 @@ test('M2.3-B enriches Overpass JSON and OSM 0.6 XML ways with verified per-verte
     assert.ok(wayFeature);
     assert.deepEqual(wayFeature.properties._nodeIds, ['5001', '5002', '5003']);
 
-    // Verify rejection when coordinates are tampered/misaligned
+    // Verify rejection when coordinates are displaced by 1e-6 deg (~11 cm > 1e-7 deg tolerance)
+    const displaced1e6GeoJson = JSON.parse(JSON.stringify(convertedOverpass));
+    delete displaced1e6GeoJson.features[0].properties._nodeIds;
+    displaced1e6GeoJson.features[0].geometry.coordinates[1][0] += 1e-6;
+    enrichGeoJsonWithOverpassNodeIds(displaced1e6GeoJson, overpassPayload);
+    assert.equal(
+      displaced1e6GeoJson.features[0].properties._nodeIds,
+      undefined,
+      'Vertex coordinate displaced by 1e-6 deg (~11 cm) must reject node ID attachment'
+    );
+
+    // Verify rejection when coordinates are materially displaced by 0.01 deg (~1.1 km)
     const misalignedGeoJson = JSON.parse(JSON.stringify(convertedOverpass));
     delete misalignedGeoJson.features[0].properties._nodeIds;
-    misalignedGeoJson.features[0].geometry.coordinates[1][0] += 0.01; // > 1e-5 deg mismatch
+    misalignedGeoJson.features[0].geometry.coordinates[1][0] += 0.01;
     enrichGeoJsonWithOverpassNodeIds(misalignedGeoJson, overpassPayload);
     assert.equal(
       misalignedGeoJson.features[0].properties._nodeIds,
@@ -1089,6 +1300,17 @@ test('M2.3-B enriches Overpass JSON and OSM 0.6 XML ways with verified per-verte
     const convertedXml = osmtogeojson(xmlDoc);
     enrichGeoJsonWithOsmXmlNodeIds(convertedXml, xmlDoc);
     assert.deepEqual(convertedXml.features[0].properties._nodeIds, ['6001', '6002', '6003']);
+
+    // XML rejection when coordinate is displaced by 1e-6 deg
+    const displacedXmlGeoJson = JSON.parse(JSON.stringify(convertedXml));
+    delete displacedXmlGeoJson.features[0].properties._nodeIds;
+    displacedXmlGeoJson.features[0].geometry.coordinates[0][1] += 1e-6;
+    enrichGeoJsonWithOsmXmlNodeIds(displacedXmlGeoJson, xmlDoc);
+    assert.equal(
+      displacedXmlGeoJson.features[0].properties._nodeIds,
+      undefined,
+      'XML coordinate displaced by 1e-6 deg must reject node ID attachment'
+    );
 
     // 3. Verify MultiLineString _nodeIdsByPart preservation through LocalGeoJsonProvider
     const multiLineGeoJson = {
@@ -1151,6 +1373,129 @@ test('M2.3-B enriches Overpass JSON and OSM 0.6 XML ways with verified per-verte
       true,
       'server.ts must invoke enrichGeoJsonWithOsmXmlNodeIds after XML osmtogeojson fallback'
     );
+  });
+
+test('M2.3-B Renderer Isolation: live server node enrichment does not alter legacy mapData.roads, mapData.railways, chaining, or GeometryBuilder scene meshes', () => {
+    // Construct an offline Overpass payload with:
+    // - Two connected road ways (way 201: nodes 201->202, way 202: nodes 202->203) that chain together in chainContiguousRoads
+    // - A third road way 203 starting at node 204 at [4.9010001, 52.3780001] (~1.5 cm from node 202 [4.9010, 52.3780])
+    // - A railway track way 301 (nodes 301->302)
+    const overpassPayload = {
+      version: 0.6,
+      elements: [
+        { type: 'node', id: 201, lat: 52.3780, lon: 4.9000 },
+        { type: 'node', id: 202, lat: 52.3780, lon: 4.9010 },
+        { type: 'node', id: 203, lat: 52.3780, lon: 4.9020 },
+        { type: 'node', id: 204, lat: 52.3780001, lon: 4.9010001 }, // ~1.5 cm from node 202
+        { type: 'node', id: 205, lat: 52.3788, lon: 4.9010 },
+        { type: 'node', id: 301, lat: 52.3770, lon: 4.9000 },
+        { type: 'node', id: 302, lat: 52.3770, lon: 4.9020 },
+        {
+          type: 'way',
+          id: 201,
+          nodes: [201, 202],
+          tags: { highway: 'residential', name: 'Continuous Way', layer: '0' },
+        },
+        {
+          type: 'way',
+          id: 202,
+          nodes: [202, 203],
+          tags: { highway: 'residential', name: 'Continuous Way', layer: '0' },
+        },
+        {
+          type: 'way',
+          id: 203,
+          nodes: [204, 205],
+          tags: { highway: 'residential', name: 'Close Way', layer: '0' },
+        },
+        {
+          type: 'way',
+          id: 301,
+          nodes: [301, 302],
+          tags: { railway: 'rail', name: 'Spur Line', layer: '0' },
+        },
+      ],
+    };
+
+    // Pre-enrichment: pure osmtogeojson output without _nodeIds
+    const preEnrichedGeoJson = osmtogeojson(overpassPayload);
+
+    // Post-enrichment: osmtogeojson output enriched with verified _nodeIds via server.ts helper
+    const postEnrichedGeoJson = JSON.parse(JSON.stringify(preEnrichedGeoJson));
+    enrichGeoJsonWithOverpassNodeIds(postEnrichedGeoJson, overpassPayload);
+
+    const provider = new LocalGeoJsonProvider();
+    const preMapData = provider.parseGeoJson(preEnrichedGeoJson, 'Pre-Enrichment');
+    const postMapData = provider.parseGeoJson(postEnrichedGeoJson, 'Post-Enrichment');
+
+    // 1. Verify legacy mapData.roads are 100% structurally identical
+    assert.equal(
+      preMapData.roads.length,
+      postMapData.roads.length,
+      'Road feature count must be identical between pre- and post-enrichment'
+    );
+    for (let i = 0; i < preMapData.roads.length; i++) {
+      const rPre = preMapData.roads[i];
+      const rPost = postMapData.roads[i];
+      assert.equal(rPre.id, rPost.id);
+      assert.deepEqual(rPre.sourceFeatureIds, rPost.sourceFeatureIds);
+      assert.deepEqual(rPre.points, rPost.points);
+      assert.deepEqual(rPre.nodeIds, rPost.nodeIds);
+      assert.equal(rPre.roadClass, rPost.roadClass);
+      assert.equal(rPre.width, rPost.width);
+    }
+
+    // 2. Verify legacy mapData.railways are 100% structurally identical
+    assert.equal(
+      preMapData.railways.length,
+      postMapData.railways.length,
+      'Railway feature count must be identical between pre- and post-enrichment'
+    );
+    for (let i = 0; i < preMapData.railways.length; i++) {
+      const rwPre = preMapData.railways[i];
+      const rwPost = postMapData.railways[i];
+      assert.equal(rwPre.id, rwPost.id);
+      assert.deepEqual(rwPre.points, rwPost.points);
+      assert.deepEqual(rwPre.nodeIds, rwPost.nodeIds);
+    }
+
+    // 3. Verify GeometryBuilder 3D scene construction is 100% unchanged
+    const preScene = new GeometryBuilder().buildScene(preMapData, MAP_THEMES.tactical);
+    const postScene = new GeometryBuilder().buildScene(postMapData, MAP_THEMES.tactical);
+
+    assert.equal(
+      preScene.roadsGroup.children.length,
+      postScene.roadsGroup.children.length,
+      'Road mesh scene child count must be identical'
+    );
+    assert.equal(
+      preScene.railwaysGroup.children.length,
+      postScene.railwaysGroup.children.length,
+      'Railway mesh scene child count must be identical'
+    );
+
+    preScene.dispose();
+    postScene.dispose();
+
+    // 4. Verify that postMapData.topologySource receives explicit OSM node IDs for RoadNetworkBuilder
+    assert.ok(postMapData.topologySource);
+    assert.equal(postMapData.topologySource.roadParts.length, 3);
+    assert.deepEqual(postMapData.topologySource.roadParts[0].rawOsmNodeIds, ['201', '202']);
+    assert.deepEqual(postMapData.topologySource.roadParts[1].rawOsmNodeIds, ['202', '203']);
+    assert.deepEqual(postMapData.topologySource.roadParts[2].rawOsmNodeIds, ['204', '205']);
+
+    // In RoadNetworkBuilder, node 204 at ~1.5 cm from node 202 is preserved as a distinct explicit node
+    const graph = buildRoadNetwork(postMapData.topologySource.roadParts);
+    assert.ok(graph.roads.nodes.has('road_node:0|0|0:osm_201'));
+    assert.ok(graph.roads.nodes.has('road_node:0|0|0:osm_203'));
+    assert.ok(graph.roads.nodes.has('road_node:0|0|0:osm_204'));
+    assert.ok(graph.roads.nodes.has('road_node:0|0|0:osm_205'));
+    // Degree-2 node 202 between Way 201 and Way 202 is contracted into the simplified edge
+    const simplifiedEdge = [...graph.roads.edges.values()].find(
+      (e) => e.fromNodeId === 'road_node:0|0|0:osm_201' && e.toNodeId === 'road_node:0|0|0:osm_203'
+    );
+    assert.ok(simplifiedEdge);
+    assert.deepEqual(simplifiedEdge.vertexRawOsmNodeIds, ['201', '202', '203']);
   });
 
 test('M2.3-B measures and logs LocalGeoJsonProvider.parseGeoJson vs buildRoadNetwork performance on synthetic and real OSM extracts', () => {

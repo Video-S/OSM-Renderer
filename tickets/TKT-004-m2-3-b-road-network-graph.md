@@ -48,19 +48,29 @@ Prior to Stage B:
 - Updated `TopologicalNodeIndex.ts` with deterministic distance tie-breaking and explicit OSM node helpers (`isExplicitNode`, `extractRawOsmNodeId`).
 - Updated `LocalGeoJsonProvider.ts` so `clipPolylineToBox` records `clippedAtStart` / `clippedAtEnd` and clears node IDs on boundary exit cuts, `extractVerifiedPartOsmNodeIds` validates per-part node ID lengths for `LineString` and `MultiLineString`, `@id` is supported alongside `props.id` and `f.id`, and `ProcessedMapData.topologySource.roadParts` is populated with deep-cloned `UnchainedRoadPart` records prior to `seenRoadSegments` and `chainContiguousRoads`.
 - Wired `enrichGeoJsonWithOverpassNodeIds` and `enrichGeoJsonWithOsmXmlNodeIds` into `server.ts` immediately after `osmtogeojson`.
+- Targeted Correctness & Regression Fixes (post-review):
+  1. *Enforced accepted one-way simplification semantics*: In `RoadNetworkBuilder.ts`, `canContractDegree2RoadNode` strictly enforces identical `rawOnewayTag` per ADR-0009 Section 4.3 (blocking e.g. `oneway=yes` + `oneway=-1`, and omitted `oneway` + explicit `oneway=no`), along with continuous traffic flow. Updated `T-08` with 6 explicit positive and negative one-way cases.
+  2. *Prevented semantic data loss during duplicate detection*: Exported `getCanonicalMeaningfulOsmTagsString` (excluding only internal node-enrichment and identity keys: `nodes`, `nodeIds`, `_nodeIds`, `_nodeIdsByPart`, `id`, `@id`), incorporated canonical tags into `compareRoadPartsCanonically` pre-sorting, and included the canonical tags string in `bucketKey`. Added test coverage in `T-16` proving identical geometries with different `surface`, `turn:lanes`, or directional attributes remain distinct graph edges.
+  3. *Verified renderer isolation for live node-ID enrichment*: In `LocalGeoJsonProvider.ts`, separated legacy node extraction (`extractLegacyPartOsmNodeIds`, reading only legacy `nodes` / `nodeIds`) from topology node extraction (`extractVerifiedTopologyPartOsmNodeIds`, reading `_nodeIdsByPart` / `_nodeIds` / `nodes` / `nodeIds`). Guaranteed byte-for-byte identical legacy `mapData.roads`, `mapData.railways`, chained geometries, and `GeometryBuilder` scene meshes between raw and enriched GeoJSON.
+  4. *Tightened coordinate-alignment verification*: Set `COORD_ALIGNMENT_TOLERANCE_DEG = 1e-7` (~1.1 cm, matching OSM 7-decimal-place precision and strictly below the 15 cm snap radius). Tested Overpass JSON and XML rejection for displaced coordinates (`1e-6` deg and `0.01` deg).
 - Per project instructions, `TKT-004` remains `in_progress` pending project-owner review.
 
 ## Verification
 - Status: Implemented and verified (2026-11-05); awaiting project-owner review to close.
 - Executed verification commands:
-  - `npm test` (`tsx --test src/world/*.test.ts`): Exit code `0` — **106 / 106 tests passed** (`0` failures), including all `14` new Stage B tests in `src/world/RoadNetworkTopology.test.ts`.
+  - `npm test` (`tsx --test src/world/*.test.ts`): Exit code `0` — **107 / 107 tests passed** (`0` failures), including all Stage B tests in `src/world/RoadNetworkTopology.test.ts`.
   - `npm run lint` (`tsc --noEmit`): Exit code `0` — `0` TypeScript errors.
   - `npm run build` (`vite build`): Exit code `0` — production bundle generated cleanly.
   - `npm run docs:api` (`typedoc`): Exit code `0` — API documentation generated in `docs/api-reference/`.
-- Recorded Stage B performance benchmark (`src/world/RoadNetworkTopology.test.ts`):
-  - **270-Way Synthetic Urban Road Grid**: `parseGeoJson = 12.61 ms`, `buildRoadNetwork = 11.85 ms` (`parts = 270`, `nodes = 100`, `edges = 180`, `simplified = 90`).
-  - **Station Hengelo Real OSM + Urban Roads (282 features)**: `parseGeoJson = 7.52 ms`, `buildRoadNetwork = 6.41 ms` (`parts = 120`, `nodes = 14`, `edges = 7`, `simplified = 113`).
-  - **Amsterdam Centraal Real OSM + Urban Roads (1041 features)**: `parseGeoJson = 27.78 ms`, `buildRoadNetwork = 10.50 ms` (`parts = 273`, `nodes = 106`, `edges = 183`, `simplified = 90`).
+- Recorded Stage B performance benchmark runs (`src/world/RoadNetworkTopology.test.ts`):
+  - **Run 1 (initial run)**:
+    - 270-Way Synthetic Urban Road Grid: `parseGeoJson = 12.61 ms`, `buildRoadNetwork = 11.85 ms` (`parts = 270`, `nodes = 100`, `edges = 180`, `simplified = 90`).
+    - Station Hengelo Real OSM + Urban Roads (282 features): `parseGeoJson = 7.52 ms`, `buildRoadNetwork = 6.41 ms` (`parts = 120`, `nodes = 14`, `edges = 7`, `simplified = 113`).
+    - Amsterdam Centraal Real OSM + Urban Roads (1041 features): `parseGeoJson = 27.78 ms`, `buildRoadNetwork = 10.50 ms` (`parts = 273`, `nodes = 106`, `edges = 183`, `simplified = 90`).
+  - **Run 2 (post-fix verification run)**:
+    - 270-Way Synthetic Urban Road Grid: `parseGeoJson = 11.63 ms`, `buildRoadNetwork = 11.03 ms` (`parts = 270`, `nodes = 100`, `edges = 180`, `simplified = 90`).
+    - Station Hengelo Real OSM + Urban Roads (282 features): `parseGeoJson = 12.10 ms`, `buildRoadNetwork = 6.11 ms` (`parts = 120`, `nodes = 14`, `edges = 7`, `simplified = 113`).
+    - Amsterdam Centraal Real OSM + Urban Roads (1041 features): `parseGeoJson = 40.26 ms`, `buildRoadNetwork = 14.68 ms` (`parts = 273`, `nodes = 106`, `edges = 183`, `simplified = 90`).
 
 ## Related files and documentation
 - Source: `src/world/infrastructure/topology/types.ts`, `src/world/infrastructure/topology/OsmNodeIdEnricher.ts`, `src/world/infrastructure/topology/RoadNetworkBuilder.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/TopologicalNodeIndex.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/types/MapFeature.ts`, `server.ts`

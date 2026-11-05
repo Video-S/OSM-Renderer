@@ -417,14 +417,24 @@ function hasNonFiniteCoordinates(coords: any): boolean {
   return false;
 }
 
-function extractRawOsmNodeIds(props: RawGeoJsonProperties): Array<string | number> | undefined {
+function extractTopologyRawOsmNodeIds(props: RawGeoJsonProperties): Array<string | number> | undefined {
+  if (Array.isArray(props._nodeIds)) return props._nodeIds;
   if (Array.isArray(props.nodes)) return props.nodes;
   if (Array.isArray(props.nodeIds)) return props.nodeIds;
-  if (Array.isArray(props._nodeIds)) return props._nodeIds;
   return undefined;
 }
 
-function extractVerifiedPartOsmNodeIds(
+function extractLegacyRawOsmNodeIds(props: RawGeoJsonProperties): Array<string | number> | undefined {
+  if (Array.isArray(props.nodes)) return props.nodes;
+  if (Array.isArray(props.nodeIds)) return props.nodeIds;
+  return undefined;
+}
+
+/**
+ * Extracts verified per-part explicit OSM node IDs for M2.3 topology graph construction.
+ * Reads _nodeIdsByPart, _nodeIds, nodes, and nodeIds.
+ */
+function extractVerifiedTopologyPartOsmNodeIds(
   props: RawGeoJsonProperties,
   partIndex: number,
   totalParts: number,
@@ -440,7 +450,39 @@ function extractVerifiedPartOsmNodeIds(
     return undefined;
   }
 
-  const raw = extractRawOsmNodeIds(props);
+  const raw = extractTopologyRawOsmNodeIds(props);
+  if (!raw) return undefined;
+
+  if (totalParts === 1 && raw.length === expectedVertexCount && !Array.isArray(raw[0])) {
+    return [...raw];
+  }
+
+  if (
+    raw.length === totalParts &&
+    Array.isArray(raw[partIndex]) &&
+    (raw[partIndex] as unknown as Array<string | number>).length === expectedVertexCount
+  ) {
+    return [...(raw[partIndex] as unknown as Array<string | number>)];
+  }
+
+  return undefined;
+}
+
+/**
+ * Extracts legacy explicit OSM node IDs (only props.nodes and props.nodeIds from synthetic test fixtures).
+ * Deliberately excludes server-side live enrichment (_nodeIds, _nodeIdsByPart) so that legacy
+ * renderer-facing chaining (chainContiguousRoads) and GeometryBuilder junction building remain 100%
+ * isolated and byte-for-byte identical until Stage E.
+ */
+function extractLegacyPartOsmNodeIds(
+  props: RawGeoJsonProperties,
+  partIndex: number,
+  totalParts: number,
+  expectedVertexCount: number
+): Array<string | number> | undefined {
+  if (expectedVertexCount < 2) return undefined;
+
+  const raw = extractLegacyRawOsmNodeIds(props);
   if (!raw) return undefined;
 
   if (totalParts === 1 && raw.length === expectedVertexCount && !Array.isArray(raw[0])) {
@@ -1114,7 +1156,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         let wasFeatureClipped = false;
 
         for (let i = 0; i < rawLines.length; i++) {
-          const partOsmNodes = extractVerifiedPartOsmNodeIds(
+          const partLegacyOsmNodes = extractLegacyPartOsmNodeIds(
             props,
             i,
             rawLines.length,
@@ -1127,14 +1169,14 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               -clipExtent,
               clipExtent,
               clipExtent,
-              partOsmNodes
+              partLegacyOsmNodes
             );
             if (clipped.wasClipped) wasFeatureClipped = true;
             candidateLines.push(...clipped.lines);
           } else {
             candidateLines.push({
               points: rawLines[i],
-              osmNodes: partOsmNodes,
+              osmNodes: partLegacyOsmNodes,
               clippedAtStart: false,
               clippedAtEnd: false,
             });
@@ -1515,14 +1557,21 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
         const candidateLines: Array<{
           points: [number, number][];
-          osmNodes?: Array<string | number | undefined>;
+          topologyOsmNodes?: Array<string | number | undefined>;
+          legacyOsmNodes?: Array<string | number | undefined>;
           clippedAtStart?: boolean;
           clippedAtEnd?: boolean;
         }> = [];
         let wasFeatureClipped = false;
 
         for (let i = 0; i < rawLines.length; i++) {
-          const partOsmNodes = extractVerifiedPartOsmNodeIds(
+          const partTopologyOsmNodes = extractVerifiedTopologyPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
+          const partLegacyOsmNodes = extractLegacyPartOsmNodeIds(
             props,
             i,
             rawLines.length,
@@ -1535,14 +1584,38 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               -clipExtent,
               clipExtent,
               clipExtent,
-              partOsmNodes
+              partTopologyOsmNodes
             );
             if (clipped.wasClipped) wasFeatureClipped = true;
-            candidateLines.push(...clipped.lines);
+
+            let legacyClippedNodes: Array<Array<string | number | undefined> | undefined> = [];
+            if (partLegacyOsmNodes) {
+              const legacyClipped = clipPolylineToBox(
+                rawLines[i],
+                -clipExtent,
+                -clipExtent,
+                clipExtent,
+                clipExtent,
+                partLegacyOsmNodes
+              );
+              legacyClippedNodes = legacyClipped.lines.map((l) => l.osmNodes);
+            }
+
+            for (let cIdx = 0; cIdx < clipped.lines.length; cIdx++) {
+              const cl = clipped.lines[cIdx];
+              candidateLines.push({
+                points: cl.points,
+                topologyOsmNodes: cl.osmNodes,
+                legacyOsmNodes: legacyClippedNodes[cIdx],
+                clippedAtStart: cl.clippedAtStart,
+                clippedAtEnd: cl.clippedAtEnd,
+              });
+            }
           } else {
             candidateLines.push({
               points: rawLines[i],
-              osmNodes: partOsmNodes,
+              topologyOsmNodes: partTopologyOsmNodes,
+              legacyOsmNodes: partLegacyOsmNodes,
               clippedAtStart: false,
               clippedAtEnd: false,
             });
@@ -1559,7 +1632,13 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
         let addedAny = false;
         for (let partIdx = 0; partIdx < candidateLines.length; partIdx++) {
-          const { points: line, osmNodes, clippedAtStart, clippedAtEnd } = candidateLines[partIdx];
+          const {
+            points: line,
+            topologyOsmNodes,
+            legacyOsmNodes,
+            clippedAtStart,
+            clippedAtEnd,
+          } = candidateLines[partIdx];
           if (line.length >= 2) {
             let totalLen = 0;
             for (let j = 0; j < line.length - 1; j++) {
@@ -1587,8 +1666,10 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               name: props.name,
               points: line.map((pt) => [pt[0], pt[1]] as [number, number]),
               rawOsmNodeIds: line.map((_, vIdx) =>
-                osmNodes && osmNodes[vIdx] !== undefined && osmNodes[vIdx] !== null
-                  ? String(osmNodes[vIdx])
+                topologyOsmNodes &&
+                topologyOsmNodes[vIdx] !== undefined &&
+                topologyOsmNodes[vIdx] !== null
+                  ? String(topologyOsmNodes[vIdx])
                   : undefined
               ),
               clippedAtStart: Boolean(clippedAtStart),
@@ -1605,7 +1686,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             const nodeIds = topoNodeIndex.resolveWayNodeIds(
               line,
               partGradeScope,
-              osmNodes as Array<string | number> | undefined
+              legacyOsmNodes as Array<string | number> | undefined
             );
 
             const p0 = line[0];

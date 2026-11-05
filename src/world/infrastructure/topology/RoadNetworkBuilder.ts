@@ -230,6 +230,38 @@ function comparePointArraysMillimeter(
   return 0;
 }
 
+const EXCLUDED_TAG_KEYS = new Set<string>([
+  'id',
+  '@id',
+  'osm_id',
+  'sourceFeatureId',
+  'partIndex',
+  'nodes',
+  'nodeIds',
+  '_nodeIds',
+  '_nodeIdsByPart',
+  '_topologyNodeIds',
+  '_topologyNodeIdsByPart',
+]);
+
+/**
+ * Returns a canonical, sorted string representation of meaningful OSM tags for a road part,
+ * excluding only identity and node-enrichment bookkeeping keys.
+ */
+export function getCanonicalMeaningfulOsmTagsString(tags?: RawGeoJsonProperties): string {
+  if (!tags) return '';
+  const entries: [string, string][] = [];
+  for (const [key, rawVal] of Object.entries(tags)) {
+    if (EXCLUDED_TAG_KEYS.has(key)) continue;
+    if (rawVal === undefined || rawVal === null) continue;
+    const strVal = String(rawVal).trim();
+    if (strVal.length === 0) continue;
+    entries.push([key, strVal]);
+  }
+  entries.sort((a, b) => compareStringsCodeUnit(a[0], b[0]));
+  return entries.map(([k, v]) => `${k}=${v}`).join(';;');
+}
+
 function compareRoadPartsCanonically(a: UnchainedRoadPart, b: UnchainedRoadPart): number {
   if (a.layer !== b.layer) return a.layer - b.layer;
   const aBridge = a.isBridge ? 1 : 0;
@@ -257,6 +289,12 @@ function compareRoadPartsCanonically(a: UnchainedRoadPart, b: UnchainedRoadPart)
 
   const wCmp = Math.round(a.width * 10) - Math.round(b.width * 10);
   if (wCmp !== 0) return wCmp;
+
+  const tagCmp = compareStringsCodeUnit(
+    getCanonicalMeaningfulOsmTagsString(a.osmTags),
+    getCanonicalMeaningfulOsmTagsString(b.osmTags)
+  );
+  if (tagCmp !== 0) return tagCmp;
 
   const srcCmp = compareStringsCodeUnit(a.sourceFeatureId, b.sourceFeatureId);
   if (srcCmp !== 0) return srcCmp;
@@ -471,6 +509,11 @@ function canContractDegree2RoadNode(
     return false;
   }
 
+  // Accepted ADR-0009 Section 4.3 strictly requires identical rawOnewayTag
+  if (e1.rawOnewayTag !== e2.rawOnewayTag) {
+    return false;
+  }
+
   // Never contract unknown/conditional oneway tags (e.g. oneway=reversible)
   if (e1.normalizedOneway === 'unknown' || e2.normalizedOneway === 'unknown') {
     return false;
@@ -481,8 +524,9 @@ function canContractDegree2RoadNode(
     return e1.normalizedOneway === 'bidirectional' && e2.normalizedOneway === 'bidirectional';
   }
 
-  // Both e1 and e2 are directed one-way ('forward' | 'reverse'):
-  // Traffic must flow continuously through `node` (one enters `node`, the other leaves `node`).
+  // Both e1 and e2 are directed one-way ('forward' | 'reverse') with identical rawOnewayTag:
+  // Traffic must flow continuously through `node` (one enters `node`, the other leaves `node`)
+  // without reversing either edge.
   const e1InE2Out = edgeFlowsIntoNode(e1, node.id) && edgeFlowsOutOfNode(e2, node.id);
   const e2InE1Out = edgeFlowsIntoNode(e2, node.id) && edgeFlowsOutOfNode(e1, node.id);
   return e1InE2Out || e2InE1Out;
@@ -572,6 +616,7 @@ export function buildRoadNetwork(
     const normOneway = normalizeOnewayTag(rawOneway);
     const lanes = parseLanesTag(part.osmTags);
     const nameKey = (part.name ?? '').trim().toLowerCase();
+    const canonicalTagsKey = getCanonicalMeaningfulOsmTagsString(part.osmTags);
 
     const bucketKey = [
       part.layer,
@@ -585,6 +630,7 @@ export function buildRoadNetwork(
       lanes ?? '',
       rawOneway ?? '',
       part.points.length,
+      canonicalTagsKey,
     ].join('|');
 
     const bucket = dedupBuckets.get(bucketKey);

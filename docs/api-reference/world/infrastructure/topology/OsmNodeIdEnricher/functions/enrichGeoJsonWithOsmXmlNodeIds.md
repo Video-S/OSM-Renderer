@@ -8,7 +8,7 @@
 
 > **enrichGeoJsonWithOsmXmlNodeIds**(`geojson`, `xmlDoc`): `any`
 
-Defined in: world/infrastructure/topology/OsmNodeIdEnricher.ts:247
+Defined in: world/infrastructure/topology/OsmNodeIdEnricher.ts:253
 
 Enriches a GeoJSON FeatureCollection converted from OSM 0.6 XML (`xmlDoc`) with verified
 per-vertex OSM node IDs (`_nodeIds` / `_nodeIdsByPart`).

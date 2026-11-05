@@ -8,7 +8,7 @@
 
 > **enrichGeoJsonWithOverpassNodeIds**(`geojson`, `overpassJson`): `any`
 
-Defined in: world/infrastructure/topology/OsmNodeIdEnricher.ts:215
+Defined in: world/infrastructure/topology/OsmNodeIdEnricher.ts:221
 
 Enriches a GeoJSON FeatureCollection converted from Overpass JSON with verified
 per-vertex OSM node IDs (`_nodeIds` / `_nodeIdsByPart`).

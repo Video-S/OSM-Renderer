@@ -26,6 +26,12 @@ Re-exports [buildRoadNetwork](../RoadNetworkBuilder/functions/buildRoadNetwork.m
 
 ***
 
+### COORD\_ALIGNMENT\_TOLERANCE\_DEG
+
+Re-exports [COORD_ALIGNMENT_TOLERANCE_DEG](../OsmNodeIdEnricher/variables/COORD_ALIGNMENT_TOLERANCE_DEG.md)
+
+***
+
 ### EdgeProvenance
 
 Re-exports [EdgeProvenance](../types/interfaces/EdgeProvenance.md)
@@ -53,6 +59,12 @@ Re-exports [enrichGeoJsonWithOverpassNodeIds](../OsmNodeIdEnricher/functions/enr
 ### extractRawOnewayTag
 
 Re-exports [extractRawOnewayTag](../RoadNetworkBuilder/functions/extractRawOnewayTag.md)
+
+***
+
+### getCanonicalMeaningfulOsmTagsString
+
+Re-exports [getCanonicalMeaningfulOsmTagsString](../RoadNetworkBuilder/functions/getCanonicalMeaningfulOsmTagsString.md)
 
 ***
 

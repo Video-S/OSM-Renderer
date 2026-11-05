@@ -54,7 +54,7 @@ To keep confirmed implementation behavior strictly separate from architectural r
 
 | # | Area | Confirmed Source Fact (Current Implementation) | Architectural Risk / Gap for M2.3 |
 | :--- | :--- | :--- | :--- |
-| **G1** | **Destructive Pre-Chaining of `mapData.roads` (`LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.parseGeoJson()` calls `chainContiguousRoads(roads, diagnostics)` at line 1742 *before* returning `ProcessedMapData`. Inside `chainContiguousRoads` (lines 2153–2268), `current` is mutated in place: `current.id` becomes `${current.id}+${other.id}`, `current.points` and `current.nodeIds` are concatenated, `other.points` may be reversed (lines 2227, 2244), and `other.osmTags` is discarded (`current.osmTags` retains only the first way's tags). | A graph builder that only receives `mapData.roads` cannot recover original unchained way boundaries, secondary way `osmTags` (`lanes`, `surface`, `oneway`), or original per-way digitization direction. Graph construction requires a non-destructive pre-chaining input handoff. |
+| **G1** | **Heuristic Deduplication & Destructive Pre-Chaining of `mapData.roads` (`LocalGeoJsonProvider.ts`)** | In `LocalGeoJsonProvider.parseGeoJson()`, road parts first pass through `seenRoadSegments` deduplication (lines 1487–1515), which hashes rounded `0.5 m` endpoints, averaged vertex coordinates (`sumX / line.length`, `sumZ / line.length` rounded to `0.5 m`), `0.5 m` total length, `partGradeScope`, and `roadClass`. Next, `chainContiguousRoads(roads, diagnostics)` is called at line 1742 *before* returning `ProcessedMapData`, mutating `current` in place (`current.id = "${current.id}+${other.id}"`, concatenating `points` and `nodeIds`, reversing `other.points` at lines 2227/2244, and discarding `other.osmTags`). Additionally, when a raw GeoJSON feature lacks an explicit `f.id`, `props.id`, or `props['@id']`, line 883 assigns an array-index fallback ID `feat-${featureIndex}`. | (1) `seenRoadSegments` is a coarse heuristic hash, not an exact geometric equality test: two distinct curved or S-bent geometries between the same endpoints with the same average vertex centroid and length collide and one is silently dropped. (2) `chainContiguousRoads` destructively erases unchained way boundaries, secondary way `osmTags` (`lanes`, `surface`, `oneway`), and original per-way digitization direction. Graph construction must capture clipped road parts **before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads`**. |
 | **G2** | **Per-Vertex OSM Node ID Survival (`server.ts` & `LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.extractRawOsmNodeIds` (lines 401–406) reads `props.nodes`, `props.nodeIds`, or `props._nodeIds`. In `server.ts` (lines 159, 182), `osmtogeojson` is invoked with default options on Overpass JSON and OSM 0.6 XML fallback documents, which does not copy way `nodes` / `<nd ref>` lists onto output GeoJSON `LineString` `properties`. Additionally, `LocalGeoJsonProvider.ts` (lines 1041, 1441) passes `rawLines.length === 1 ? rawOsmNodes : undefined` to `clipPolylineToBox`. | Live `/api/osm-data` responses currently lack explicit per-vertex OSM node IDs and rely entirely on `0.15 m` coordinate fallback. `MultiLineString` features (`rawLines.length > 1`) also drop `rawOsmNodes`. |
 | **G3** | **Shared `topoNodeIndex` & Unprotected Level Crossings (`LocalGeoJsonProvider.ts`)** | `LocalGeoJsonProvider.ts` (line 871) instantiates one `topoNodeIndex` shared by railways (line 1030) and roads (line 1480) using `partGradeScope = "${layer}|${isBridge}|${isTunnel}"`. Later, `chainContiguousRoads` (lines 2112–2119) computes `globalNodeDegree` by iterating **only over `roads`** (`for (const r of roads)`), not `railways`. | (1) Sharing `topoNodeIndex` couples road and railway coordinate-fallback centroids and aliases within `0.15 m` on the same `partGradeScope`. (2) Because `globalNodeDegree` only counts `roads`, a degree-2 road node that is also a shared road/rail level crossing has `globalNodeDegree === 2` and gets chained *through* by `chainContiguousRoads`, demoting the crossing node to an interior vertex. |
 | **G4** | **Interior Splitting & Node Prefixing (`GeometryBuilder.ts`)** | In `splitRoadsAtSharedInteriorNodes` (`GeometryBuilder.ts`, lines 907–987): (a) vertices are scoped by `tierScope = isPath ? 'path' : 'veh'` (line 919); (b) line 946 computes `const uniqueInRoad = new Set(keys)` before incrementing `nodeUsageCount`; (c) line 942 writes `canonicalNodeIds` (`veh|osm_...`) back to `r.nodeIds`, and line 2636 prepends `tierPrefix` (`veh_`) again, producing `startNodeId = "veh_veh|osm_..."`. | (a) Cross-tier (`veh` vs. `path`) shared interior nodes are not linked topologically. (b) Confirmed bug for self-intersecting single-way P-loops: `new Set(keys)` counts a repeated vertex within the same way only once (`nodeUsageCount === 1`), so an isolated P-loop way does not split at its own self-junction. (c) The `veh_veh|osm_...` double prefix is an internal naming-consistency defect (not a functional connectivity bug, since all branches in the same tier receive the same prefix). |
@@ -88,12 +88,12 @@ src/world/infrastructure/topology/
 
 To resolve **Gap G1** without breaking `GeometryBuilder` or any of the 92 existing tests during Stages B–D:
 
-1. **Why `mapData.roads` Alone Is Insufficient**:
-   - `LocalGeoJsonProvider.parseGeoJson()` currently mutates and chains `RoadFeature` objects inside `chainContiguousRoads()` before returning `ProcessedMapData`. Once chained, secondary way `osmTags`, original per-way vertex directions, and unchained part boundaries are irreversibly lost.
+1. **Why `mapData.roads` and `seenRoadSegments` Are Insufficient**:
+   - `LocalGeoJsonProvider.parseGeoJson()` applies a coarse heuristic deduplication filter (`seenRoadSegments`, lines 1487–1515, based on `0.5 m` rounded endpoints, averaged vertex coordinates, and rounded length) and then mutates and chains `RoadFeature` objects inside `chainContiguousRoads()` (line 1742). Distinct geometries sharing the same approximate hash can be dropped by `seenRoadSegments`, and secondary way `osmTags`, original per-way vertex directions, and unchained part boundaries are irreversibly lost during `chainContiguousRoads`.
 2. **Minimal Non-Destructive Handoff Contract (`ProcessedMapData.topologySource`)**:
-   - During `LocalGeoJsonProvider.parseGeoJson()`, immediately after `clipPolylineToBox` and exact-segment deduplication (`seenRoadSegments`)—and **before** `chainContiguousRoads` runs—`LocalGeoJsonProvider` records an immutable `topologySource: TopologySourceData` field on `ProcessedMapData`.
-   - `chainContiguousRoads` then operates on shallow-cloned `RoadFeature` records to produce the legacy `mapData.roads` array expected by `GeometryBuilder` during Stages B–D.
-   - `buildInfrastructureGraph(input: ProcessedMapData | TopologySourceData)` reads `input.topologySource` when passed a `ProcessedMapData` object (with a fallback adapter converting `mapData.roads` / `mapData.railways` into `UnchainedRoadPart` / `UnchainedRailwayPart` records only for legacy unit tests that construct synthetic `ProcessedMapData` literals directly without calling `LocalGeoJsonProvider`).
+   - During `LocalGeoJsonProvider.parseGeoJson()`, immediately after `clipPolylineToBox` and culvert/layer classification—**before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads` runs**—`LocalGeoJsonProvider` records an immutable `topologySource: TopologySourceData` field on `ProcessedMapData`.
+   - The existing renderer-facing `mapData.roads` pipeline (`seenRoadSegments` heuristic deduplication followed by `chainContiguousRoads` on separate `RoadFeature` objects) remains **unchanged during Stages B–D**.
+   - `buildInfrastructureGraph(input: ProcessedMapData | TopologySourceData)` consumes `input.topologySource` (with a fallback adapter for legacy unit tests that construct synthetic `ProcessedMapData` literals directly without calling `LocalGeoJsonProvider`).
 
 ```typescript
 import {
@@ -115,6 +115,8 @@ export type InfrastructurePointKind =
 export interface InfrastructurePointMetadata {
   /** Feature ID from GeoJSON (e.g. "node/98765"). */
   id: string;
+  /** True if `id` came from an explicit source feature ID (`f.id`, `props.id`, or `props['@id']`), false if synthetic `feat-${featureIndex}`. */
+  hasExplicitSourceId: boolean;
   /** Explicit raw OSM node ID if extractable (e.g. "98765"), otherwise undefined. */
   rawOsmNodeId?: string;
   /** Local metric world coordinates [x, z]. */
@@ -126,14 +128,20 @@ export interface InfrastructurePointMetadata {
 }
 
 /**
- * Non-destructive, pre-chaining road way part captured after bounding-box clipping
- * and exact-segment deduplication, prior to `chainContiguousRoads`.
+ * Non-destructive, pre-deduplication and pre-chaining road way part captured immediately
+ * after bounding-box clipping (`clipPolylineToBox`) and culvert/layer classification,
+ * BEFORE `seenRoadSegments` heuristic deduplication and BEFORE `chainContiguousRoads`.
  */
 export interface UnchainedRoadPart {
   /** Unique part ID (e.g. "way/100-0"). */
   id: string;
-  /** Original unsplit feature ID (e.g. "way/100"). */
+  /** Original unsplit feature ID (e.g. "way/100", or synthetic "feat-0" when the input feature lacked an ID). */
   sourceFeatureId: string;
+  /**
+   * True when `sourceFeatureId` came from an explicit ID in the input GeoJSON (`f.id`, `props.id`, or `props['@id']`);
+   * false when synthesized as `feat-${featureIndex}`.
+   */
+  hasExplicitSourceId: boolean;
   /** Zero-based index of this clipped/multi-line part within `sourceFeatureId`. */
   partIndex: number;
   /** Ordered 2D metric vertices [x, z][] in original digitized way orientation. */
@@ -159,11 +167,12 @@ export interface UnchainedRoadPart {
 }
 
 /**
- * Non-destructive railway way part captured after bounding-box clipping.
+ * Non-destructive railway way part captured immediately after bounding-box clipping.
  */
 export interface UnchainedRailwayPart {
   id: string;
   sourceFeatureId: string;
+  hasExplicitSourceId: boolean;
   partIndex: number;
   points: readonly [number, number][];
   rawOsmNodeIds: readonly (string | undefined)[];
@@ -184,14 +193,13 @@ export interface UnchainedRailwayPart {
 }
 
 /**
- * Non-destructive topology input attached to `ProcessedMapData.topologySource`.
+ * Non-destructive topology input attached to `ProcessedMapData.topologySource`,
+ * captured prior to heuristic road deduplication and prior to road chaining.
  */
 export interface TopologySourceData {
   roadParts: readonly UnchainedRoadPart[];
   railwayParts: readonly UnchainedRailwayPart[];
   infrastructurePoints: readonly InfrastructurePointMetadata[];
-  /** Maps canonical retained part/source ID -> array of deduplicated duplicate feature IDs. */
-  deduplicatedRoadMap: Readonly<Record<string, readonly string[]>>;
 }
 ```
 
@@ -629,15 +637,26 @@ export interface InfrastructureGraph {
 
 ### 4. Graph Construction, Semantics, and Simplification Specification
 
-#### 4.1 Determinism Across Input Reordering & Node Identity Rules
-1. **Canonical Input Sorting**:
+#### 4.1 Determinism, Exact Duplicate Detection, and Node Identity Rules
+1. **Canonical Input Sorting & Qualified Input-Order Determinism**:
+   - In `LocalGeoJsonProvider.ts` (line 883), GeoJSON features that lack an explicit source ID (`f.id`, `props.id`, or `props['@id']`) receive an index-based fallback ID `feat-${featureIndex}` (`hasExplicitSourceId: false`).
    - Before registering vertices in `TopologicalNodeIndex` or creating edges, `roadParts` and `railwayParts` are sorted deterministically by:
      1. Vertical scope key `(layer, isBridge ? 1 : 0, isTunnel ? 1 : 0)`,
-     2. `sourceFeatureId` (standard UTF-16 code-unit comparison),
-     3. `partIndex` (ascending integer),
-     4. Initial vertex coordinates `(points[0][0], points[0][1], points[1][0], points[1][1])`.
-   - **Guarantee**: Reordering the input `GeoJSON.features` array produces the exact same canonical node IDs, fallback node centroids, simplified edge orientations, `parallelIndex` assignments, and provenance arrays.
-2. **Three-Part Node Identity Separation**:
+     2. Explicit source ID rank (`hasExplicitSourceId ? 0 : 1`),
+     3. When `hasExplicitSourceId === true`: `(sourceFeatureId, partIndex)` (standard UTF-16 code-unit comparison),
+     4. Full polyline coordinate sequence `(points.length, points[0][0], points[0][1], ..., points[N-1][0], points[N-1][1])` and semantic class (`roadClass` or `railwayType`, `width`),
+     5. Final tie-breaker for identical anonymous geometries: `(sourceFeatureId, partIndex)`.
+   - **Determinism Guarantee and Qualification**:
+     - **Graph Structure & Geometry**: Across any permutation of the input `GeoJSON.features` array, node positions, fallback node clustering, edge polylines, topological degrees, and `parallelIndex` ordering are 100% invariant.
+     - **Identifier Stability Qualification**: Edge IDs (`edge.id`) and provenance maps (`provenance.sourceFeatureIds`, `featureToEdgeIds`) are completely invariant across input feature reordering **for inputs that provide stable explicit feature IDs (`hasExplicitSourceId: true`)**. When input features omit explicit IDs and rely on `LocalGeoJsonProvider`'s `feat-${featureIndex}` fallback, the graph topology and geometry remain deterministic, while synthetic `feat-${featureIndex}` strings in `provenance` and edge IDs necessarily reflect input array positions unless the caller supplies stable feature IDs.
+2. **Strict Geometric and Semantic Duplicate Detection**:
+   - Because `TopologySourceData` captures parts *before* `LocalGeoJsonProvider`'s coarse `seenRoadSegments` heuristic filter, the graph builder performs its own **strict exact-duplicate check** prior to splitting:
+   - Two parts $A$ and $B$ in the same network domain are collapsed as exact duplicates (retaining the canonically first part and recording the second part's `sourceFeatureId` in `EdgeSegmentProvenance.deduplicatedFeatureIds`) **if and only if all of the following hold**:
+     1. **Vertex Count & Full Polyline Coordinate Equality**: `A.points.length === B.points.length`, and every corresponding vertex $k \in [0, N-1]$ matches within `1e-3 m` (`1 mm`, $\max_k \hypot(x_{A,k} - x_{B,k}, z_{A,k} - z_{B,k}) \le 10^{-3}\text{ m}$) either in forward order ($0 \dots N-1$) or—only when both parts have `normalizedOneway === 'bidirectional'` and identical `rawOnewayTag`—in exact reverse order ($N-1 \dots 0$).
+     2. **Explicit OSM Node ID Compatibility**: At every vertex $k$ (aligned in the matched direction), neither part has a conflicting `rawOsmNodeId` (if both define `rawOsmNodeIds[k]`, they must be identical strings).
+     3. **Semantic Attribute Equality**: Identical vertical scope (`layer`, `isBridge`, `isTunnel`), `clippedAtStart` / `clippedAtEnd` (in matched direction), and domain attributes (`roadClass`, `tier`, `Math.round(width * 10)`, `isCulvert`, normalized `name`, `lanes`, `rawOnewayTag` for roads; `railwayType`, `Math.round(width * 10)`, `gauge`, `electrified`, `service`, `usage` for railways).
+   - **Guarantee**: Distinct parallel carriageways, service lanes, or S-curved geometries that happen to share rounded `0.5 m` endpoints, average vertex centroid, and total length (which previously collided in `seenRoadSegments`) are **never** deduplicated; they remain distinct graph edges.
+3. **Three-Part Node Identity Separation**:
    - **Explicit OSM Node (`nodeIdOrigin: 'explicit_osm'`)**: Has a defined `rawOsmNodeId` (e.g. `"5001"`) and canonical ID `${network}_node:${scope}:osm_${rawOsmNodeId}`. Two vertices with distinct `rawOsmNodeId` values (`"5001" !== "5002"`) **never** merge, even at `0.00 m` distance.
    - **Coordinate Fallback Node (`nodeIdOrigin: 'coordinate_fallback'`)**: Created when `rawOsmNodeId` is `undefined` and no existing node in the same domain and vertical scope lies within `DEFAULT_NODE_SNAP_TOLERANCE_METERS = 0.15` (`15 cm`). Assigned canonical ID `${network}_node:${scope}:fb_${seq}` (deterministic because inputs are canonically sorted prior to registration). If an explicit OSM node in the same domain and vertical scope lies within `0.15 m`, the coordinate-only vertex resolves to that explicit node's canonical ID (`nodeIdOrigin: 'explicit_osm'`). If multiple distinct explicit OSM nodes lie within `0.15 m` of a coordinate-only vertex, it snaps to the strictly closest one, breaking exact distance ties by lexicographically smallest `rawOsmNodeId`.
    - **Boundary-Clipped Node (`nodeIdOrigin: 'boundary_clip'`)**: Any endpoint where `clippedAtStart` or `clippedAtEnd` is `true` and `rawOsmNodeId` is `undefined` receives a unique, non-snapping node ID `${network}_node:${scope}:clip_${partId}_${endpoint}`. It is never merged with any other way's boundary-clipped or fallback node.
@@ -790,8 +809,8 @@ Grade transitions connect an at-grade edge endpoint (`!isBridge && !isTunnel`) a
 
 ## Recommended Resolutions to Open Questions (`Proposed` — Pending Project-Owner Sign-Off)
 
-1. **Non-Destructive Pre-Chaining Input vs. Legacy `mapData.roads` (Stages B–D vs. Stage E)**:
-   - *Recommended Resolution*: Preserve `LocalGeoJsonProvider.parseGeoJson()`'s existing `mapData.roads` output unchanged during Stages B–D so all 92 existing tests remain untouched, and attach a separate, non-destructive `mapData.topologySource: TopologySourceData` collection captured prior to `chainContiguousRoads` for `buildInfrastructureGraph`.
+1. **Non-Destructive Pre-Deduplication & Pre-Chaining Input vs. Legacy `mapData.roads` (Stages B–D vs. Stage E)**:
+   - *Recommended Resolution*: Preserve `LocalGeoJsonProvider.parseGeoJson()`'s existing `mapData.roads` pipeline (`seenRoadSegments` heuristic deduplication + `chainContiguousRoads`) unchanged during Stages B–D so all 92 existing tests remain untouched, and attach a separate, non-destructive `mapData.topologySource: TopologySourceData` collection captured **before heuristic `seenRoadSegments` deduplication and before `chainContiguousRoads`** for `buildInfrastructureGraph`.
 2. **Explicit Per-Vertex OSM Node ID Preservation in `server.ts` and `LocalGeoJsonProvider.ts`**:
    - *Recommended Resolution*: Preserve explicit per-vertex OSM node IDs for live Overpass JSON (`way.nodes`) and OSM 0.6 XML fallback (`<nd ref="...">`) responses when the node reference count aligns 1:1 with the extracted geometry coordinates. Handle `MultiLineString` and `clipPolylineToBox` split parts carefully by propagating vertex node IDs only where vertex alignment is exact, without claiming 100% ID recovery a priori, and keep the conservative `0.15 m` coordinate fallback when explicit IDs are absent.
 3. **Cross-Tier (`vehicular` vs. `path`) Road/Path Topology**:
@@ -822,7 +841,7 @@ All graph stages will be verified using Node's built-in test runner via `tsx --t
 3. **T-03 (`4-Way Shared-Node Road Intersection & Multi-Role Node`)**: Two roads sharing a central OSM node that is also tagged `highway=crossing` split into 4 incident `RoadEdge`s at a single `RoadNode` with `degree === 4` and non-exclusive `roles: ['highway_crossing', 'junction']`.
 4. **T-04 (`Unconnected 2D Geometric Crossing — Overpass & Unshared Same-Layer Crossing`)**: Two roads crossing at `(0, 0)` on `layer=0` vs. `layer=1` produce `1` `GradeSeparatedCrossingRelation`; two same-layer roads crossing in 2D without a shared vertex produce `0` junction nodes and `1` `UnresolvedCrossingCandidate` (`reason: 'geometric_intersection_without_shared_node'`).
 5. **T-05 (`Interior Node Split Where Side Road Meets Main Road Mid-Way`)**: Side road endpoint sharing explicit `rawOsmNodeId: "200"` with an interior vertex of a main road splits the main road into 2 edges at a degree-3 junction node.
-6. **T-06 (`Parallel Edges Between Same Two Nodes & Input-Order Determinism`)**: A main road and a crescent loop connecting the same nodes `(u, v)` produce 2 distinct `RoadEdge`s with `parallelIndex: 0` and `parallelIndex: 1`; shuffling the input feature array produces identical node IDs, edge IDs, and `parallelIndex` assignments.
+6. **T-06 (`Parallel Edges Between Same Two Nodes & Qualified Input-Order Determinism`)**: A main road and a crescent loop with stable explicit feature IDs connecting the same nodes `(u, v)` produce 2 distinct `RoadEdge`s with `parallelIndex: 0` and `parallelIndex: 1`; shuffling the input feature array produces identical node IDs, edge IDs, and `parallelIndex` assignments (while anonymous features lacking explicit source IDs preserve identical graph topology, node coordinates, edge geometries, and `parallelIndex` ordering across input permutations).
 7. **T-07 (`Self-Loop and P-Loop Handling — Half-Edge Degree Invariant`)**: A P-loop where way endpoint `points[N-1]` reconnects to interior vertex `points[2]` splits into 1 stem edge (`u -> v`) and 1 closed-loop edge (`v -> v`, `isClosedLoop: true`), where node `v` has `degree === 3`, `incidentHalfEdges.length === 3`, and `incidentEdgeIds.length === 2`. An isolated closed loop retains a deterministic `'loop_anchor'` node (`degree === 2`, `incidentEdgeIds.length === 1`, `incidentHalfEdges.length === 2`).
 8. **T-08 (`Attribute & One-Way Discontinuity Blocks Degree-2 Simplification`)**: Contiguous ways meeting at a degree-2 node with different `roadClass`, different `width`, opposing `oneway` directions (`oneway=yes` meeting `oneway=-1`), or unusual `oneway=reversible` tags are **not** merged (`roles: ['attribute_break']`), and `rawOnewayTag` is preserved verbatim.
 9. **T-09 (`Explicit OSM Node ID Precedence Over Coordinate Fallback`)**: Two vertices at `(10, 10)` with distinct `rawOsmNodeId` `"1"` and `"2"` remain 2 separate nodes (`nodeIdOrigin: 'explicit_osm'`), whereas an untagged vertex at `(10.05, 10.05)` within `0.15 m` resolves deterministically to `"1"`.
@@ -838,7 +857,8 @@ All graph stages will be verified using Node's built-in test runner via `tsx --t
     - Shared `rawOsmNodeId` between collinear at-grade and bridge road endpoints $\to$ `1` `GradeTransitionRelation` (`confidence: 'explicit_osm_node'`).
     - Untagged terminal endpoints `0.10 m` apart with $\text{continuousTraversalDot} \ge 0.866$ and unique match $\to$ `1` `GradeTransitionRelation` (`confidence: 'coordinate_fallback_confirmed'`).
     - Parallel loopback edge (`continuousTraversalDot <= -0.866`), perpendicular cross-street `0.50 m` away, or two ambiguous parallel candidates within `0.15 m` $\to$ `0` `GradeTransitionRelation`s and `1` `UnresolvedGradeTransitionCandidate`.
-16. **T-16 (`Pre-Chaining Handoff & Stage E Renderer Non-Regression`)**: Verifies that `ProcessedMapData.topologySource` preserves unchained parts while `mapData.roads` remains compatible during Stages B–D, and in Stage E all 92 existing tests pass with zero coplanar overlap or portal regressions.
+16. **T-16 (`Distinct Geometries Sharing Approximate Heuristic Deduplication Key Remain Separate Edges`)**: Two distinct road ways between `(0, 0)` and `(20, 0)` with the same `roadClass`, same average vertex centroid `(10, 0)`, and same total length (e.g., an S-curve `[(0,0), (5, 4), (15, -4), (20,0)]` and its mirror `[(0,0), (5, -4), (15, 4), (20,0)]`, which collide on `seenRoadSegments` in `LocalGeoJsonProvider`) are both preserved in `ProcessedMapData.topologySource` and produce `2` distinct `RoadEdge` records (`parallelIndex: 0` and `1`), whereas a true vertex-for-vertex duplicate (`<= 1 mm` at every vertex with identical attributes and compatible node IDs/oneway) is deduplicated into `provenance.segments[0].deduplicatedFeatureIds`.
+17. **T-17 (`Pre-Deduplication/Pre-Chaining Handoff & Stage E Renderer Non-Regression`)**: Verifies that `ProcessedMapData.topologySource` preserves unchained and pre-deduplication parts while `mapData.roads` remains compatible during Stages B–D, and in Stage E all 92 existing tests pass with zero coplanar overlap or portal regressions.
 
 ---
 

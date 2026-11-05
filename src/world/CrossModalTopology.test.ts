@@ -2097,5 +2097,141 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
         `Seeded permutation ${seed} must produce identical event-deduplicated InfrastructureGraph`
       );
     }
+
+    // 5. Regression: Confirmed crossing and unresolved crossing on the SAME road/rail edge pair 0.10 m apart both survive
+    // Road way/950 crosses straight RailE (way/960 at x = 70) twice:
+    // - at [70, 0.00]: confirmed level crossing via shared explicit node '9501'
+    // - at [70, 0.10]: unconfirmed geometric intersection (0.10 m away, same edge pair)
+    // Both MUST survive: 1 confirmed LevelCrossingRelation and 1 UnresolvedCrossingCandidate on the same pair
+    const samePairNearSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/950-0',
+          points: [
+            [65, 0.00],
+            [70, 0.00],
+            [75, 0.05],
+            [75, 0.10],
+            [65, 0.10],
+          ],
+          rawOsmNodeIds: ['9500', '9501', '9502', '9503', '9504'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/960-0',
+          points: [
+            [70, -10],
+            [70, 0.00],
+            [70, 20],
+          ],
+          rawOsmNodeIds: ['9600', '9501', '9602'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/9501',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '9501',
+          point: [70, 0.00],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const samePairNearGraph = buildInfrastructureGraph(samePairNearSource);
+    assert.equal(samePairNearGraph.levelCrossings.length, 1);
+    assert.equal(samePairNearGraph.levelCrossings[0].rawOsmNodeId, '9501');
+    const unresolvedOnSamePair = samePairNearGraph.diagnostics.unresolvedCrossings.filter(
+      (u) => u.edgeAId.includes('way/950-0') && u.edgeBId.includes('way/960-0')
+    );
+    assert.equal(
+      unresolvedOnSamePair.length,
+      1,
+      'Unresolved crossing on same edge pair 0.10 m away from confirmed crossing must survive and not be falsely suppressed'
+    );
+    assert.ok(
+      Math.abs(unresolvedOnSamePair[0].position[1] - 0.10) < 1e-4,
+      `Expected unresolved crossing at z = 0.10, got ${unresolvedOnSamePair[0].position[1]}`
+    );
+
+    // 6. Regression: Repeated discovery of the SAME confirmed crossing (e.g. adjacent segments touching the node) does not create an unresolved duplicate
+    const samePairConfirmedUnresolved = samePairNearGraph.diagnostics.unresolvedCrossings.filter(
+      (u) =>
+        u.edgeAId.includes('way/950-0') &&
+        u.edgeBId.includes('way/960-0') &&
+        Math.hypot(u.position[0] - 70, u.position[1] - 0) <= 0.02
+    );
+    assert.equal(
+      samePairConfirmedUnresolved.length,
+      0,
+      'Repeated discovery of confirmed crossing must not emit an unresolved duplicate'
+    );
+
+    // 7. Regression: Annotation offset within 0.15 m does NOT expand the event-deduplication radius
+    // Point feature is placed at [80, -0.08] (0.08 m offset from road vertex '9701' at [80, 0]), matching road vertex '9701'.
+    // The road crosses RailF (way/980 at x = 80) at [80, 0].
+    // The same road loops back and crosses RailF again at [80, 0.09] (0.09 m away from physical crossing, but only 0.17 m away from the point annotation).
+    // Because the deduplication radius is keyed strictly to the physical crossing position (0.02 m), the second crossing at [80, 0.09] must NOT be suppressed!
+    const annotationOffsetSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/970-0',
+          points: [
+            [75, 0.00],
+            [80, 0.00],
+            [85, 0.04],
+            [85, 0.09],
+            [75, 0.09],
+          ],
+          rawOsmNodeIds: ['9700', '9701', '9702', '9703', '9704'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/980-0',
+          points: [
+            [80, -10],
+            [80, 20],
+          ],
+          rawOsmNodeIds: ['9800', '9801'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/9701',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '9701',
+          point: [80, -0.08], // Offset by 0.08 m from physical crossing [80, 0.00]
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const annotationOffsetGraph = buildInfrastructureGraph(annotationOffsetSource);
+    assert.equal(annotationOffsetGraph.levelCrossings.length, 1);
+    assert.equal(annotationOffsetGraph.levelCrossings[0].rawOsmNodeId, '9701');
+    assert.ok(
+      Math.abs(annotationOffsetGraph.levelCrossings[0].position[1] - 0.00) < 1e-4,
+      'Confirmed level crossing position must be at physical geometric crossing (z = 0.00)'
+    );
+
+    const secondCrossing = annotationOffsetGraph.diagnostics.unresolvedCrossings.filter(
+      (u) =>
+        u.edgeAId.includes('way/970-0') &&
+        u.edgeBId.includes('way/980-0') &&
+        Math.abs(u.position[1] - 0.09) < 1e-3
+    );
+    assert.equal(
+      secondCrossing.length,
+      1,
+      'Annotation offset must not expand event-deduplication radius to suppress second crossing 0.09 m away'
+    );
   });
 });

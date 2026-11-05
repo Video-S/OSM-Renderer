@@ -1203,7 +1203,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     roadEdgeIds: readonly string[],
     railEdgeIds: readonly string[],
     layer: number,
-    positions: readonly (readonly [number, number])[]
+    position: readonly [number, number]
   ) => {
     for (const rId of roadEdgeIds) {
       for (const rlId of railEdgeIds) {
@@ -1213,16 +1213,14 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
           list = [];
           handledRoadRailPairEvents.set(key, list);
         }
-        for (const p of positions) {
-          if (
-            !list.some(
-              (existing) =>
-                Math.hypot(existing[0] - p[0], existing[1] - p[1]) <=
-                 SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
-            )
-          ) {
-            list.push([p[0], p[1]]);
-          }
+        if (
+          !list.some(
+            (existing) =>
+              Math.hypot(existing[0] - position[0], existing[1] - position[1]) <=
+              SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
+          )
+        ) {
+          list.push([position[0], position[1]]);
         }
       }
     }
@@ -1240,7 +1238,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
     return list.some(
       (existing) =>
         Math.hypot(existing[0] - pos[0], existing[1] - pos[1]) <=
-        DEFAULT_NODE_SNAP_TOLERANCE_METERS
+        SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS
     );
   };
 
@@ -1498,7 +1496,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
           uniqueRoadEdges.map((e) => e.id),
           uniqueRailEdges.map((e) => e.id),
           targetLayer,
-          [pos, crossingHit.point]
+          crossingHit.point
         );
         continue;
       }
@@ -1543,7 +1541,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       uniqueRoadEdges.map((e) => e.id),
       uniqueRailEdges.map((e) => e.id),
       targetLayer,
-      [pos, crossingHit.point]
+      crossingHit.point
     );
   }
 
@@ -1726,7 +1724,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
         layerRoads.map((r) => r.edge.id),
         layerRails.map((rl) => rl.edge.id),
         targetLayer,
-        [ptMeta.point]
+        ptMeta.point
       );
       continue;
     }
@@ -1810,7 +1808,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
         layerRoads.map((r) => r.edge.id),
         layerRails.map((rl) => rl.edge.id),
         targetLayer,
-        [ptMeta.point, crossingHit.point]
+        crossingHit.point
       );
       continue;
     }
@@ -1852,7 +1850,7 @@ export function analyzeCrossModal(input: CrossModalAnalysisInput): CrossModalAna
       layerRoads.map((r) => r.edge.id),
       layerRails.map((rl) => rl.edge.id),
       targetLayer,
-      [ptMeta.point, crossingHit.point]
+      crossingHit.point
     );
   }
 

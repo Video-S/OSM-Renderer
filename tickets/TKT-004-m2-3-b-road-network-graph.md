@@ -53,12 +53,16 @@ Prior to Stage B:
   2. *Prevented semantic data loss during duplicate detection*: Exported `getCanonicalMeaningfulOsmTagsString` (excluding only internal node-enrichment and identity keys: `nodes`, `nodeIds`, `_nodeIds`, `_nodeIdsByPart`, `id`, `@id`), incorporated canonical tags into `compareRoadPartsCanonically` pre-sorting, and included the canonical tags string in `bucketKey`. Added test coverage in `T-16` proving identical geometries with different `surface`, `turn:lanes`, or directional attributes remain distinct graph edges.
   3. *Verified renderer isolation for live node-ID enrichment*: In `LocalGeoJsonProvider.ts`, separated legacy node extraction (`extractLegacyPartOsmNodeIds`, reading only legacy `nodes` / `nodeIds`) from topology node extraction (`extractVerifiedTopologyPartOsmNodeIds`, reading `_nodeIdsByPart` / `_nodeIds` / `nodes` / `nodeIds`). Guaranteed byte-for-byte identical legacy `mapData.roads`, `mapData.railways`, chained geometries, and `GeometryBuilder` scene meshes between raw and enriched GeoJSON.
   4. *Tightened coordinate-alignment verification*: Set `COORD_ALIGNMENT_TOLERANCE_DEG = 1e-7` (~1.1 cm, matching OSM 7-decimal-place precision and strictly below the 15 cm snap radius). Tested Overpass JSON and XML rejection for displaced coordinates (`1e-6` deg and `0.01` deg).
+- Final Acceptance Corrections (post-review):
+  1. *Complete renderer-facing metadata isolation*: Added `cleanLegacyOsmTags` in `LocalGeoJsonProvider.ts` to sanitize all legacy features (`roads`, `railways`, `linearWaterways`, `waterBodies`, `parks`, `buildings`, `landuse`, `barriers`, `landmarks`) by stripping server-side enriched `_nodeIds` and `_nodeIdsByPart`. Ensured legacy feature objects and `osmTags` remain 100% equivalent (byte-for-byte `deepEqual`) between raw and enriched GeoJSON while preserving explicit IDs in `topologySource.roadParts.rawOsmNodeIds`.
+  2. *Strengthened renderer regression test*: Upgraded test #102 in `RoadNetworkTopology.test.ts` to compare complete `mapData.roads` and `mapData.railways` arrays (`assert.deepEqual`), verify scene mesh hierarchy, transforms, render orders, and inspectable provenance (`userData.faceRanges`), and perform byte-for-byte buffer equality assertions (`positions`, `normals`, `uvs`, `indices`, and `instanceMatrix`). Added full OSM 0.6 XML enrichment coverage verifying identical legacy feature output and scene mesh buffers.
+  3. *Preserved edge-level surface semantics*: Added surface attribute guard `(e1.surface ?? '').trim().toLowerCase() !== (e2.surface ?? '').trim().toLowerCase()` to `canContractDegree2RoadNode` in `RoadNetworkBuilder.ts`. Added focused test verifying that asphalt meeting paving stones blocks degree-2 simplification, assigns role `attribute_break` to the retained node, retains edge-level `surface` values, and preserves original per-segment provenance without causing unrelated tag changes to split edges.
 - Per project instructions, `TKT-004` remains `in_progress` pending project-owner review.
 
 ## Verification
 - Status: Implemented and verified (2026-11-05); awaiting project-owner review to close.
 - Executed verification commands:
-  - `npm test` (`tsx --test src/world/*.test.ts`): Exit code `0` — **107 / 107 tests passed** (`0` failures), including all Stage B tests in `src/world/RoadNetworkTopology.test.ts`.
+  - `npm test` (`tsx --test src/world/*.test.ts`): Exit code `0` — **108 / 108 tests passed** (`0` failures), including all Stage B tests in `src/world/RoadNetworkTopology.test.ts`.
   - `npm run lint` (`tsc --noEmit`): Exit code `0` — `0` TypeScript errors.
   - `npm run build` (`vite build`): Exit code `0` — production bundle generated cleanly.
   - `npm run docs:api` (`typedoc`): Exit code `0` — API documentation generated in `docs/api-reference/`.
@@ -71,6 +75,10 @@ Prior to Stage B:
     - 270-Way Synthetic Urban Road Grid: `parseGeoJson = 11.63 ms`, `buildRoadNetwork = 11.03 ms` (`parts = 270`, `nodes = 100`, `edges = 180`, `simplified = 90`).
     - Station Hengelo Real OSM + Urban Roads (282 features): `parseGeoJson = 12.10 ms`, `buildRoadNetwork = 6.11 ms` (`parts = 120`, `nodes = 14`, `edges = 7`, `simplified = 113`).
     - Amsterdam Centraal Real OSM + Urban Roads (1041 features): `parseGeoJson = 40.26 ms`, `buildRoadNetwork = 14.68 ms` (`parts = 273`, `nodes = 106`, `edges = 183`, `simplified = 90`).
+  - **Run 3 (final acceptance corrections run)**:
+    - 270-Way Synthetic Urban Road Grid: `parseGeoJson = 9.77 ms`, `buildRoadNetwork = 16.87 ms` (`parts = 270`, `nodes = 100`, `edges = 180`, `simplified = 90`).
+    - Station Hengelo Real OSM + Urban Roads (282 features): `parseGeoJson = 21.01 ms`, `buildRoadNetwork = 4.85 ms` (`parts = 120`, `nodes = 14`, `edges = 7`, `simplified = 113`).
+    - Amsterdam Centraal Real OSM + Urban Roads (1041 features): `parseGeoJson = 54.69 ms`, `buildRoadNetwork = 9.37 ms` (`parts = 273`, `nodes = 106`, `edges = 183`, `simplified = 90`).
 
 ## Related files and documentation
 - Source: `src/world/infrastructure/topology/types.ts`, `src/world/infrastructure/topology/OsmNodeIdEnricher.ts`, `src/world/infrastructure/topology/RoadNetworkBuilder.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/TopologicalNodeIndex.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/types/MapFeature.ts`, `server.ts`

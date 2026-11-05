@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import osmtogeojson from 'osmtogeojson';
 import { DOMParser } from 'xmldom';
+import * as THREE from 'three';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { GeometryBuilder } from './GeometryBuilder';
 import { MAP_THEMES } from '../styles/mapThemes';
@@ -19,6 +20,87 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Recursively verifies that two Three.js scene hierarchies have identical object structure,
+ * transforms, render orders, inspectable feature provenance faceRanges, and byte-for-byte identical
+ * buffer geometry attributes (positions, normals, UVs, indices) and instance matrices.
+ */
+function assertSceneGroupBuffersEqual(
+  preObj: THREE.Object3D,
+  postObj: THREE.Object3D,
+  contextPath = 'root'
+) {
+  assert.equal(preObj.name, postObj.name, `Object name mismatch at ${contextPath}`);
+  assert.equal(preObj.type, postObj.type, `Object type mismatch at ${contextPath}`);
+  assert.equal(
+    preObj.children.length,
+    postObj.children.length,
+    `Child count mismatch at ${contextPath} (pre=[${preObj.children.map((c) => c.name)}], post=[${postObj.children.map((c) => c.name)}])`
+  );
+
+  assert.deepEqual(preObj.position.toArray(), postObj.position.toArray(), `Position mismatch at ${contextPath}`);
+  assert.deepEqual(preObj.rotation.toArray(), postObj.rotation.toArray(), `Rotation mismatch at ${contextPath}`);
+  assert.deepEqual(preObj.scale.toArray(), postObj.scale.toArray(), `Scale mismatch at ${contextPath}`);
+  assert.equal(preObj.renderOrder, postObj.renderOrder, `RenderOrder mismatch at ${contextPath}`);
+
+  if (preObj.userData?.faceRanges || postObj.userData?.faceRanges) {
+    assert.deepEqual(
+      preObj.userData.faceRanges,
+      postObj.userData.faceRanges,
+      `userData.faceRanges provenance mismatch at ${contextPath}`
+    );
+  }
+
+  if ('geometry' in preObj && 'geometry' in postObj) {
+    const geoPre = (preObj as THREE.Mesh).geometry;
+    const geoPost = (postObj as THREE.Mesh).geometry;
+    if (geoPre && geoPost) {
+      if (geoPre.index || geoPost.index) {
+        assert.ok(geoPre.index && geoPost.index, `Index buffer presence mismatch at ${contextPath}`);
+        assert.equal(geoPre.index.count, geoPost.index.count, `Index count mismatch at ${contextPath}`);
+        assert.deepEqual(
+          Array.from(geoPre.index.array),
+          Array.from(geoPost.index.array),
+          `Index buffer values mismatch at ${contextPath}`
+        );
+      }
+
+      const attrKeysPre = Object.keys(geoPre.attributes).sort();
+      const attrKeysPost = Object.keys(geoPost.attributes).sort();
+      assert.deepEqual(attrKeysPre, attrKeysPost, `Attribute keys mismatch at ${contextPath}`);
+
+      for (const attrName of attrKeysPre) {
+        const attrPre = geoPre.attributes[attrName];
+        const attrPost = geoPost.attributes[attrName];
+        assert.equal(attrPre.count, attrPost.count, `Attribute ${attrName} count mismatch at ${contextPath}`);
+        assert.equal(attrPre.itemSize, attrPost.itemSize, `Attribute ${attrName} itemSize mismatch at ${contextPath}`);
+        assert.deepEqual(
+          Array.from(attrPre.array),
+          Array.from(attrPost.array),
+          `Attribute ${attrName} buffer values mismatch at ${contextPath}`
+        );
+      }
+    }
+  }
+
+  if ('instanceMatrix' in preObj && 'instanceMatrix' in postObj) {
+    const instPre = preObj as THREE.InstancedMesh;
+    const instPost = postObj as THREE.InstancedMesh;
+    assert.equal(instPre.count, instPost.count, `Instance count mismatch at ${contextPath}`);
+    assert.deepEqual(
+      Array.from(instPre.instanceMatrix.array),
+      Array.from(instPost.instanceMatrix.array),
+      `Instance matrix buffer values mismatch at ${contextPath}`
+    );
+  }
+
+  for (let i = 0; i < preObj.children.length; i++) {
+    const childPre = preObj.children[i];
+    const childPost = postObj.children[i];
+    assertSceneGroupBuffersEqual(childPre, childPost, `${contextPath}/${childPre.name || i}`);
+  }
+}
 
 function makeRoadPart(
   overrides: Partial<UnchainedRoadPart> & {
@@ -77,7 +159,7 @@ test('M2.3-B T-01: simplifies curved degree-2 chains while preserving interior v
         [10, 0],
       ],
       rawOsmNodeIds: ['1', '2', '3'],
-      osmTags: { id: 'way/101', highway: 'residential', name: 'Curve Street', maxspeed: '30' },
+      osmTags: { id: 'way/101', highway: 'residential', name: 'Curve Street', surface: 'asphalt', maxspeed: '30' },
     });
     // Reversed middle segment: digitized from node 5 (20, 0) back to node 3 (10, 0) via interior curve point (15, -3)
     const part2Reversed = makeRoadPart({
@@ -90,7 +172,7 @@ test('M2.3-B T-01: simplifies curved degree-2 chains while preserving interior v
         [10, 0],
       ],
       rawOsmNodeIds: ['5', '4', '3'],
-      osmTags: { id: 'way/102', highway: 'residential', name: 'Curve Street', maxspeed: '50' },
+      osmTags: { id: 'way/102', highway: 'residential', name: 'Curve Street', surface: 'asphalt', maxspeed: '50' },
     });
     const part3 = makeRoadPart({
       id: 'way/103-0',
@@ -598,6 +680,40 @@ test('M2.3-B T-08: blocks degree-2 simplification across road attribute breaks a
     assert.ok(breakNode);
     assert.deepEqual(breakNode.roles, ['attribute_break']);
 
+    // Surface break: asphalt meeting paving_stones must block degree-2 simplification
+    const segSurfaceAsphalt = makeRoadPart({
+      id: 'way/805-0',
+      sourceFeatureId: 'way/805',
+      name: 'Pave Road',
+      roadClass: 'tertiary',
+      width: 6.0,
+      surface: 'asphalt',
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      rawOsmNodeIds: ['805', '806'],
+    });
+    const segSurfacePaving = makeRoadPart({
+      id: 'way/806-0',
+      sourceFeatureId: 'way/806',
+      name: 'Pave Road',
+      roadClass: 'tertiary',
+      width: 6.0,
+      surface: 'paving_stones',
+      points: [
+        [10, 0],
+        [20, 0],
+      ],
+      rawOsmNodeIds: ['806', '807'],
+    });
+    const surfaceBreakRes = buildRoadNetwork([segSurfaceAsphalt, segSurfacePaving]);
+    assert.equal(surfaceBreakRes.roads.edges.size, 2, 'Surface transition must block simplification');
+    const surfaceBreakNode = surfaceBreakRes.roads.nodes.get('road_node:0|0|0:osm_806');
+    assert.ok(surfaceBreakNode);
+    assert.deepEqual(surfaceBreakNode.roles, ['attribute_break']);
+    assert.equal(surfaceBreakNode.primaryRole, 'attribute_break');
+
     // Case 1: Two compatible oneway=yes segments with continuous traffic flow (A -> B, B -> C)
     const onewayA = makeRoadPart({
       id: 'way/810-0',
@@ -782,6 +898,117 @@ test('M2.3-B T-08: blocks degree-2 simplification across road attribute breaks a
     assert.equal(revEdge?.normalizedOneway, 'unknown');
     assert.equal(revEdge?.rawOnewayTag, 'reversible');
   });
+
+test('M2.3-B preserves edge-level surface semantics: blocks degree-2 simplification for asphalt meeting paving stones and assigns attribute_break role', () => {
+  // Two contiguous tertiary road segments meeting at shared degree-2 node 902
+  const asphaltPart = makeRoadPart({
+    id: 'way/901-0',
+    sourceFeatureId: 'way/901',
+    name: 'Kerkstraat',
+    roadClass: 'tertiary',
+    width: 6.0,
+    surface: 'asphalt',
+    points: [
+      [0, 0],
+      [10, 0],
+    ],
+    rawOsmNodeIds: ['901', '902'],
+    osmTags: { id: 'way/901', highway: 'tertiary', name: 'Kerkstraat', surface: 'asphalt', maxspeed: '50' },
+  });
+
+  const pavingStonesPart = makeRoadPart({
+    id: 'way/902-0',
+    sourceFeatureId: 'way/902',
+    name: 'Kerkstraat',
+    roadClass: 'tertiary',
+    width: 6.0,
+    surface: 'paving_stones',
+    points: [
+      [10, 0],
+      [20, 0],
+    ],
+    rawOsmNodeIds: ['902', '903'],
+    osmTags: { id: 'way/902', highway: 'tertiary', name: 'Kerkstraat', surface: 'paving_stones', maxspeed: '30' },
+  });
+
+  const graph = buildRoadNetwork([asphaltPart, pavingStonesPart]);
+
+  // Simplification must be blocked: 2 edges retained, 3 nodes retained
+  assert.equal(
+    graph.roads.edges.size,
+    2,
+    'Surface transition (asphalt -> paving_stones) must block degree-2 simplification'
+  );
+  assert.equal(
+    graph.roads.nodes.size,
+    3,
+    'All 3 nodes (including degree-2 attribute break node) must be retained'
+  );
+
+  const breakNode = graph.roads.nodes.get('road_node:0|0|0:osm_902');
+  assert.ok(breakNode, 'Shared degree-2 node 902 must be retained');
+  assert.equal(breakNode.degree, 2);
+  assert.equal(breakNode.primaryRole, 'attribute_break');
+  assert.ok(breakNode.roles.includes('attribute_break'));
+
+  // Verify edge-level surface semantics
+  const edges = [...graph.roads.edges.values()];
+  const edgeAsphalt = edges.find(
+    (e) => e.fromNodeId === 'road_node:0|0|0:osm_901' && e.toNodeId === 'road_node:0|0|0:osm_902'
+  );
+  const edgePaving = edges.find(
+    (e) => e.fromNodeId === 'road_node:0|0|0:osm_902' && e.toNodeId === 'road_node:0|0|0:osm_903'
+  );
+  assert.ok(edgeAsphalt);
+  assert.ok(edgePaving);
+  assert.equal(edgeAsphalt.surface, 'asphalt');
+  assert.equal(edgePaving.surface, 'paving_stones');
+
+  // Verify per-segment provenance retains original tags without loss
+  assert.equal(edgeAsphalt.provenance.segments[0].osmTags.surface, 'asphalt');
+  assert.equal(edgeAsphalt.provenance.segments[0].osmTags.maxspeed, '50');
+  assert.equal(edgePaving.provenance.segments[0].osmTags.surface, 'paving_stones');
+  assert.equal(edgePaving.provenance.segments[0].osmTags.maxspeed, '30');
+
+  // In contrast: Two segments with identical surface ('asphalt') but differing unrelated tags (e.g. lit=yes vs lit=no, maxspeed=50 vs maxspeed=30)
+  // must simplify into 1 edge, preserving per-segment provenance without triggering an automatic split
+  const asphaltSegA = makeRoadPart({
+    id: 'way/910-0',
+    sourceFeatureId: 'way/910',
+    name: 'Dorpsstraat',
+    roadClass: 'residential',
+    surface: 'asphalt',
+    points: [
+      [0, 0],
+      [10, 0],
+    ],
+    rawOsmNodeIds: ['910', '911'],
+    osmTags: { id: 'way/910', highway: 'residential', name: 'Dorpsstraat', surface: 'asphalt', lit: 'yes', maxspeed: '50' },
+  });
+  const asphaltSegB = makeRoadPart({
+    id: 'way/911-0',
+    sourceFeatureId: 'way/911',
+    name: 'Dorpsstraat',
+    roadClass: 'residential',
+    surface: 'asphalt',
+    points: [
+      [10, 0],
+      [20, 0],
+    ],
+    rawOsmNodeIds: ['911', '912'],
+    osmTags: { id: 'way/911', highway: 'residential', name: 'Dorpsstraat', surface: 'asphalt', lit: 'no', maxspeed: '30' },
+  });
+
+  const mergedGraph = buildRoadNetwork([asphaltSegA, asphaltSegB]);
+  assert.equal(mergedGraph.roads.edges.size, 1, 'Same surface with differing unrelated tags must simplify into 1 edge');
+  const [mergedEdge] = [...mergedGraph.roads.edges.values()];
+  assert.equal(mergedEdge.surface, 'asphalt');
+  assert.equal(mergedEdge.provenance.segments.length, 2);
+  assert.equal(mergedEdge.provenance.segments[0].osmTags.lit, 'yes');
+  assert.equal(mergedEdge.provenance.segments[0].osmTags.maxspeed, '50');
+  assert.equal(mergedEdge.provenance.segments[1].osmTags.lit, 'no');
+  assert.equal(mergedEdge.provenance.segments[1].osmTags.maxspeed, '30');
+});
 
 test('M2.3-B T-09: enforces explicit OSM node ID precedence over 0.15m coordinate proximity and order-independent coordinate snapping', () => {
     // Two distinct explicit OSM nodes (901 and 902) at the exact same [0, 0] coordinate must NOT merge
@@ -1428,54 +1655,75 @@ test('M2.3-B Renderer Isolation: live server node enrichment does not alter lega
     const preMapData = provider.parseGeoJson(preEnrichedGeoJson, 'Pre-Enrichment');
     const postMapData = provider.parseGeoJson(postEnrichedGeoJson, 'Post-Enrichment');
 
-    // 1. Verify legacy mapData.roads are 100% structurally identical
-    assert.equal(
-      preMapData.roads.length,
-      postMapData.roads.length,
-      'Road feature count must be identical between pre- and post-enrichment'
+    // 1. Verify complete renderer-facing road and railway features (including metadata and osmTags) are 100% equivalent
+    assert.deepEqual(
+      preMapData.roads,
+      postMapData.roads,
+      'Complete road feature array (including metadata and osmTags) must be 100% equivalent between pre- and post-enrichment'
     );
-    for (let i = 0; i < preMapData.roads.length; i++) {
-      const rPre = preMapData.roads[i];
-      const rPost = postMapData.roads[i];
-      assert.equal(rPre.id, rPost.id);
-      assert.deepEqual(rPre.sourceFeatureIds, rPost.sourceFeatureIds);
-      assert.deepEqual(rPre.points, rPost.points);
-      assert.deepEqual(rPre.nodeIds, rPost.nodeIds);
-      assert.equal(rPre.roadClass, rPost.roadClass);
-      assert.equal(rPre.width, rPost.width);
-    }
-
-    // 2. Verify legacy mapData.railways are 100% structurally identical
-    assert.equal(
-      preMapData.railways.length,
-      postMapData.railways.length,
-      'Railway feature count must be identical between pre- and post-enrichment'
+    assert.deepEqual(
+      preMapData.railways,
+      postMapData.railways,
+      'Complete railway feature array (including metadata and osmTags) must be 100% equivalent between pre- and post-enrichment'
     );
-    for (let i = 0; i < preMapData.railways.length; i++) {
-      const rwPre = preMapData.railways[i];
-      const rwPost = postMapData.railways[i];
-      assert.equal(rwPre.id, rwPost.id);
-      assert.deepEqual(rwPre.points, rwPost.points);
-      assert.deepEqual(rwPre.nodeIds, rwPost.nodeIds);
-    }
 
-    // 3. Verify GeometryBuilder 3D scene construction is 100% unchanged
+    // 2. Verify GeometryBuilder 3D scene mesh hierarchy, transforms, provenance, and buffer geometry attributes
     const preScene = new GeometryBuilder().buildScene(preMapData, MAP_THEMES.tactical);
     const postScene = new GeometryBuilder().buildScene(postMapData, MAP_THEMES.tactical);
 
-    assert.equal(
-      preScene.roadsGroup.children.length,
-      postScene.roadsGroup.children.length,
-      'Road mesh scene child count must be identical'
-    );
-    assert.equal(
-      preScene.railwaysGroup.children.length,
-      postScene.railwaysGroup.children.length,
-      'Railway mesh scene child count must be identical'
-    );
+    assertSceneGroupBuffersEqual(preScene.roadsGroup, postScene.roadsGroup, 'RoadsGroup');
+    assertSceneGroupBuffersEqual(preScene.railwaysGroup, postScene.railwaysGroup, 'RailwaysGroup');
 
     preScene.dispose();
     postScene.dispose();
+
+    // 3. XML Enrichment Isolation Coverage: verify OSM 0.6 XML enrichment maintains identical legacy features and mesh buffers
+    const osmXmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+      <osm version="0.6" generator="test">
+        <node id="701" lat="52.3780" lon="4.9000"/>
+        <node id="702" lat="52.3780" lon="4.9010"/>
+        <node id="703" lat="52.3790" lon="4.9000"/>
+        <node id="704" lat="52.3790" lon="4.9010"/>
+        <way id="701">
+          <nd ref="701"/>
+          <nd ref="702"/>
+          <tag k="highway" v="residential"/>
+          <tag k="name" v="Xml Road"/>
+        </way>
+        <way id="702">
+          <nd ref="703"/>
+          <nd ref="704"/>
+          <tag k="railway" v="rail"/>
+          <tag k="name" v="Xml Rail"/>
+        </way>
+      </osm>`;
+    const xmlDocPayload = new DOMParser().parseFromString(osmXmlPayload, 'text/xml');
+    const preXmlGeoJson = osmtogeojson(xmlDocPayload);
+    const postXmlGeoJson = JSON.parse(JSON.stringify(preXmlGeoJson));
+    enrichGeoJsonWithOsmXmlNodeIds(postXmlGeoJson, xmlDocPayload);
+
+    const preXmlMapData = provider.parseGeoJson(preXmlGeoJson, 'Pre-Xml-Enrichment');
+    const postXmlMapData = provider.parseGeoJson(postXmlGeoJson, 'Post-Xml-Enrichment');
+
+    assert.deepEqual(
+      preXmlMapData.roads,
+      postXmlMapData.roads,
+      'XML: complete road feature array (including metadata and osmTags) must be 100% equivalent'
+    );
+    assert.deepEqual(
+      preXmlMapData.railways,
+      postXmlMapData.railways,
+      'XML: complete railway feature array (including metadata and osmTags) must be 100% equivalent'
+    );
+
+    const preXmlScene = new GeometryBuilder().buildScene(preXmlMapData, MAP_THEMES.tactical);
+    const postXmlScene = new GeometryBuilder().buildScene(postXmlMapData, MAP_THEMES.tactical);
+
+    assertSceneGroupBuffersEqual(preXmlScene.roadsGroup, postXmlScene.roadsGroup, 'XmlRoadsGroup');
+    assertSceneGroupBuffersEqual(preXmlScene.railwaysGroup, postXmlScene.railwaysGroup, 'XmlRailwaysGroup');
+
+    preXmlScene.dispose();
+    postXmlScene.dispose();
 
     // 4. Verify that postMapData.topologySource receives explicit OSM node IDs for RoadNetworkBuilder
     assert.ok(postMapData.topologySource);

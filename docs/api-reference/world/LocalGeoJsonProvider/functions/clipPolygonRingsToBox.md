@@ -8,7 +8,7 @@
 
 > **clipPolygonRingsToBox**(`rings`, `minX`, `minZ`, `maxX`, `maxZ`, `options?`): [`ClippedPolygonResult`](../interfaces/ClippedPolygonResult.md)
 
-Defined in: world/LocalGeoJsonProvider.ts:687
+Defined in: world/LocalGeoJsonProvider.ts:705
 
 Clips a polygon `[outerRing, ...holes]` to `[minX, minZ, maxX, maxZ]`.
 Uses primary Martínez-Rueda polygonClipping, with a topology-aware convex decomposition fallback

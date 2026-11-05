@@ -504,7 +504,8 @@ function canContractDegree2RoadNode(
     Math.round(e1.width * 10) !== Math.round(e2.width * 10) ||
     e1.isCulvert !== e2.isCulvert ||
     (e1.name ?? '').trim().toLowerCase() !== (e2.name ?? '').trim().toLowerCase() ||
-    e1.lanes !== e2.lanes
+    e1.lanes !== e2.lanes ||
+    (e1.surface ?? '').trim().toLowerCase() !== (e2.surface ?? '').trim().toLowerCase()
   ) {
     return false;
   }

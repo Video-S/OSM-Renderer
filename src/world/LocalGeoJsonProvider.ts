@@ -519,6 +519,24 @@ function cloneRawGeoJsonProperties(props: RawGeoJsonProperties): RawGeoJsonPrope
   return copy;
 }
 
+/**
+ * Strips server-side live topology enrichment properties (_nodeIds, _nodeIdsByPart) from
+ * legacy renderer-facing features so that legacy mapData.roads and mapData.railways
+ * metadata (including osmTags) remain 100% equivalent before and after enrichment.
+ */
+function cleanLegacyOsmTags(props: RawGeoJsonProperties): RawGeoJsonProperties {
+  const copy: RawGeoJsonProperties = { ...props };
+  delete copy._nodeIds;
+  delete copy._nodeIdsByPart;
+  if (Array.isArray(copy.nodes)) {
+    copy.nodes = [...copy.nodes];
+  }
+  if (Array.isArray(copy.nodeIds)) {
+    copy.nodeIds = [...copy.nodeIds];
+  }
+  return copy;
+}
+
 export interface ClipBoxOptions {
   forceFallback?: boolean;
 }
@@ -1223,7 +1241,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               electrified: Boolean(props.electrified && props.electrified !== 'no'),
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.railways++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1290,7 +1308,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               intermittent: Boolean(props.intermittent && props.intermittent !== 'no'),
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.linearWaterways++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1353,7 +1371,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               intermittent: Boolean(props.intermittent && props.intermittent !== 'no'),
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.waterBodies++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1414,7 +1432,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               leafType: classification.leafType,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.parks++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1526,7 +1544,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               amenity: props.amenity ? String(props.amenity) : undefined,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.buildings++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1734,7 +1752,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               layer: effectiveLayer,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: cloneRawGeoJsonProperties(props),
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.roads++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1797,7 +1815,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               subtype: classification.subtype,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.landuse++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1858,7 +1876,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               height: classification.defaultHeight || 1.6,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
-              osmTags: props,
+              osmTags: cleanLegacyOsmTags(props),
             });
             diagnostics.parsedFeatureParts!.byCategory.barriers =
               (diagnostics.parsedFeatureParts!.byCategory.barriers || 0) + 1;
@@ -1913,7 +1931,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             leafType: classification.leafType,
             cartoLabel: classification.cartoLabel,
             primaryTag: classification.primaryTag,
-            osmTags: props,
+            osmTags: cleanLegacyOsmTags(props),
           });
           diagnostics.parsedFeatureParts!.byCategory.landmarks =
             (diagnostics.parsedFeatureParts!.byCategory.landmarks || 0) + 1;

@@ -34,6 +34,8 @@ import {
   TurnoutTopologySpec,
   UnchainedRailwayPart,
   UnresolvedCrossingCandidate,
+  UnresolvedInfrastructurePointCandidate,
+  UnresolvedInfrastructurePointReason,
 } from './types';
 
 const SECONDARY_SERVICE_SET = new Set<string>(['siding', 'yard', 'spur', 'crossover']);
@@ -596,11 +598,113 @@ interface PendingConfirmedFlatCrossing {
   trackBTangent: [number, number];
 }
 
-interface PendingUntaggedDegree4Candidate {
+interface PendingUnresolvedDegree4Candidate {
   nodeId: string;
   position: [number, number];
   trackAPartIds: Set<string>;
   trackBPartIds: Set<string>;
+  reason: UnresolvedCrossingCandidate['reason'];
+}
+
+interface ExplicitPointVerticalScope {
+  hasExplicitScope: boolean;
+  layer?: number;
+  isBridge?: boolean;
+  isTunnel?: boolean;
+}
+
+function extractPointExplicitVerticalScope(
+  osmTags?: RawGeoJsonProperties
+): ExplicitPointVerticalScope {
+  if (!osmTags) {
+    return { hasExplicitScope: false };
+  }
+
+  const rawBridge =
+    osmTags.bridge !== undefined && osmTags.bridge !== null
+      ? String(osmTags.bridge).trim().toLowerCase()
+      : '';
+  const hasBridgeTag = rawBridge.length > 0;
+  const isBridge = hasBridgeTag
+    ? !['no', 'false', '0'].includes(rawBridge)
+    : undefined;
+
+  const rawTunnel =
+    osmTags.tunnel !== undefined && osmTags.tunnel !== null
+      ? String(osmTags.tunnel).trim().toLowerCase()
+      : '';
+  const rawCovered =
+    osmTags.covered !== undefined && osmTags.covered !== null
+      ? String(osmTags.covered).trim().toLowerCase()
+      : '';
+  const hasTunnelTag = rawTunnel.length > 0 || rawCovered.length > 0;
+  const isTunnel = hasTunnelTag
+    ? (rawTunnel.length > 0 && !['no', 'false', '0'].includes(rawTunnel)) ||
+      (rawCovered.length > 0 && !['no', 'false', '0'].includes(rawCovered))
+    : undefined;
+
+  const rawLayer =
+    osmTags.layer !== undefined && osmTags.layer !== null
+      ? String(osmTags.layer).trim()
+      : '';
+  const parsedLayer = rawLayer.length > 0 ? Number(rawLayer) : Number.NaN;
+  const hasLayerTag = Number.isFinite(parsedLayer);
+
+  let layer: number | undefined;
+  if (hasLayerTag) {
+    layer = Math.trunc(parsedLayer);
+  } else if (isBridge === true) {
+    layer = 1;
+  } else if (isTunnel === true) {
+    layer = -1;
+  }
+
+  return {
+    hasExplicitScope: hasBridgeTag || hasTunnelTag || hasLayerTag,
+    layer,
+    isBridge,
+    isTunnel,
+  };
+}
+
+function isNodeCompatibleWithPointScope(
+  node: InternalRailwayNodeRecord,
+  ptScope: ExplicitPointVerticalScope
+): boolean {
+  if (!ptScope.hasExplicitScope) return true;
+  if (ptScope.isBridge !== undefined && node.isBridge !== ptScope.isBridge) return false;
+  if (ptScope.isTunnel !== undefined && node.isTunnel !== ptScope.isTunnel) return false;
+  if (ptScope.layer !== undefined && node.layer !== ptScope.layer) return false;
+  return true;
+}
+
+function distancePointToPolyline2D(
+  pt: readonly [number, number],
+  polyline: readonly [number, number][]
+): number {
+  if (polyline.length === 0) return Infinity;
+  if (polyline.length === 1) {
+    return Math.hypot(pt[0] - polyline[0][0], pt[1] - polyline[0][1]);
+  }
+  let minDist = Infinity;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const ax = polyline[i][0];
+    const az = polyline[i][1];
+    const bx = polyline[i + 1][0];
+    const bz = polyline[i + 1][1];
+    const vx = bx - ax;
+    const vz = bz - az;
+    const lenSq = vx * vx + vz * vz;
+    let t = 0;
+    if (lenSq > 1e-12) {
+      t = Math.max(0, Math.min(1, ((pt[0] - ax) * vx + (pt[1] - az) * vz) / lenSq));
+    }
+    const projX = ax + t * vx;
+    const projZ = az + t * vz;
+    const d = Math.hypot(pt[0] - projX, pt[1] - projZ);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
 }
 
 /**
@@ -756,6 +860,7 @@ export function buildRailwayNetwork(
   const extractedPoints = extractInputInfrastructurePoints(input, infrastructurePoints);
 
   const unresolvedCrossings: UnresolvedCrossingCandidate[] = [];
+  const unresolvedInfrastructurePoints: UnresolvedInfrastructurePointCandidate[] = [];
   const diagnostics: RailwayNetworkDiagnostics = {
     inputPartCount: extractedParts.length,
     exactDeduplicatedCount: 0,
@@ -771,9 +876,21 @@ export function buildRailwayNetwork(
     boundaryClippedNodeCount: 0,
     closedLoopEdgeCount: 0,
     unresolvedCrossings,
+    unresolvedInfrastructurePoints,
   };
 
   if (extractedParts.length === 0) {
+    for (const ptMeta of extractedPoints) {
+      unresolvedInfrastructurePoints.push({
+        pointId: ptMeta.id,
+        rawOsmNodeId: ptMeta.rawOsmNodeId,
+        kind: ptMeta.kind,
+        position: [ptMeta.point[0], ptMeta.point[1]],
+        candidateNodeIds: [],
+        reason: 'no_candidate_node_within_snap_tolerance',
+        osmTags: cloneOsmTags(ptMeta.osmTags),
+      });
+    }
     return {
       railways: {
         nodes: new Map(),
@@ -1011,52 +1128,7 @@ export function buildRailwayNetwork(
     }
   }
 
-  // 4B. Associate railway point metadata (`railway=switch` and `railway=railway_crossing`) with internal nodes
-  const allInternalNodesList = [...internalNodes.values()];
-  for (const ptMeta of extractedPoints) {
-    const ptNormOsmId =
-      stripNodePrefix(ptMeta.rawOsmNodeId) ??
-      (ptMeta.hasExplicitSourceId ? stripNodePrefix(ptMeta.id) : undefined);
-
-    let matchedNodes: InternalRailwayNodeRecord[] = [];
-    if (ptNormOsmId !== undefined) {
-      matchedNodes = allInternalNodesList.filter(
-        (n) => stripNodePrefix(n.rawOsmNodeId) === ptNormOsmId
-      );
-    }
-
-    if (matchedNodes.length === 0) {
-      // Coordinate fallback matching within 0.15 m when explicit OSM node IDs do not conflict
-      let bestNode: InternalRailwayNodeRecord | undefined;
-      let bestDist = DEFAULT_NODE_SNAP_TOLERANCE_METERS;
-      for (const n of allInternalNodesList) {
-        if (ptNormOsmId !== undefined && n.rawOsmNodeId !== undefined) {
-          continue;
-        }
-        const dist = Math.hypot(n.x - ptMeta.point[0], n.z - ptMeta.point[1]);
-        if (
-          dist <= bestDist - 1e-9 ||
-          (Math.abs(dist - bestDist) <= 1e-9 && bestNode && n.id < bestNode.id)
-        ) {
-          bestDist = dist;
-          bestNode = n;
-        }
-      }
-      if (bestNode) {
-        matchedNodes = [bestNode];
-      }
-    }
-
-    for (const targetNode of matchedNodes) {
-      if (ptMeta.kind === 'railway_switch' && !targetNode.switchPointMeta) {
-        targetNode.switchPointMeta = ptMeta;
-      } else if (ptMeta.kind === 'railway_crossing_flat' && !targetNode.flatCrossingPointMeta) {
-        targetNode.flatCrossingPointMeta = ptMeta;
-      }
-    }
-  }
-
-  // 4C. Detect and decouple flat diamond crossings (ADR-0009 Section 5.1)
+  // Build initial vertex occurrence table per internal node so Step 4B can verify topological evidence
   const occurrencesByNode = new Map<string, PartVertexOccurrence[]>();
   for (const item of retainedParts) {
     const nodeIds = partVertexNodeIds.get(item.part.id)!;
@@ -1076,8 +1148,184 @@ export function buildRailwayNetwork(
     }
   }
 
+  const getTotalIncidentArmsAtNode = (nodeId: string): number => {
+    const occs = occurrencesByNode.get(nodeId);
+    if (!occs) return 0;
+    let totalArms = 0;
+    for (const o of occs) {
+      totalArms += o.isInterior ? 2 : 1;
+    }
+    return totalArms;
+  };
+
+  const hasSufficientTopologicalEvidenceForPoint = (
+    nodeId: string,
+    kind: InfrastructurePointMetadata['kind']
+  ): boolean => {
+    const arms = getTotalIncidentArmsAtNode(nodeId);
+    if (kind === 'railway_switch') {
+      return arms >= 3;
+    }
+    if (kind === 'railway_crossing_flat') {
+      return arms === 4;
+    }
+    return arms >= 1;
+  };
+
+  const recordUnresolvedPoint = (
+    ptMeta: InfrastructurePointMetadata,
+    candidateNodeIds: readonly string[],
+    reason: UnresolvedInfrastructurePointReason
+  ) => {
+    unresolvedInfrastructurePoints.push({
+      pointId: ptMeta.id,
+      rawOsmNodeId: ptMeta.rawOsmNodeId,
+      kind: ptMeta.kind,
+      position: [ptMeta.point[0], ptMeta.point[1]],
+      candidateNodeIds: [...candidateNodeIds].sort(compareStringsCodeUnit),
+      reason,
+      osmTags: cloneOsmTags(ptMeta.osmTags),
+    });
+  };
+
+  // 4B. Associate railway point metadata (`railway=switch` and `railway=railway_crossing`) with internal nodes
+  const allInternalNodesList = [...internalNodes.values()];
+  for (const ptMeta of extractedPoints) {
+    const ptNormOsmId =
+      stripNodePrefix(ptMeta.rawOsmNodeId) ??
+      (ptMeta.hasExplicitSourceId ? stripNodePrefix(ptMeta.id) : undefined);
+    const ptScope = extractPointExplicitVerticalScope(ptMeta.osmTags);
+
+    let targetNode: InternalRailwayNodeRecord | undefined;
+
+    // 4B.1 Prefer matching verified raw OSM node IDs
+    const exactIdNodes =
+      ptNormOsmId !== undefined
+        ? allInternalNodesList.filter((n) => stripNodePrefix(n.rawOsmNodeId) === ptNormOsmId)
+        : [];
+
+    if (exactIdNodes.length > 0) {
+      const scopeCompatibleExact = exactIdNodes.filter((n) =>
+        isNodeCompatibleWithPointScope(n, ptScope)
+      );
+      if (scopeCompatibleExact.length !== 1) {
+        recordUnresolvedPoint(
+          ptMeta,
+          exactIdNodes.map((n) => n.id),
+          'vertical_scope_mismatch'
+        );
+        continue;
+      }
+
+      const candidate = scopeCompatibleExact[0];
+      if (!hasSufficientTopologicalEvidenceForPoint(candidate.id, ptMeta.kind)) {
+        recordUnresolvedPoint(ptMeta, [candidate.id], 'insufficient_topological_evidence');
+        continue;
+      }
+      targetNode = candidate;
+    } else {
+      // 4B.2 Conservative coordinate fallback within 0.15 m
+      const nearbyNodes = allInternalNodesList.filter(
+        (n) =>
+          !n.isBoundaryClipped &&
+          Math.hypot(n.x - ptMeta.point[0], n.z - ptMeta.point[1]) <=
+            DEFAULT_NODE_SNAP_TOLERANCE_METERS
+      );
+
+      if (nearbyNodes.length === 0) {
+        recordUnresolvedPoint(ptMeta, [], 'no_candidate_node_within_snap_tolerance');
+        continue;
+      }
+
+      // Never match conflicting explicit OSM node IDs by proximity
+      const conflictingIdNodes =
+        ptNormOsmId !== undefined
+          ? nearbyNodes.filter(
+              (n) =>
+                n.rawOsmNodeId !== undefined && stripNodePrefix(n.rawOsmNodeId) !== ptNormOsmId
+            )
+          : [];
+
+      if (conflictingIdNodes.length > 0) {
+        recordUnresolvedPoint(
+          ptMeta,
+          nearbyNodes.map((n) => n.id),
+          'conflicting_explicit_osm_node_id'
+        );
+        continue;
+      }
+
+      // Respect vertical scope when available and prevent cross-scope ambiguity
+      const scopeCompatibleNearby = nearbyNodes.filter((n) =>
+        isNodeCompatibleWithPointScope(n, ptScope)
+      );
+
+      if (scopeCompatibleNearby.length === 0) {
+        recordUnresolvedPoint(
+          ptMeta,
+          nearbyNodes.map((n) => n.id),
+          'vertical_scope_mismatch'
+        );
+        continue;
+      }
+
+      if (!ptScope.hasExplicitScope) {
+        const nearbyVerticalScopes = new Set<string>();
+        for (const n of nearbyNodes) {
+          nearbyVerticalScopes.add(`${n.layer}|${n.isBridge ? 1 : 0}|${n.isTunnel ? 1 : 0}`);
+        }
+        for (const item of retainedParts) {
+          const scopeKey = getScopeKey(item.part);
+          if (nearbyVerticalScopes.has(scopeKey)) continue;
+          if (
+            distancePointToPolyline2D(ptMeta.point, item.mutablePoints) <=
+            DEFAULT_NODE_SNAP_TOLERANCE_METERS
+          ) {
+            nearbyVerticalScopes.add(scopeKey);
+          }
+        }
+
+        if (nearbyVerticalScopes.size > 1) {
+          recordUnresolvedPoint(
+            ptMeta,
+            nearbyNodes.map((n) => n.id),
+            'vertical_scope_mismatch'
+          );
+          continue;
+        }
+      }
+
+      // Do not arbitrarily select the nearest candidate if multiple eligible nodes exist within snap tolerance
+      if (scopeCompatibleNearby.length > 1) {
+        recordUnresolvedPoint(
+          ptMeta,
+          scopeCompatibleNearby.map((n) => n.id),
+          'ambiguous_multiple_candidate_nodes'
+        );
+        continue;
+      }
+
+      const candidate = scopeCompatibleNearby[0];
+      if (!hasSufficientTopologicalEvidenceForPoint(candidate.id, ptMeta.kind)) {
+        recordUnresolvedPoint(ptMeta, [candidate.id], 'insufficient_topological_evidence');
+        continue;
+      }
+
+      targetNode = candidate;
+    }
+
+    if (targetNode) {
+      if (ptMeta.kind === 'railway_switch' && !targetNode.switchPointMeta) {
+        targetNode.switchPointMeta = ptMeta;
+      } else if (ptMeta.kind === 'railway_crossing_flat' && !targetNode.flatCrossingPointMeta) {
+        targetNode.flatCrossingPointMeta = ptMeta;
+      }
+    }
+  }
+
+  // 4C. Detect and decouple flat diamond crossings (ADR-0009 Section 5.1)
   const pendingConfirmedFlatCrossings: PendingConfirmedFlatCrossing[] = [];
-  const pendingUntaggedDegree4Candidates: PendingUntaggedDegree4Candidate[] = [];
+  const pendingUnresolvedDegree4Candidates: PendingUnresolvedDegree4Candidate[] = [];
   let flatCrossingDecoupleSeq = 0;
 
   for (const [nid, occs] of occurrencesByNode.entries()) {
@@ -1137,8 +1385,12 @@ export function buildRailwayNetwork(
       const minCrossingAngleRad = hasExplicitFlatCrossingTag
         ? MIN_TAGGED_FLAT_CROSSING_ANGLE_RAD
         : MIN_UNTAGGED_FLAT_CROSSING_ANGLE_RAD;
+      const isDistinctParts = occA.partRecord.part.id !== occB.partRecord.part.id;
       const isCollinearDiamond =
-        dotA <= -COS_15_DEG && dotB <= -COS_15_DEG && crossAngle >= minCrossingAngleRad;
+        isDistinctParts &&
+        dotA <= -COS_15_DEG &&
+        dotB <= -COS_15_DEG &&
+        crossAngle >= minCrossingAngleRad;
 
       if (
         isCollinearDiamond &&
@@ -1178,6 +1430,20 @@ export function buildRailwayNetwork(
           trackBPartIds: new Set([occB.partRecord.part.id]),
           trackATangent: tA,
           trackBTangent: tB,
+        });
+      } else {
+        const reason: UnresolvedCrossingCandidate['reason'] = hasExplicitFlatCrossingTag
+          ? 'ambiguous_railway_crossing_track_pairing'
+          : node.nodeIdOrigin === 'coordinate_fallback' && isCollinearDiamond
+          ? 'coincident_vertex_without_osm_id'
+          : 'missing_railway_crossing_tag_at_degree_4_node';
+
+        pendingUnresolvedDegree4Candidates.push({
+          nodeId: nid,
+          position: [node.x, node.z],
+          trackAPartIds: new Set([occA.partRecord.part.id]),
+          trackBPartIds: new Set([occB.partRecord.part.id]),
+          reason,
         });
       }
       continue;
@@ -1224,13 +1490,28 @@ export function buildRailwayNetwork(
 
       const dotA = aPrev.tangent[0] * aNext.tangent[0] + aPrev.tangent[1] * aNext.tangent[1];
       const dotB = bArm1.tangent[0] * bArm2.tangent[0] + bArm1.tangent[1] * bArm2.tangent[1];
+      const alt1Collinear =
+        aPrev.tangent[0] * bArm1.tangent[0] + aPrev.tangent[1] * bArm1.tangent[1] <= -COS_15_DEG &&
+        aNext.tangent[0] * bArm2.tangent[0] + aNext.tangent[1] * bArm2.tangent[1] <= -COS_15_DEG;
+      const alt2Collinear =
+        aPrev.tangent[0] * bArm2.tangent[0] + aPrev.tangent[1] * bArm2.tangent[1] <= -COS_15_DEG &&
+        aNext.tangent[0] * bArm1.tangent[0] + aNext.tangent[1] * bArm1.tangent[1] <= -COS_15_DEG;
+
       const tA = computeForwardTrackTangent(aPrev, aNext);
       const tB = computeForwardTrackTangent(bArm1, bArm2);
       const crossAngle = computeCrossingAngleRad(tA, tB);
 
+      const isDistinctParts =
+        occA.partRecord.part.id !== end1.partRecord.part.id &&
+        occA.partRecord.part.id !== end2.partRecord.part.id &&
+        end1.partRecord.part.id !== end2.partRecord.part.id;
+
       const isCollinearDiamond =
+        isDistinctParts &&
         dotA <= -COS_15_DEG &&
         dotB <= -COS_15_DEG &&
+        !alt1Collinear &&
+        !alt2Collinear &&
         crossAngle >= MIN_TAGGED_FLAT_CROSSING_ANGLE_RAD;
 
       if (isCollinearDiamond && node.switchPointMeta === undefined && hasExplicitFlatCrossingTag) {
@@ -1267,6 +1548,16 @@ export function buildRailwayNetwork(
           trackATangent: tA,
           trackBTangent: tB,
         });
+      } else {
+        pendingUnresolvedDegree4Candidates.push({
+          nodeId: nid,
+          position: [node.x, node.z],
+          trackAPartIds: new Set([occA.partRecord.part.id]),
+          trackBPartIds: new Set([end1.partRecord.part.id, end2.partRecord.part.id]),
+          reason: hasExplicitFlatCrossingTag
+            ? 'ambiguous_railway_crossing_track_pairing'
+            : 'missing_railway_crossing_tag_at_degree_4_node',
+        });
       }
       continue;
     }
@@ -1295,17 +1586,25 @@ export function buildRailwayNetwork(
         tA: [number, number];
         tB: [number, number];
       }> = [];
+      let collinearPartitionCount = 0;
 
       const minCrossingAngleRad = hasExplicitFlatCrossingTag
         ? MIN_TAGGED_FLAT_CROSSING_ANGLE_RAD
         : MIN_UNTAGGED_FLAT_CROSSING_ANGLE_RAD;
 
       for (const [i1, i2, j1, j2] of partitions) {
+        if (
+          endpointOccs[i1].partRecord.part.id === endpointOccs[i2].partRecord.part.id ||
+          endpointOccs[j1].partRecord.part.id === endpointOccs[j2].partRecord.part.id
+        ) {
+          continue;
+        }
         const dot1 =
           arms[i1].tangent[0] * arms[i2].tangent[0] + arms[i1].tangent[1] * arms[i2].tangent[1];
         const dot2 =
           arms[j1].tangent[0] * arms[j2].tangent[0] + arms[j1].tangent[1] * arms[j2].tangent[1];
         if (dot1 <= -COS_15_DEG && dot2 <= -COS_15_DEG) {
+          collinearPartitionCount++;
           const tA = computeForwardTrackTangent(arms[i1], arms[i2]);
           const tB = computeForwardTrackTangent(arms[j1], arms[j2]);
           if (computeCrossingAngleRad(tA, tB) >= minCrossingAngleRad) {
@@ -1314,62 +1613,78 @@ export function buildRailwayNetwork(
         }
       }
 
-      if (validPartitions.length === 1 && node.switchPointMeta === undefined) {
+      if (
+        collinearPartitionCount === 1 &&
+        validPartitions.length === 1 &&
+        node.switchPointMeta === undefined &&
+        hasExplicitFlatCrossingTag
+      ) {
         const chosen = validPartitions[0];
         const occA1 = endpointOccs[chosen.p1[0]];
         const occA2 = endpointOccs[chosen.p1[1]];
         const occB1 = endpointOccs[chosen.p2[0]];
         const occB2 = endpointOccs[chosen.p2[1]];
 
-        if (hasExplicitFlatCrossingTag) {
-          flatCrossingDecoupleSeq++;
-          const nodeIdA = `${nid}:fc_${flatCrossingDecoupleSeq}_a`;
-          const nodeIdB = `${nid}:fc_${flatCrossingDecoupleSeq}_b`;
+        flatCrossingDecoupleSeq++;
+        const nodeIdA = `${nid}:fc_${flatCrossingDecoupleSeq}_a`;
+        const nodeIdB = `${nid}:fc_${flatCrossingDecoupleSeq}_b`;
 
-          internalNodes.set(nodeIdA, {
-            ...node,
-            id: nodeIdA,
-            isDecoupledFlatCrossingTrackNode: true,
-          });
-          internalNodes.set(nodeIdB, {
-            ...node,
-            id: nodeIdB,
-            isDecoupledFlatCrossingTrackNode: true,
-          });
+        internalNodes.set(nodeIdA, {
+          ...node,
+          id: nodeIdA,
+          isDecoupledFlatCrossingTrackNode: true,
+        });
+        internalNodes.set(nodeIdB, {
+          ...node,
+          id: nodeIdB,
+          isDecoupledFlatCrossingTrackNode: true,
+        });
 
-          partVertexNodeIds.get(occA1.partRecord.part.id)![occA1.vertexIndex] = nodeIdA;
-          partVertexNodeIds.get(occA2.partRecord.part.id)![occA2.vertexIndex] = nodeIdA;
-          partVertexNodeIds.get(occB1.partRecord.part.id)![occB1.vertexIndex] = nodeIdB;
-          partVertexNodeIds.get(occB2.partRecord.part.id)![occB2.vertexIndex] = nodeIdB;
+        partVertexNodeIds.get(occA1.partRecord.part.id)![occA1.vertexIndex] = nodeIdA;
+        partVertexNodeIds.get(occA2.partRecord.part.id)![occA2.vertexIndex] = nodeIdA;
+        partVertexNodeIds.get(occB1.partRecord.part.id)![occB1.vertexIndex] = nodeIdB;
+        partVertexNodeIds.get(occB2.partRecord.part.id)![occB2.vertexIndex] = nodeIdB;
 
-          pendingConfirmedFlatCrossings.push({
-            originalNodeId: nid,
-            rawOsmNodeId: node.rawOsmNodeId ?? node.flatCrossingPointMeta?.rawOsmNodeId,
-            position: [node.x, node.z],
-            layer: node.layer,
-            confidence: 'explicit_railway_crossing_tag',
-            pointOsmTags: node.flatCrossingPointMeta?.osmTags
-              ? cloneOsmTags(node.flatCrossingPointMeta.osmTags)
-              : undefined,
-            trackAPartIds: new Set([occA1.partRecord.part.id, occA2.partRecord.part.id]),
-            trackBPartIds: new Set([occB1.partRecord.part.id, occB2.partRecord.part.id]),
-            trackATangent: chosen.tA,
-            trackBTangent: chosen.tB,
-          });
+        pendingConfirmedFlatCrossings.push({
+          originalNodeId: nid,
+          rawOsmNodeId: node.rawOsmNodeId ?? node.flatCrossingPointMeta?.rawOsmNodeId,
+          position: [node.x, node.z],
+          layer: node.layer,
+          confidence: 'explicit_railway_crossing_tag',
+          pointOsmTags: node.flatCrossingPointMeta?.osmTags
+            ? cloneOsmTags(node.flatCrossingPointMeta.osmTags)
+            : undefined,
+          trackAPartIds: new Set([occA1.partRecord.part.id, occA2.partRecord.part.id]),
+          trackBPartIds: new Set([occB1.partRecord.part.id, occB2.partRecord.part.id]),
+          trackATangent: chosen.tA,
+          trackBTangent: chosen.tB,
+        });
+      } else {
+        let trackAPartIds: Set<string>;
+        let trackBPartIds: Set<string>;
+        if (validPartitions.length === 1) {
+          const chosen = validPartitions[0];
+          trackAPartIds = new Set([
+            endpointOccs[chosen.p1[0]].partRecord.part.id,
+            endpointOccs[chosen.p1[1]].partRecord.part.id,
+          ]);
+          trackBPartIds = new Set([
+            endpointOccs[chosen.p2[0]].partRecord.part.id,
+            endpointOccs[chosen.p2[1]].partRecord.part.id,
+          ]);
         } else {
-          pendingUntaggedDegree4Candidates.push({
-            nodeId: nid,
-            position: [node.x, node.z],
-            trackAPartIds: new Set([occA1.partRecord.part.id, occA2.partRecord.part.id]),
-            trackBPartIds: new Set([occB1.partRecord.part.id, occB2.partRecord.part.id]),
-          });
+          trackAPartIds = new Set([endpointOccs[0].partRecord.part.id]);
+          trackBPartIds = new Set([endpointOccs[1].partRecord.part.id]);
         }
-      } else if (!hasExplicitFlatCrossingTag) {
-        pendingUntaggedDegree4Candidates.push({
+
+        pendingUnresolvedDegree4Candidates.push({
           nodeId: nid,
           position: [node.x, node.z],
-          trackAPartIds: new Set([endpointOccs[0].partRecord.part.id]),
-          trackBPartIds: new Set([endpointOccs[1].partRecord.part.id]),
+          trackAPartIds,
+          trackBPartIds,
+          reason: hasExplicitFlatCrossingTag
+            ? 'ambiguous_railway_crossing_track_pairing'
+            : 'missing_railway_crossing_tag_at_degree_4_node',
         });
       }
     }
@@ -1843,7 +2158,10 @@ export function buildRailwayNetwork(
     if (rec.isAttributeBreak) {
       rolesSet.add('attribute_break');
     }
-    if (rec.flatCrossingPointMeta !== undefined) {
+    if (
+      rec.flatCrossingPointMeta !== undefined &&
+      (rec.isDecoupledFlatCrossingTrackNode || degree < 4)
+    ) {
       rolesSet.add('railway_crossing');
     }
 
@@ -1866,9 +2184,6 @@ export function buildRailwayNetwork(
       }
     } else if (degree >= 4) {
       diagnostics.railwayUnresolvedJunctionCount++;
-      if (rec.switchPointMeta !== undefined) {
-        rolesSet.add('switch');
-      }
       rolesSet.add('junction');
     } else if (rec.switchPointMeta !== undefined) {
       rolesSet.add('switch');
@@ -1903,7 +2218,7 @@ export function buildRailwayNetwork(
     });
   }
 
-  // 8. Resolve final RailwayFlatCrossingRelation records and untagged degree-4 UnresolvedCrossingCandidates
+  // 8. Resolve final RailwayFlatCrossingRelation records and degree-4 UnresolvedCrossingCandidates
   const findBestEdgeAndArcLengthForTrack = (
     partIds: ReadonlySet<string>,
     pos: [number, number]
@@ -1997,28 +2312,61 @@ export function buildRailwayNetwork(
     };
   }
 
-  for (const cand of pendingUntaggedDegree4Candidates) {
+  for (const cand of pendingUnresolvedDegree4Candidates) {
     const resolvedA = findBestEdgeAndArcLengthForTrack(cand.trackAPartIds, cand.position);
     const resolvedB = findBestEdgeAndArcLengthForTrack(cand.trackBPartIds, cand.position);
-    if (!resolvedA || !resolvedB) continue;
+
+    let rawEdgeA = resolvedA?.edgeId;
+    let rawEdgeB = resolvedB?.edgeId;
+
+    if (!rawEdgeA || !rawEdgeB || rawEdgeA === rawEdgeB) {
+      const nodeAtCrossing = nodesMap.get(cand.nodeId);
+      if (nodeAtCrossing && nodeAtCrossing.incidentEdgeIds.length >= 2) {
+        rawEdgeA = nodeAtCrossing.incidentEdgeIds[0];
+        rawEdgeB = nodeAtCrossing.incidentEdgeIds[1];
+      } else if (nodeAtCrossing && nodeAtCrossing.incidentEdgeIds.length === 1) {
+        rawEdgeA = nodeAtCrossing.incidentEdgeIds[0];
+        rawEdgeB = nodeAtCrossing.incidentEdgeIds[0];
+      }
+    }
+
+    if (!rawEdgeA || !rawEdgeB) continue;
 
     const edgeAId =
-      compareStringsCodeUnit(resolvedA.edgeId, resolvedB.edgeId) <= 0
-        ? resolvedA.edgeId
-        : resolvedB.edgeId;
+      compareStringsCodeUnit(rawEdgeA, rawEdgeB) <= 0 ? rawEdgeA : rawEdgeB;
     const edgeBId =
-      compareStringsCodeUnit(resolvedA.edgeId, resolvedB.edgeId) <= 0
-        ? resolvedB.edgeId
-        : resolvedA.edgeId;
+      compareStringsCodeUnit(rawEdgeA, rawEdgeB) <= 0 ? rawEdgeB : rawEdgeA;
 
     unresolvedCrossings.push({
       kind: 'rail_rail',
       position: [cand.position[0], cand.position[1]],
       edgeAId,
       edgeBId,
-      reason: 'missing_railway_crossing_tag_at_degree_4_node',
+      reason: cand.reason,
     });
   }
+
+  unresolvedCrossings.sort((a, b) => {
+    const cmpA = compareStringsCodeUnit(a.edgeAId, b.edgeAId);
+    if (cmpA !== 0) return cmpA;
+    const cmpB = compareStringsCodeUnit(a.edgeBId, b.edgeBId);
+    if (cmpB !== 0) return cmpB;
+    const dx = Math.round(a.position[0] * 1000) - Math.round(b.position[0] * 1000);
+    if (dx !== 0) return dx;
+    const dz = Math.round(a.position[1] * 1000) - Math.round(b.position[1] * 1000);
+    if (dz !== 0) return dz;
+    return compareStringsCodeUnit(a.reason, b.reason);
+  });
+
+  unresolvedInfrastructurePoints.sort((a, b) => {
+    const cmpId = compareStringsCodeUnit(a.pointId, b.pointId);
+    if (cmpId !== 0) return cmpId;
+    const dx = Math.round(a.position[0] * 1000) - Math.round(b.position[0] * 1000);
+    if (dx !== 0) return dx;
+    const dz = Math.round(a.position[1] * 1000) - Math.round(b.position[1] * 1000);
+    if (dz !== 0) return dz;
+    return compareStringsCodeUnit(a.reason, b.reason);
+  });
 
   const featureToEdgeIds = new Map<string, readonly string[]>();
   for (const [featId, set] of [...featureToEdgesTemp.entries()].sort((a, b) =>

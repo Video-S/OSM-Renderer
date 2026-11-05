@@ -461,7 +461,25 @@ export interface UnresolvedCrossingCandidate {
   reason:
     | 'coincident_vertex_without_osm_id'
     | 'geometric_intersection_without_shared_node'
-    | 'missing_railway_crossing_tag_at_degree_4_node';
+    | 'missing_railway_crossing_tag_at_degree_4_node'
+    | 'ambiguous_railway_crossing_track_pairing';
+}
+
+export type UnresolvedInfrastructurePointReason =
+  | 'no_candidate_node_within_snap_tolerance'
+  | 'conflicting_explicit_osm_node_id'
+  | 'ambiguous_multiple_candidate_nodes'
+  | 'vertical_scope_mismatch'
+  | 'insufficient_topological_evidence';
+
+export interface UnresolvedInfrastructurePointCandidate {
+  pointId: string;
+  rawOsmNodeId?: string;
+  kind: InfrastructurePointKind;
+  position: [number, number];
+  candidateNodeIds: readonly string[];
+  reason: UnresolvedInfrastructurePointReason;
+  osmTags: RawGeoJsonProperties;
 }
 
 export interface RailwayNetworkDiagnostics {
@@ -479,6 +497,7 @@ export interface RailwayNetworkDiagnostics {
   boundaryClippedNodeCount: number;
   closedLoopEdgeCount: number;
   unresolvedCrossings: readonly UnresolvedCrossingCandidate[];
+  unresolvedInfrastructurePoints: readonly UnresolvedInfrastructurePointCandidate[];
 }
 
 export interface RailwayNetworkBuildResult {

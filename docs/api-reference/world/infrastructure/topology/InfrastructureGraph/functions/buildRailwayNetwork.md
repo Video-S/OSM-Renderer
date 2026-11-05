@@ -8,7 +8,7 @@
 
 > **buildRailwayNetwork**(`input`, `infrastructurePoints?`): [`RailwayNetworkBuildResult`](../../types/interfaces/RailwayNetworkBuildResult.md)
 
-Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:751
+Defined in: world/infrastructure/topology/RailwayNetworkBuilder.ts:855
 
 Pure, deterministic Stage C Railway Network Graph builder (`ADR-0009`).
 Constructs `RailwayNetwork`, `RailwayFlatCrossingRelation[]`, and `RailwayNetworkDiagnostics`

@@ -328,3 +328,15 @@ Re-exports [UnresolvedCrossingCandidate](../types/interfaces/UnresolvedCrossingC
 ### UnresolvedGradeTransitionCandidate
 
 Re-exports [UnresolvedGradeTransitionCandidate](../types/interfaces/UnresolvedGradeTransitionCandidate.md)
+
+***
+
+### UnresolvedInfrastructurePointCandidate
+
+Re-exports [UnresolvedInfrastructurePointCandidate](../types/interfaces/UnresolvedInfrastructurePointCandidate.md)
+
+***
+
+### UnresolvedInfrastructurePointReason
+
+Re-exports [UnresolvedInfrastructurePointReason](../types/type-aliases/UnresolvedInfrastructurePointReason.md)

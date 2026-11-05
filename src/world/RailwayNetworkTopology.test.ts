@@ -1240,5 +1240,559 @@ describe('M2.3-C Railway Network Graph Topology (ADR-0009)', () => {
         `${amsterdamGraph.diagnostics.railwayUnresolvedSwitchCount} unresolved, flatCrossings=${amsterdamGraph.diagnostics.railwayFlatCrossingCount})`
     );
   });
+
+  it('completes unresolved 4-arm railway crossing diagnostics across 2-interior, 1-interior+2-endpoint, and 4-endpoint arrangements (tagged and untagged)', () => {
+    // 1. Case A (2 interior occurrences) — untagged coordinate-fallback interior meeting
+    const caseACoordFallbackParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/ca_fb_1-0',
+        sourceFeatureId: 'way/ca_fb_1',
+        points: [
+          [-60, 0],
+          [0, 0],
+          [60, 0],
+        ],
+        rawOsmNodeIds: [undefined, undefined, undefined],
+      }),
+      makeRailwayPart({
+        id: 'way/ca_fb_2-0',
+        sourceFeatureId: 'way/ca_fb_2',
+        points: [
+          [0, -60],
+          [0, 0],
+          [0, 60],
+        ],
+        rawOsmNodeIds: [undefined, undefined, undefined],
+      }),
+    ];
+    const resCaseAFb = buildRailwayNetwork(caseACoordFallbackParts);
+    assert.equal(resCaseAFb.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseAFb.diagnostics.railwayConfirmedSwitchCount, 0);
+    assert.equal(resCaseAFb.diagnostics.railwayUnresolvedSwitchCount, 0);
+    assert.equal(resCaseAFb.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseAFb.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseAFb.diagnostics.unresolvedCrossings[0].reason,
+      'coincident_vertex_without_osm_id'
+    );
+    const fbCenterNode = [...resCaseAFb.railways.nodes.values()].find((n) => n.degree === 4)!;
+    assert.ok(fbCenterNode);
+    assert.equal(fbCenterNode.primaryRole, 'junction');
+    assert.deepEqual(fbCenterNode.roles, ['junction']);
+    assert.equal(fbCenterNode.turnoutTopology, undefined);
+
+    // 2. Case A (2 interior occurrences) — tagged railway=railway_crossing where one way bends 90 deg at the node (ambiguous track pairing)
+    const caseATaggedKinkParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/ca_kink_1-0',
+        sourceFeatureId: 'way/ca_kink_1',
+        points: [
+          [-60, 0],
+          [0, 0],
+          [60, 0],
+        ],
+        rawOsmNodeIds: ['6101', '6100', '6102'],
+      }),
+      makeRailwayPart({
+        id: 'way/ca_kink_2-0',
+        sourceFeatureId: 'way/ca_kink_2',
+        points: [
+          [0, -60],
+          [0, 0],
+          [40, -50],
+        ],
+        rawOsmNodeIds: ['6103', '6100', '6104'],
+      }),
+    ];
+    const resCaseATaggedKink = buildRailwayNetwork(caseATaggedKinkParts, [
+      {
+        id: 'node/6100',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '6100',
+        point: [0, 0],
+        kind: 'railway_crossing_flat',
+        osmTags: { railway: 'railway_crossing' },
+      },
+    ]);
+    assert.equal(resCaseATaggedKink.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseATaggedKink.diagnostics.railwayConfirmedSwitchCount, 0);
+    assert.equal(resCaseATaggedKink.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseATaggedKink.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseATaggedKink.diagnostics.unresolvedCrossings[0].reason,
+      'ambiguous_railway_crossing_track_pairing'
+    );
+    const kinkNode = resCaseATaggedKink.railways.nodes.get('rail_node:0|0|0:osm_6100')!;
+    assert.ok(kinkNode);
+    assert.equal(kinkNode.degree, 4);
+    assert.equal(kinkNode.primaryRole, 'junction');
+    assert.deepEqual(kinkNode.roles, ['junction']);
+    assert.equal(kinkNode.turnoutTopology, undefined);
+
+    // 3. Case B (1 interior-through-way + 2 terminating way endpoints) — confirmed when tagged & collinear, unresolved when untagged or non-collinear
+    const caseBCollinearParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/cb_thru-0',
+        sourceFeatureId: 'way/cb_thru',
+        points: [
+          [-60, 0],
+          [0, 0],
+          [60, 0],
+        ],
+        rawOsmNodeIds: ['6201', '6200', '6202'],
+      }),
+      makeRailwayPart({
+        id: 'way/cb_end1-0',
+        sourceFeatureId: 'way/cb_end1',
+        points: [
+          [0, -50],
+          [0, 0],
+        ],
+        rawOsmNodeIds: ['6203', '6200'],
+      }),
+      makeRailwayPart({
+        id: 'way/cb_end2-0',
+        sourceFeatureId: 'way/cb_end2',
+        points: [
+          [0, 0],
+          [0, 50],
+        ],
+        rawOsmNodeIds: ['6200', '6204'],
+      }),
+    ];
+
+    // 3a. Case B untagged -> unresolved with missing_railway_crossing_tag_at_degree_4_node
+    const resCaseBUntagged = buildRailwayNetwork(caseBCollinearParts);
+    assert.equal(resCaseBUntagged.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseBUntagged.diagnostics.railwayConfirmedSwitchCount, 0);
+    assert.equal(resCaseBUntagged.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseBUntagged.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseBUntagged.diagnostics.unresolvedCrossings[0].reason,
+      'missing_railway_crossing_tag_at_degree_4_node'
+    );
+    const cbUntaggedNode = resCaseBUntagged.railways.nodes.get('rail_node:0|0|0:osm_6200')!;
+    assert.equal(cbUntaggedNode.degree, 4);
+    assert.equal(cbUntaggedNode.primaryRole, 'junction');
+    assert.deepEqual(cbUntaggedNode.roles, ['junction']);
+
+    // 3b. Case B tagged & collinear -> confirmed flat diamond crossing with non-interconnecting tracks
+    const resCaseBConfirmed = buildRailwayNetwork(caseBCollinearParts, [
+      {
+        id: 'node/6200',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '6200',
+        point: [0, 0],
+        kind: 'railway_crossing_flat',
+        osmTags: { railway: 'railway_crossing' },
+      },
+    ]);
+    assert.equal(resCaseBConfirmed.diagnostics.railwayFlatCrossingCount, 1);
+    assert.equal(resCaseBConfirmed.diagnostics.railwayUnresolvedJunctionCount, 0);
+    assert.equal(resCaseBConfirmed.diagnostics.unresolvedCrossings.length, 0);
+    const cbFc = resCaseBConfirmed.railwayFlatCrossings[0];
+    assert.equal(
+      areEdgesConnectedInGraph(resCaseBConfirmed, cbFc.trackAEdgeId, cbFc.trackBEdgeId),
+      false
+    );
+
+    // 3c. Case B tagged, but terminating endpoints are non-collinear (ambiguous_railway_crossing_track_pairing)
+    const caseBNonCollinearParts: UnchainedRailwayPart[] = [
+      caseBCollinearParts[0],
+      caseBCollinearParts[1],
+      makeRailwayPart({
+        id: 'way/cb_end2_bent-0',
+        sourceFeatureId: 'way/cb_end2_bent',
+        points: [
+          [0, 0],
+          [40, 30],
+        ],
+        rawOsmNodeIds: ['6200', '6204'],
+      }),
+    ];
+    const resCaseBAmbiguous = buildRailwayNetwork(caseBNonCollinearParts, [
+      {
+        id: 'node/6200',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '6200',
+        point: [0, 0],
+        kind: 'railway_crossing_flat',
+        osmTags: { railway: 'railway_crossing' },
+      },
+    ]);
+    assert.equal(resCaseBAmbiguous.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseBAmbiguous.diagnostics.railwayConfirmedSwitchCount, 0);
+    assert.equal(resCaseBAmbiguous.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseBAmbiguous.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseBAmbiguous.diagnostics.unresolvedCrossings[0].reason,
+      'ambiguous_railway_crossing_track_pairing'
+    );
+    const cbAmbigNode = resCaseBAmbiguous.railways.nodes.get('rail_node:0|0|0:osm_6200')!;
+    assert.equal(cbAmbigNode.degree, 4);
+    assert.equal(cbAmbigNode.primaryRole, 'junction');
+    assert.deepEqual(cbAmbigNode.roles, ['junction']);
+
+    // 4. Case C (4 terminating way endpoints) — tagged railway=railway_crossing with ambiguous track pairing
+    // 4a. Zero valid collinear partitions (4-arm fan)
+    const caseCFanParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/cc_fan_1-0',
+        points: [
+          [-60, 0],
+          [0, 0],
+        ],
+        rawOsmNodeIds: ['6301', '6300'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_fan_2-0',
+        points: [
+          [0, 0],
+          [60, -40],
+        ],
+        rawOsmNodeIds: ['6300', '6302'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_fan_3-0',
+        points: [
+          [0, 0],
+          [60, 0],
+        ],
+        rawOsmNodeIds: ['6300', '6303'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_fan_4-0',
+        points: [
+          [0, 0],
+          [60, 40],
+        ],
+        rawOsmNodeIds: ['6300', '6304'],
+      }),
+    ];
+    const resCaseCFan = buildRailwayNetwork(caseCFanParts, [
+      {
+        id: 'node/6300',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '6300',
+        point: [0, 0],
+        kind: 'railway_crossing_flat',
+        osmTags: { railway: 'railway_crossing' },
+      },
+    ]);
+    assert.equal(resCaseCFan.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseCFan.diagnostics.railwayConfirmedSwitchCount, 0);
+    assert.equal(resCaseCFan.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseCFan.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseCFan.diagnostics.unresolvedCrossings[0].reason,
+      'ambiguous_railway_crossing_track_pairing'
+    );
+    const ccFanNode = resCaseCFan.railways.nodes.get('rail_node:0|0|0:osm_6300')!;
+    assert.equal(ccFanNode.degree, 4);
+    assert.equal(ccFanNode.primaryRole, 'junction');
+    assert.deepEqual(ccFanNode.roles, ['junction']);
+
+    // 4b. Multiple competing collinear partitions (4 endpoints in a narrow 6-deg bundle: 0, 6, 180, 186 deg)
+    const rad6 = (6 * Math.PI) / 180;
+    const caseCBundleParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/cc_bun_1-0',
+        points: [
+          [-60, 0],
+          [0, 0],
+        ],
+        rawOsmNodeIds: ['6401', '6400'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_bun_2-0',
+        points: [
+          [-60 * Math.cos(rad6), -60 * Math.sin(rad6)],
+          [0, 0],
+        ],
+        rawOsmNodeIds: ['6402', '6400'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_bun_3-0',
+        points: [
+          [0, 0],
+          [60, 0],
+        ],
+        rawOsmNodeIds: ['6400', '6403'],
+      }),
+      makeRailwayPart({
+        id: 'way/cc_bun_4-0',
+        points: [
+          [0, 0],
+          [60 * Math.cos(rad6), 60 * Math.sin(rad6)],
+        ],
+        rawOsmNodeIds: ['6400', '6404'],
+      }),
+    ];
+    const resCaseCBundle = buildRailwayNetwork(caseCBundleParts, [
+      {
+        id: 'node/6400',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '6400',
+        point: [0, 0],
+        kind: 'railway_crossing_flat',
+        osmTags: { railway: 'railway_crossing' },
+      },
+    ]);
+    assert.equal(resCaseCBundle.diagnostics.railwayFlatCrossingCount, 0);
+    assert.equal(resCaseCBundle.diagnostics.railwayUnresolvedJunctionCount, 1);
+    assert.equal(resCaseCBundle.diagnostics.unresolvedCrossings.length, 1);
+    assert.equal(
+      resCaseCBundle.diagnostics.unresolvedCrossings[0].reason,
+      'ambiguous_railway_crossing_track_pairing'
+    );
+  });
+
+  it('enforces conservative railway=switch and railway=railway_crossing point matching (unique fallback, multiple nearby nodes, conflicting explicit IDs, and vertical-scope isolation)', () => {
+    const baseTurnoutParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/pm_1-0',
+        points: [
+          [-80, 0],
+          [0, 0],
+        ],
+        rawOsmNodeIds: [undefined, undefined],
+      }),
+      makeRailwayPart({
+        id: 'way/pm_2-0',
+        points: [
+          [0, 0],
+          [80, 0],
+        ],
+        rawOsmNodeIds: [undefined, undefined],
+      }),
+      makeRailwayPart({
+        id: 'way/pm_3-0',
+        points: [
+          [0, 0],
+          [80, 15],
+        ],
+        rawOsmNodeIds: [undefined, undefined],
+      }),
+    ];
+
+    // 1. Unique valid coordinate fallback within 0.15 m
+    const uniqueFallbackRes = buildRailwayNetwork(baseTurnoutParts, [
+      {
+        id: 'pt_switch_fallback',
+        hasExplicitSourceId: false,
+        rawOsmNodeId: undefined,
+        point: [0.06, -0.05], // ~0.078 m <= 0.15 m
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', ref: 'SW-42' },
+      },
+    ]);
+    assert.equal(uniqueFallbackRes.diagnostics.unresolvedInfrastructurePoints.length, 0);
+    assert.equal(uniqueFallbackRes.diagnostics.railwayConfirmedSwitchCount, 1);
+    const matchedSwitchNode = [...uniqueFallbackRes.railways.nodes.values()].find(
+      (n) => n.degree === 3
+    )!;
+    assert.deepEqual(matchedSwitchNode.pointOsmTags, { railway: 'switch', ref: 'SW-42' });
+
+    // 2. Two equally plausible nearby railway nodes within 0.15 m -> neither matched (even if one is slightly closer)
+    const twoNearbyTurnoutsParts: UnchainedRailwayPart[] = [
+      // Turnout A at (-0.06, 0)
+      makeRailwayPart({
+        id: 'way/tA_1-0',
+        points: [
+          [-80, 0],
+          [-0.06, 0],
+        ],
+        rawOsmNodeIds: ['7101', '7100'],
+      }),
+      makeRailwayPart({
+        id: 'way/tA_2-0',
+        points: [
+          [-0.06, 0],
+          [80, 0],
+        ],
+        rawOsmNodeIds: ['7100', '7102'],
+      }),
+      makeRailwayPart({
+        id: 'way/tA_3-0',
+        points: [
+          [-0.06, 0],
+          [80, 15],
+        ],
+        rawOsmNodeIds: ['7100', '7103'],
+      }),
+      // Turnout B at (+0.08, 0)
+      makeRailwayPart({
+        id: 'way/tB_1-0',
+        points: [
+          [-80, 5],
+          [0.08, 0],
+        ],
+        rawOsmNodeIds: ['7201', '7200'],
+      }),
+      makeRailwayPart({
+        id: 'way/tB_2-0',
+        points: [
+          [0.08, 0],
+          [80, 5],
+        ],
+        rawOsmNodeIds: ['7200', '7202'],
+      }),
+      makeRailwayPart({
+        id: 'way/tB_3-0',
+        points: [
+          [0.08, 0],
+          [80, 20],
+        ],
+        rawOsmNodeIds: ['7200', '7203'],
+      }),
+    ];
+    const twoNearbyRes = buildRailwayNetwork(twoNearbyTurnoutsParts, [
+      {
+        id: 'pt_ambiguous_switch',
+        hasExplicitSourceId: false,
+        rawOsmNodeId: undefined,
+        point: [0, 0], // 0.06 m from 7100 and 0.08 m from 7200 (both <= 0.15 m)
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', ref: 'AMBIG' },
+      },
+    ]);
+    assert.equal(twoNearbyRes.diagnostics.unresolvedInfrastructurePoints.length, 1);
+    assert.equal(
+      twoNearbyRes.diagnostics.unresolvedInfrastructurePoints[0].reason,
+      'ambiguous_multiple_candidate_nodes'
+    );
+    assert.deepEqual(twoNearbyRes.diagnostics.unresolvedInfrastructurePoints[0].candidateNodeIds, [
+      'rail_node:0|0|0:osm_7100',
+      'rail_node:0|0|0:osm_7200',
+    ]);
+    assert.equal(
+      twoNearbyRes.railways.nodes.get('rail_node:0|0|0:osm_7100')!.pointOsmTags,
+      undefined
+    );
+    assert.equal(
+      twoNearbyRes.railways.nodes.get('rail_node:0|0|0:osm_7200')!.pointOsmTags,
+      undefined
+    );
+
+    // 3. Conflicting explicit OSM node IDs -> never matched by proximity
+    const explicitTurnoutParts: UnchainedRailwayPart[] = [
+      makeRailwayPart({
+        id: 'way/exp_1-0',
+        points: [
+          [-80, 0],
+          [0, 0],
+        ],
+        rawOsmNodeIds: ['8101', '8100'],
+      }),
+      makeRailwayPart({
+        id: 'way/exp_2-0',
+        points: [
+          [0, 0],
+          [80, 0],
+        ],
+        rawOsmNodeIds: ['8100', '8102'],
+      }),
+      makeRailwayPart({
+        id: 'way/exp_3-0',
+        points: [
+          [0, 0],
+          [80, 15],
+        ],
+        rawOsmNodeIds: ['8100', '8103'],
+      }),
+    ];
+    const conflictIdRes = buildRailwayNetwork(explicitTurnoutParts, [
+      {
+        id: 'node/9999',
+        hasExplicitSourceId: true,
+        rawOsmNodeId: '9999', // conflicts with node 8100 at [0, 0]
+        point: [0, 0],
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', ref: 'CONFLICT' },
+      },
+    ]);
+    assert.equal(conflictIdRes.diagnostics.unresolvedInfrastructurePoints.length, 1);
+    assert.equal(
+      conflictIdRes.diagnostics.unresolvedInfrastructurePoints[0].reason,
+      'conflicting_explicit_osm_node_id'
+    );
+    assert.equal(
+      conflictIdRes.railways.nodes.get('rail_node:0|0|0:osm_8100')!.pointOsmTags,
+      undefined
+    );
+
+    // 4. Nearby railway tracks on different vertical scopes (at-grade vs bridge vs tunnel)
+    const multiScopeParts: UnchainedRailwayPart[] = [
+      ...baseTurnoutParts, // at-grade (layer=0, isBridge=false) with turnout at [0, 0]
+      makeRailwayPart({
+        id: 'way/bridge_overpass-0',
+        points: [
+          [0, -60],
+          [0, 0],
+          [0, 60],
+        ],
+        rawOsmNodeIds: [undefined, undefined, undefined],
+        layer: 1,
+        isBridge: true,
+      }),
+    ];
+
+    // 4a. Untagged point at [0, 0] where both at-grade turnout and bridge track pass within 0.15 m -> rejected
+    const untaggedCrossScopeRes = buildRailwayNetwork(multiScopeParts, [
+      {
+        id: 'pt_untagged_multiscope',
+        hasExplicitSourceId: false,
+        rawOsmNodeId: undefined,
+        point: [0, 0],
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', ref: 'UNSCOPED' },
+      },
+    ]);
+    assert.equal(untaggedCrossScopeRes.diagnostics.unresolvedInfrastructurePoints.length, 1);
+    assert.equal(
+      untaggedCrossScopeRes.diagnostics.unresolvedInfrastructurePoints[0].reason,
+      'vertical_scope_mismatch'
+    );
+
+    // 4b. Point explicitly tagged bridge=yes, layer=1 on at-grade-only turnout -> rejected
+    const wrongExplicitScopeRes = buildRailwayNetwork(baseTurnoutParts, [
+      {
+        id: 'pt_bridge_only_tag',
+        hasExplicitSourceId: false,
+        rawOsmNodeId: undefined,
+        point: [0, 0],
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', bridge: 'yes', layer: '1' },
+      },
+    ]);
+    assert.equal(wrongExplicitScopeRes.diagnostics.unresolvedInfrastructurePoints.length, 1);
+    assert.equal(
+      wrongExplicitScopeRes.diagnostics.unresolvedInfrastructurePoints[0].reason,
+      'vertical_scope_mismatch'
+    );
+
+    // 4c. Point explicitly tagged layer=0, bridge=no at [0, 0] in multiScopeParts -> matches ONLY the at-grade turnout node
+    const scopedToAtGradeRes = buildRailwayNetwork(multiScopeParts, [
+      {
+        id: 'pt_scoped_at_grade',
+        hasExplicitSourceId: false,
+        rawOsmNodeId: undefined,
+        point: [0, 0],
+        kind: 'railway_switch',
+        osmTags: { railway: 'switch', layer: '0', bridge: 'no', ref: 'AG-ONLY' },
+      },
+    ]);
+    assert.equal(scopedToAtGradeRes.diagnostics.unresolvedInfrastructurePoints.length, 0);
+    const agTurnoutNode = [...scopedToAtGradeRes.railways.nodes.values()].find(
+      (n) => !n.isBridge && n.degree === 3
+    )!;
+    assert.equal(agTurnoutNode.pointOsmTags?.ref, 'AG-ONLY');
+    for (const n of scopedToAtGradeRes.railways.nodes.values()) {
+      if (n.isBridge) {
+        assert.equal(n.pointOsmTags, undefined);
+      }
+    }
+  });
 });
+
 

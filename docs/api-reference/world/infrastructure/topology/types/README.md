@@ -35,6 +35,7 @@
 - [UnchainedRoadPart](interfaces/UnchainedRoadPart.md)
 - [UnresolvedCrossingCandidate](interfaces/UnresolvedCrossingCandidate.md)
 - [UnresolvedGradeTransitionCandidate](interfaces/UnresolvedGradeTransitionCandidate.md)
+- [UnresolvedInfrastructurePointCandidate](interfaces/UnresolvedInfrastructurePointCandidate.md)
 
 ## Type Aliases
 
@@ -48,3 +49,4 @@
 - [RoadNodeRole](type-aliases/RoadNodeRole.md)
 - [RoadTier](type-aliases/RoadTier.md)
 - [TurnoutClassificationStatus](type-aliases/TurnoutClassificationStatus.md)
+- [UnresolvedInfrastructurePointReason](type-aliases/UnresolvedInfrastructurePointReason.md)

@@ -1278,6 +1278,11 @@ function solveBoundaryDerivedJunctionNode(
     right: [number, number];
     center: [number, number];
   }> = [];
+  const portalVectors: Array<{
+    tCut: [number, number];
+    nCut: [number, number];
+    width: number;
+  }> = [];
   const unionInputs: MultiPolygonCoords = [];
   const rawContourPts: [number, number][] = [];
   const coreHubPts: [number, number][] = [];
@@ -1338,6 +1343,7 @@ function solveBoundaryDerivedJunctionNode(
       snapCoord(pCut[1] - nCutZ * halfW),
     ];
     portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
+    portalVectors.push({ tCut: [tCutX, tCutZ], nCut: [nCutX, nCutZ], width: bBranch.width });
 
     // Generate full-width local ribbon along localPts to capture any curve inside [0, trimDist]
     const stubRibbon = generateRoadRibbon(localPts, bBranch.width, 0, {
@@ -1421,22 +1427,23 @@ function solveBoundaryDerivedJunctionNode(
       coreHubPts.push(reflexCorners[i]!);
     }
 
-    // Also add the 4-sided arm strip (without snappedCenter pinch vertex) to unionInputs for fallback
-    const stripRing: [number, number][] = [
-      ...activeRightChain,
-      ...activeLeftChain.slice().reverse(),
-      activeRightChain[0],
+    // Authoritative full-width road footprint stub from nodeCenter to the cut portal
+    const fullStripRing: [number, number][] = [
+      ...rightChain,
+      ...leftChain.slice().reverse(),
+      rightChain[0],
     ];
     const dedupedStrip: [number, number][] = [];
-    for (const pt of stripRing) {
+    for (const pt of fullStripRing) {
+      const snappedPt: [number, number] = [snapCoord(pt[0]), snapCoord(pt[1])];
       if (
         dedupedStrip.length === 0 ||
         Math.hypot(
-          pt[0] - dedupedStrip[dedupedStrip.length - 1][0],
-          pt[1] - dedupedStrip[dedupedStrip.length - 1][1]
+          snappedPt[0] - dedupedStrip[dedupedStrip.length - 1][0],
+          snappedPt[1] - dedupedStrip[dedupedStrip.length - 1][1]
         ) > 1e-4
       ) {
-        dedupedStrip.push([pt[0], pt[1]]);
+        dedupedStrip.push(snappedPt);
       }
     }
     if (
@@ -1451,7 +1458,7 @@ function solveBoundaryDerivedJunctionNode(
     }
   }
 
-  // Deduplicate and clean rawContourPts
+  // Deduplicate and clean rawContourPts for fallback
   const cleanRingPoints = (pts: [number, number][]): [number, number][] => {
     const deduped: [number, number][] = [];
     for (const pt of pts) {
@@ -1492,31 +1499,75 @@ function solveBoundaryDerivedJunctionNode(
     return deduped;
   };
 
+  // Authoritative junction surface: direct Boolean union of all incident branch stubs
   let solidMultiPoly: MultiPolygonCoords = [];
-  const candidateContourRing = cleanRingPoints(rawContourPts);
-  if (candidateContourRing.length >= 4 && !hasRingSelfIntersection(candidateContourRing)) {
-    solidMultiPoly = [[candidateContourRing]];
-  } else {
-    const coreRing = cleanRingPoints(coreHubPts);
-    if (coreRing.length >= 4 && !hasRingSelfIntersection(coreRing)) {
-      unionInputs.push([coreRing]);
-    }
-    if (unionInputs.length > 0) {
-      try {
-        const rawUnion: MultiPolygonCoords =
-          unionInputs.length === 1
-            ? [unionInputs[0]]
-            : (polygonClipping.union(
-                unionInputs[0] as unknown as polygonClipping.Geom,
-                ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
-              ) as unknown as MultiPolygonCoords);
-        const cleanedUnion = filterDegenerateBooleanArtifacts(rawUnion);
-        solidMultiPoly = cleanedUnion
-          .map((poly) => [poly[0]])
-          .filter((poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0]));
-      } catch {
-        solidMultiPoly = [];
+  if (unionInputs.length > 0) {
+    try {
+      let rawUnion: MultiPolygonCoords =
+        unionInputs.length === 1
+          ? [unionInputs[0]]
+          : (polygonClipping.union(
+              unionInputs[0] as unknown as polygonClipping.Geom,
+              ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
+            ) as unknown as MultiPolygonCoords);
+
+      // Clip away any lateral or corner protrusions beyond any branch's cut portal into the road corridor
+      for (let i = 0; i < k; i++) {
+        const { left: lp, right: rp } = portals[i];
+        const { tCut, nCut, width } = portalVectors[i];
+        const extDist = 0.5;
+        const margin = 0.05;
+        const pL0: [number, number] = [
+          snapCoord(lp[0] + nCut[0] * margin),
+          snapCoord(lp[1] + nCut[1] * margin),
+        ];
+        const pR0: [number, number] = [
+          snapCoord(rp[0] - nCut[0] * margin),
+          snapCoord(rp[1] - nCut[1] * margin),
+        ];
+        const pR1: [number, number] = [
+          snapCoord(pR0[0] + tCut[0] * extDist),
+          snapCoord(pR0[1] + tCut[1] * extDist),
+        ];
+        const pL1: [number, number] = [
+          snapCoord(pL0[0] + tCut[0] * extDist),
+          snapCoord(pL0[1] + tCut[1] * extDist),
+        ];
+        const roadCorridorPoly: [number, number][][] = [[pL0, pL1, pR1, pR0, pL0]];
+
+        try {
+          const diff = polygonClipping.difference(
+            rawUnion as unknown as polygonClipping.Geom,
+            roadCorridorPoly as unknown as polygonClipping.Geom
+          ) as unknown as MultiPolygonCoords;
+          if (diff && diff.length > 0) {
+            rawUnion = diff;
+          }
+        } catch {
+          // ignore difference exception
+        }
       }
+
+      const cleanedUnion = filterDegenerateBooleanArtifacts(rawUnion);
+      solidMultiPoly = cleanedUnion
+        .filter((poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0]))
+        .map((poly) => {
+          const validOuter = poly[0];
+          const validHoles = poly
+            .slice(1)
+            .filter((hole) => hole.length >= 4 && !hasRingSelfIntersection(hole));
+          return [validOuter, ...validHoles];
+        });
+    } catch {
+      solidMultiPoly = [];
+    }
+  }
+
+  // Fallback to cleaned stitched contour only if Boolean union failed or produced no valid polygons
+  if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
+    const candidateContourRing = cleanRingPoints(rawContourPts);
+    if (candidateContourRing.length >= 4 && !hasRingSelfIntersection(candidateContourRing)) {
+      solidMultiPoly = [[candidateContourRing]];
     }
   }
 

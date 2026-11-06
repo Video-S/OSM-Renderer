@@ -2775,7 +2775,7 @@ export function buildGraphAtGradeRoadGeometries(
                     g.setIndex(new THREE.BufferAttribute(subRibbon.indices, 1));
                     if (validateAndPruneHorizontalGeometry(g)) {
                       subGeos.push(g);
-                      registerRoadFootprint(sub.subId, isPath, subOutline);
+                      registerRoadFootprint(sub.subId, isPath, [subOutline]);
                     } else {
                       g.dispose();
                     }

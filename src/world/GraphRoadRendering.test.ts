@@ -453,10 +453,7 @@ function buildGraphRoadScene(
  * Audits all meshes in `scene.roadsGroup` for finite vertices/normals, valid index ranges,
  * non-degenerate triangles, and upward-facing (+Y) geometric face normals via `auditGraphRoadMeshIntegrity()`.
  */
-function assertRoadGroupGeometryInvariants(
-  scene: BuiltSceneGeometry,
-  options?: { allowOverlaps?: boolean }
-): {
+function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
   meshNames: string[];
   faceRangesById: Map<string, FaceFeatureRange>;
   junctionRanges: FaceFeatureRange[];
@@ -569,13 +566,11 @@ function assertRoadGroupGeometryInvariants(
   );
 
   const roadVal = validateRoadNetworkGeometry(scene);
-  if (!options?.allowOverlaps) {
-    assert.deepEqual(
-      roadVal.overlapConflicts,
-      [],
-      `Expected 0 co-elevation road triangle overlaps, got ${JSON.stringify(roadVal.overlapConflicts)}`
-    );
-  }
+  assert.deepEqual(
+    roadVal.overlapConflicts,
+    [],
+    `Expected 0 co-elevation road triangle overlaps, got ${JSON.stringify(roadVal.overlapConflicts)}`
+  );
   assert.deepEqual(
     roadVal.continuityDefects,
     [],
@@ -996,7 +991,15 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       3,
       'Roundabout with 3 radial approaches must produce 3 branching junctions'
     );
-    assert.equal(junctionRanges.length, 3);
+    assert.equal(junctionRanges.length, 4,
+      'Three roundabout junctions plus the new local unequal-width transition must be rendered');
+    assert.ok(
+      junctionRanges.some((range) =>
+        range.info.sourceFeatureIds.includes('way/width-step-wide') &&
+        range.info.sourceFeatureIds.includes('way/width-step-narrow')
+      ),
+      'The width-step transition must preserve both source ways'
+    );
     assert.ok(
       stats.degree2ContinuityJoinCount >= 1,
       'Width-step degree-2 node must be handled as a degree-2 continuity join'
@@ -1768,9 +1771,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       );
 
       // Run full geometric triangle winding and normal audit + ZFightingValidator
-      const { integrityReport } = assertRoadGroupGeometryInvariants(graphScene, {
-        allowOverlaps: !ds.name.includes('Synthetic 3x3'),
-      });
+      const { integrityReport } = assertRoadGroupGeometryInvariants(graphScene);
 
       const gStats: GraphRoadRenderStats = graphScene.roadsGroup.userData.graphRoadStats;
       assert.ok(gStats, `Expected graphRoadStats on ${ds.name}`);
@@ -2913,6 +2914,76 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
   });
 
 
+
+  it('18. clips cycleway fork patches against actual at-grade roads without joining unrelated infrastructure', () => {
+    const data = createDatasetFromSpecs([
+      // Path-only fork with a separate road crossing its local junction footprint.
+      { id: 'way/bike-west', roadClass: 'cycleway', width: 3.5,
+        points: [[-30, 0], [0, 0]], nodeIds: ['bike-west', 'bike-fork'] },
+      { id: 'way/bike-east', roadClass: 'cycleway', width: 3.5,
+        points: [[0, 0], [30, 0]], nodeIds: ['bike-fork', 'bike-east'] },
+      { id: 'way/bike-north', roadClass: 'cycleway', width: 3.5,
+        points: [[0, 0], [0, 30]], nodeIds: ['bike-fork', 'bike-north'] },
+      { id: 'way/veh-crossing-bike', roadClass: 'service', width: 2,
+        points: [[-30, 2], [30, 2]], nodeIds: ['veh-west', 'veh-east'] },
+
+      // Path fork meeting a single vehicular arm: neither a vehicular branch
+      // junction nor a reason to leave the path-only fork unmeshed.
+      { id: 'way/mixed-bike-west', roadClass: 'cycleway', width: 3.5,
+        points: [[50, 0], [80, 0]], nodeIds: ['mixed-west', 'mixed-fork'] },
+      { id: 'way/mixed-bike-east', roadClass: 'cycleway', width: 3.5,
+        points: [[80, 0], [110, 0]], nodeIds: ['mixed-fork', 'mixed-east'] },
+      { id: 'way/mixed-bike-north', roadClass: 'cycleway', width: 3.5,
+        points: [[80, 0], [80, 30]], nodeIds: ['mixed-fork', 'mixed-north'] },
+      { id: 'way/veh-terminating-at-fork', roadClass: 'residential', width: 7,
+        points: [[80, -30], [80, 0]], nodeIds: ['veh-south', 'mixed-fork'] },
+
+      // At-grade path must not be cut by this unrelated elevated bridge.
+      { id: 'way/elevated-bike-overpass', roadClass: 'secondary', width: 9,
+        points: [[-25, -25], [25, 25]], nodeIds: ['bridge-south', 'bridge-north'],
+        layer: 1, isBridge: true },
+    ]);
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const stats: GraphRoadRenderStats = scene.roadsGroup.userData.graphRoadStats;
+      assert.equal(stats.branchingJunctionCount, 0,
+        'Neither cycleway fork may create a vehicular branching junction');
+      assert.equal(stats.pathJunctionCount, 2,
+        'Pure and cross-tier cycleway forks both require path junction patches');
+      const pathPatches = junctionRanges.filter((range) => range.info.id.startsWith('path-junction-'));
+      assert.equal(pathPatches.length, 2, 'Both cycleway fork patches must remain inspectable');
+      assert.ok(pathPatches.some((patch) => patch.info.sourceFeatureIds.includes('way/mixed-bike-north')),
+        'Cross-tier path junction must preserve the source-feature lineage');
+
+      const cyclewayMesh = scene.roadsGroup.children.find((obj) => obj.name === 'Roads_cycleway') as THREE.Mesh;
+      assert.ok(cyclewayMesh, 'Expected the green cycleway surface to render');
+      const positions = cyclewayMesh.geometry.getAttribute('position');
+      const indices = cyclewayMesh.geometry.getIndex();
+      const coversPoint = (x: number, z: number): boolean => {
+        const triangles = indices ? indices.count / 3 : positions.count / 3;
+        for (let face = 0; face < triangles; face++) {
+          const ids = [0, 1, 2].map((k) => indices ? indices.getX(face * 3 + k) : face * 3 + k);
+          if (ids.some((i) => Math.abs(positions.getY(i) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+          const points = ids.map((i) => [positions.getX(i), positions.getZ(i)] as [number, number]);
+          const cross = (a: [number, number], b: [number, number]) =>
+            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+          const ab = cross(points[0], points[1]);
+          const bc = cross(points[1], points[2]);
+          const ca = cross(points[2], points[0]);
+          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+        }
+        return false;
+      };
+      assert.ok(coversPoint(0, 0),
+        'The unconnected elevated bridge must not remove the cycleway fork throat');
+      assert.ok(coversPoint(80, 5),
+        'Cross-tier bicycle arms must connect outside the overlapping vehicular surface');
+    } finally {
+      scene.dispose();
+    }
+  });
 
   it('19. tapers an unequal-width cycleway through-node rather than forming square shoulders', () => {
     const data = createDatasetFromSpecs([

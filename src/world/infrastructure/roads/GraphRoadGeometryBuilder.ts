@@ -748,6 +748,13 @@ function applyDegree2SharedContinuityPortal(
     return false;
   }
 
+  // A single shared miter portal cannot preserve two different approach widths.
+  // Let the existing local full-width footprint union form the two-arm transition
+  // instead of averaging widths and pinching/widening the source ribbons.
+  if (Math.abs(b0.width - b1.width) > 1e-3) {
+    return false;
+  }
+
   const dot = b0.dir[0] * b1.dir[0] + b0.dir[1] * b1.dir[1];
   // If interior angle between the two arms is acute (< ~95°, i.e. dot >= 0.08),
   // fall back to boundary-derived 2-branch corner trimming so the inner crotch never overlaps.
@@ -776,8 +783,9 @@ function applyDegree2SharedContinuityPortal(
 
   const cosHalf = Math.sqrt(Math.max(0.1, (1 - dot) * 0.5));
   const miterScale = Math.min(1.35, 1.0 / Math.max(0.75, cosHalf));
-  // Preserve full perpendicular road width across degree-2 continuity joins without clamping halfW by segment length
-  const halfW = (b0.width + b1.width) * 0.25 * miterScale;
+  // Both widths are equal here, so the shared portal preserves their original
+  // cross-sections instead of inventing a third, averaged road width.
+  const halfW = b0.width * 0.5 * miterScale;
 
   const t0 = trimmedEndpoints.get(b0.edge.id);
   const t1 = trimmedEndpoints.get(b1.edge.id);

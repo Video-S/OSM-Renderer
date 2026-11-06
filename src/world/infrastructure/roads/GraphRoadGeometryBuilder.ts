@@ -1207,7 +1207,9 @@ function solveBoundaryDerivedJunctionNode(
       for (let j = i + 1; j < k; j++) {
         const a = sortedBranches[i];
         const b = sortedBranches[j];
-        if (k === 3 && !isPathJunction && a.roadClass !== b.roadClass) continue;
+        // Only path-tier forks currently have a validated three-arm taper;
+        // leave vehicular branching junctions on the full-footprint union.
+        if (k === 3 && !isPathJunction) continue;
         const dot = a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
         const delta = Math.abs(a.width - b.width);
         if (a.edge.id === b.edge.id || dot > strongestOpposition || delta <= 1e-3) continue;
@@ -2430,51 +2432,23 @@ export function buildGraphAtGradeRoadGeometries(
   // Track exactly the final polygonal surface, including disconnected components and holes.
   // Registering only the outer ring (or skipping a component) makes subsequent Boolean
   // clipping disagree with the triangles that were actually rendered.
-  const registerRoadFootprint = (id: string, isPath: boolean, inputRing: any) => {
-    let ring: [number, number][] = [];
-    if (Array.isArray(inputRing)) {
-      let cur = inputRing;
-      while (Array.isArray(cur) && cur.length > 0 && Array.isArray(cur[0]) && typeof cur[0][0] !== 'number') {
-        cur = cur[0];
+  const registerRoadFootprint = (id: string, isPath: boolean, poly: MultiPolygonCoords) => {
+    if (!poly || poly.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const rings of poly) {
+      if (!rings[0] || rings[0].length < 4) return;
+      for (const ring of rings) {
+        for (const [x, z] of ring) {
+          if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minZ = Math.min(minZ, z);
+          maxZ = Math.max(maxZ, z);
+        }
       }
-      if (Array.isArray(cur) && cur.length > 0 && typeof cur[0][0] === 'number') {
-        ring = cur as [number, number][];
-      } else if (Array.isArray(cur) && cur.length > 0 && typeof cur[0] === 'number') {
-        ring = cur as unknown as [number, number][];
-      }
     }
-    if (!ring || ring.length < 3 || hasRingSelfIntersection(ring)) return;
-    let minX = Infinity,
-      maxX = -Infinity,
-      minZ = Infinity,
-      maxZ = -Infinity;
-    const snapped: [number, number][] = [];
-    for (const [x, z] of ring) {
-      const sx = snapCoord(x);
-      const sz = snapCoord(z);
-      if (sx < minX) minX = sx;
-      if (sx > maxX) maxX = sx;
-      if (sz < minZ) minZ = sz;
-      if (sz > maxZ) maxZ = sz;
-      snapped.push([sx, sz]);
-    }
-    if (
-      snapped.length > 0 &&
-      (snapped[0][0] !== snapped[snapped.length - 1][0] ||
-        snapped[0][1] !== snapped[snapped.length - 1][1])
-    ) {
-      snapped.push([snapped[0][0], snapped[0][1]]);
-    }
-    if (snapped.length >= 4 && !hasRingSelfIntersection(snapped)) {
-      placedRoadFootprints.push({
-        id,
-        isPath,
-        minX,
-        maxX,
-        minZ,
-        maxZ,
-        poly: [[snapped]] as MultiPolygonCoords,
-      });
+    if (minX < maxX && minZ < maxZ) {
+      placedRoadFootprints.push({ id, isPath, minX, maxX, minZ, maxZ, poly });
     }
   };
 
@@ -2589,11 +2563,7 @@ export function buildGraphAtGradeRoadGeometries(
 
       if (validateAndPruneHorizontalGeometry(junctionGeo)) {
         // Only let subsequent ribbons clip against a junction that was emitted.
-        registerRoadFootprint(
-          junctionFeatureId,
-          isPathJunction,
-          visibleJunctionPoly[0]?.[0] || junctionMultiPoly[0][0]
-        );
+        registerRoadFootprint(junctionFeatureId, isPathJunction, visibleJunctionPoly);
         junctionMultiPolyByFeatureId.set(junctionFeatureId, visibleJunctionPoly);
         for (const sid of junctionSourceIdsSet) renderedSourceIds.add(sid);
         resourceManager.registerGeometry(junctionGeo);
@@ -2631,7 +2601,11 @@ export function buildGraphAtGradeRoadGeometries(
 
   };
 
-  emitJunctions(pendingJunctions, false);
+  // Vehicle ribbons are emitted before path patches; this allows path patches to
+  // subtract only actually rendered, same-plane vehicular surfaces.
+  emitJunctions(pendingJunctions.filter((j) => !j.isPathJunction), false);
+  const pathJunctions = pendingJunctions.filter((j) => j.isPathJunction);
+  let pathJunctionsEmitted = false;
 
   // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
   const clippedPolysBySubId = new Map<string, MultiPolygonCoords>();
@@ -2643,6 +2617,11 @@ export function buildGraphAtGradeRoadGeometries(
   });
 
   for (const edge of sortedBuildableEdges) {
+    const isPathEdge = edge.tier === 'path' || isNonVehicularRoadClass(edge.roadClass);
+    if (isPathEdge && !pathJunctionsEmitted) {
+      emitJunctions(pathJunctions, true);
+      pathJunctionsEmitted = true;
+    }
     const subSegments = resolvedSubSegmentsByEdgeId.get(edge.id);
     if (!subSegments || subSegments.length === 0) continue;
 
@@ -3059,9 +3038,7 @@ export function buildGraphAtGradeRoadGeometries(
         // Register footprint for downstream clipping
         if (resolvedClippedPolys) {
           clippedPolysBySubId.set(sub.subId, resolvedClippedPolys);
-          if (resolvedClippedPolys[0]?.[0]) {
-            registerRoadFootprint(sub.subId, isPath, resolvedClippedPolys[0][0]);
-          }
+          registerRoadFootprint(sub.subId, isPath, resolvedClippedPolys);
         } else if (isClosedSubLoop) {
           const midIdx = Math.floor(pts.length / 2);
           if (midIdx >= 1 && pts.length - midIdx >= 2) {
@@ -3071,11 +3048,11 @@ export function buildGraphAtGradeRoadGeometries(
             const half2 = buildRoadRibbonOutlineRing(pts.slice(midIdx), width, {
               endPortal: activeEndPortal,
             });
-            if (half1) registerRoadFootprint(`${sub.subId}#h1`, isPath, half1);
-            if (half2) registerRoadFootprint(`${sub.subId}#h2`, isPath, half2);
+            if (half1) registerRoadFootprint(`${sub.subId}#h1`, isPath, [half1]);
+            if (half2) registerRoadFootprint(`${sub.subId}#h2`, isPath, [half2]);
           }
         } else if (outlinePoly) {
-          registerRoadFootprint(sub.subId, isPath, outlinePoly);
+          registerRoadFootprint(sub.subId, isPath, [outlinePoly]);
         }
 
         const segName =
@@ -3137,6 +3114,8 @@ export function buildGraphAtGradeRoadGeometries(
   }
 
 
+
+  if (!pathJunctionsEmitted) emitJunctions(pathJunctions, true);
 
   // 7. Synchronize junction portalConnections against any clipped or fully-subtracted road ribbons
   // and append junction geometries into their corresponding road class buckets.

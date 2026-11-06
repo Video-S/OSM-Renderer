@@ -6,12 +6,12 @@
 
 # Function: parseInfrastructureRenderSource()
 
-> **parseInfrastructureRenderSource**(`raw`): [`InfrastructureRenderSource`](../type-aliases/InfrastructureRenderSource.md)
+> **parseInfrastructureRenderSource**(`raw`, `domain?`): [`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:69
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:114
 
-Parses a raw string value into a valid `InfrastructureRenderSource`,
-resolving any absent or unrecognized value safely to `'legacy'`.
+Parses a raw string value into a valid `InfrastructureRenderSource` for the specified domain
+(defaults to `'roads'`), resolving any absent or unrecognized value safely to `'legacy'`.
 
 ## Parameters
 
@@ -19,6 +19,10 @@ resolving any absent or unrecognized value safely to `'legacy'`.
 
 `string`
 
+### domain?
+
+`"roads"` \| `"railways"` = `'roads'`
+
 ## Returns
 
-[`InfrastructureRenderSource`](../type-aliases/InfrastructureRenderSource.md)
+[`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)

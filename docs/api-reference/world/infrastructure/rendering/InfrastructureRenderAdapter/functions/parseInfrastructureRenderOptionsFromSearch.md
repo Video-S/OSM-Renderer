@@ -8,10 +8,10 @@
 
 > **parseInfrastructureRenderOptionsFromSearch**(`search`): [`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:101
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:148
 
 Parses independent `topologyRoads` and `topologyRailways` developer switches
-from a URL query string (e.g. `?topologyRoads=graph-preview&topologyRailways=legacy`)
+from a URL query string (e.g. `?topologyRoads=graph&topologyRailways=legacy`)
 or `URLSearchParams` instance. Invalid or missing parameters resolve to `'legacy'`.
 
 ## Parameters

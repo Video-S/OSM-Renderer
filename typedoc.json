@@ -20,6 +20,7 @@
     "src/world/infrastructure/topology/CrossModalAnalyzer.ts",
     "src/world/infrastructure/topology/InfrastructureGraph.ts",
     "src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts",
+    "src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts",
     "src/world/SceneResourceManager.ts",
     "src/world/ZFightingValidator.ts",
     "src/world/PlanarLayerValidator.ts",

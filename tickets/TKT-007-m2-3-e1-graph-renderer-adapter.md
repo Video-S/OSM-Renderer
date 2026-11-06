@@ -2,7 +2,7 @@
 id: TKT-007
 title: M2.3-E1 Graph-to-Renderer Adapter and Safe Integration
 type: feature
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-06
 updated: 2026-11-06
@@ -15,8 +15,8 @@ Implement **Stage E1 (`M2.3-E1`)** of Milestone 2.3 (*Infrastructure Topology an
 
 ## Context
 Following project-owner acceptance of `M2.3-D` (`TKT-006` closed with `135 / 135` passing tests), Stage E is partitioned into five independently reviewed stages:
-- **E1 — Graph-to-renderer adapter and safe integration** (authorized now)
-- **E2 — Graph-driven road rendering and intersections** (planned; requires separate project-owner approval)
+- **E1 — Graph-to-renderer adapter and safe integration** (accepted and closed)
+- **E2 — Graph-driven road rendering and intersections** (authorized now via `TKT-008`)
 - **E3 — Graph-driven railway rendering and switches** (planned; requires separate project-owner approval)
 - **E4 — Level crossings, bridges, and tunnels** (planned; requires separate project-owner approval)
 - **E5 — Legacy cleanup and regression hardening** (planned; requires separate project-owner approval)
@@ -50,14 +50,14 @@ Prior to Stage E1:
 - [x] Comprehensive automated test suite (`src/world/InfrastructureRenderAdapter.test.ts`) passing via `npm test`, covering adapter determinism, road/railway/cross-domain descriptor accuracy, source lineage, immutability, preview switch parsing, legacy renderer buffer/provenance invariance, and performance benchmarks.
 - [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to document E1 and planned stages E2–E5.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
-- [ ] Project owner reviews Stage E1 implementation to close `TKT-007`.
+- [x] Project owner reviews Stage E1 implementation to close `TKT-007`.
 
 ## Implementation notes
 - Stage E1 strictly excludes E2 (graph-driven road rendering and intersections), E3 (graph-driven railway rendering and switches), E4 (level crossings, bridges, and tunnels), and E5 (legacy cleanup).
 - In E1, `'graph-preview'` builds and validates graph-backed render descriptors alongside the existing renderer without altering mesh generation.
 
 ## Verification
-- Status: In progress (all technical verification criteria and acceptance corrections satisfied; pending project-owner review to close `TKT-007`).
+- Status: Closed (project-owner acceptance recorded; **145 / 145** Stage E1 test baseline preserved alongside historical **135 / 135** Stage D, **126 / 126** Stage C, **108 / 108** Stage B, and **92 / 92** Stage A baselines).
 - Executed commands & results (2026-11-06):
   - `npm test` — Exit code `0` (**145 / 145 passed**, `0` failures; includes `10 / 10` tests in `src/world/InfrastructureRenderAdapter.test.ts` plus `135 / 135` preserved baseline tests).
   - `npm run lint` (`tsc --noEmit`) — Exit code `0` (`0` TypeScript errors).

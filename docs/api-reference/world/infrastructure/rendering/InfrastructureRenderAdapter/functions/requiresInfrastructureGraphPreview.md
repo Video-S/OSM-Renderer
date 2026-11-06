@@ -8,16 +8,23 @@
 
 > **requiresInfrastructureGraphPreview**(`options?`): `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:124
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:172
 
-Returns `true` if at least one domain (`roads` or `railways`) is configured for `'graph-preview'`.
+Returns `true` if at least one domain (`roads` or `railways`) requires `InfrastructureGraph`
+and `InfrastructureRenderDescriptorBundle` construction (i.e. `'graph-preview'` or `'graph'`).
 When both domains are `'legacy'`, callers must skip `buildInfrastructureGraph` and adapter execution.
 
 ## Parameters
 
 ### options?
 
-`Partial`\<[`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)\>
+#### railways?
+
+`string`
+
+#### roads?
+
+`string`
 
 ## Returns
 

@@ -179,16 +179,33 @@ Z-fighting is audited programmatically by `src/world/ZFightingValidator.ts`:
 
 `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts` provides a pure-TypeScript translation layer between `InfrastructureGraph` (`ADR-0009`) and the 3D geometry pipeline:
 
-1. **Independent Road & Railway Preview Switches (`InfrastructureRenderOptions`)**:
-   - `roads: 'legacy' | 'graph-preview'` and `railways: 'legacy' | 'graph-preview'` (both defaulting to `'legacy'`).
-   - Selectable via URL query parameters `?topologyRoads=graph-preview&topologyRailways=legacy` (`parseInfrastructureRenderOptionsFromSearch`). Invalid or absent values resolve safely to `'legacy'`.
+1. **Independent Road & Railway Render Source Switches (`InfrastructureRenderOptions`)**:
+   - `roads: 'legacy' | 'graph-preview' | 'graph'` and `railways: 'legacy' | 'graph-preview'` (both defaulting to `'legacy'`).
+   - Selectable via URL query parameters `?topologyRoads=legacy|graph-preview|graph&topologyRailways=legacy|graph-preview` (`parseInfrastructureRenderOptionsFromSearch`). Invalid or absent values (including `?topologyRailways=graph` during Stage E2) resolve safely to `'legacy'`.
    - When both domains are `'legacy'`, zero graph construction and zero adapter work occur.
-   - When either domain is `'graph-preview'`, `prepareInfrastructureRenderPreview` builds one shared `InfrastructureGraph` and one `InfrastructureRenderDescriptorBundle` per dataset (memoized across camera frames, theme updates, hover events, and `railwayPrototypeMode` transitions).
+   - When either domain is `'graph-preview'` or `'graph'`, `prepareInfrastructureRenderPreview` builds one shared `InfrastructureGraph` and one `InfrastructureRenderDescriptorBundle` per dataset (memoized across camera frames, theme updates, hover events, and `railwayPrototypeMode` transitions).
 2. **Domain Descriptor Handoff Contracts**:
-   - **Road Descriptors (`RoadEdgeRenderDescriptor`, `RoadNodeRenderDescriptor` — for planned Stage E2)**: Preserve canonical IDs, ordered metric polylines, `roadClass`, `tier` (`'vehicular' | 'path'`), `width`, `lanes`, `normalizedOneway`, `rawOnewayTag`, `surface`, `isCulvert`, boundary-clip flags, incident half-edge tangents, and explicit cross-tier contact flags (`isCrossTier`, `isCrossTierOnlyInteraction`, `requiresVehicularJunctionTrimming`, `requiresPathJunctionTrimming`) so path contacts never trigger full-width vehicular carriageway junction trimming (`ADR-0002`, `ADR-0009` Resolution 3).
+   - **Road Descriptors (`RoadEdgeRenderDescriptor`, `RoadNodeRenderDescriptor` — consumed in Stage E2)**: Preserve canonical IDs, ordered metric polylines, `roadClass`, `tier` (`'vehicular' | 'path'`), `width`, `lanes`, `normalizedOneway`, `rawOnewayTag`, `surface`, `isCulvert`, boundary-clip flags, incident half-edge tangents, and explicit cross-tier contact flags (`isCrossTier`, `isCrossTierOnlyInteraction`, `requiresVehicularJunctionTrimming`, `requiresVehicularContinuityMiter`, `requiresPathJunctionTrimming`) so path contacts never trigger full-width vehicular carriageway junction trimming (`ADR-0002`, `ADR-0009` Resolution 3).
    - **Railway Descriptors (`RailwayEdgeRenderDescriptor`, `RailwayNodeRenderDescriptor`, `RailwayFlatCrossingRenderDescriptor` — for planned Stage E3)**: Preserve canonical IDs, polylines, `railwayType`, `gauge`, `electrified`, `service`, `usage`, `isSecondaryBranch`, confirmed vs. unresolved turnout topology (`turnoutStatus`, `turnoutTopology`), and flat diamond crossings with `allowsBranchInterchange: false`.
    - **Cross-Domain Descriptors (`LevelCrossingRenderDescriptor`, `GradeTransitionRenderDescriptor`, `GradeSeparatedCrossingRenderDescriptor`, `InfrastructureRenderUnresolvedDiagnostics` — for planned Stage E4)**: Preserve confirmed level crossings, grade-separated crossings, bridge/tunnel portal transitions (`atGradeToStructureDirection`, `continuousTraversalDot`), and unresolved diagnostics strictly separated from confirmed descriptors.
    - **Source Lineage**: Preserve `sourceFeatureId`, `sourceFeatureIds`, `deduplicatedFeatureIds`, `sourceFeatureToRoadEdgeIds`, `sourceFeatureToRailwayEdgeIds`, and `roadFeatureLineage` / `railwayFeatureLineage` (`chainingMap`, `deduplicatedMap`) for `InspectableFeatureInfo` and `faceRanges`.
-3. **Stage E1 Invariance Boundary**:
-   - In Stage E1, `'graph-preview'` validates descriptors alongside the existing renderer without altering any 3D mesh generation. Actual graph-driven mesh synthesis is deferred to separately authorized Stages E2–E5.
+
+---
+
+## 11. Graph-Driven At-Grade Road & Junction Rendering (`M2.3-E2` / `TKT-008`)
+
+When `infrastructureRenderOptions.roads === 'graph'`, Stage 6A–C of `GeometryBuilder.buildScene()` delegates at-grade road and junction meshing to `buildGraphAtGradeRoadGeometries` in `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`:
+
+1. **Authoritative Graph Topology Consumption**:
+   - Consumes `InfrastructureRenderDescriptorBundle` (`roadNodes`, `roadEdges`, `gradeTransitions`, `roadFeatureLineage`) directly without invoking legacy `splitRoadsAtSharedInteriorNodes` or `TopologicalNodeIndex`.
+   - Filters `edge.isAtGradeBuildable === true` (including `isCulvert === true`, which remains at `ROAD_SURFACE = 0.050 m`), while elevated bridges (`isBridge || layer > 0`) and subterranean tunnels (`isTunnel || layer < 0`) continue through Stage 6D.
+2. **Node-Role & Tier-Driven Junction vs. Continuity Synthesis**:
+   - **Branching Vehicular Junctions (`requiresVehicularJunctionTrimming === true`, `vehicularHalfEdgeCount >= 3`)**: Solves boundary-derived portals (`RoadEndPortal`) and CCW-ordered curb corners around `node.position`, snapping acute convex inner corners (`innerCornerTA >= trimDist - 0.05 m`) directly to their shared miter intersection so adjacent road ribbons never cross over or self-intersect, and triangulates upward-facing (`+Y`) polygons at `ROAD_SURFACE` (`0.050 m`) with complete `portalConnections: RoadPortalConnectionSpec[]`.
+   - **Degree-2 Continuity Joins (`requiresVehicularContinuityMiter === true` and degree-2 path joins)**: Joins 2-arm bends, attribute breaks (`surface`, `oneway`, `lanes`, `name`), and width transitions along a shared cross-section portal at `node.position` (`0.0 mm` seam gap, zero redundant junction polygon); sharp hairpin reversals (`dot >= 0.25`) fall back to boundary-derived corner trimming.
+   - **Cross-Tier Contacts (`isCrossTierOnlyInteraction === true`)**: Through-roads contacted by footpaths keep continuous vehicular ribbons without vehicular junction trimming, while overlapping path/cycleway/steps footprints are subtracted against vehicular carriageways and junctions via 2D Boolean difference (`polygonClipping.difference`).
+   - **Path-Tier Junctions & Steps (`requiresPathJunctionTrimming === true`)**: Pure path intersections (`>= 3` path half-edges, `0` vehicular arms) synthesize `path-junction-${node.id}` polygons at `ROAD_SURFACE`, and `highway=steps` edges emit both the base ramp surface (`0.050 m`) and raised transverse treads (`+0.006 m`).
+3. **Multi-Segment Provenance & Endpoint Cap Rules**:
+   - Simplified multi-way edges (`provenanceSegments.length > 1`) are split at each constituent `startVertexIndex .. endVertexIndex` boundary using shared orthogonal cross-section portals so each constituent OSM way receives its own `FaceFeatureRange` and `InspectableFeatureInfo` (`sourceFeatureId`, `osmTags`, `name`).
+   - Semicircular dead-end caps are emitted only at true dead-ends (`degree === 1`, unclipped, and not a bridge/tunnel grade transition).
+
 

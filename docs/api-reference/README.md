@@ -14,6 +14,7 @@
 - [world/FeatureCatalogue](world/FeatureCatalogue/README.md)
 - [world/GeometryBuilder](world/GeometryBuilder/README.md)
 - [world/infrastructure/rendering/InfrastructureRenderAdapter](world/infrastructure/rendering/InfrastructureRenderAdapter/README.md)
+- [world/infrastructure/roads/GraphRoadGeometryBuilder](world/infrastructure/roads/GraphRoadGeometryBuilder/README.md)
 - [world/infrastructure/topology/CrossModalAnalyzer](world/infrastructure/topology/CrossModalAnalyzer/README.md)
 - [world/infrastructure/topology/InfrastructureGraph](world/infrastructure/topology/InfrastructureGraph/README.md)
 - [world/infrastructure/topology/OsmNodeIdEnricher](world/infrastructure/topology/OsmNodeIdEnricher/README.md)

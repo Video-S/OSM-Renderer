@@ -55,6 +55,8 @@ import {
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
   parseInfrastructureRenderSource,
+  parseRailwayInfrastructureRenderSource,
+  parseRoadInfrastructureRenderSource,
   prepareInfrastructureRenderPreview,
   requiresInfrastructureGraphPreview,
   validateInfrastructureRenderDescriptors,
@@ -63,25 +65,41 @@ import {
   type InfrastructureRenderPreviewResult,
   type InfrastructureRenderSource,
   type InfrastructureRenderValidationReport,
+  type RailwayInfrastructureRenderSource,
+  type RoadInfrastructureRenderSource,
 } from './infrastructure/rendering/InfrastructureRenderAdapter';
+import {
+  buildGraphAtGradeRoadGeometries,
+  type GraphRoadGeometryBuildOptions,
+  type GraphRoadGeometryBuildResult,
+  type GraphRoadRenderStats,
+} from './infrastructure/roads/GraphRoadGeometryBuilder';
 
 export {
   SceneResourceManager,
   adaptInfrastructureGraphToRenderDescriptors,
+  buildGraphAtGradeRoadGeometries,
   buildInfrastructureRenderDescriptors,
   cloneDescriptorOsmTags,
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
   parseInfrastructureRenderSource,
+  parseRailwayInfrastructureRenderSource,
+  parseRoadInfrastructureRenderSource,
   prepareInfrastructureRenderPreview,
   requiresInfrastructureGraphPreview,
   validateInfrastructureRenderDescriptors,
+  type GraphRoadGeometryBuildOptions,
+  type GraphRoadGeometryBuildResult,
+  type GraphRoadRenderStats,
   type InfrastructureRenderDescriptorBundle,
   type InfrastructureRenderOptions,
   type InfrastructureRenderPreviewResult,
   type InfrastructureRenderSource,
   type InfrastructureRenderValidationReport,
+  type RailwayInfrastructureRenderSource,
+  type RoadInfrastructureRenderSource,
 };
 
 
@@ -185,7 +203,7 @@ export function resolveInspectedFeature(hit: {
   return null;
 }
 
-function sanitizeOsmTags(raw?: RawGeoJsonProperties): Record<string, string | number | boolean> {
+export function sanitizeOsmTags(raw?: RawGeoJsonProperties): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   if (!raw) return out;
   for (const [k, v] of Object.entries(raw)) {
@@ -706,7 +724,7 @@ function mergeWithFaceRanges(
  * Extracts a closed 2D outer polygon ring `[x, z][]` around a centerline polyline of width `width`
  * so at-grade road ribbons and footpaths can participate in exact 2D Boolean clipping.
  */
-function buildRoadRibbonOutlineRing(
+export function buildRoadRibbonOutlineRing(
   points: [number, number][],
   width: number,
   options?: Pick<RoadRibbonOptions, 'startPortal' | 'endPortal'>
@@ -859,7 +877,7 @@ export function cleanPolylineForClipping(points: [number, number][]): [number, n
  * overlapping road footprints, returning only clean, non-self-intersecting exterior sub-polylines
  * that never overlap the conflicting road surface.
  */
-function buildSafeExteriorSubPolylines(
+export function buildSafeExteriorSubPolylines(
   points: [number, number][],
   width: number,
   overlappingBoxes: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>
@@ -1619,7 +1637,7 @@ function generatePitchMarkings(
 /**
  * Generates transverse raised 3D step treads along a `highway=steps` stairway polyline.
  */
-function generateStepTreads(
+export function generateStepTreads(
   points: [number, number][],
   width: number,
   yElev: number
@@ -2636,8 +2654,6 @@ export class GeometryBuilder {
     // ==========================================================================
     // 6. ROADS, JUNCTION-NODE MESHING, 3D BRIDGE RAMPS & 3D TUNNEL PORTALS
     // ==========================================================================
-    const topoIndex = new TopologicalNodeIndex(0.15);
-
     const rawAtGradeRoads: RoadFeature[] = [];
     const gradeSeparatedRoads: RoadFeature[] = [];
     const atGradeRoadEndpoints: [number, number][] = [];
@@ -2655,8 +2671,10 @@ export class GeometryBuilder {
       );
       if ((r.layer === 0 && !r.isBridge && !r.isTunnel) || isExplicitCulvert) {
         rawAtGradeRoads.push(r);
-        for (const pt of r.points) {
-          atGradeRoadEndpoints.push(pt);
+        if (infrastructureRenderOptions.roads !== 'graph') {
+          for (const pt of r.points) {
+            atGradeRoadEndpoints.push(pt);
+          }
         }
       } else {
         gradeSeparatedRoads.push(r);
@@ -2669,9 +2687,100 @@ export class GeometryBuilder {
       }
     }
 
-    // Split at-grade roads at any shared interior nodes so mid-polyline intersections are meshed
-    const atGradeRoads = splitRoadsAtSharedInteriorNodes(rawAtGradeRoads, topoIndex);
-    const nodeBranches = new Map<string, RoadBranch[]>();
+    const roadsByClass = new Map<
+      RoadClass,
+      Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
+    >();
+
+    if (infrastructureRenderOptions.roads === 'graph' && infrastructureRenderPreview?.descriptors) {
+      const graphRoadResult = buildGraphAtGradeRoadGeometries({
+        descriptors: infrastructureRenderPreview.descriptors,
+        roadWidthMultiplier: this.options.roadWidthMultiplier,
+        gradeTransitionCoords,
+        resourceManager,
+        diagnostics: data.diagnostics,
+      });
+
+      graphRoadResult.roadsByClass.forEach((items, roadClass) => {
+        roadsByClass.set(roadClass, items);
+      });
+      for (const pt of graphRoadResult.atGradeRoadEndpoints) {
+        atGradeRoadEndpoints.push(pt);
+      }
+      for (const sid of graphRoadResult.renderedSourceIds) {
+        renderedSourceIds.add(sid);
+      }
+
+      // Propagate deduplicated feature IDs whose survivor way was actually rendered
+      const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
+      for (const [survivorId, dupIds] of Object.entries(roadLineage.deduplicatedMap)) {
+        if (
+          graphRoadResult.renderedSourceIds.has(survivorId) &&
+          !graphRoadResult.fullySubtractedRoadIds.has(survivorId)
+        ) {
+          for (const dupId of dupIds) {
+            renderedSourceIds.add(dupId);
+          }
+        }
+      }
+
+      roadsGroup.userData.fullySubtractedRoadIds = Array.from(
+        graphRoadResult.fullySubtractedRoadIds
+      );
+      roadsGroup.userData.graphRoadStats = graphRoadResult.stats;
+      const deduplicatedCount = Object.values(roadLineage.deduplicatedMap).reduce(
+        (sum, arr) => sum + arr.length,
+        0
+      );
+      const chainedCount = Object.values(roadLineage.chainingMap).reduce(
+        (sum, arr) => sum + Math.max(0, arr.length - 1),
+        0
+      );
+      roadsGroup.userData.graphRoadLineage = {
+        renderedSourceIds: Array.from(graphRoadResult.renderedSourceIds),
+        deduplicatedCount,
+        deduplicatedMap: { ...roadLineage.deduplicatedMap },
+        chainedCount,
+        chainingMap: { ...roadLineage.chainingMap },
+      };
+
+      if (data.diagnostics) {
+        if (!data.diagnostics.featureLineage) {
+          data.diagnostics.featureLineage = {
+            retainedCount: graphRoadResult.renderedSourceIds.size,
+            chainedGroupsCount: 0,
+            chainedFeaturesCount: 0,
+            deduplicatedCount: 0,
+            chainingMap: {},
+            deduplicatedMap: {},
+          };
+        }
+        const fl = data.diagnostics.featureLineage;
+        for (const [canonicalId, dupIds] of Object.entries(roadLineage.deduplicatedMap)) {
+          if (!fl.deduplicatedMap[canonicalId]) {
+            fl.deduplicatedMap[canonicalId] = [];
+          }
+          for (const dupId of dupIds) {
+            if (!fl.deduplicatedMap[canonicalId].includes(dupId)) {
+              fl.deduplicatedMap[canonicalId].push(dupId);
+              fl.deduplicatedCount++;
+            }
+          }
+        }
+        for (const [edgeId, sids] of Object.entries(roadLineage.chainingMap)) {
+          if (!fl.chainingMap[edgeId] && sids.length > 1) {
+            fl.chainingMap[edgeId] = [...sids];
+            fl.chainedGroupsCount++;
+            fl.chainedFeaturesCount += sids.length;
+          }
+        }
+      }
+    } else {
+      const topoIndex = new TopologicalNodeIndex(0.15);
+
+      // Split at-grade roads at any shared interior nodes so mid-polyline intersections are meshed
+      const atGradeRoads = splitRoadsAtSharedInteriorNodes(rawAtGradeRoads, topoIndex);
+      const nodeBranches = new Map<string, RoadBranch[]>();
 
     // A. Gather road branches at at-grade junction nodes
     for (const road of atGradeRoads) {
@@ -3194,10 +3303,6 @@ export class GeometryBuilder {
     }
 
     // C. Build trimmed road ribbons for at-grade roads (Vehicular by priority first, then non-vehicular paths)
-    const roadsByClass = new Map<
-      RoadClass,
-      Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
-    >();
 
     const fullySubtractedRoadIds = new Set<string>();
 
@@ -3576,13 +3681,14 @@ export class GeometryBuilder {
 
     roadsGroup.userData.fullySubtractedRoadIds = Array.from(fullySubtractedRoadIds);
 
-    // Add junction geometries into matching class buffers
-    junctionGeometriesByClass.forEach((items, roadClass) => {
-      if (!roadsByClass.has(roadClass)) {
-        roadsByClass.set(roadClass, []);
-      }
-      roadsByClass.get(roadClass)!.push(...items);
-    });
+      // Add junction geometries into matching class buffers
+      junctionGeometriesByClass.forEach((items, roadClass) => {
+        if (!roadsByClass.has(roadClass)) {
+          roadsByClass.set(roadClass, []);
+        }
+        roadsByClass.get(roadClass)!.push(...items);
+      });
+    }
 
     // D. Build grade-separated roads:
     // - Bridges: 3D sloped approach ramps connecting at-grade roads to elevated bridge decks + substructure + parapets + piers

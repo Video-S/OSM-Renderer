@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderPreviewTiming
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:620
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:668
 
 Timing breakdown for Stage E1 preview preparation.
 
@@ -16,7 +16,7 @@ Timing breakdown for Stage E1 preview preparation.
 
 > **adapterBuildTimeMs**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:622
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:670
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:622
 
 > **graphBuildTimeMs**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:621
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:669
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:621
 
 > **totalPreviewTimeMs**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:624
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:672
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:624
 
 > **validationTimeMs**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:623
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:671

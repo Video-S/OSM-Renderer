@@ -19,14 +19,18 @@
 
 ## Functions
 
+- [buildRoadRibbonOutlineRing](functions/buildRoadRibbonOutlineRing.md)
+- [buildSafeExteriorSubPolylines](functions/buildSafeExteriorSubPolylines.md)
 - [cleanPolylineForClipping](functions/cleanPolylineForClipping.md)
 - [createShapeFromRings](functions/createShapeFromRings.md)
 - [createShapesFromMultiPolygon](functions/createShapesFromMultiPolygon.md)
 - [generateExtrudedBarrierRibbon](functions/generateExtrudedBarrierRibbon.md)
 - [generateParkingStallMarkings](functions/generateParkingStallMarkings.md)
 - [generateRoadRibbon](functions/generateRoadRibbon.md)
+- [generateStepTreads](functions/generateStepTreads.md)
 - [hasRingSelfIntersection](functions/hasRingSelfIntersection.md)
 - [resolveInspectedFeature](functions/resolveInspectedFeature.md)
+- [sanitizeOsmTags](functions/sanitizeOsmTags.md)
 - [splitRoadsAtSharedInteriorNodes](functions/splitRoadsAtSharedInteriorNodes.md)
 
 ## References
@@ -34,6 +38,12 @@
 ### adaptInfrastructureGraphToRenderDescriptors
 
 Re-exports [adaptInfrastructureGraphToRenderDescriptors](../infrastructure/rendering/InfrastructureRenderAdapter/variables/adaptInfrastructureGraphToRenderDescriptors.md)
+
+***
+
+### buildGraphAtGradeRoadGeometries
+
+Re-exports [buildGraphAtGradeRoadGeometries](../infrastructure/roads/GraphRoadGeometryBuilder/functions/buildGraphAtGradeRoadGeometries.md)
 
 ***
 
@@ -52,6 +62,24 @@ Re-exports [cloneDescriptorOsmTags](../infrastructure/rendering/InfrastructureRe
 ### DEFAULT\_INFRASTRUCTURE\_RENDER\_OPTIONS
 
 Re-exports [DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS](../infrastructure/rendering/InfrastructureRenderAdapter/variables/DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.md)
+
+***
+
+### GraphRoadGeometryBuildOptions
+
+Re-exports [GraphRoadGeometryBuildOptions](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadGeometryBuildOptions.md)
+
+***
+
+### GraphRoadGeometryBuildResult
+
+Re-exports [GraphRoadGeometryBuildResult](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadGeometryBuildResult.md)
+
+***
+
+### GraphRoadRenderStats
+
+Re-exports [GraphRoadRenderStats](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadRenderStats.md)
 
 ***
 
@@ -103,15 +131,39 @@ Re-exports [parseInfrastructureRenderSource](../infrastructure/rendering/Infrast
 
 ***
 
+### parseRailwayInfrastructureRenderSource
+
+Re-exports [parseRailwayInfrastructureRenderSource](../infrastructure/rendering/InfrastructureRenderAdapter/functions/parseRailwayInfrastructureRenderSource.md)
+
+***
+
+### parseRoadInfrastructureRenderSource
+
+Re-exports [parseRoadInfrastructureRenderSource](../infrastructure/rendering/InfrastructureRenderAdapter/functions/parseRoadInfrastructureRenderSource.md)
+
+***
+
 ### prepareInfrastructureRenderPreview
 
 Re-exports [prepareInfrastructureRenderPreview](../infrastructure/rendering/InfrastructureRenderAdapter/functions/prepareInfrastructureRenderPreview.md)
 
 ***
 
+### RailwayInfrastructureRenderSource
+
+Re-exports [RailwayInfrastructureRenderSource](../infrastructure/rendering/InfrastructureRenderAdapter/type-aliases/RailwayInfrastructureRenderSource.md)
+
+***
+
 ### requiresInfrastructureGraphPreview
 
 Re-exports [requiresInfrastructureGraphPreview](../infrastructure/rendering/InfrastructureRenderAdapter/functions/requiresInfrastructureGraphPreview.md)
+
+***
+
+### RoadInfrastructureRenderSource
+
+Re-exports [RoadInfrastructureRenderSource](../infrastructure/rendering/InfrastructureRenderAdapter/type-aliases/RoadInfrastructureRenderSource.md)
 
 ***
 

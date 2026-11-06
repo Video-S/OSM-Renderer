@@ -35,22 +35,40 @@ import {
 } from '../topology/InfrastructureGraph';
 
 /**
- * Selects the data source mode for road or railway infrastructure rendering in Milestone 2.3 Stage E.
+ * Selects the data source mode for road infrastructure rendering in Milestone 2.3 Stage E2.
  *
- * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.roads` and `ProcessedMapData.railways`
- *   with zero graph construction or adapter overhead.
+ * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.roads`
+ *   with zero graph construction or adapter overhead when both domains are `'legacy'`.
  * - `'graph-preview'`: Stage E1 preview mode. Builds and validates graph-backed render descriptors
- *   from a single shared `InfrastructureGraph` alongside the legacy renderer without altering
- *   existing 3D mesh generation. (Actual `'graph'` mesh generation is deferred to Stages E2–E4.)
+ *   from a single shared `InfrastructureGraph` alongside the legacy road renderer without altering
+ *   existing 3D mesh generation.
+ * - `'graph'`: Stage E2 graph-driven road rendering mode. Builds and validates `InfrastructureGraph`
+ *   and `InfrastructureRenderDescriptorBundle`, then constructs at-grade road ribbons, degree-2
+ *   continuity joins, and boundary-derived junction polygons directly from the road render descriptors.
  */
-export type InfrastructureRenderSource = 'legacy' | 'graph-preview';
+export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph';
 
 /**
- * Independent developer configuration switches for road and railway topology-to-renderer previewing.
+ * Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E2.
+ *
+ * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.railways`.
+ * - `'graph-preview'`: Builds and validates railway render descriptors alongside the legacy railway renderer.
+ *   (Graph-driven railway rendering `'graph'` remains deferred to Stage E3; setting `topologyRailways=graph`
+ *   in Stage E2 resolves safely to `'legacy'`.)
+ */
+export type RailwayInfrastructureRenderSource = 'legacy' | 'graph-preview';
+
+/**
+ * Union of supported infrastructure render source modes across road and railway domains.
+ */
+export type InfrastructureRenderSource = RoadInfrastructureRenderSource;
+
+/**
+ * Independent developer configuration switches for road and railway topology-to-renderer modes.
  */
 export interface InfrastructureRenderOptions {
-  roads: InfrastructureRenderSource;
-  railways: InfrastructureRenderSource;
+  roads: RoadInfrastructureRenderSource;
+  railways: RailwayInfrastructureRenderSource;
 }
 
 /**
@@ -63,23 +81,52 @@ export const DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS: Readonly<InfrastructureRende
   });
 
 /**
- * Parses a raw string value into a valid `InfrastructureRenderSource`,
+ * Parses a raw string value into a valid `RoadInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
  * resolving any absent or unrecognized value safely to `'legacy'`.
  */
-export function parseInfrastructureRenderSource(
+export function parseRoadInfrastructureRenderSource(
   raw: string | null | undefined
-): InfrastructureRenderSource {
+): RoadInfrastructureRenderSource {
+  if (typeof raw !== 'string') return 'legacy';
+  const normalized = raw.trim();
+  if (normalized === 'graph-preview' || normalized === 'graph') {
+    return normalized;
+  }
+  return 'legacy';
+}
+
+/**
+ * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview'`),
+ * resolving any absent or unrecognized value (including `'graph'` during Stage E2) safely to `'legacy'`.
+ */
+export function parseRailwayInfrastructureRenderSource(
+  raw: string | null | undefined
+): RailwayInfrastructureRenderSource {
   if (typeof raw !== 'string') return 'legacy';
   const normalized = raw.trim();
   return normalized === 'graph-preview' ? 'graph-preview' : 'legacy';
 }
 
 /**
- * Normalizes partial or undefined `InfrastructureRenderOptions` so both `roads` and `railways`
- * are guaranteed to be `'legacy' | 'graph-preview'`.
+ * Parses a raw string value into a valid `InfrastructureRenderSource` for the specified domain
+ * (defaults to `'roads'`), resolving any absent or unrecognized value safely to `'legacy'`.
+ */
+export function parseInfrastructureRenderSource(
+  raw: string | null | undefined,
+  domain: 'roads' | 'railways' = 'roads'
+): InfrastructureRenderSource {
+  if (domain === 'railways') {
+    return parseRailwayInfrastructureRenderSource(raw);
+  }
+  return parseRoadInfrastructureRenderSource(raw);
+}
+
+/**
+ * Normalizes partial or undefined `InfrastructureRenderOptions` so `roads` is guaranteed to be
+ * `'legacy' | 'graph-preview' | 'graph'` and `railways` is guaranteed to be `'legacy' | 'graph-preview'`.
  */
 export function normalizeInfrastructureRenderOptions(
-  options?: Partial<InfrastructureRenderOptions> | null
+  options?: { roads?: string | null; railways?: string | null } | null
 ): InfrastructureRenderOptions {
   if (!options) {
     return {
@@ -88,14 +135,14 @@ export function normalizeInfrastructureRenderOptions(
     };
   }
   return {
-    roads: parseInfrastructureRenderSource(options.roads),
-    railways: parseInfrastructureRenderSource(options.railways),
+    roads: parseRoadInfrastructureRenderSource(options.roads),
+    railways: parseRailwayInfrastructureRenderSource(options.railways),
   };
 }
 
 /**
  * Parses independent `topologyRoads` and `topologyRailways` developer switches
- * from a URL query string (e.g. `?topologyRoads=graph-preview&topologyRailways=legacy`)
+ * from a URL query string (e.g. `?topologyRoads=graph&topologyRailways=legacy`)
  * or `URLSearchParams` instance. Invalid or missing parameters resolve to `'legacy'`.
  */
 export function parseInfrastructureRenderOptionsFromSearch(
@@ -112,20 +159,21 @@ export function parseInfrastructureRenderOptionsFromSearch(
       ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
       : search;
   return {
-    roads: parseInfrastructureRenderSource(params.get('topologyRoads')),
-    railways: parseInfrastructureRenderSource(params.get('topologyRailways')),
+    roads: parseRoadInfrastructureRenderSource(params.get('topologyRoads')),
+    railways: parseRailwayInfrastructureRenderSource(params.get('topologyRailways')),
   };
 }
 
 /**
- * Returns `true` if at least one domain (`roads` or `railways`) is configured for `'graph-preview'`.
+ * Returns `true` if at least one domain (`roads` or `railways`) requires `InfrastructureGraph`
+ * and `InfrastructureRenderDescriptorBundle` construction (i.e. `'graph-preview'` or `'graph'`).
  * When both domains are `'legacy'`, callers must skip `buildInfrastructureGraph` and adapter execution.
  */
 export function requiresInfrastructureGraphPreview(
-  options?: Partial<InfrastructureRenderOptions> | null
+  options?: { roads?: string | null; railways?: string | null } | null
 ): boolean {
   const normalized = normalizeInfrastructureRenderOptions(options);
-  return normalized.roads === 'graph-preview' || normalized.railways === 'graph-preview';
+  return normalized.roads !== 'legacy' || normalized.railways !== 'legacy';
 }
 
 /**

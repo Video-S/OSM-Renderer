@@ -27,6 +27,8 @@
 ## Type Aliases
 
 - [InfrastructureRenderSource](type-aliases/InfrastructureRenderSource.md)
+- [RailwayInfrastructureRenderSource](type-aliases/RailwayInfrastructureRenderSource.md)
+- [RoadInfrastructureRenderSource](type-aliases/RoadInfrastructureRenderSource.md)
 
 ## Variables
 
@@ -40,6 +42,8 @@
 - [normalizeInfrastructureRenderOptions](functions/normalizeInfrastructureRenderOptions.md)
 - [parseInfrastructureRenderOptionsFromSearch](functions/parseInfrastructureRenderOptionsFromSearch.md)
 - [parseInfrastructureRenderSource](functions/parseInfrastructureRenderSource.md)
+- [parseRailwayInfrastructureRenderSource](functions/parseRailwayInfrastructureRenderSource.md)
+- [parseRoadInfrastructureRenderSource](functions/parseRoadInfrastructureRenderSource.md)
 - [prepareInfrastructureRenderPreview](functions/prepareInfrastructureRenderPreview.md)
 - [requiresInfrastructureGraphPreview](functions/requiresInfrastructureGraphPreview.md)
 - [validateInfrastructureRenderDescriptors](functions/validateInfrastructureRenderDescriptors.md)

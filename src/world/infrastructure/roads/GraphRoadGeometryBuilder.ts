@@ -539,7 +539,7 @@ interface PlacedRoadFootprint {
   maxX: number;
   minZ: number;
   maxZ: number;
-  poly: [number, number][][];
+  poly: MultiPolygonCoords;
 }
 
 function snapCoord(v: number): number {
@@ -2362,39 +2362,26 @@ export function buildGraphAtGradeRoadGeometries(
   // 4. Track 2D polygon footprints of placed junctions and road ribbons for Boolean clipping
   const placedRoadFootprints: PlacedRoadFootprint[] = [];
 
-  const registerRoadFootprint = (id: string, isPath: boolean, ring: [number, number][]) => {
-    if (!ring || ring.length < 3 || hasRingSelfIntersection(ring)) return;
-    let minX = Infinity,
-      maxX = -Infinity,
-      minZ = Infinity,
-      maxZ = -Infinity;
-    const snapped: [number, number][] = [];
-    for (const [x, z] of ring) {
-      const sx = snapCoord(x);
-      const sz = snapCoord(z);
-      if (sx < minX) minX = sx;
-      if (sx > maxX) maxX = sx;
-      if (sz < minZ) minZ = sz;
-      if (sz > maxZ) maxZ = sz;
-      snapped.push([sx, sz]);
+  // Track exactly the final polygonal surface, including disconnected components and holes.
+  // Registering only the outer ring (or skipping a component) makes subsequent Boolean
+  // clipping disagree with the triangles that were actually rendered.
+  const registerRoadFootprint = (id: string, isPath: boolean, poly: MultiPolygonCoords) => {
+    if (!poly || poly.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const rings of poly) {
+      if (!rings[0] || rings[0].length < 4) return;
+      for (const ring of rings) {
+        for (const [x, z] of ring) {
+          if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minZ = Math.min(minZ, z);
+          maxZ = Math.max(maxZ, z);
+        }
+      }
     }
-    if (
-      snapped.length > 0 &&
-      (snapped[0][0] !== snapped[snapped.length - 1][0] ||
-        snapped[0][1] !== snapped[snapped.length - 1][1])
-    ) {
-      snapped.push([snapped[0][0], snapped[0][1]]);
-    }
-    if (snapped.length >= 4 && !hasRingSelfIntersection(snapped)) {
-      placedRoadFootprints.push({
-        id,
-        isPath,
-        minX,
-        maxX,
-        minZ,
-        maxZ,
-        poly: [snapped],
-      });
+    if (minX < maxX && minZ < maxZ) {
+      placedRoadFootprints.push({ id, isPath, minX, maxX, minZ, maxZ, poly });
     }
   };
 
@@ -2464,11 +2451,7 @@ export function buildGraphAtGradeRoadGeometries(
       });
     }
 
-    for (const polyRings of junctionMultiPoly) {
-      if (polyRings[0]) {
-        registerRoadFootprint(junctionFeatureId, isPathJunction, polyRings[0]);
-      }
-    }
+    registerRoadFootprint(junctionFeatureId, isPathJunction, junctionMultiPoly);
     junctionMultiPolyByFeatureId.set(junctionFeatureId, junctionMultiPoly);
 
     const shapes = createShapesFromMultiPolygon(junctionMultiPoly);
@@ -2612,7 +2595,7 @@ export function buildGraphAtGradeRoadGeometries(
               !outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]);
 
             let requiresClipping = outlineHasSelfIntersection;
-            const overlappingPolys: Array<[number, number][][]> = [];
+            const overlappingPolys: MultiPolygonCoords[] = [];
             const overlappingBoxes: Array<{
               minX: number;
               maxX: number;
@@ -2792,7 +2775,7 @@ export function buildGraphAtGradeRoadGeometries(
                     g.setIndex(new THREE.BufferAttribute(subRibbon.indices, 1));
                     if (validateAndPruneHorizontalGeometry(g)) {
                       subGeos.push(g);
-                      registerRoadFootprint(sub.subId, isPath, subOutline[0]);
+                      registerRoadFootprint(sub.subId, isPath, subOutline);
                     } else {
                       g.dispose();
                     }
@@ -2888,6 +2871,12 @@ export function buildGraphAtGradeRoadGeometries(
               hasStartCap: sub.hasCapStart,
               hasEndCap: sub.hasCapEnd,
             });
+            if (candidateGeo) {
+              outlinePoly = buildGraphRibbonPolygonRing(pts, width, {
+                hasStartCap: sub.hasCapStart,
+                hasEndCap: sub.hasCapEnd,
+              });
+            }
           }
 
           // If tight interior vertices still caused a self-fold, clean the polyline and retry
@@ -2906,6 +2895,12 @@ export function buildGraphAtGradeRoadGeometries(
               });
               if (candidateGeo) {
                 pts = cleanedPts;
+                activeStartPortal = undefined;
+                activeEndPortal = undefined;
+                outlinePoly = buildGraphRibbonPolygonRing(pts, width, {
+                  hasStartCap: sub.hasCapStart,
+                  hasEndCap: sub.hasCapEnd,
+                });
               }
             }
           }
@@ -2926,9 +2921,7 @@ export function buildGraphAtGradeRoadGeometries(
         // Register footprint for downstream clipping
         if (resolvedClippedPolys) {
           clippedPolysBySubId.set(sub.subId, resolvedClippedPolys);
-          for (const polyRings of resolvedClippedPolys) {
-            if (polyRings[0]) registerRoadFootprint(sub.subId, isPath, polyRings[0]);
-          }
+          registerRoadFootprint(sub.subId, isPath, resolvedClippedPolys);
         } else if (isClosedSubLoop) {
           const midIdx = Math.floor(pts.length / 2);
           if (midIdx >= 1 && pts.length - midIdx >= 2) {
@@ -2938,11 +2931,11 @@ export function buildGraphAtGradeRoadGeometries(
             const half2 = buildRoadRibbonOutlineRing(pts.slice(midIdx), width, {
               endPortal: activeEndPortal,
             });
-            if (half1 && half1[0]) registerRoadFootprint(`${sub.subId}#h1`, isPath, half1[0]);
-            if (half2 && half2[0]) registerRoadFootprint(`${sub.subId}#h2`, isPath, half2[0]);
+            if (half1 && half1[0]) registerRoadFootprint(`${sub.subId}#h1`, isPath, [half1]);
+            if (half2 && half2[0]) registerRoadFootprint(`${sub.subId}#h2`, isPath, [half2]);
           }
         } else if (outlinePoly && outlinePoly[0]) {
-          registerRoadFootprint(sub.subId, isPath, outlinePoly[0]);
+          registerRoadFootprint(sub.subId, isPath, [outlinePoly]);
         }
 
         const segName =

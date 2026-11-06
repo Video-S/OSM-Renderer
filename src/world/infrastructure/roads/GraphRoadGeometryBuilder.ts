@@ -2105,7 +2105,10 @@ export function buildGraphAtGradeRoadGeometries(
     }
 
     // C. Pure path-tier junctions & continuity (vehicularHalfEdgeCount === 0 && pathHalfEdgeCount >= 2)
-    if (node.requiresPathJunctionTrimming) {
+    // A path can branch at a cross-tier node as well. Its path-only junction patch
+    // must not create a vehicular asphalt junction, and will be clipped under
+    // already-rendered vehicular surfaces during the separate path pass.
+    if (node.requiresPathJunctionTrimming || (node.isCrossTier && node.pathHalfEdgeCount >= 2)) {
       const pathBranches = collectBuildableBranches(node, node.pathIncidentHalfEdges);
       if (pathBranches.length === 2) {
         const joined = applyDegree2SharedContinuityPortal(
@@ -2392,7 +2395,8 @@ export function buildGraphAtGradeRoadGeometries(
   >();
   const junctionMultiPolyByFeatureId = new Map<string, MultiPolygonCoords>();
 
-  for (const junc of pendingJunctions) {
+  const emitJunctions = (junctions: PendingJunctionPolygon[], clipPathAgainstVehicular: boolean) => {
+  for (const junc of junctions) {
     const {
       junctionFeatureId,
       isPathJunction,
@@ -2408,6 +2412,42 @@ export function buildGraphAtGradeRoadGeometries(
       typeof domSeg?.osmTags?.name === 'string' ? domSeg.osmTags.name : domEdge.name;
     const yElev = getRoadElevation(dominantClass, 0, false, false);
 
+    // Path patches must not z-fight with at-grade vehicular ribbons or junctions.
+    // The vehicular footprint is already emitted by the time path junctions run.
+    let visibleJunctionPoly = junctionMultiPoly;
+    if (isPathJunction && clipPathAgainstVehicular) {
+      let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+      for (const polygon of junctionMultiPoly) {
+        for (const ring of polygon) {
+          for (const [x, z] of ring) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minZ = Math.min(minZ, z);
+            maxZ = Math.max(maxZ, z);
+          }
+        }
+      }
+      const blockers = placedRoadFootprints.filter((fp) =>
+        !fp.isPath && fp.maxX > minX && fp.minX < maxX &&
+        fp.maxZ > minZ && fp.minZ < maxZ
+      );
+      if (blockers.length > 0) {
+        try {
+          visibleJunctionPoly = filterDegenerateBooleanArtifacts(
+            polygonClipping.difference(
+              junctionMultiPoly as unknown as polygonClipping.Geom,
+              ...(blockers.map((fp) => fp.poly) as unknown as polygonClipping.Geom[])
+            ) as unknown as MultiPolygonCoords
+          );
+        } catch {
+          recordGraphRoadDiagnostic(diagnostics, 'path_junction_vehicular_clipping_failed', junctionFeatureId);
+          stats.rejectedOrDegenerateCount++;
+          continue;
+        }
+      }
+    }
+    if (visibleJunctionPoly.length === 0) continue;
+
     const junctionSourceIdsSet = new Set<string>();
     const portalConnections: RoadPortalConnectionSpec[] = [];
 
@@ -2421,7 +2461,6 @@ export function buildGraphAtGradeRoadGeometries(
         : [...bBranch.edge.sourceFeatureIds];
       for (const sid of branchSids) {
         junctionSourceIdsSet.add(sid);
-        renderedSourceIds.add(sid);
       }
 
       const touchingSubId = touching
@@ -2451,10 +2490,7 @@ export function buildGraphAtGradeRoadGeometries(
       });
     }
 
-    registerRoadFootprint(junctionFeatureId, isPathJunction, junctionMultiPoly);
-    junctionMultiPolyByFeatureId.set(junctionFeatureId, junctionMultiPoly);
-
-    const shapes = createShapesFromMultiPolygon(junctionMultiPoly);
+    const shapes = createShapesFromMultiPolygon(visibleJunctionPoly);
     if (shapes.length > 0) {
       const junctionGeo = new THREE.ShapeGeometry(shapes);
       junctionGeo.rotateX(-Math.PI / 2);
@@ -2462,6 +2498,10 @@ export function buildGraphAtGradeRoadGeometries(
       if (junctionGeo.hasAttribute('uv')) junctionGeo.deleteAttribute('uv');
 
       if (validateAndPruneHorizontalGeometry(junctionGeo)) {
+        // Only let subsequent ribbons clip against a junction that was emitted.
+        registerRoadFootprint(junctionFeatureId, isPathJunction, visibleJunctionPoly);
+        junctionMultiPolyByFeatureId.set(junctionFeatureId, visibleJunctionPoly);
+        for (const sid of junctionSourceIdsSet) renderedSourceIds.add(sid);
         resourceManager.registerGeometry(junctionGeo);
         const cartoLabel = formatRoadCartoLabel(dominantClass);
         if (!junctionGeometriesByClass.has(dominantClass)) {
@@ -2495,6 +2535,15 @@ export function buildGraphAtGradeRoadGeometries(
     }
   }
 
+  };
+
+  // Vehicle surfaces win visual priority where an at-grade path crosses them.
+  // Path patches are emitted only after the vehicular ribbons, so their clipping
+  // footprint describes the actual visible surface instead of an overlapping layer.
+  emitJunctions(pendingJunctions.filter((j) => !j.isPathJunction), false);
+  const pathJunctions = pendingJunctions.filter((j) => j.isPathJunction);
+  let pathJunctionsEmitted = false;
+
   // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
   const clippedPolysBySubId = new Map<string, MultiPolygonCoords>();
   const sortedBuildableEdges = [...buildableEdges].sort((a, b) => {
@@ -2505,6 +2554,11 @@ export function buildGraphAtGradeRoadGeometries(
   });
 
   for (const edge of sortedBuildableEdges) {
+    const isPathEdge = edge.tier === 'path' || isNonVehicularRoadClass(edge.roadClass);
+    if (isPathEdge && !pathJunctionsEmitted) {
+      emitJunctions(pathJunctions, true);
+      pathJunctionsEmitted = true;
+    }
     const subSegments = resolvedSubSegmentsByEdgeId.get(edge.id);
     if (!subSegments || subSegments.length === 0) continue;
 
@@ -2995,6 +3049,8 @@ export function buildGraphAtGradeRoadGeometries(
       }
     }
   }
+
+  if (!pathJunctionsEmitted) emitJunctions(pathJunctions, true);
 
   // 7. Synchronize junction portalConnections against any clipped or fully-subtracted road ribbons
   // and append junction geometries into their corresponding road class buckets.

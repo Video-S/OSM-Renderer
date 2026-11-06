@@ -86,6 +86,13 @@ Prior to Stage E2:
 - Added `GraphRoadRendering.test.ts` tests 19 and 20: a 6m-to-2m cycleway width transition and an unequal-width three-arm cycleway fork, checking full-width external approaches, local transition coverage without square shoulders, and source provenance.
 - **Verification pending:** GitHub file-edit access cannot run `npm test`, `npm run lint`, `npm run build`, or `npm run docs:api` in the current environment. All earlier passing test totals predate this correction. Ticket remains `in_progress`; no owner sign-off recorded.
 
+### 2026-11-06 — Post-quota regression recovery (pending execution)
+- The latest agent test logs reported `164` total tests with `162` passing and `2` failing: E2 test 4's old three-junction expectation (a fourth width-transition patch is now correctly present), and E2 test 10's invalid road-network geometry in a large dataset. These outcomes were observed in Gemini's environment, not reproduced independently here.
+- Reverted the later agent changes that weakened the overlap assertion, registered only the first polygon ring (discarding additional components and holes), and emitted path patches before vehicular road ribbons. The source now again clips against complete MultiPolygon footprints and respects vehicular-first path-clipping order.
+- Constrained three-arm tapers to path-tier forks until their vehicular behavior is verified. Two-arm unequal-width transitions remain supported.
+- Updated test 4 to recognize and inspect the width-transition patch; restored test 18, which the later agent had deleted. Test 18 checks visible cycleway surface coverage and source lineage without demanding a patch where another road completely occludes it.
+- **Pending verification:** Run the focused `npx tsx --test src/world/GraphRoadRendering.test.ts` then `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api`. No post-fix pass counts are claimed. TKT-008 stays `in_progress`.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

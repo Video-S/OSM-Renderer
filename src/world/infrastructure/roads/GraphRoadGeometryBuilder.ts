@@ -1204,6 +1204,19 @@ function solveBoundaryDerivedJunctionNode(
   }
 
   const trimDists: number[] = [];
+  // Two nearly collinear arms with different widths need a transition *between*
+  // their independent full-width cut portals. A union of both half-road stubs
+  // instead produces a square shoulder at the shared graph node.
+  const widthDelta = k === 2 ? Math.abs(sortedBranches[0].width - sortedBranches[1].width) : 0;
+  const twoArmDot = k === 2
+    ? sortedBranches[0].dir[0] * sortedBranches[1].dir[0] +
+      sortedBranches[0].dir[1] * sortedBranches[1].dir[1]
+    : 1;
+  const minimumTaperArmLength = widthDelta * 0.65;
+  const useTwoArmWidthTaper =
+    k === 2 && widthDelta > 1e-3 && twoArmDot <= -0.95 &&
+    sortedBranches[0].edge.id !== sortedBranches[1].edge.id &&
+    maxTrimDists.every((budget) => budget >= minimumTaperArmLength);
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 
   for (let i = 0; i < k; i++) {
@@ -1240,7 +1253,10 @@ function solveBoundaryDerivedJunctionNode(
 
     const minStub = Math.min(bBranch.width * 0.30, 1.2);
     const rawTrimDist = Math.max(0.15, minStub, reqLeft, reqRight, maxPairReq);
-    const trimDist = Math.min(rawTrimDist, maxTrimDists[i]);
+    const taperTrimDist = useTwoArmWidthTaper
+      ? Math.max(rawTrimDist, Math.max(maxBranchWidth * 0.5, minimumTaperArmLength))
+      : rawTrimDist;
+    const trimDist = Math.min(taperTrimDist, maxTrimDists[i]);
     trimDists.push(trimDist);
   }
 
@@ -1403,20 +1419,38 @@ function solveBoundaryDerivedJunctionNode(
     return null;
   }
 
-  // Construct the patch from the full-width footprint union, with no post-union
-  // corridor cutouts. The ribbon pass clips genuine overlap against this patch.
+  // A width transition has two full-width portals separated by a short span.
+  // Bridge those exact cut cross-sections with a trapezoid, not a union that
+  // retains the wide arm's square end all the way to the shared node.
+  // On tight bends, short edges, or invalid taper contours, retain the reliable
+  // full-footprint union instead of inventing a distorted transition.
   let solidMultiPoly: MultiPolygonCoords = [];
-  try {
-    const rawUnion = polygonClipping.union(
-      unionInputs[0] as unknown as polygonClipping.Geom,
-      ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
-    ) as unknown as MultiPolygonCoords;
-    solidMultiPoly = filterDegenerateBooleanArtifacts(rawUnion).filter(
-      (poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
-    );
-  } catch {
-    recordGraphRoadDiagnostic(diagnostics, 'junction_footprint_union_failed', nodeId);
-    return null;
+  if (useTwoArmWidthTaper) {
+    const transitionRing: [number, number][] = [
+      portals[0].left,
+      portals[0].right,
+      portals[1].left,
+      portals[1].right,
+      portals[0].left,
+    ];
+    if (!hasRingSelfIntersection(transitionRing) &&
+        computeMultiPolygonArea([[transitionRing]]) >= 0.05) {
+      solidMultiPoly = [[transitionRing]];
+    }
+  }
+  if (solidMultiPoly.length === 0) {
+    try {
+      const rawUnion = polygonClipping.union(
+        unionInputs[0] as unknown as polygonClipping.Geom,
+        ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+      solidMultiPoly = filterDegenerateBooleanArtifacts(rawUnion).filter(
+        (poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
+      );
+    } catch {
+      recordGraphRoadDiagnostic(diagnostics, 'junction_footprint_union_failed', nodeId);
+      return null;
+    }
   }
 
   if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {

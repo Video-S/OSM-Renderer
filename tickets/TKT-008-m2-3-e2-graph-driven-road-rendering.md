@@ -73,6 +73,13 @@ Prior to Stage E2:
 - **API Documentation (`npm run docs:api`)**: **Succeeded** (`typedoc`).
 - **Status**: `in_progress` pending project-owner review and acceptance.
 
+### 2026-11-06 — Cycleway fork/crossing rendering correction (pending verification)
+- Investigated the project-owner's annotated browser screenshot: green cycleway surfaces show remaining throat gaps and clipping around road crossings. The E2 builder only clips at-grade road surfaces, so an elevated bridge is not assumed to have caused the subtraction.
+- Graph road rendering now also synthesizes path-only junctions at shared cross-tier nodes with at least two path half-edges; this does not create a vehicular junction.
+- Vehicular junctions and ribbons are emitted first. Path junction patches are then clipped against actually emitted at-grade vehicular footprints, before path ribbons are built. Only successfully emitted junctions are registered for subsequent clipping.
+- Added GraphRoadRendering.test.ts test 18 for a cycleway fork crossed by an unrelated at-grade road, a cross-tier path fork, and an elevated bridge, including path-surface coverage and provenance.
+- Verification pending: These changes were committed through GitHub, but the npm commands cannot be executed in this environment. Previously recorded passing test counts predate the correction; they are not evidence of post-change success. TKT-008 remains in_progress.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

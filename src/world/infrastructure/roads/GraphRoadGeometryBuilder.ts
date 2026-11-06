@@ -1197,19 +1197,28 @@ function solveBoundaryDerivedJunctionNode(
   }
 
   const trimDists: number[] = [];
-  // Two nearly collinear arms with different widths need a transition *between*
-  // their independent full-width cut portals. A union of both half-road stubs
-  // instead produces a square shoulder at the shared graph node.
-  const widthDelta = k === 2 ? Math.abs(sortedBranches[0].width - sortedBranches[1].width) : 0;
-  const twoArmDot = k === 2
-    ? sortedBranches[0].dir[0] * sortedBranches[1].dir[0] +
-      sortedBranches[0].dir[1] * sortedBranches[1].dir[1]
-    : 1;
-  const minimumTaperArmLength = widthDelta * 0.65;
-  const useTwoArmWidthTaper =
-    k === 2 && widthDelta > 1e-3 && twoArmDot <= -0.95 &&
-    sortedBranches[0].edge.id !== sortedBranches[1].edge.id &&
-    maxTrimDists.every((budget) => budget >= minimumTaperArmLength);
+  // Find two opposing through-arms with unequal widths. This can be a simple
+  // two-arm width change or the continuous pair at a three-arm fork. Other
+  // junctions retain the established local full-footprint union.
+  let widthTransitionPair: [number, number] | null = null;
+  let strongestOpposition = -0.95;
+  if (k === 2 || k === 3) {
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        const a = sortedBranches[i];
+        const b = sortedBranches[j];
+        const dot = a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
+        const delta = Math.abs(a.width - b.width);
+        if (a.edge.id === b.edge.id || dot > strongestOpposition || delta <= 1e-3) continue;
+        const minimumTaperArmLength = delta * 0.65;
+        if (maxTrimDists[i] < minimumTaperArmLength || maxTrimDists[j] < minimumTaperArmLength) {
+          continue;
+        }
+        widthTransitionPair = [i, j];
+        strongestOpposition = dot;
+      }
+    }
+  }
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 
   for (let i = 0; i < k; i++) {
@@ -1246,8 +1255,13 @@ function solveBoundaryDerivedJunctionNode(
 
     const minStub = Math.min(bBranch.width * 0.30, 1.2);
     const rawTrimDist = Math.max(0.15, minStub, reqLeft, reqRight, maxPairReq);
-    const taperTrimDist = useTwoArmWidthTaper
-      ? Math.max(rawTrimDist, Math.max(maxBranchWidth * 0.5, minimumTaperArmLength))
+    const isTransitionArm = widthTransitionPair?.includes(i) ?? false;
+    const transitionDelta = widthTransitionPair
+      ? Math.abs(sortedBranches[widthTransitionPair[0]].width -
+          sortedBranches[widthTransitionPair[1]].width)
+      : 0;
+    const taperTrimDist = isTransitionArm
+      ? Math.max(rawTrimDist, maxBranchWidth * 0.5, transitionDelta * 0.65)
       : rawTrimDist;
     const trimDist = Math.min(taperTrimDist, maxTrimDists[i]);
     trimDists.push(trimDist);
@@ -1412,23 +1426,35 @@ function solveBoundaryDerivedJunctionNode(
     return null;
   }
 
-  // A width transition has two full-width portals separated by a short span.
-  // Bridge those exact cut cross-sections with a trapezoid, not a union that
-  // retains the wide arm's square end all the way to the shared node.
-  // On tight bends, short edges, or invalid taper contours, retain the reliable
-  // full-footprint union instead of inventing a distorted transition.
+  // Bridge the independent full-width portals of a continuous unequal-width
+  // pair with a bounded taper instead of the wide arm's square shoulder.
+  // A third diverging arm joins the taper through the same local footprint union.
+  // On tight bends, short edges, or invalid contours, keep the ordinary union.
   let solidMultiPoly: MultiPolygonCoords = [];
-  if (useTwoArmWidthTaper) {
+  if (widthTransitionPair) {
+    const [a, b] = widthTransitionPair;
     const transitionRing: [number, number][] = [
-      portals[0].left,
-      portals[0].right,
-      portals[1].left,
-      portals[1].right,
-      portals[0].left,
+      portals[a].left, portals[a].right,
+      portals[b].left, portals[b].right,
+      portals[a].left,
     ];
     if (!hasRingSelfIntersection(transitionRing) &&
         computeMultiPolygonArea([[transitionRing]]) >= 0.05) {
-      solidMultiPoly = [[transitionRing]];
+      const remainingArms = unionInputs.filter((_, i) => i !== a && i !== b);
+      if (remainingArms.length === 0) {
+        solidMultiPoly = [[transitionRing]];
+      } else {
+        try {
+          solidMultiPoly = filterDegenerateBooleanArtifacts(
+            polygonClipping.union(
+              [[transitionRing]] as unknown as polygonClipping.Geom,
+              ...(remainingArms as unknown as polygonClipping.Geom[])
+            ) as unknown as MultiPolygonCoords
+          ).filter((poly) => poly[0] && !hasRingSelfIntersection(poly[0]));
+        } catch {
+          // Keep the reliable complete footprint union below.
+        }
+      }
     }
   }
   if (solidMultiPoly.length === 0) {

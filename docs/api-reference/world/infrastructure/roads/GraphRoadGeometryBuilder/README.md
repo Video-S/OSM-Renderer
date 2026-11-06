@@ -8,10 +8,18 @@
 
 ## Interfaces
 
+- [GraphRoadDegenerateTriangleDefect](interfaces/GraphRoadDegenerateTriangleDefect.md)
 - [GraphRoadGeometryBuildOptions](interfaces/GraphRoadGeometryBuildOptions.md)
 - [GraphRoadGeometryBuildResult](interfaces/GraphRoadGeometryBuildResult.md)
+- [GraphRoadMeshIntegrityReport](interfaces/GraphRoadMeshIntegrityReport.md)
 - [GraphRoadRenderStats](interfaces/GraphRoadRenderStats.md)
+- [GraphRoadWindingDefect](interfaces/GraphRoadWindingDefect.md)
+
+## Variables
+
+- [MIN\_NONDEGENERATE\_TRIANGLE\_AREA\_M2](variables/MIN_NONDEGENERATE_TRIANGLE_AREA_M2.md)
 
 ## Functions
 
+- [auditGraphRoadMeshIntegrity](functions/auditGraphRoadMeshIntegrity.md)
 - [buildGraphAtGradeRoadGeometries](functions/buildGraphAtGradeRoadGeometries.md)

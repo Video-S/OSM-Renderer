@@ -41,6 +41,12 @@ Re-exports [adaptInfrastructureGraphToRenderDescriptors](../infrastructure/rende
 
 ***
 
+### auditGraphRoadMeshIntegrity
+
+Re-exports [auditGraphRoadMeshIntegrity](../infrastructure/roads/GraphRoadGeometryBuilder/functions/auditGraphRoadMeshIntegrity.md)
+
+***
+
 ### buildGraphAtGradeRoadGeometries
 
 Re-exports [buildGraphAtGradeRoadGeometries](../infrastructure/roads/GraphRoadGeometryBuilder/functions/buildGraphAtGradeRoadGeometries.md)
@@ -65,6 +71,12 @@ Re-exports [DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS](../infrastructure/rendering/I
 
 ***
 
+### GraphRoadDegenerateTriangleDefect
+
+Re-exports [GraphRoadDegenerateTriangleDefect](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadDegenerateTriangleDefect.md)
+
+***
+
 ### GraphRoadGeometryBuildOptions
 
 Re-exports [GraphRoadGeometryBuildOptions](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadGeometryBuildOptions.md)
@@ -77,9 +89,21 @@ Re-exports [GraphRoadGeometryBuildResult](../infrastructure/roads/GraphRoadGeome
 
 ***
 
+### GraphRoadMeshIntegrityReport
+
+Re-exports [GraphRoadMeshIntegrityReport](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadMeshIntegrityReport.md)
+
+***
+
 ### GraphRoadRenderStats
 
 Re-exports [GraphRoadRenderStats](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadRenderStats.md)
+
+***
+
+### GraphRoadWindingDefect
+
+Re-exports [GraphRoadWindingDefect](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadWindingDefect.md)
 
 ***
 
@@ -110,6 +134,12 @@ Re-exports [InfrastructureRenderSource](../infrastructure/rendering/Infrastructu
 ### InfrastructureRenderValidationReport
 
 Re-exports [InfrastructureRenderValidationReport](../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderValidationReport.md)
+
+***
+
+### MIN\_NONDEGENERATE\_TRIANGLE\_AREA\_M2
+
+Re-exports [MIN_NONDEGENERATE_TRIANGLE_AREA_M2](../infrastructure/roads/GraphRoadGeometryBuilder/variables/MIN_NONDEGENERATE_TRIANGLE_AREA_M2.md)
 
 ***
 

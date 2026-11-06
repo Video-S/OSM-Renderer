@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadGeometryBuildOptions
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:112
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:447
 
 Input configuration for `buildGraphAtGradeRoadGeometries`.
 
@@ -16,7 +16,7 @@ Input configuration for `buildGraphAtGradeRoadGeometries`.
 
 > **descriptors**: [`InfrastructureRenderDescriptorBundle`](../../../rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderDescriptorBundle.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:114
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:449
 
 Immutable graph-backed render descriptor bundle produced by `InfrastructureRenderAdapter`.
 
@@ -26,9 +26,9 @@ Immutable graph-backed render descriptor bundle produced by `InfrastructureRende
 
 > `optional` **diagnostics?**: [`MapFeatureDiagnostics`](../../../../../types/MapFeature/interfaces/MapFeatureDiagnostics.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:122
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:457
 
-Optional pipeline diagnostics object to record clipping failures or fully subtracted features.
+Optional pipeline diagnostics object to record clipping failures or rejected geometry fallbacks.
 
 ***
 
@@ -36,9 +36,9 @@ Optional pipeline diagnostics object to record clipping failures or fully subtra
 
 > `optional` **gradeTransitionCoords?**: readonly (readonly \[`number`, `number`\])[]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:118
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:453
 
-Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints for cap suppression.
+Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints (retained for interface compatibility).
 
 ***
 
@@ -46,7 +46,7 @@ Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints f
 
 > **resourceManager**: [`SceneResourceManager`](../../../../SceneResourceManager/classes/SceneResourceManager.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:120
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:455
 
 Scene resource manager for deterministic GPU buffer registration and disposal.
 
@@ -56,6 +56,6 @@ Scene resource manager for deterministic GPU buffer registration and disposal.
 
 > **roadWidthMultiplier**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:116
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:451
 
 User/scene multiplier applied to canonical road widths.

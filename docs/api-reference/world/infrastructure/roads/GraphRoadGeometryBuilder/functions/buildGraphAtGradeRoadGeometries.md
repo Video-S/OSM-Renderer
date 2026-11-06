@@ -8,7 +8,7 @@
 
 > **buildGraphAtGradeRoadGeometries**(`options`): [`GraphRoadGeometryBuildResult`](../interfaces/GraphRoadGeometryBuildResult.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:596
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:1758
 
 Constructs at-grade road ribbons, degree-2 continuity joins, and boundary-derived junction
 polygons directly from an `InfrastructureRenderDescriptorBundle` (`M2.3-E2`).

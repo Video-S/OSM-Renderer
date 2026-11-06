@@ -6,7 +6,7 @@
 
 # Interface: BuiltSceneGeometry
 
-Defined in: world/GeometryBuilder.ts:121
+Defined in: world/GeometryBuilder.ts:131
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:121
 
 > **barriersGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:128
+Defined in: world/GeometryBuilder.ts:138
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:128
 
 > **buildingsGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:122
+Defined in: world/GeometryBuilder.ts:132
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/GeometryBuilder.ts:122
 
 > **dispose**: () => `void`
 
-Defined in: world/GeometryBuilder.ts:144
+Defined in: world/GeometryBuilder.ts:154
 
 #### Returns
 
@@ -42,7 +42,7 @@ Defined in: world/GeometryBuilder.ts:144
 
 > **foliageGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:129
+Defined in: world/GeometryBuilder.ts:139
 
 ***
 
@@ -50,7 +50,7 @@ Defined in: world/GeometryBuilder.ts:129
 
 > **groundMesh**: `Mesh`
 
-Defined in: world/GeometryBuilder.ts:130
+Defined in: world/GeometryBuilder.ts:140
 
 ***
 
@@ -58,7 +58,7 @@ Defined in: world/GeometryBuilder.ts:130
 
 > **infrastructureRenderOptions**: [`InfrastructureRenderOptions`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/GeometryBuilder.ts:142
+Defined in: world/GeometryBuilder.ts:152
 
 ***
 
@@ -66,7 +66,7 @@ Defined in: world/GeometryBuilder.ts:142
 
 > **infrastructureRenderPreview**: [`InfrastructureRenderPreviewResult`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderPreviewResult.md)
 
-Defined in: world/GeometryBuilder.ts:143
+Defined in: world/GeometryBuilder.ts:153
 
 ***
 
@@ -74,7 +74,7 @@ Defined in: world/GeometryBuilder.ts:143
 
 > **interactiveMeshes**: `object`
 
-Defined in: world/GeometryBuilder.ts:131
+Defined in: world/GeometryBuilder.ts:141
 
 #### buildings
 
@@ -86,7 +86,7 @@ Defined in: world/GeometryBuilder.ts:131
 
 > **landuseGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:127
+Defined in: world/GeometryBuilder.ts:137
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/GeometryBuilder.ts:127
 
 > **parksGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:126
+Defined in: world/GeometryBuilder.ts:136
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/GeometryBuilder.ts:126
 
 > **railwaysGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:124
+Defined in: world/GeometryBuilder.ts:134
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: world/GeometryBuilder.ts:124
 
 > **resources**: [`SceneResourceManager`](../../SceneResourceManager/classes/SceneResourceManager.md)
 
-Defined in: world/GeometryBuilder.ts:141
+Defined in: world/GeometryBuilder.ts:151
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: world/GeometryBuilder.ts:141
 
 > **roadsGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:123
+Defined in: world/GeometryBuilder.ts:133
 
 ***
 
@@ -126,7 +126,7 @@ Defined in: world/GeometryBuilder.ts:123
 
 > **stats**: `object`
 
-Defined in: world/GeometryBuilder.ts:134
+Defined in: world/GeometryBuilder.ts:144
 
 #### forestTreesCount?
 
@@ -154,7 +154,7 @@ Defined in: world/GeometryBuilder.ts:134
 
 > `optional` **updateCameraZoom?**: (`zoom`) => `void`
 
-Defined in: world/GeometryBuilder.ts:146
+Defined in: world/GeometryBuilder.ts:156
 
 #### Parameters
 
@@ -172,7 +172,7 @@ Defined in: world/GeometryBuilder.ts:146
 
 > **updateTheme**: (`theme`) => `void`
 
-Defined in: world/GeometryBuilder.ts:145
+Defined in: world/GeometryBuilder.ts:155
 
 #### Parameters
 
@@ -190,4 +190,4 @@ Defined in: world/GeometryBuilder.ts:145
 
 > **waterGroup**: `Group`
 
-Defined in: world/GeometryBuilder.ts:125
+Defined in: world/GeometryBuilder.ts:135

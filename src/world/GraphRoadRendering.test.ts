@@ -8,9 +8,12 @@ import {
 } from '../types/MapFeature';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import {
+  auditGraphRoadMeshIntegrity,
   BuiltSceneGeometry,
   FaceFeatureRange,
+  generateRoadRibbon,
   GeometryBuilder,
+  GraphRoadMeshIntegrityReport,
   GraphRoadRenderStats,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
@@ -231,6 +234,199 @@ function createDatasetFromSpecs(
   };
 }
 
+/**
+ * Generates a realistic 270-way dense urban road network fixture containing:
+ * - Curved horizontal avenues (with intermediate curve vertices)
+ * - Vertical cross-streets with mixed road classes and widths
+ * - Multi-way 5-arm and 6-arm diagonal boulevard intersections
+ * - Chained degree-2 ways with distinct tags
+ * - Cross-tier footpaths and steps
+ * - Grade-separated bridges
+ */
+function createRoadHeavyUrbanDataset(): ProcessedMapData {
+  const specs: SyntheticRoadSpec[] = [];
+  const rows = 9;
+  const cols = 9;
+  const spacing = 36;
+  const halfSpan = ((cols - 1) * spacing) / 2;
+
+  const nodeCoord = (r: number, c: number): [number, number] => [
+    -halfSpan + c * spacing,
+    -halfSpan + r * spacing,
+  ];
+  const nodeId = (r: number, c: number) => `urb_${r}_${c}`;
+
+  // 1. Horizontal avenues (72 segments, half with intermediate curved vertices)
+  for (let r = 0; r < rows; r++) {
+    const roadClass: RoadClass =
+      r % 4 === 0 ? 'primary' : r % 2 === 0 ? 'secondary' : 'residential';
+    const width = r % 4 === 0 ? 11.0 : r % 2 === 0 ? 8.5 : 6.5;
+    for (let c = 0; c < cols - 1; c++) {
+      const p0 = nodeCoord(r, c);
+      const p1 = nodeCoord(r, c + 1);
+      const midX = (p0[0] + p1[0]) * 0.5;
+      const curveOffset = ((r + c) % 3 === 0 ? 1.8 : -1.4) * (r % 2 === 0 ? 1 : 0);
+      const pts: [number, number][] =
+        curveOffset !== 0
+          ? [p0, [midX, p0[1] + curveOffset], p1]
+          : [p0, p1];
+      const nids =
+        curveOffset !== 0
+          ? [nodeId(r, c), undefined, nodeId(r, c + 1)]
+          : [nodeId(r, c), nodeId(r, c + 1)];
+      const reversed = (r + c) % 5 === 0;
+      specs.push({
+        id: `way/urb-h-${r}-${c}`,
+        roadClass,
+        width,
+        oneway: r % 4 === 0,
+        name: `Avenue ${r}`,
+        points: reversed ? [...pts].reverse() : pts,
+        nodeIds: reversed ? [...nids].reverse() : nids,
+      });
+    }
+  }
+
+  // 2. Vertical streets (72 segments)
+  for (let c = 0; c < cols; c++) {
+    const roadClass: RoadClass =
+      c % 4 === 0 ? 'secondary' : c % 3 === 0 ? 'tertiary' : 'residential';
+    const width = c % 4 === 0 ? 9.5 : c % 3 === 0 ? 7.5 : 6.0;
+    for (let r = 0; r < rows - 1; r++) {
+      const p0 = nodeCoord(r, c);
+      const p1 = nodeCoord(r + 1, c);
+      specs.push({
+        id: `way/urb-v-${c}-${r}`,
+        roadClass,
+        width,
+        name: `Street ${c}`,
+        points: [p0, p1],
+        nodeIds: [nodeId(r, c), nodeId(r + 1, c)],
+      });
+    }
+  }
+
+  // 3. Diagonal boulevards creating 5-way and 6-way intersections across blocks (32 segments)
+  for (let r = 0; r < rows - 1; r += 2) {
+    for (let c = 0; c < cols - 1; c += 2) {
+      specs.push({
+        id: `way/urb-diag-${r}-${c}`,
+        roadClass: 'tertiary',
+        width: 7.0,
+        name: `Diagonal ${r}-${c}`,
+        points: [nodeCoord(r, c), nodeCoord(r + 1, c + 1)],
+        nodeIds: [nodeId(r, c), nodeId(r + 1, c + 1)],
+      });
+    }
+  }
+
+  // 4. Cul-de-sac service spurs and degree-2 extensions around the perimeter (36 segments)
+  for (let i = 0; i < rows; i++) {
+    const pWest = nodeCoord(i, 0);
+    const midId = `urb_west_mid_${i}`;
+    const endId = `urb_west_end_${i}`;
+    specs.push(
+      {
+        id: `way/urb-spur-w1-${i}`,
+        roadClass: 'residential',
+        width: 6.0,
+        points: [pWest, [pWest[0] - 22, pWest[1] + 3]],
+        nodeIds: [nodeId(i, 0), midId],
+      },
+      {
+        id: `way/urb-spur-w2-${i}`,
+        roadClass: 'service',
+        width: 4.5,
+        points: [
+          [pWest[0] - 22, pWest[1] + 3],
+          [pWest[0] - 42, pWest[1] - 2],
+        ],
+        nodeIds: [midId, endId],
+      }
+    );
+
+    const pEast = nodeCoord(i, cols - 1);
+    const eMidId = `urb_east_mid_${i}`;
+    const eEndId = `urb_east_end_${i}`;
+    specs.push(
+      {
+        id: `way/urb-spur-e1-${i}`,
+        roadClass: 'residential',
+        width: 6.5,
+        points: [pEast, [pEast[0] + 24, pEast[1] - 4]],
+        nodeIds: [nodeId(i, cols - 1), eMidId],
+      },
+      {
+        id: `way/urb-spur-e2-${i}`,
+        roadClass: 'residential',
+        width: 6.5,
+        osmTags: { section: `east_${i}` },
+        points: [
+          [pEast[0] + 24, pEast[1] - 4],
+          [pEast[0] + 48, pEast[1] - 8],
+        ],
+        nodeIds: [eMidId, eEndId],
+      }
+    );
+  }
+
+  // 5. Cross-tier footpaths, cycleways, and steps (50 segments)
+  for (let r = 1; r < rows - 1; r++) {
+    for (let c = 1; c < cols - 2; c += 2) {
+      const pStart = nodeCoord(r, c);
+      const parkCenter: [number, number] = [pStart[0] + spacing * 0.5, pStart[1] + spacing * 0.5];
+      const hubId = `urb_path_hub_${r}_${c}`;
+      specs.push(
+        {
+          id: `way/urb-foot-a-${r}-${c}`,
+          roadClass: 'footway',
+          width: 2.0,
+          points: [pStart, parkCenter],
+          nodeIds: [nodeId(r, c), hubId],
+        },
+        {
+          id: `way/urb-foot-b-${r}-${c}`,
+          roadClass: 'cycleway',
+          width: 2.4,
+          points: [parkCenter, nodeCoord(r, c + 1)],
+          nodeIds: [hubId, nodeId(r, c + 1)],
+        },
+        {
+          id: `way/urb-steps-${r}-${c}`,
+          roadClass: r % 2 === 0 ? 'steps' : 'path',
+          width: 2.0,
+          points: [parkCenter, [parkCenter[0], parkCenter[1] + 12]],
+          nodeIds: [hubId, `urb_steps_top_${r}_${c}`],
+        }
+      );
+    }
+  }
+
+  // 6. Elevated bridge overpasses (8 segments)
+  for (let i = 0; i < 8; i++) {
+    const x = -120 + i * 32;
+    specs.push({
+      id: `way/urb-bridge-${i}`,
+      roadClass: 'primary',
+      width: 10.0,
+      layer: 1,
+      isBridge: true,
+      points: [
+        [x, -175],
+        [x, -145],
+      ],
+      nodeIds: [`urb_br_s_${i}`, `urb_br_n_${i}`],
+    });
+  }
+
+  return createDatasetFromSpecs(specs, {
+    minX: -240,
+    maxX: 240,
+    minZ: -240,
+    maxZ: 240,
+  });
+}
+
 function buildGraphRoadScene(
   data: ProcessedMapData,
   roadWidthMultiplier = 1.0
@@ -253,12 +449,13 @@ function buildGraphRoadScene(
 
 /**
  * Audits all meshes in `scene.roadsGroup` for finite vertices/normals, valid index ranges,
- * non-degenerate triangles, and upward-facing (+Y) normals on at-grade road/path/junction meshes.
+ * non-degenerate triangles, and upward-facing (+Y) geometric face normals via `auditGraphRoadMeshIntegrity()`.
  */
 function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
   meshNames: string[];
   faceRangesById: Map<string, FaceFeatureRange>;
   junctionRanges: FaceFeatureRange[];
+  integrityReport: GraphRoadMeshIntegrityReport;
 } {
   const meshNames: string[] = [];
   const faceRangesById = new Map<string, FaceFeatureRange>();
@@ -290,7 +487,6 @@ function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
       );
     }
 
-    const isAtGradeSurfaceMesh = mesh.name.startsWith('Roads_');
     const index = geom.index;
     const triCount = index ? index.count / 3 : pos.count / 3;
     assert.ok(triCount > 0, `Mesh ${mesh.name} must have at least 1 triangle`);
@@ -303,19 +499,6 @@ function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
         i0 >= 0 && i0 < pos.count && i1 >= 0 && i1 < pos.count && i2 >= 0 && i2 < pos.count,
         `Mesh ${mesh.name} face ${f} index out of bounds`
       );
-
-      if (isAtGradeSurfaceMesh) {
-        const y0 = pos.getY(i0);
-        const y1 = pos.getY(i1);
-        const y2 = pos.getY(i2);
-        // At-grade surface triangles lie on flat horizontal planes (0.050m, 0.054m, 0.055m, or 0.061m step treads)
-        if (Math.abs(y0 - y1) < 1e-4 && Math.abs(y1 - y2) < 1e-4 && y0 <= 0.1) {
-          assert.ok(
-            norm.getY(i0) > 0.99 && norm.getY(i1) > 0.99 && norm.getY(i2) > 0.99,
-            `At-grade mesh ${mesh.name} face ${f} must have upward +Y normal`
-          );
-        }
-      }
     }
 
     const ranges: FaceFeatureRange[] | undefined = mesh.userData?.faceRanges;
@@ -340,6 +523,46 @@ function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
     }
   });
 
+  // Execute full geometric triangle winding and normal audit via cross(v1 - v0, v2 - v0)
+  const integrityReport = auditGraphRoadMeshIntegrity(scene.roadsGroup);
+  const hasAtGradeRoadMeshes = meshNames.some(
+    (name) =>
+      name !== 'Roads_bridge' &&
+      !name.startsWith('Bridge_') &&
+      !name.startsWith('Tunnel_')
+  );
+  if (hasAtGradeRoadMeshes) {
+    assert.ok(
+      integrityReport.auditedTriangleCount > 0,
+      'Expected auditGraphRoadMeshIntegrity to inspect at least 1 triangle when at-grade road meshes exist'
+    );
+  }
+  assert.equal(
+    integrityReport.negativelyWoundCount,
+    0,
+    `Expected 0 negatively wound triangles, got ${integrityReport.negativelyWoundCount}: ${JSON.stringify(integrityReport.windingDefects)}`
+  );
+  assert.equal(
+    integrityReport.storedNormalMismatchCount,
+    0,
+    `Expected 0 stored normal mismatches, got ${integrityReport.storedNormalMismatchCount}: ${JSON.stringify(integrityReport.windingDefects)}`
+  );
+  assert.deepEqual(
+    integrityReport.windingDefects,
+    [],
+    `Expected 0 winding defects, got ${JSON.stringify(integrityReport.windingDefects)}`
+  );
+  assert.deepEqual(
+    integrityReport.degenerateTriangles,
+    [],
+    `Expected 0 degenerate triangles, got ${JSON.stringify(integrityReport.degenerateTriangles)}`
+  );
+  assert.equal(
+    integrityReport.upwardTriangleCount,
+    integrityReport.auditedTriangleCount,
+    'Every audited horizontal road/path/step/junction triangle must face upward (+Y)'
+  );
+
   const roadVal = validateRoadNetworkGeometry(scene);
   assert.deepEqual(
     roadVal.overlapConflicts,
@@ -353,7 +576,7 @@ function assertRoadGroupGeometryInvariants(scene: BuiltSceneGeometry): {
   );
   assert.equal(roadVal.isValid, true);
 
-  return { meshNames, faceRangesById, junctionRanges };
+  return { meshNames, faceRangesById, junctionRanges, integrityReport };
 }
 
 function seededShuffle<T>(items: readonly T[], seed: number): T[] {
@@ -1392,7 +1615,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     baselineScene.dispose();
   });
 
-  it('10. validates mode isolation (legacy vs graph-preview vs graph), railway invariance, and urban/real-extract benchmarks (Scenario 20)', () => {
+  it('10. validates mode isolation (legacy vs graph-preview vs graph), railway invariance, and road-heavy urban/real-extract benchmarks (Scenario 20)', () => {
     const provider = new LocalGeoJsonProvider();
     const hengeloRawFc: any = {
       type: 'FeatureCollection',
@@ -1405,7 +1628,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       features: JSON.parse(JSON.stringify(realOsmExtracts.regions.amsterdamCentraal.features)),
     };
 
-    // Build a dense 3x3 urban grid synthetic stress fixture
+    // Build a 3x3 urban grid synthetic fixture
     const urbanSpecs: SyntheticRoadSpec[] = [];
     const coords = [-90, 0, 90];
     for (let r = 0; r < 3; r++) {
@@ -1438,7 +1661,6 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
         });
       }
     }
-    // Add diagonal cross-tier pedestrian path and steps
     urbanSpecs.push(
       {
         id: 'way/urban-diag-path',
@@ -1466,6 +1688,10 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       {
         name: 'Synthetic 3x3 Urban Grid',
         makeData: () => createDatasetFromSpecs(urbanSpecs),
+      },
+      {
+        name: 'Dense 270-Way Urban Road Network',
+        makeData: () => createRoadHeavyUrbanDataset(),
       },
       {
         name: 'Station Hengelo',
@@ -1534,11 +1760,8 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
         `railwaysGroup must remain 100% invariant when roads === 'graph' on ${ds.name}`
       );
 
-      // Verify ZFightingValidator road network geometry invariants in graph mode
-      const roadReport = validateRoadNetworkGeometry(graphScene);
-      assert.deepEqual(roadReport.overlapConflicts, []);
-      assert.deepEqual(roadReport.continuityDefects, []);
-      assert.equal(roadReport.isValid, true);
+      // Run full geometric triangle winding and normal audit + ZFightingValidator
+      const { integrityReport } = assertRoadGroupGeometryInvariants(graphScene);
 
       const gStats: GraphRoadRenderStats = graphScene.roadsGroup.userData.graphRoadStats;
       assert.ok(gStats, `Expected graphRoadStats on ${ds.name}`);
@@ -1547,6 +1770,9 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
         dataset: ds.name,
         legacyBuildMs: legacyMs,
         graphBuildMs: graphMs,
+        auditedTris: integrityReport.auditedTriangleCount,
+        negWoundTris: integrityReport.negativelyWoundCount,
+        degenTris: integrityReport.degenerateTriangles.length,
         ...gStats,
       });
 
@@ -1562,5 +1788,531 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
 
     console.table(benchmarkSummary);
+  });
+
+  it('11. deliberate negative audit tests: catches reversed triangle indices with +Y vertex normals, crossed ribbon portals, and inverted junction triangles', () => {
+    // Negative Case A: Reversed triangle indices [i0, i2, i1] with unchanged +Y stored vertex normals
+    const groupA = new THREE.Group();
+    const ribbonA = generateRoadRibbon(
+      [
+        [0, 0],
+        [20, 0],
+      ],
+      8,
+      ELEVATION_POLICY.ROAD_SURFACE,
+      { roundCaps: false }
+    )!;
+    // Deliberately swap indices of triangle 0 (l0, l1, r0 -> l0, r0, l1) while leaving stored normals at (0, 1, 0)
+    const flippedIndicesA = new Uint32Array(ribbonA.indices);
+    const tmp = flippedIndicesA[1];
+    flippedIndicesA[1] = flippedIndicesA[2];
+    flippedIndicesA[2] = tmp;
+
+    const geoA = new THREE.BufferGeometry();
+    geoA.setAttribute('position', new THREE.BufferAttribute(ribbonA.positions, 3));
+    geoA.setAttribute('normal', new THREE.BufferAttribute(ribbonA.normals, 3));
+    geoA.setIndex(new THREE.BufferAttribute(flippedIndicesA, 1));
+    const meshA = new THREE.Mesh(geoA, new THREE.MeshBasicMaterial());
+    meshA.name = 'Roads_residential';
+    meshA.userData = {
+      faceRanges: [
+        {
+          startFace: 0,
+          endFace: 2,
+          info: {
+            id: 're_neg_test_a',
+            sourceFeatureId: 'way/neg-test-a',
+            sourceFeatureIds: ['way/neg-test-a'],
+            name: 'Negative Test A',
+            category: 'Road & Way',
+          },
+        },
+      ],
+    };
+    groupA.add(meshA);
+
+    const reportA = auditGraphRoadMeshIntegrity(groupA);
+    assert.equal(reportA.auditedTriangleCount, 2);
+    assert.equal(
+      reportA.negativelyWoundCount,
+      1,
+      'Must catch the 1 reversed-index triangle despite +Y stored normals'
+    );
+    assert.equal(reportA.storedNormalMismatchCount, 1);
+    assert.equal(reportA.windingDefects.length, 1);
+    assert.equal(reportA.windingDefects[0].meshName, 'Roads_residential');
+    assert.equal(reportA.windingDefects[0].faceIndex, 0);
+    assert.equal(reportA.windingDefects[0].featureId, 're_neg_test_a');
+    assert.equal(reportA.windingDefects[0].sourceFeatureId, 'way/neg-test-a');
+    assert.equal(reportA.windingDefects[0].reason, 'inverted_winding');
+    assert.ok(reportA.windingDefects[0].geometricNormal[1] < -0.99);
+    geoA.dispose();
+
+    // Negative Case B: Ribbon quad generated with crossed/inverted portal vertices (left and right swapped)
+    const groupB = new THREE.Group();
+    const crossedRibbon = generateRoadRibbon(
+      [
+        [0, 0],
+        [20, 0],
+      ],
+      8,
+      ELEVATION_POLICY.ROAD_SURFACE,
+      {
+        roundCaps: false,
+        // Normal for segment [0,0]->[20,0] is (0, 1); swapping left=(0,-4) and right=(0,+4) crosses the quad
+        startPortal: {
+          left: [0, -4],
+          right: [0, 4],
+        },
+      }
+    )!;
+    const geoB = new THREE.BufferGeometry();
+    geoB.setAttribute('position', new THREE.BufferAttribute(crossedRibbon.positions, 3));
+    geoB.setAttribute('normal', new THREE.BufferAttribute(crossedRibbon.normals, 3));
+    geoB.setIndex(new THREE.BufferAttribute(crossedRibbon.indices, 1));
+    const meshB = new THREE.Mesh(geoB, new THREE.MeshBasicMaterial());
+    meshB.name = 'Roads_primary';
+    meshB.userData = {
+      faceRanges: [
+        {
+          startFace: 0,
+          endFace: 2,
+          info: {
+            id: 're_crossed_portal',
+            sourceFeatureId: 'way/crossed-portal',
+            sourceFeatureIds: ['way/crossed-portal'],
+            name: 'Crossed Portal Ribbon',
+            category: 'Road & Way',
+          },
+        },
+      ],
+    };
+    groupB.add(meshB);
+
+    const reportB = auditGraphRoadMeshIntegrity(groupB);
+    assert.ok(
+      reportB.negativelyWoundCount >= 1,
+      'Must catch inverted triangle in a crossed-portal ribbon quad'
+    );
+    assert.ok(reportB.windingDefects.some((d) => d.featureId === 're_crossed_portal'));
+    geoB.dispose();
+
+    // Negative Case C: Malformed/inverted junction triangle + degenerate zero-area triangle
+    const groupC = new THREE.Group();
+    const geoC = new THREE.BufferGeometry();
+    const y = ELEVATION_POLICY.ROAD_SURFACE;
+    // Face 0: clockwise/downward triangle in XZ: (0, y, 0) -> (10, y, 0) -> (0, y, 10) has crossY = -100 (< 0)
+    // Face 1: collinear degenerate triangle: (0, y, 0) -> (5, y, 0) -> (10, y, 0) has area = 0
+    geoC.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(
+        [0, y, 0, 10, y, 0, 0, y, 10, 5, y, 0],
+        3
+      )
+    );
+    geoC.setAttribute(
+      'normal',
+      new THREE.Float32BufferAttribute(
+        [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+        3
+      )
+    );
+    geoC.setIndex([0, 1, 2, 0, 3, 1]);
+    const meshC = new THREE.Mesh(geoC, new THREE.MeshBasicMaterial());
+    meshC.name = 'Roads_secondary';
+    meshC.userData = {
+      faceRanges: [
+        {
+          startFace: 0,
+          endFace: 2,
+          info: {
+            id: 'junction-rn_malformed',
+            sourceFeatureId: 'way/malformed-junc',
+            sourceFeatureIds: ['way/malformed-junc'],
+            name: 'Malformed Junction',
+            category: 'Road & Way',
+          },
+        },
+      ],
+    };
+    groupC.add(meshC);
+
+    const reportC = auditGraphRoadMeshIntegrity(groupC);
+    assert.equal(reportC.negativelyWoundCount, 1, 'Must catch malformed inverted junction triangle');
+    assert.equal(reportC.windingDefects.length, 1);
+    assert.equal(reportC.windingDefects[0].featureId, 'junction-rn_malformed');
+    assert.equal(reportC.windingDefects[0].faceIndex, 0);
+    assert.equal(
+      reportC.degenerateTriangles.length,
+      1,
+      'Must report zero-area collinear triangle separately in degenerateTriangles'
+    );
+    assert.equal(reportC.degenerateTriangles[0].featureId, 'junction-rn_malformed');
+    assert.equal(reportC.degenerateTriangles[0].faceIndex, 1);
+    geoC.dispose();
+  });
+
+  it('12. stabilizes edge-case junctions, short segments, self-loops, unequal widths, and nearby unconnected grade-transition caps', () => {
+    const data = createDatasetFromSpecs([
+      // 1. Acute 15-degree Y-fork with unequal widths at [-140, -100] (node 'y15_0')
+      {
+        id: 'way/y15-stem',
+        roadClass: 'primary',
+        width: 12,
+        points: [
+          [-185, -100],
+          [-140, -100],
+        ],
+        nodeIds: ['y15_1', 'y15_0'],
+      },
+      {
+        id: 'way/y15-armA',
+        roadClass: 'primary',
+        width: 12,
+        points: [
+          [-140, -100],
+          [-90, -100],
+        ],
+        nodeIds: ['y15_0', 'y15_2'],
+      },
+      {
+        id: 'way/y15-armB-acute',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [-140, -100],
+          [-90, -100 + Math.tan((15 * Math.PI) / 180) * 50],
+        ],
+        nodeIds: ['y15_0', 'y15_3'],
+      },
+
+      // 2. Unequal-width T-junction at [-140, 0] (node 'uw_0'): 14m motorway/primary transition meeting 5m service road
+      {
+        id: 'way/uw-west-14m',
+        roadClass: 'primary',
+        width: 14,
+        points: [
+          [-185, 0],
+          [-140, 0],
+        ],
+        nodeIds: ['uw_w', 'uw_0'],
+      },
+      {
+        id: 'way/uw-east-6m',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [-140, 0],
+          [-95, 0],
+        ],
+        nodeIds: ['uw_0', 'uw_e'],
+      },
+      {
+        id: 'way/uw-south-5m',
+        roadClass: 'service',
+        width: 5,
+        points: [
+          [-140, -40],
+          [-140, 0],
+        ],
+        nodeIds: ['uw_s', 'uw_0'],
+      },
+
+      // 3. 6-arm star junction with closely spaced branches at [0, -100] (node 'star6_0')
+      ...[0, 28, 90, 155, 220, 295].map((deg, idx) => {
+        const rad = (deg * Math.PI) / 180;
+        return {
+          id: `way/star6-arm-${idx}`,
+          roadClass: (idx % 2 === 0 ? 'secondary' : 'residential') as RoadClass,
+          width: idx % 2 === 0 ? 9 : 6.5,
+          points: [
+            [0, -100] as [number, number],
+            [Math.cos(rad) * 42, -100 + Math.sin(rad) * 42] as [number, number],
+          ],
+          nodeIds: ['star6_0', `star6_${idx + 1}`],
+        };
+      }),
+
+      // 4. Short road segment (4.5 m) between two T-junctions at [0, 0] ('short_a') and [4.5, 0] ('short_b')
+      {
+        id: 'way/short-connector',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [0, 0],
+          [4.5, 0],
+        ],
+        nodeIds: ['short_a', 'short_b'],
+      },
+      {
+        id: 'way/short-west',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [-35, 0],
+          [0, 0],
+        ],
+        nodeIds: ['short_w', 'short_a'],
+      },
+      {
+        id: 'way/short-north-a',
+        roadClass: 'service',
+        width: 4.5,
+        points: [
+          [0, 0],
+          [0, 35],
+        ],
+        nodeIds: ['short_a', 'short_na'],
+      },
+      {
+        id: 'way/short-east',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [4.5, 0],
+          [40, 0],
+        ],
+        nodeIds: ['short_b', 'short_e'],
+      },
+      {
+        id: 'way/short-south-b',
+        roadClass: 'service',
+        width: 4.5,
+        points: [
+          [4.5, -35],
+          [4.5, 0],
+        ],
+        nodeIds: ['short_sb', 'short_b'],
+      },
+
+      // 5. P-loop (self-loop edge starting and ending at node 'ploop_0' at [110, -100] + stem road)
+      {
+        id: 'way/ploop-stem',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [70, -100],
+          [110, -100],
+        ],
+        nodeIds: ['ploop_stem_w', 'ploop_0'],
+      },
+      {
+        id: 'way/ploop-ring',
+        roadClass: 'residential',
+        width: 6,
+        points: [
+          [110, -100],
+          [135, -80],
+          [155, -100],
+          [135, -120],
+          [110, -100],
+        ],
+        nodeIds: ['ploop_0', 'ploop_1', 'ploop_2', 'ploop_3', 'ploop_0'],
+      },
+
+      // 6. Cross-tier footpaths attached to a curved vehicular through-road with nearby interior vertices at [110, 0] ('ct_curve_0')
+      {
+        id: 'way/ct-curve-west',
+        roadClass: 'secondary',
+        width: 9,
+        surface: 'asphalt',
+        points: [
+          [70, -5],
+          [107.5, -0.4],
+          [110, 0],
+        ],
+        nodeIds: ['ct_w1', undefined, 'ct_curve_0'],
+      },
+      {
+        id: 'way/ct-curve-east',
+        roadClass: 'secondary',
+        width: 9,
+        surface: 'concrete',
+        points: [
+          [110, 0],
+          [112.5, 0.4],
+          [150, 5],
+        ],
+        nodeIds: ['ct_curve_0', undefined, 'ct_e1'],
+      },
+      {
+        id: 'way/ct-curve-foot-north',
+        roadClass: 'footway',
+        width: 2.0,
+        points: [
+          [110, 0],
+          [110, 30],
+        ],
+        nodeIds: ['ct_curve_0', 'ct_fn'],
+      },
+      {
+        id: 'way/ct-curve-foot-south',
+        roadClass: 'footway',
+        width: 2.0,
+        points: [
+          [110, -30],
+          [110, 0],
+        ],
+        nodeIds: ['ct_fs', 'ct_curve_0'],
+      },
+
+      // 7. Grade-transition cap preservation:
+      // (a) A connected bridge transition at [-100, 115] (node 'gt_conn') where the approach road must suppress its cap.
+      // (b) An elevated bridge starting at [-100, 100] (node 'gt_bridge_unconn_start') and an unconnected dead-end
+      //     service road whose endpoint is 0.40 m away at [-100, 99.60] (node 'gt_unconn_deadend').
+      //     Because the dead-end road does not share a topological grade-transition node with the bridge,
+      //     it must preserve its semicircular dead-end cap despite being 0.40 m (<= 0.65 m) from the bridge portal.
+      {
+        id: 'way/gt-connected-approach',
+        roadClass: 'tertiary',
+        width: 8,
+        points: [
+          [-150, 115],
+          [-100, 115],
+        ],
+        nodeIds: ['gt_west', 'gt_conn'],
+      },
+      {
+        id: 'way/gt-bridge',
+        roadClass: 'tertiary',
+        width: 8,
+        layer: 1,
+        isBridge: true,
+        points: [
+          [-100, 115],
+          [-50, 115],
+        ],
+        nodeIds: ['gt_conn', 'gt_east'],
+      },
+      {
+        id: 'way/gt-bridge-near-deadend',
+        roadClass: 'tertiary',
+        width: 8,
+        layer: 1,
+        isBridge: true,
+        points: [
+          [-100, 100],
+          [-50, 100],
+        ],
+        nodeIds: ['gt_bridge_unconn_start', 'gt_bridge_unconn_end'],
+      },
+      {
+        id: 'way/nearby-unconnected-culdesac',
+        roadClass: 'service',
+        width: 4.5,
+        points: [
+          [-100, 65],
+          [-100, 99.6],
+        ],
+        nodeIds: ['gt_unconn_south', 'gt_unconn_deadend'],
+      },
+    ]);
+
+    const scene = buildGraphRoadScene(data);
+    const { faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+
+    // Verify the nearby (0.40m) unconnected service road kept both of its semicircular dead-end caps!
+    // A 2-point road with both caps has: 1 quad (2 triangles) + 2 caps * 6 segments = 14 triangles.
+    // Meanwhile, the connected approach road ('way/gt-connected-approach') has 1 cap at [-150, 100] and no cap at [-100, 100] = 8 triangles.
+    const unconnectedRange = Array.from(faceRangesById.values()).find(
+      (r) => r.info.sourceFeatureId === 'way/nearby-unconnected-culdesac'
+    );
+    assert.ok(unconnectedRange, 'Expected nearby-unconnected-culdesac to be rendered');
+    const unconnectedTriCount = unconnectedRange.endFace - unconnectedRange.startFace;
+    assert.equal(
+      unconnectedTriCount,
+      14,
+      'Unconnected at-grade road endpoint 0.40m from a bridge transition must preserve its dead-end cap (14 triangles)'
+    );
+
+    const connectedRange = Array.from(faceRangesById.values()).find(
+      (r) => r.info.sourceFeatureId === 'way/gt-connected-approach'
+    );
+    assert.ok(connectedRange, 'Expected gt-connected-approach to be rendered');
+    const connectedTriCount = connectedRange.endFace - connectedRange.startFace;
+    assert.equal(
+      connectedTriCount,
+      8,
+      'Connected approach road must suppress its cap at the bridge transition while keeping its far dead-end cap (8 triangles)'
+    );
+
+    scene.dispose();
+  });
+
+  it('13. transactional junction rejection: rejects malformed duplicate-ray junction without leaving connected ribbons trimmed', () => {
+    // Two distinct vehicular edges entering node 'dup_node' [0, 0] along the exact same ray from [40, 0],
+    // plus a third edge from [-40, 0]. Because two distinct arms enter along the exact same 0-degree ray,
+    // solveBoundaryDerivedJunctionNode must reject the malformed junction transactionally and leave all 3 ribbons untrimmed.
+    const data = createDatasetFromSpecs([
+      {
+        id: 'way/tx-west',
+        roadClass: 'residential',
+        width: 7,
+        points: [
+          [-40, 0],
+          [0, 0],
+        ],
+        nodeIds: ['tx_w', 'dup_node'],
+      },
+      {
+        id: 'way/tx-east-1',
+        roadClass: 'residential',
+        width: 7,
+        points: [
+          [0, 0],
+          [40, 0],
+        ],
+        nodeIds: ['dup_node', 'tx_e1'],
+      },
+      {
+        id: 'way/tx-east-2-collinear',
+        roadClass: 'secondary',
+        width: 9,
+        points: [
+          [0, 0],
+          [50, 0],
+        ],
+        nodeIds: ['dup_node', 'tx_e2'],
+      },
+    ]);
+
+    const scene = buildGraphRoadScene(data);
+    const { junctionRanges, faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+
+    assert.equal(
+      junctionRanges.length,
+      0,
+      'Malformed collinear-arm junction must be rejected rather than triangulating an invalid polygon'
+    );
+    assert.ok(
+      (data.diagnostics?.rejectedInvalid.byReason['junction_degenerate_overlapping_arms']
+        ?.count ?? 0) >= 1,
+      'Must record junction_degenerate_overlapping_arms diagnostic when rejecting malformed junction'
+    );
+
+    // Verify way/tx-west was NOT left trimmed back from [0, 0]: its vertices must reach x = 0!
+    const resMesh = scene.roadsGroup.children.find(
+      (c) => c.name === 'Roads_residential'
+    ) as THREE.Mesh;
+    assert.ok(resMesh);
+    const westRange = Array.from(faceRangesById.values()).find(
+      (r) => r.info.sourceFeatureId === 'way/tx-west'
+    );
+    assert.ok(westRange);
+    const pos = resMesh.geometry.attributes.position;
+    const idx = resMesh.geometry.index!;
+    let maxWestX = -Infinity;
+    for (let f = westRange.startFace; f < westRange.endFace; f++) {
+      for (let k = 0; k < 3; k++) {
+        const vi = idx.getX(f * 3 + k);
+        maxWestX = Math.max(maxWestX, pos.getX(vi));
+      }
+    }
+    assert.ok(
+      maxWestX >= -0.05,
+      `Rejected junction must not leave connected road ribbon trimmed (expected maxWestX >= -0.05, got ${maxWestX})`
+    );
+
+    scene.dispose();
   });
 });

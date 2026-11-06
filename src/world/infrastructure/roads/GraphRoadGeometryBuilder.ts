@@ -4,7 +4,6 @@ import polygonClipping from 'polygon-clipping';
 import {
   InspectableFeatureInfo,
   ProcessedMapData,
-  RawGeoJsonProperties,
   RoadClass,
   RoadPortalConnectionSpec,
 } from '../../../types/MapFeature';
@@ -28,8 +27,8 @@ import {
   buildSafeExteriorSubPolylines,
   cleanPolylineForClipping,
   createShapesFromMultiPolygon,
+  FaceFeatureRange,
   generateRoadRibbon,
-  generateStepTreads,
   hasRingSelfIntersection,
   sanitizeOsmTags,
   type RoadRibbonOptions,
@@ -77,6 +76,342 @@ const ROAD_CLASS_PRIORITY: Record<RoadClass, number> = {
 };
 
 /**
+ * Structural 3D mesh names inside `roadsGroup` that legitimately contain vertical walls
+ * or downward-facing bridge undersides and are excluded from horizontal at-grade road surface checks.
+ */
+const STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES = new Set<string>([
+  'Bridge_Substructure',
+  'Bridge_Piers',
+  'Bridge_Parapets',
+  'Tunnel_Portals',
+  'Tunnel_Entrances',
+  'Tunnel_Underground_Trace',
+]);
+
+/**
+ * Minimum triangle area (`m²`) below which an indexed face is classified as degenerate.
+ */
+export const MIN_NONDEGENERATE_TRIANGLE_AREA_M2 = 1e-6;
+
+/**
+ * Detailed attribution for a winding or normal-orientation defect detected on an at-grade road,
+ * path, step-tread, or junction triangle (`M2.3-E2`).
+ */
+export interface GraphRoadWindingDefect {
+  /** Name of the Three.js `Mesh` containing the defective triangle (e.g. `Roads_residential`). */
+  meshName: string;
+  /** Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry. */
+  faceIndex: number;
+  /** Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRanges`. */
+  featureId?: string;
+  /** Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`. */
+  sourceFeatureId?: string;
+  /** Failure classification. */
+  reason:
+    | 'inverted_winding'
+    | 'non_upward_horizontal_face'
+    | 'stored_normal_mismatch'
+    | 'non_finite_vertex';
+  /** World-space triangle vertex coordinates `[v0, v1, v2]`. */
+  vertices: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  /** Unit geometric face normal computed via `normalize(cross(v1 - v0, v2 - v0))`. */
+  geometricNormal: [number, number, number];
+  /** Stored vertex normals `[n0, n1, n2]` from the geometry's `normal` buffer attribute. */
+  storedNormals: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  /** Minimum dot product between `geometricNormal` and the 3 stored vertex normals. */
+  minStoredNormalDot: number;
+  /** Geometric area of the triangle in square meters (`0.5 * |cross(v1 - v0, v2 - v0)|`). */
+  area: number;
+}
+
+/**
+ * Detailed attribution for a zero-area or near-zero-area degenerate triangle detected in a road mesh.
+ */
+export interface GraphRoadDegenerateTriangleDefect {
+  /** Name of the Three.js `Mesh` containing the degenerate triangle. */
+  meshName: string;
+  /** Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry. */
+  faceIndex: number;
+  /** Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRanges`. */
+  featureId?: string;
+  /** Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`. */
+  sourceFeatureId?: string;
+  /** World-space triangle vertex coordinates `[v0, v1, v2]`. */
+  vertices: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  /** Geometric area of the triangle in square meters (`<= 1e-6 m²`). */
+  area: number;
+}
+
+/**
+ * Summary report produced by `auditGraphRoadMeshIntegrity()`.
+ */
+export interface GraphRoadMeshIntegrityReport {
+  /** Total horizontal at-grade road/path/step/junction meshes inspected. */
+  auditedMeshCount: number;
+  /** Total indexed triangles inspected across all audited at-grade road/path/junction features. */
+  auditedTriangleCount: number;
+  /** Number of non-degenerate horizontal triangles with valid upward `+Y` geometric winding (`geomNormal.y > 0.99`). */
+  upwardTriangleCount: number;
+  /** Number of triangles with inverted/downward geometric winding (`geomNormal.y < 0`). */
+  negativelyWoundCount: number;
+  /** Number of triangles whose stored vertex normals disagree with the geometric face normal (`dot <= 0.99`). */
+  storedNormalMismatchCount: number;
+  /** Winding and normal orientation defects with full feature and coordinate attribution. */
+  windingDefects: GraphRoadWindingDefect[];
+  /** Degenerate triangles (`area <= 1e-6 m²`) reported separately from winding defects. */
+  degenerateTriangles: GraphRoadDegenerateTriangleDefect[];
+}
+
+/**
+ * Resolves the `InspectableFeatureInfo` corresponding to `faceIndex` from a mesh's `userData.faceRanges`.
+ */
+function resolveFaceFeatureInfo(
+  mesh: THREE.Mesh,
+  faceIndex: number
+): InspectableFeatureInfo | undefined {
+  const ranges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
+  if (Array.isArray(ranges)) {
+    for (const r of ranges) {
+      if (faceIndex >= r.startFace && faceIndex < r.endFace) {
+        return r.info;
+      }
+    }
+  }
+  if (mesh.userData?.id && mesh.userData?.category) {
+    return mesh.userData as InspectableFeatureInfo;
+  }
+  return undefined;
+}
+
+/**
+ * Audits all horizontal at-grade road, path, step-tread, and junction triangles under `roadsRoot`
+ * by computing actual geometric face normals from indexed triangle positions via `cross(v1 - v0, v2 - v0)`.
+ *
+ * Verifies:
+ * 1. Every non-degenerate horizontal at-grade road/path/junction triangle faces upward (`geomNormal.y > 0.99`).
+ * 2. Stored vertex normals agree with geometric face orientation (`dot(storedNormal, geomNormal) > 0.99`).
+ * 3. Degenerate triangles (`area <= 1e-6 m²`) are reported separately.
+ * 4. Valid 3D structural meshes (`Bridge_Substructure`, `Bridge_Piers`, `Bridge_Parapets`, `Tunnel_Portals`)
+ *    and sloped elevated bridge ramps are not misclassified as horizontal at-grade road surfaces.
+ */
+export function auditGraphRoadMeshIntegrity(
+  roadsRoot: THREE.Object3D
+): GraphRoadMeshIntegrityReport {
+  const report: GraphRoadMeshIntegrityReport = {
+    auditedMeshCount: 0,
+    auditedTriangleCount: 0,
+    upwardTriangleCount: 0,
+    negativelyWoundCount: 0,
+    storedNormalMismatchCount: 0,
+    windingDefects: [],
+    degenerateTriangles: [],
+  };
+
+  roadsRoot.updateMatrixWorld(true);
+  const v0 = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const v2 = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const crossVec = new THREE.Vector3();
+  const n0 = new THREE.Vector3();
+  const n1 = new THREE.Vector3();
+  const n2 = new THREE.Vector3();
+  const normalMatrix = new THREE.Matrix3();
+
+  roadsRoot.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES.has(obj.name)) return;
+
+    const geom = obj.geometry as THREE.BufferGeometry | undefined;
+    if (!geom) return;
+    const posAttr = geom.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr || posAttr.count < 3) return;
+    const normAttr = geom.getAttribute('normal') as THREE.BufferAttribute | undefined;
+    const indexAttr = geom.getIndex();
+
+    report.auditedMeshCount++;
+    normalMatrix.getNormalMatrix(obj.matrixWorld);
+
+    const triCount = indexAttr ? Math.floor(indexAttr.count / 3) : Math.floor(posAttr.count / 3);
+
+    for (let f = 0; f < triCount; f++) {
+      const i0 = indexAttr ? indexAttr.getX(f * 3) : f * 3;
+      const i1 = indexAttr ? indexAttr.getX(f * 3 + 1) : f * 3 + 1;
+      const i2 = indexAttr ? indexAttr.getX(f * 3 + 2) : f * 3 + 2;
+
+      const info = resolveFaceFeatureInfo(obj, f);
+      // Skip elevated bridge deck ramps (`Roads_bridge` / `info.isBridge`), which have sloped approach spans.
+      // At-grade culverts (where `info.isTunnel` may be true on a horizontal road mesh) remain audited.
+      if (obj.name === 'Roads_bridge' || info?.isBridge) {
+        continue;
+      }
+
+      v0.fromBufferAttribute(posAttr, i0).applyMatrix4(obj.matrixWorld);
+      v1.fromBufferAttribute(posAttr, i1).applyMatrix4(obj.matrixWorld);
+      v2.fromBufferAttribute(posAttr, i2).applyMatrix4(obj.matrixWorld);
+
+      const verts: [
+        [number, number, number],
+        [number, number, number],
+        [number, number, number],
+      ] = [
+        [v0.x, v0.y, v0.z],
+        [v1.x, v1.y, v1.z],
+        [v2.x, v2.y, v2.z],
+      ];
+
+      if (
+        !Number.isFinite(v0.x) ||
+        !Number.isFinite(v0.y) ||
+        !Number.isFinite(v0.z) ||
+        !Number.isFinite(v1.x) ||
+        !Number.isFinite(v1.y) ||
+        !Number.isFinite(v1.z) ||
+        !Number.isFinite(v2.x) ||
+        !Number.isFinite(v2.y) ||
+        !Number.isFinite(v2.z)
+      ) {
+        report.auditedTriangleCount++;
+        report.windingDefects.push({
+          meshName: obj.name || 'UnnamedRoadMesh',
+          faceIndex: f,
+          featureId: info?.id,
+          sourceFeatureId: info?.sourceFeatureId,
+          reason: 'non_finite_vertex',
+          vertices: verts,
+          geometricNormal: [0, 0, 0],
+          storedNormals: [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+          ],
+          minStoredNormalDot: 0,
+          area: 0,
+        });
+        continue;
+      }
+
+      // If no faceRanges metadata was attached, ignore elevated sloped bridge ramp faces (y > 0.12 m)
+      const maxY = Math.max(v0.y, v1.y, v2.y);
+      const minY = Math.min(v0.y, v1.y, v2.y);
+      if (!info && (maxY > 0.12 || minY < -0.05)) {
+        continue;
+      }
+
+      report.auditedTriangleCount++;
+
+      e1.subVectors(v1, v0);
+      e2.subVectors(v2, v0);
+      crossVec.crossVectors(e1, e2);
+      const doubleArea = crossVec.length();
+      const area = doubleArea * 0.5;
+
+      if (!Number.isFinite(area) || area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
+        report.degenerateTriangles.push({
+          meshName: obj.name || 'UnnamedRoadMesh',
+          faceIndex: f,
+          featureId: info?.id,
+          sourceFeatureId: info?.sourceFeatureId,
+          vertices: verts,
+          area: Number.isFinite(area) ? area : 0,
+        });
+        continue;
+      }
+
+      const geomNormal: [number, number, number] = [
+        crossVec.x / doubleArea,
+        crossVec.y / doubleArea,
+        crossVec.z / doubleArea,
+      ];
+
+      let storedNormals: [
+        [number, number, number],
+        [number, number, number],
+        [number, number, number],
+      ] = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ];
+      let minDot = -1;
+
+      if (normAttr && normAttr.count > Math.max(i0, i1, i2)) {
+        n0.fromBufferAttribute(normAttr, i0).applyMatrix3(normalMatrix).normalize();
+        n1.fromBufferAttribute(normAttr, i1).applyMatrix3(normalMatrix).normalize();
+        n2.fromBufferAttribute(normAttr, i2).applyMatrix3(normalMatrix).normalize();
+        storedNormals = [
+          [n0.x, n0.y, n0.z],
+          [n1.x, n1.y, n1.z],
+          [n2.x, n2.y, n2.z],
+        ];
+        const dot0 =
+          n0.x * geomNormal[0] + n0.y * geomNormal[1] + n0.z * geomNormal[2];
+        const dot1 =
+          n1.x * geomNormal[0] + n1.y * geomNormal[1] + n1.z * geomNormal[2];
+        const dot2 =
+          n2.x * geomNormal[0] + n2.y * geomNormal[1] + n2.z * geomNormal[2];
+        minDot = Math.min(dot0, dot1, dot2);
+      }
+
+      const isUpward = geomNormal[1] > 0.99;
+      const normalsAgree = minDot > 0.99;
+
+      if (geomNormal[1] < 0) {
+        report.negativelyWoundCount++;
+      }
+      if (!normalsAgree) {
+        report.storedNormalMismatchCount++;
+      }
+
+      if (!isUpward) {
+        report.windingDefects.push({
+          meshName: obj.name || 'UnnamedRoadMesh',
+          faceIndex: f,
+          featureId: info?.id,
+          sourceFeatureId: info?.sourceFeatureId,
+          reason: geomNormal[1] < 0 ? 'inverted_winding' : 'non_upward_horizontal_face',
+          vertices: verts,
+          geometricNormal: geomNormal,
+          storedNormals,
+          minStoredNormalDot: minDot,
+          area,
+        });
+      } else if (!normalsAgree) {
+        report.windingDefects.push({
+          meshName: obj.name || 'UnnamedRoadMesh',
+          faceIndex: f,
+          featureId: info?.id,
+          sourceFeatureId: info?.sourceFeatureId,
+          reason: 'stored_normal_mismatch',
+          vertices: verts,
+          geometricNormal: geomNormal,
+          storedNormals,
+          minStoredNormalDot: minDot,
+          area,
+        });
+      } else {
+        report.upwardTriangleCount++;
+      }
+    }
+  });
+
+  return report;
+}
+
+/**
  * Diagnostic and benchmark counters emitted by the Stage E2 graph-driven road geometry builder.
  */
 export interface GraphRoadRenderStats {
@@ -98,7 +433,7 @@ export interface GraphRoadRenderStats {
   pathJunctionCount: number;
   /** Number of cross-tier-only interaction nodes (`isCrossTierOnlyInteraction === true`) encountered. */
   crossTierOnlyNodeCount: number;
-  /** Number of degenerate or micro road edges/sub-segments rejected (`< 2` points or `< 0.05 m` length). */
+  /** Number of degenerate or micro road edges/sub-segments or invalid junction solutions rejected. */
   rejectedOrDegenerateCount: number;
   /** Number of road/path edges or sub-segments completely removed by 2D Boolean carriageway subtraction. */
   fullySubtractedCount: number;
@@ -114,11 +449,11 @@ export interface GraphRoadGeometryBuildOptions {
   descriptors: InfrastructureRenderDescriptorBundle;
   /** User/scene multiplier applied to canonical road widths. */
   roadWidthMultiplier: number;
-  /** Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints for cap suppression. */
+  /** Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints (retained for interface compatibility). */
   gradeTransitionCoords?: ReadonlyArray<readonly [number, number]>;
   /** Scene resource manager for deterministic GPU buffer registration and disposal. */
   resourceManager: SceneResourceManager;
-  /** Optional pipeline diagnostics object to record clipping failures or fully subtracted features. */
+  /** Optional pipeline diagnostics object to record clipping failures or rejected geometry fallbacks. */
   diagnostics?: ProcessedMapData['diagnostics'];
 }
 
@@ -163,6 +498,8 @@ interface GraphBranchSpec {
   nodePos: [number, number];
   width: number;
   roadClass: RoadClass;
+  firstSegmentLength: number;
+  totalEdgeLength: number;
   segmentLength: number;
 }
 
@@ -171,6 +508,7 @@ interface PendingJunctionPolygon {
   junctionFeatureId: string;
   isPathJunction: boolean;
   polygonPoints: [number, number][];
+  validatedTriangles: Array<[number, number, number]>;
   sortedBranches: GraphBranchSpec[];
   portals: Array<{ left: [number, number]; right: [number, number]; center: [number, number] }>;
   dominantBranch: GraphBranchSpec;
@@ -206,6 +544,125 @@ interface PlacedRoadFootprint {
 
 function snapCoord(v: number): number {
   return Math.round(v / COORDINATE_SNAP_QUANTUM) * COORDINATE_SNAP_QUANTUM;
+}
+
+/**
+ * Records a structured rejection/fallback reason in `ProcessedMapData['diagnostics']` when provided.
+ */
+function recordGraphRoadDiagnostic(
+  diagnostics: ProcessedMapData['diagnostics'] | undefined,
+  reason: string,
+  sampleId: string
+): void {
+  if (!diagnostics) return;
+  if (!diagnostics.rejectedInvalid.byReason[reason]) {
+    diagnostics.rejectedInvalid.byReason[reason] = { count: 0, sampleIds: [] };
+  }
+  const bucket = diagnostics.rejectedInvalid.byReason[reason];
+  bucket.count++;
+  if (bucket.sampleIds.length < 10 && !bucket.sampleIds.includes(sampleId)) {
+    bucket.sampleIds.push(sampleId);
+  }
+}
+
+/**
+ * Validates and cleans a horizontal road/path/step/junction `BufferGeometry` in place:
+ * - Verifies that NO non-degenerate triangle (`area > 1e-6 m²`) has downward/inverted winding (`crossY <= 0`).
+ *   Never conceals inverted triangles by flipping normals or reversing indices.
+ * - Filters out zero-area collinear sliver triangles (`area <= 1e-6 m²`) emitted by earcut or pinched quads.
+ * - Ensures stored vertex normals on all active vertices are `[0, 1, 0]`.
+ *
+ * Returns `true` if the geometry has `>= 1` valid upward-facing triangles and `0` inverted triangles,
+ * or `false` if any non-degenerate triangle is inverted or no valid triangles remain.
+ */
+function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean {
+  const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!posAttr || posAttr.count < 3) return false;
+
+  const indexAttr = geo.getIndex();
+  const triCount = indexAttr ? Math.floor(indexAttr.count / 3) : Math.floor(posAttr.count / 3);
+  if (triCount === 0) return false;
+
+  const validIndices: number[] = [];
+
+  for (let f = 0; f < triCount; f++) {
+    const i0 = indexAttr ? indexAttr.getX(f * 3) : f * 3;
+    const i1 = indexAttr ? indexAttr.getX(f * 3 + 1) : f * 3 + 1;
+    const i2 = indexAttr ? indexAttr.getX(f * 3 + 2) : f * 3 + 2;
+
+    const x0 = posAttr.getX(i0);
+    const y0 = posAttr.getY(i0);
+    const z0 = posAttr.getZ(i0);
+    const x1 = posAttr.getX(i1);
+    const y1 = posAttr.getY(i1);
+    const z1 = posAttr.getZ(i1);
+    const x2 = posAttr.getX(i2);
+    const y2 = posAttr.getY(i2);
+    const z2 = posAttr.getZ(i2);
+
+    if (
+      !Number.isFinite(x0) ||
+      !Number.isFinite(y0) ||
+      !Number.isFinite(z0) ||
+      !Number.isFinite(x1) ||
+      !Number.isFinite(y1) ||
+      !Number.isFinite(z1) ||
+      !Number.isFinite(x2) ||
+      !Number.isFinite(y2) ||
+      !Number.isFinite(z2)
+    ) {
+      return false;
+    }
+
+    const ax = x1 - x0;
+    const ay = y1 - y0;
+    const az = z1 - z0;
+    const bx = x2 - x0;
+    const by = y2 - y0;
+    const bz = z2 - z0;
+
+    const cx = ay * bz - az * by;
+    const cy = az * bx - ax * bz;
+    const cz = ax * by - ay * bx;
+    const doubleArea = Math.hypot(cx, cy, cz);
+    const area = doubleArea * 0.5;
+
+    if (!Number.isFinite(area) || area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
+      // Omit zero-area sliver triangle
+      continue;
+    }
+
+    const ny = cy / doubleArea;
+    if (ny <= 0.99) {
+      // Never conceal an inverted or non-upward triangle by flipping normals or indices
+      return false;
+    }
+
+    validIndices.push(i0, i1, i2);
+  }
+
+  if (validIndices.length < 3) {
+    return false;
+  }
+
+  geo.setIndex(validIndices);
+
+  const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (!normAttr || normAttr.count !== posAttr.count) {
+    const normals = new Float32Array(posAttr.count * 3);
+    for (let i = 0; i < posAttr.count; i++) {
+      normals[i * 3] = 0;
+      normals[i * 3 + 1] = 1;
+      normals[i * 3 + 2] = 0;
+    }
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  } else {
+    for (let i = 0; i < normAttr.count; i++) {
+      normAttr.setXYZ(i, 0, 1, 0);
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -274,9 +731,12 @@ function getEndpointProvenanceSegment(
 
 /**
  * Applies a degree-2 continuity miter portal between two incident half-edges `b0` and `b1`
- * at `nodeCenter` when their deflection angle and widths permit a direct shared portal join.
- * Returns `true` if a direct shared portal was applied, or `false` if the bend is an extreme
- * hairpin that requires boundary-derived apex trimming.
+ * at `nodeCenter` when their deflection angle, widths, and segment lengths permit a valid,
+ * non-inverting shared portal join.
+ *
+ * Transactionally validates portal orientation and longitudinal overhang against both incident
+ * edges before mutating `trimmedEndpoints`. Returns `false` if the join requires boundary-derived
+ * corner trimming or safe fallback.
  */
 function applyDegree2SharedContinuityPortal(
   b0: GraphBranchSpec,
@@ -284,10 +744,21 @@ function applyDegree2SharedContinuityPortal(
   nodeCenter: [number, number],
   trimmedEndpoints: Map<string, EdgeTrimState>
 ): boolean {
+  if (b0.edge.id === b1.edge.id && b0.endpoint === b1.endpoint) {
+    return false;
+  }
+
   const dot = b0.dir[0] * b1.dir[0] + b0.dir[1] * b1.dir[1];
-  // If interior angle between the two arms is acute (< ~75°, i.e. dot >= 0.25),
-  // fall back to boundary-derived 2-branch corner trimming so the acute inner crotch never overlaps.
-  if (dot >= 0.25) {
+  // If interior angle between the two arms is acute (< ~95°, i.e. dot >= 0.08),
+  // fall back to boundary-derived 2-branch corner trimming so the inner crotch never overlaps.
+  if (dot >= 0.08) {
+    return false;
+  }
+
+  // If the two arms have drastically different widths at a sharp bend, use boundary-derived beveling
+  const widthRatio =
+    Math.max(b0.width, b1.width) / Math.max(0.1, Math.min(b0.width, b1.width));
+  if (widthRatio > 1.75 && dot > -0.85) {
     return false;
   }
 
@@ -304,10 +775,30 @@ function applyDegree2SharedContinuityPortal(
   const nz = tx;
 
   const cosHalf = Math.sqrt(Math.max(0.1, (1 - dot) * 0.5));
-  const miterScale = Math.min(1.30, 1.0 / Math.max(0.72, cosHalf));
+  const miterScale = Math.min(1.25, 1.0 / Math.max(0.75, cosHalf));
   const avgHalfW = (b0.width + b1.width) * 0.25 * miterScale;
-  const maxSafeHalfW = Math.min(b0.segmentLength, b1.segmentLength) * 0.85;
+  const maxSafeHalfW = Math.min(b0.firstSegmentLength, b1.firstSegmentLength) * 0.75;
   const halfW = Math.min(avgHalfW, Math.max(avgHalfW * 0.5, maxSafeHalfW));
+
+  const t0 = trimmedEndpoints.get(b0.edge.id);
+  const t1 = trimmedEndpoints.get(b1.edge.id);
+  if (!t0 || !t1) return false;
+
+  // Check longitudinal overhang of the tilted miter portal into b0 and b1
+  const overhang0 = Math.abs(nx * b0.dir[0] + nz * b0.dir[1]) * halfW;
+  const overhang1 = Math.abs(nx * b1.dir[0] + nz * b1.dir[1]) * halfW;
+
+  const otherTrim0 = b0.endpoint === 'start' ? t0.endTrimDist : t0.startTrimDist;
+  const otherTrim1 = b1.endpoint === 'start' ? t1.endTrimDist : t1.startTrimDist;
+
+  if (
+    overhang0 > b0.firstSegmentLength * 0.65 ||
+    overhang1 > b1.firstSegmentLength * 0.65 ||
+    overhang0 + otherTrim0 > b0.totalEdgeLength * 0.75 ||
+    overhang1 + otherTrim1 > b1.totalEdgeLength * 0.75
+  ) {
+    return false;
+  }
 
   const sharedLeftOutB1: [number, number] = [
     nodeCenter[0] + nx * halfW,
@@ -318,9 +809,21 @@ function applyDegree2SharedContinuityPortal(
     nodeCenter[1] - nz * halfW,
   ];
 
-  const t0 = trimmedEndpoints.get(b0.edge.id);
-  const t1 = trimmedEndpoints.get(b1.edge.id);
-  if (!t0 || !t1) return false;
+  // Verify positive lateral width along both b0 and b1 inward normals
+  const n0x = -b0.dir[1];
+  const n0z = b0.dir[0];
+  const n1x = -b1.dir[1];
+  const n1z = b1.dir[0];
+  const latWidth0 =
+    (sharedRightOutB1[0] - sharedLeftOutB1[0]) * n0x +
+    (sharedRightOutB1[1] - sharedLeftOutB1[1]) * n0z;
+  const latWidth1 =
+    (sharedLeftOutB1[0] - sharedRightOutB1[0]) * n1x +
+    (sharedLeftOutB1[1] - sharedRightOutB1[1]) * n1z;
+
+  if (latWidth0 < b0.width * 0.25 || latWidth1 < b1.width * 0.25) {
+    return false;
+  }
 
   if (b0.endpoint === 'start') {
     t0.start = [nodeCenter[0], nodeCenter[1]];
@@ -364,15 +867,157 @@ function applyDegree2SharedContinuityPortal(
 }
 
 /**
- * Computes boundary-derived branch portals and a CCW junction polygon ring around `nodeCenter`
- * for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
+ * Validates and triangulates a candidate junction polygon ring `[x, z][]` around `nodeCenter`.
+ *
+ * Enforces:
+ * - Finite coordinates within `maxAllowedRadius` of `nodeCenter`.
+ * - Minimum 3 unique non-collinear vertices (deduplicating consecutive vertices `< 1e-3 m` and
+ *   folding spikes).
+ * - Positive signed area `>= 0.05 m²` in ascending `atan2(z, x)` winding order around `nodeCenter`
+ *   (preventing inside-out polygons).
+ * - Zero self-intersections (`!hasRingSelfIntersection`).
+ * - Clean earcut triangulation in `(x, -z)` 2D space producing `>= 1` non-degenerate upward-facing
+ *   triangles (`crossY > 0`) and `0` inverted triangles.
+ */
+function validateAndTriangulateJunctionRing(
+  rawPoints: [number, number][],
+  nodeCenter: [number, number],
+  maxAllowedRadius: number
+): {
+  polygonPoints: [number, number][];
+  validatedTriangles: Array<[number, number, number]>;
+} | null {
+  if (!rawPoints || rawPoints.length < 3) return null;
+
+  // 1. Deduplicate near-coincident consecutive vertices
+  const deduped: [number, number][] = [];
+  for (let i = 0; i < rawPoints.length; i++) {
+    const pt = rawPoints[i];
+    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return null;
+    if (Math.hypot(pt[0] - nodeCenter[0], pt[1] - nodeCenter[1]) > maxAllowedRadius) {
+      return null;
+    }
+    const prev =
+      deduped.length > 0 ? deduped[deduped.length - 1] : rawPoints[rawPoints.length - 1];
+    if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
+      deduped.push([pt[0], pt[1]]);
+    }
+  }
+  if (deduped.length < 3) return null;
+
+  // 2. Reject any candidate ring containing a near-180-degree fold-back spike
+  // rather than deleting portal vertices
+  const polygonPoints = deduped;
+  const n = polygonPoints.length;
+  for (let i = 0; i < n; i++) {
+    const prev = polygonPoints[(i - 1 + n) % n];
+    const curr = polygonPoints[i];
+    const next = polygonPoints[(i + 1) % n];
+    const v1x = curr[0] - prev[0];
+    const v1z = curr[1] - prev[1];
+    const v2x = next[0] - curr[0];
+    const v2z = next[1] - curr[1];
+    const l1 = Math.hypot(v1x, v1z);
+    const l2 = Math.hypot(v2x, v2z);
+    if (l1 <= 1e-3 || l2 <= 1e-3) continue;
+    const cosA = (v1x * v2x + v1z * v2z) / (l1 * l2);
+    if (cosA < -0.992) {
+      return null;
+    }
+  }
+
+  // 3. Check closed ring self-intersection
+  const closedRing: [number, number][] = [
+    ...polygonPoints,
+    [polygonPoints[0][0], polygonPoints[0][1]],
+  ];
+  if (hasRingSelfIntersection(closedRing)) {
+    return null;
+  }
+
+  // 4. Verify positive signed area in ascending atan2(z, x) order (not inside-out)
+  let signedArea2 = 0;
+  for (let i = 0; i < polygonPoints.length; i++) {
+    const p0 = polygonPoints[i];
+    const p1 = polygonPoints[(i + 1) % polygonPoints.length];
+    signedArea2 += p0[0] * p1[1] - p1[0] * p0[1];
+  }
+  const signedAreaXZ = signedArea2 * 0.5;
+  if (!Number.isFinite(signedAreaXZ) || signedAreaXZ < 0.05) {
+    return null;
+  }
+
+  // 5. Triangulate in 2D (x, z) space. Because signedAreaXZ > 0, contourXZ is 2D CCW
+  // (!THREE.ShapeUtils.isClockWise(contourXZ)), and each 2D CCW triangle [i0, i1, i2]
+  // maps to 3D +Y upward-facing triangle [i0, i2, i1] in right-handed (X, Y, Z) coordinates.
+  const contourXZ = polygonPoints.map(([x, z]) => new THREE.Vector2(x, z));
+  if (THREE.ShapeUtils.isClockWise(contourXZ)) {
+    return null;
+  }
+
+  const earTriangles = THREE.ShapeUtils.triangulateShape(contourXZ, []);
+  if (!earTriangles || earTriangles.length === 0) {
+    return null;
+  }
+
+  const validatedTriangles: Array<[number, number, number]> = [];
+  let triAreaSum = 0;
+
+  for (const [e0, e1, e2] of earTriangles) {
+    // Map 2D (x, z) CCW [e0, e1, e2] to 3D (X, Y, Z) +Y upward [e0, e2, e1]
+    const i0 = e0;
+    const i1 = e2;
+    const i2 = e1;
+    const p0 = polygonPoints[i0];
+    const p1 = polygonPoints[i1];
+    const p2 = polygonPoints[i2];
+    if (!p0 || !p1 || !p2) return null;
+
+    const ax = p1[0] - p0[0];
+    const az = p1[1] - p0[1];
+    const bx = p2[0] - p0[0];
+    const bz = p2[1] - p0[1];
+    // 3D cross product Y component: (v1 - v0) x (v2 - v0)
+    const crossY = az * bx - ax * bz;
+    const area = Math.abs(crossY) * 0.5;
+
+    if (area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
+      // Omit collinear zero-area earcut sliver triangle
+      continue;
+    }
+    if (crossY <= 0) {
+      // Reject if any non-degenerate triangle is inverted
+      return null;
+    }
+
+    validatedTriangles.push([i0, i1, i2]);
+    triAreaSum += area;
+  }
+
+  if (
+    validatedTriangles.length === 0 ||
+    Math.abs(triAreaSum - signedAreaXZ) > Math.max(0.05, signedAreaXZ * 0.05)
+  ) {
+    return null;
+  }
+
+  return { polygonPoints, validatedTriangles };
+}
+
+/**
+ * Computes boundary-derived branch portals and a validated, upward-triangulated junction polygon
+ * around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
+ *
+ * Transactionally validates all branch portals, trim distances, polygon self-intersections,
+ * and triangle orientations BEFORE committing any state to `trimmedEndpoints`.
  */
 function solveBoundaryDerivedJunctionNode(
   nodeId: string,
   nodeCenter: [number, number],
   branches: GraphBranchSpec[],
   isPathJunction: boolean,
-  trimmedEndpoints: Map<string, EdgeTrimState>
+  trimmedEndpoints: Map<string, EdgeTrimState>,
+  diagnostics?: ProcessedMapData['diagnostics']
 ): PendingJunctionPolygon | null {
   if (branches.length < 2) return null;
 
@@ -388,20 +1033,54 @@ function solveBoundaryDerivedJunctionNode(
   });
 
   const k = sortedBranches.length;
+
+  // Reject if two distinct branches enter along the exact same ray within < 1 degree
+  for (let i = 0; i < k; i++) {
+    const bA = sortedBranches[i];
+    const bB = sortedBranches[(i + 1) % k];
+    const dot = bA.dir[0] * bB.dir[0] + bA.dir[1] * bB.dir[1];
+    const det = bA.dir[0] * bB.dir[1] - bA.dir[1] * bB.dir[0];
+    if (dot > 0.9998 && Math.abs(det) < 0.02) {
+      recordGraphRoadDiagnostic(
+        diagnostics,
+        'junction_degenerate_overlapping_arms',
+        nodeId
+      );
+      return null;
+    }
+  }
+
   const branchNormals: [number, number][] = sortedBranches.map((bBranch) => [
     -bBranch.dir[1],
     bBranch.dir[0],
   ]);
+
   const maxTrimDists: number[] = sortedBranches.map((bBranch) => {
+    const tRec = trimmedEndpoints.get(bBranch.edge.id);
+    const existingOtherTrim = tRec
+      ? bBranch.endpoint === 'start'
+        ? tRec.endTrimDist
+        : tRec.startTrimDist
+      : 0;
     const isSelfLoop = bBranch.edge.fromNodeId === bBranch.edge.toNodeId;
-    const ratio = isSelfLoop ? 0.35 : 0.45;
-    return Math.max(0.15, bBranch.segmentLength * ratio);
+    const maxByFirstSeg = Math.max(0.12, bBranch.firstSegmentLength * 0.80);
+    const maxByTotalRatio = Math.max(
+      0.12,
+      bBranch.totalEdgeLength * (isSelfLoop ? 0.35 : 0.45)
+    );
+    const remainingBudget = Math.max(
+      0.12,
+      (bBranch.totalEdgeLength - existingOtherTrim - 0.20) * (isSelfLoop ? 0.45 : 0.80)
+    );
+    return Math.min(maxByFirstSeg, maxByTotalRatio, remainingBudget);
   });
 
   const corners: [number, number][] = [];
   const innerCornerTA: number[] = new Array(k).fill(0);
   const innerCornerTB: number[] = new Array(k).fill(0);
   const isConvexInnerCorner: boolean[] = new Array(k).fill(false);
+  const wasInnerCornerClamped: boolean[] = new Array(k).fill(false);
+  const hasExplicitCornerVertex: boolean[] = new Array(k).fill(false);
 
   for (let i = 0; i < k; i++) {
     const next = (i + 1) % k;
@@ -426,14 +1105,16 @@ function solveBoundaryDerivedJunctionNode(
     let cornerX: number;
     let cornerZ: number;
 
-    if (Math.abs(det) > 1e-4) {
+    if (Math.abs(det) > 0.06) {
       const dx = pB[0] - pA[0];
       const dz = pB[1] - pA[1];
       const tA = (dx * dB[1] - dz * dB[0]) / det;
       const tB = (dx * dA[1] - dz * dA[0]) / det;
 
       if (det > 0 && tA > 0 && tB > 0) {
+        // Case 1: Convex inner crotch between adjacent branches bA and bB
         isConvexInnerCorner[i] = true;
+        hasExplicitCornerVertex[i] = true;
         innerCornerTA[i] = tA;
         innerCornerTB[i] = tB;
         const clampedTA = Math.min(tA, maxTrimDists[i]);
@@ -442,6 +1123,7 @@ function solveBoundaryDerivedJunctionNode(
           cornerX = pA[0] + tA * dA[0];
           cornerZ = pA[1] + tA * dA[1];
         } else {
+          wasInnerCornerClamped[i] = true;
           const cAx = pA[0] + clampedTA * dA[0];
           const cAz = pA[1] + clampedTA * dA[1];
           const cBx = pB[0] + clampedTB * dB[0];
@@ -449,18 +1131,26 @@ function solveBoundaryDerivedJunctionNode(
           cornerX = (cAx + cBx) * 0.5;
           cornerZ = (cAz + cBz) * 0.5;
         }
-      } else {
+      } else if (det < 0 && tA <= 0 && tB <= 0) {
+        // Case 2: True reflex outer corner (angle between bA and bB > 180 degrees)
+        hasExplicitCornerVertex[i] = true;
         cornerX = pA[0] + tA * dA[0];
         cornerZ = pA[1] + tA * dA[1];
         const cDist = Math.hypot(cornerX - nodeCenter[0], cornerZ - nodeCenter[1]);
-        const maxOuterDist = 1.35 * Math.max(bA.width, bB.width);
+        const maxOuterDist = 1.25 * Math.max(bA.width, bB.width);
         if (cDist > maxOuterDist && cDist > 1e-4) {
           const scale = maxOuterDist / cDist;
           cornerX = nodeCenter[0] + (cornerX - nodeCenter[0]) * scale;
           cornerZ = nodeCenter[1] + (cornerZ - nodeCenter[1]) * scale;
         }
+      } else {
+        // Case 3: Near-180-degree or obtuse unequal-width transition (tA and tB have opposite signs):
+        // Connect portals[i].left directly to portals[next].right without an intermediate spike vertex.
+        cornerX = (pA[0] + pB[0]) * 0.5;
+        cornerZ = (pA[1] + pB[1]) * 0.5;
       }
     } else {
+      // Collinear / antiparallel curb transition
       cornerX = (pA[0] + pB[0]) * 0.5;
       cornerZ = (pA[1] + pB[1]) * 0.5;
     }
@@ -509,23 +1199,171 @@ function solveBoundaryDerivedJunctionNode(
     portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
   }
 
-  // Ensure acute/inner convex corners where the inner curb intersection dictates the branch trim
-  // (or was clamped at maxTrimDists) share `corners[i]` directly so adjacent portals never cross over
+  // Save orthogonal un-snapped portals in case we need a clean portal-only fallback
+  const orthogonalPortals = portals.map((p) => ({
+    left: [p.left[0], p.left[1]] as [number, number],
+    right: [p.right[0], p.right[1]] as [number, number],
+    center: [p.center[0], p.center[1]] as [number, number],
+  }));
+
+  // Snap inner corners where adjacent portals meet or overlap angularly
   for (let i = 0; i < k; i++) {
-    if (!isConvexInnerCorner[i]) continue;
     const next = (i + 1) % k;
-    if (innerCornerTA[i] >= trimDists[i] - 0.05) {
-      portals[i].left = [corners[i][0], corners[i][1]];
-    }
-    if (innerCornerTB[i] >= trimDists[next] - 0.05) {
-      portals[next].right = [corners[i][0], corners[i][1]];
+    const bA = sortedBranches[i];
+    const bB = sortedBranches[next];
+    const nA = branchNormals[i];
+    const nB = branchNormals[next];
+
+    const vLeftX = portals[i].left[0] - nodeCenter[0];
+    const vLeftZ = portals[i].left[1] - nodeCenter[1];
+    const vRightX = portals[next].right[0] - nodeCenter[0];
+    const vRightZ = portals[next].right[1] - nodeCenter[1];
+    // In ascending atan2(z, x) order, if vLeft x vRight < 0, portals[i].left has crossed past portals[next].right
+    const portalsCrossedAngularly = vLeftX * vRightZ - vLeftZ * vRightX < -1e-4;
+
+    if (wasInnerCornerClamped[i] || portalsCrossedAngularly) {
+      // Partition the outer span [portals[i].right -> portals[next].left] proportionally to branch widths
+      // so both portals remain strictly positive in width and share a non-crossing inner seam vertex.
+      const rA = portals[i].right;
+      const lB = portals[next].left;
+      const alpha = bA.width / Math.max(1e-3, bA.width + bB.width);
+      const seamPt: [number, number] = [
+        rA[0] + alpha * (lB[0] - rA[0]),
+        rA[1] + alpha * (lB[1] - rA[1]),
+      ];
+      const widthA = (seamPt[0] - rA[0]) * nA[0] + (seamPt[1] - rA[1]) * nA[1];
+      const widthB = (lB[0] - seamPt[0]) * nB[0] + (lB[1] - seamPt[1]) * nB[1];
+      if (widthA >= bA.width * 0.20 && widthB >= bB.width * 0.20) {
+        corners[i] = seamPt;
+        portals[i].left = [seamPt[0], seamPt[1]];
+        portals[next].right = [seamPt[0], seamPt[1]];
+      }
+    } else if (isConvexInnerCorner[i]) {
+      const cPt = corners[i];
+      if (innerCornerTA[i] >= trimDists[i] - 0.05) {
+        const widthA =
+          (cPt[0] - portals[i].right[0]) * nA[0] +
+          (cPt[1] - portals[i].right[1]) * nA[1];
+        if (widthA >= bA.width * 0.25) {
+          portals[i].left = [cPt[0], cPt[1]];
+        }
+      }
+      if (innerCornerTB[i] >= trimDists[next] - 0.05) {
+        const widthB =
+          (portals[next].left[0] - cPt[0]) * nB[0] +
+          (portals[next].left[1] - cPt[1]) * nB[1];
+        if (widthB >= bB.width * 0.25) {
+          portals[next].right = [cPt[0], cPt[1]];
+        }
+      }
     }
   }
 
+  // Validate that no edge's startTrimDist + endTrimDist exceeds available edge length
+  const trimSumByEdgeId = new Map<string, number>();
+  for (let i = 0; i < k; i++) {
+    const bBranch = sortedBranches[i];
+    const tRec = trimmedEndpoints.get(bBranch.edge.id);
+    if (!tRec) return null;
+    const prevSum =
+      trimSumByEdgeId.get(bBranch.edge.id) ??
+      (bBranch.endpoint === 'start' ? tRec.endTrimDist : tRec.startTrimDist);
+    const nextSum = prevSum + trimDists[i];
+    if (nextSum > bBranch.totalEdgeLength - 0.08) {
+      recordGraphRoadDiagnostic(
+        diagnostics,
+        'junction_short_edge_portal_crossover',
+        nodeId
+      );
+      return null;
+    }
+    trimSumByEdgeId.set(bBranch.edge.id, nextSum);
+  }
+
+  // Validate portal widths on all branches
+  const portalsHaveValidWidths = (
+    candidatePortals: Array<{
+      left: [number, number];
+      right: [number, number];
+      center: [number, number];
+    }>
+  ): boolean => {
+    for (let i = 0; i < k; i++) {
+      const p = candidatePortals[i];
+      const n = branchNormals[i];
+      const bBranch = sortedBranches[i];
+      const w = (p.left[0] - p.right[0]) * n[0] + (p.left[1] - p.right[1]) * n[1];
+      if (!Number.isFinite(w) || w < bBranch.width * 0.20) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const maxBranchWidth = Math.max(...sortedBranches.map((b) => b.width));
+  const maxTrim = Math.max(...trimDists);
+  const maxAllowedRadius = maxBranchWidth * 2.5 + maxTrim * 1.5 + 1.0;
+
+  // Build candidate 1: boundary-derived ring including explicit inner/reflex corner vertices
+  const rawCandidate1: [number, number][] = [];
+  for (let i = 0; i < k; i++) {
+    rawCandidate1.push(portals[i].right);
+    rawCandidate1.push(portals[i].left);
+    if (hasExplicitCornerVertex[i]) {
+      rawCandidate1.push(corners[i]);
+    }
+  }
+
+  let activePortals = portals;
+  let validated = portalsHaveValidWidths(portals)
+    ? validateAndTriangulateJunctionRing(rawCandidate1, nodeCenter, maxAllowedRadius)
+    : null;
+
+  // Candidate 2 fallback: direct portal-to-portal boundary with snapped portals (omitting intermediate corners)
+  if (!validated && portalsHaveValidWidths(portals)) {
+    const rawCandidate2: [number, number][] = [];
+    for (let i = 0; i < k; i++) {
+      rawCandidate2.push(portals[i].right);
+      rawCandidate2.push(portals[i].left);
+    }
+    validated = validateAndTriangulateJunctionRing(
+      rawCandidate2,
+      nodeCenter,
+      maxAllowedRadius
+    );
+  }
+
+  // Candidate 3 fallback: orthogonal un-snapped portals
+  if (!validated && portalsHaveValidWidths(orthogonalPortals)) {
+    const rawCandidate3: [number, number][] = [];
+    for (let i = 0; i < k; i++) {
+      rawCandidate3.push(orthogonalPortals[i].right);
+      rawCandidate3.push(orthogonalPortals[i].left);
+    }
+    validated = validateAndTriangulateJunctionRing(
+      rawCandidate3,
+      nodeCenter,
+      maxAllowedRadius
+    );
+    if (validated) {
+      activePortals = orthogonalPortals;
+    }
+  }
+
+  if (!validated) {
+    recordGraphRoadDiagnostic(
+      diagnostics,
+      'junction_polygon_validation_failed',
+      nodeId
+    );
+    return null;
+  }
+
+  // Transactionally commit endpoint trim state ONLY after polygon & portal validation succeeded!
   for (let i = 0; i < k; i++) {
     const bBranch = sortedBranches[i];
     const trimDist = trimDists[i];
-    const { left: leftPortal, right: rightPortal, center: centerPortal } = portals[i];
+    const { left: leftPortal, right: rightPortal, center: centerPortal } = activePortals[i];
     const tRec = trimmedEndpoints.get(bBranch.edge.id);
     if (tRec) {
       if (bBranch.endpoint === 'start') {
@@ -543,27 +1381,6 @@ function solveBoundaryDerivedJunctionNode(
     }
   }
 
-  const rawPolygonPoints: [number, number][] = [];
-  for (let i = 0; i < k; i++) {
-    rawPolygonPoints.push(portals[i].right);
-    rawPolygonPoints.push(portals[i].left);
-    rawPolygonPoints.push(corners[i]);
-  }
-
-  const polygonPoints: [number, number][] = [];
-  for (let i = 0; i < rawPolygonPoints.length; i++) {
-    const pt = rawPolygonPoints[i];
-    const prev =
-      polygonPoints.length > 0
-        ? polygonPoints[polygonPoints.length - 1]
-        : rawPolygonPoints[rawPolygonPoints.length - 1];
-    if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
-      polygonPoints.push(pt);
-    }
-  }
-
-  if (polygonPoints.length < 3) return null;
-
   let dominantBranch = sortedBranches[0];
   for (let i = 1; i < k; i++) {
     const bBranch = sortedBranches[i];
@@ -579,11 +1396,356 @@ function solveBoundaryDerivedJunctionNode(
     nodeId,
     junctionFeatureId,
     isPathJunction,
-    polygonPoints,
+    polygonPoints: validated.polygonPoints,
+    validatedTriangles: validated.validatedTriangles,
     sortedBranches,
-    portals,
+    portals: activePortals,
     dominantBranch,
   };
+}
+
+/**
+ * Sanitizes a sub-segment centerline polyline and its optional `startPortal` / `endPortal`
+ * so interior polyline vertices never fall behind a skewed portal corner and endpoint portals
+ * never invert relative to the first/last segment tangent.
+ */
+function sanitizeSubSegmentPolylineAndPortals(
+  rawPoints: [number, number][],
+  width: number,
+  rawStartPortal?: { left: [number, number]; right: [number, number] },
+  rawEndPortal?: { left: [number, number]; right: [number, number] },
+  diagnostics?: ProcessedMapData['diagnostics'],
+  subId: string = ''
+): {
+  points: [number, number][];
+  startPortal?: { left: [number, number]; right: [number, number] };
+  endPortal?: { left: [number, number]; right: [number, number] };
+} {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < rawPoints.length; i++) {
+    const pt = rawPoints[i];
+    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) continue;
+    if (pts.length === 0) {
+      pts.push([pt[0], pt[1]]);
+    } else {
+      const prev = pts[pts.length - 1];
+      if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 0.02) {
+        pts.push([pt[0], pt[1]]);
+      } else if (i === rawPoints.length - 1 && pts.length >= 2) {
+        pts[pts.length - 1] = [pt[0], pt[1]];
+      }
+    }
+  }
+
+  if (pts.length < 2) {
+    return { points: pts };
+  }
+
+  let startPortal = rawStartPortal
+    ? {
+        left: [rawStartPortal.left[0], rawStartPortal.left[1]] as [number, number],
+        right: [rawStartPortal.right[0], rawStartPortal.right[1]] as [number, number],
+      }
+    : undefined;
+  let endPortal = rawEndPortal
+    ? {
+        left: [rawEndPortal.left[0], rawEndPortal.left[1]] as [number, number],
+        right: [rawEndPortal.right[0], rawEndPortal.right[1]] as [number, number],
+      }
+    : undefined;
+
+  // Prune interior vertices near start that lie inside the longitudinal overhang of startPortal
+  if (startPortal && pts.length > 2) {
+    while (pts.length > 2) {
+      const p0 = pts[0];
+      const p1 = pts[1];
+      const dx = p1[0] - p0[0];
+      const dz = p1[1] - p0[1];
+      const segLen = Math.hypot(dx, dz);
+      if (segLen < 1e-4) {
+        pts.splice(1, 1);
+        continue;
+      }
+      const tx = dx / segLen;
+      const tz = dz / segLen;
+      const projL = (startPortal.left[0] - p0[0]) * tx + (startPortal.left[1] - p0[1]) * tz;
+      const projR = (startPortal.right[0] - p0[0]) * tx + (startPortal.right[1] - p0[1]) * tz;
+      const maxOverhang = Math.max(0, projL, projR);
+      if (segLen <= maxOverhang + width * 0.25) {
+        pts.splice(1, 1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Prune interior vertices near end that lie inside the longitudinal overhang of endPortal
+  if (endPortal && pts.length > 2) {
+    while (pts.length > 2) {
+      const last = pts.length - 1;
+      const pn = pts[last];
+      const pPrev = pts[last - 1];
+      const dx = pn[0] - pPrev[0];
+      const dz = pn[1] - pPrev[1];
+      const segLen = Math.hypot(dx, dz);
+      if (segLen < 1e-4) {
+        pts.splice(last - 1, 1);
+        continue;
+      }
+      const tx = dx / segLen;
+      const tz = dz / segLen;
+      const projL = (pn[0] - endPortal.left[0]) * tx + (pn[1] - endPortal.left[1]) * tz;
+      const projR = (pn[0] - endPortal.right[0]) * tx + (pn[1] - endPortal.right[1]) * tz;
+      const maxOverhang = Math.max(0, projL, projR);
+      if (segLen <= maxOverhang + width * 0.25) {
+        pts.splice(last - 1, 1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Validate startPortal orientation against actual first segment tangent
+  if (startPortal && pts.length >= 2) {
+    const dx = pts[1][0] - pts[0][0];
+    const dz = pts[1][1] - pts[0][1];
+    const segLen = Math.hypot(dx, dz) || 1e-6;
+    const tx = dx / segLen;
+    const tz = dz / segLen;
+    const nx = -tz;
+    const nz = tx;
+    const latWidth =
+      (startPortal.left[0] - startPortal.right[0]) * nx +
+      (startPortal.left[1] - startPortal.right[1]) * nz;
+    const projL = (startPortal.left[0] - pts[0][0]) * tx + (startPortal.left[1] - pts[0][1]) * tz;
+    const projR =
+      (startPortal.right[0] - pts[0][0]) * tx + (startPortal.right[1] - pts[0][1]) * tz;
+    if (latWidth < width * 0.15 || Math.max(projL, projR) >= segLen * 0.85) {
+      startPortal = undefined;
+      recordGraphRoadDiagnostic(
+        diagnostics,
+        'ribbon_start_portal_fallback_orthogonal',
+        subId
+      );
+    }
+  }
+
+  // Validate endPortal orientation against actual last segment tangent
+  if (endPortal && pts.length >= 2) {
+    const last = pts.length - 1;
+    const dx = pts[last][0] - pts[last - 1][0];
+    const dz = pts[last][1] - pts[last - 1][1];
+    const segLen = Math.hypot(dx, dz) || 1e-6;
+    const tx = dx / segLen;
+    const tz = dz / segLen;
+    const nx = -tz;
+    const nz = tx;
+    const latWidth =
+      (endPortal.left[0] - endPortal.right[0]) * nx +
+      (endPortal.left[1] - endPortal.right[1]) * nz;
+    const projL =
+      (pts[last][0] - endPortal.left[0]) * tx + (pts[last][1] - endPortal.left[1]) * tz;
+    const projR =
+      (pts[last][0] - endPortal.right[0]) * tx + (pts[last][1] - endPortal.right[1]) * tz;
+    if (latWidth < width * 0.15 || Math.max(projL, projR) >= segLen * 0.85) {
+      endPortal = undefined;
+      recordGraphRoadDiagnostic(
+        diagnostics,
+        'ribbon_end_portal_fallback_orthogonal',
+        subId
+      );
+    }
+  }
+
+  // On a 2-point segment with both startPortal and endPortal, verify the left and right edges advance forward
+  if (startPortal && endPortal && pts.length === 2) {
+    const dx = pts[1][0] - pts[0][0];
+    const dz = pts[1][1] - pts[0][1];
+    const segLen = Math.hypot(dx, dz) || 1e-6;
+    const tx = dx / segLen;
+    const tz = dz / segLen;
+    const leftAdvance =
+      (endPortal.left[0] - startPortal.left[0]) * tx +
+      (endPortal.left[1] - startPortal.left[1]) * tz;
+    const rightAdvance =
+      (endPortal.right[0] - startPortal.right[0]) * tx +
+      (endPortal.right[1] - startPortal.right[1]) * tz;
+    if (leftAdvance <= 0.05 || rightAdvance <= 0.05) {
+      startPortal = undefined;
+      endPortal = undefined;
+      recordGraphRoadDiagnostic(
+        diagnostics,
+        'ribbon_short_segment_portal_crossover_fallback',
+        subId
+      );
+    }
+  }
+
+  return { points: pts, startPortal, endPortal };
+}
+
+/**
+ * Builds a closed 2D polygon ring `[x, z][][]` around a road/path centerline polyline,
+ * including semicircular start and end cap arcs when `hasStartCap` or `hasEndCap` is active.
+ * Ensures 2D Boolean clipping footprints match the exact 3D rendered ribbon geometry.
+ */
+function buildGraphRibbonPolygonRing(
+  points: [number, number][],
+  width: number,
+  options?: {
+    hasStartCap?: boolean;
+    hasEndCap?: boolean;
+    startPortal?: { left: [number, number]; right: [number, number] };
+    endPortal?: { left: [number, number]; right: [number, number] };
+  }
+): [number, number][][] | null {
+  if (!options?.hasStartCap && !options?.hasEndCap) {
+    return buildRoadRibbonOutlineRing(points, width, {
+      startPortal: options?.startPortal,
+      endPortal: options?.endPortal,
+    });
+  }
+
+  const ribbon = generateRoadRibbon(points, width, 0, {
+    roundCaps: false,
+    startPortal: options?.startPortal,
+    endPortal: options?.endPortal,
+  });
+  if (!ribbon) return null;
+  const pos = ribbon.positions;
+  const n = pos.length / 6;
+  if (n < 2) return null;
+
+  const halfW = width * 0.5;
+  const capSegments = 6;
+  const ring: [number, number][] = [];
+
+  for (let i = 0; i < n; i++) {
+    const lIdx = i * 2;
+    const x = pos[lIdx * 3];
+    const z = pos[lIdx * 3 + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    ring.push([snapCoord(x), snapCoord(z)]);
+  }
+
+  // Append end semicircle cap from leftEnd to rightEnd when hasEndCap && !endPortal
+  if (options?.hasEndCap && !options?.endPortal && points.length >= 2) {
+    const pn = points[points.length - 1];
+    const pPrev = points[points.length - 2];
+    const dx = pn[0] - pPrev[0];
+    const dz = pn[1] - pPrev[1];
+    const len = Math.hypot(dx, dz) || 1e-6;
+    const tnx = dx / len;
+    const tnz = dz / len;
+    const nnx = -tnz;
+    const nnz = tnx;
+    for (let k = capSegments - 1; k >= 1; k--) {
+      const angle = -Math.PI / 2 + (k / capSegments) * Math.PI;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const vx = cosA * tnx + sinA * nnx;
+      const vz = cosA * tnz + sinA * nnz;
+      ring.push([snapCoord(pn[0] + vx * halfW), snapCoord(pn[1] + vz * halfW)]);
+    }
+  }
+
+  for (let i = n - 1; i >= 0; i--) {
+    const rIdx = i * 2 + 1;
+    const x = pos[rIdx * 3];
+    const z = pos[rIdx * 3 + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    ring.push([snapCoord(x), snapCoord(z)]);
+  }
+
+  // Append start semicircle cap from rightStart to leftStart when hasStartCap && !startPortal
+  if (options?.hasStartCap && !options?.startPortal && points.length >= 2) {
+    const p0 = points[0];
+    const p1 = points[1];
+    const dx = p1[0] - p0[0];
+    const dz = p1[1] - p0[1];
+    const len = Math.hypot(dx, dz) || 1e-6;
+    const t0x = dx / len;
+    const t0z = dz / len;
+    const n0x = -t0z;
+    const n0z = t0x;
+    for (let k = capSegments - 1; k >= 1; k--) {
+      const angle = Math.PI / 2 + (k / capSegments) * Math.PI;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const vx = cosA * t0x + sinA * n0x;
+      const vz = cosA * t0z + sinA * n0z;
+      ring.push([snapCoord(p0[0] + vx * halfW), snapCoord(p0[1] + vz * halfW)]);
+    }
+  }
+
+  if (ring.length < 3) return null;
+  ring.push([ring[0][0], ring[0][1]]);
+  return [ring];
+}
+
+/**
+ * Generates horizontal raised step-tread quads along a `highway=steps` polyline
+ * with strictly upward (+Y) counter-clockwise triangle winding (`cross(v1 - v0, v2 - v0) = +Y`).
+ */
+function generateGraphStepTreads(
+  points: [number, number][],
+  width: number,
+  yElev: number
+): THREE.BufferGeometry | null {
+  if (!points || points.length < 2) return null;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  const halfW = width * 0.44;
+  const halfTread = 0.11;
+  const stepSpacing = 0.65;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const dx = p1[0] - p0[0];
+    const dz = p1[1] - p0[1];
+    const segLen = Math.hypot(dx, dz);
+    if (segLen < 0.4) continue;
+    const tx = dx / segLen;
+    const tz = dz / segLen;
+    const nx = -tz;
+    const nz = tx;
+
+    for (let d = 0.35; d < segLen - 0.25; d += stepSpacing) {
+      const cx = p0[0] + tx * d;
+      const cz = p0[1] + tz * d;
+
+      // Quad corners around tread center (cx, cz) in CCW order when viewed from +Y:
+      // v0: back-left, v1: front-left, v2: front-right, v3: back-right
+      const v0x = cx - tx * halfTread + nx * halfW;
+      const v0z = cz - tz * halfTread + nz * halfW;
+      const v1x = cx + tx * halfTread + nx * halfW;
+      const v1z = cz + tz * halfTread + nz * halfW;
+      const v2x = cx + tx * halfTread - nx * halfW;
+      const v2z = cz + tz * halfTread - nz * halfW;
+      const v3x = cx - tx * halfTread - nx * halfW;
+      const v3z = cz - tz * halfTread - nz * halfW;
+
+      const vBase = positions.length / 3;
+      positions.push(
+        v0x, yElev, v0z,
+        v1x, yElev, v1z,
+        v2x, yElev, v2z,
+        v3x, yElev, v3z
+      );
+      for (let k = 0; k < 4; k++) normals.push(0, 1, 0);
+      // Triangle 1: (v0, v1, v3), Triangle 2: (v3, v1, v2) -> both have +Y normal!
+      indices.push(vBase, vBase + 1, vBase + 3, vBase + 3, vBase + 1, vBase + 2);
+    }
+  }
+
+  if (indices.length === 0) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setIndex(indices);
+  return geo;
 }
 
 /**
@@ -599,7 +1761,6 @@ export function buildGraphAtGradeRoadGeometries(
   const {
     descriptors,
     roadWidthMultiplier,
-    gradeTransitionCoords = [],
     resourceManager,
     diagnostics,
   } = options;
@@ -627,15 +1788,7 @@ export function buildGraphAtGradeRoadGeometries(
   const renderedSourceIds = new Set<string>();
   const fullySubtractedRoadIds = new Set<string>();
 
-  // 1. Collect all confirmed grade transition coordinates (from graph descriptors + Stage 6D)
-  const allGradeTransitionCoords: Array<readonly [number, number]> = [...gradeTransitionCoords];
-  for (const gt of descriptors.gradeTransitions) {
-    if (gt.network === 'road') {
-      allGradeTransitionCoords.push(gt.position);
-    }
-  }
-
-  // 2. Filter at-grade buildable road edges and initialize endpoint trim states
+  // 1. Filter at-grade buildable road edges and initialize endpoint trim states
   const buildableEdges: RoadEdgeRenderDescriptor[] = [];
   const trimmedEndpoints = new Map<string, EdgeTrimState>();
 
@@ -660,10 +1813,12 @@ export function buildGraphAtGradeRoadGeometries(
 
     const startNode = descriptors.roadNodesById.get(edge.fromNodeId);
     const endNode = descriptors.roadNodesById.get(edge.toNodeId);
-    const p0 = edge.points[0];
-    const pn = edge.points[edge.points.length - 1];
     const isPath = edge.tier === 'path' || isNonVehicularRoadClass(edge.roadClass);
 
+    // Authoritative graph-backed grade-transition cap suppression:
+    // Only suppress an endpoint cap when the edge or its topological node has an explicit
+    // grade transition or connects to a non-at-grade (bridge/tunnel) road edge at that node.
+    // Nearby but unconnected road endpoints near a bridge or tunnel keep their dead-end caps.
     const touchesGradeTransitionStart =
       Boolean(edge.startGradeTransitionId) ||
       Boolean(startNode && startNode.gradeTransitionIds.length > 0) ||
@@ -673,8 +1828,7 @@ export function buildGraphAtGradeRoadGeometries(
             const other = descriptors.roadEdgesById.get(id);
             return Boolean(other && !other.isAtGradeBuildable);
           })
-      ) ||
-      allGradeTransitionCoords.some((gt) => Math.hypot(gt[0] - p0[0], gt[1] - p0[1]) <= 0.65);
+      );
 
     const touchesGradeTransitionEnd =
       Boolean(edge.endGradeTransitionId) ||
@@ -685,8 +1839,7 @@ export function buildGraphAtGradeRoadGeometries(
             const other = descriptors.roadEdgesById.get(id);
             return Boolean(other && !other.isAtGradeBuildable);
           })
-      ) ||
-      allGradeTransitionCoords.some((gt) => Math.hypot(gt[0] - pn[0], gt[1] - pn[1]) <= 0.65);
+      );
 
     const isClippedStart = edge.clippedAtStart || Boolean(startNode?.isBoundaryClipped);
     const isClippedEnd = edge.clippedAtEnd || Boolean(endNode?.isBoundaryClipped);
@@ -725,13 +1878,18 @@ export function buildGraphAtGradeRoadGeometries(
     });
   }
 
-  // Helper to build GraphBranchSpec objects from a node's incident half-edges
+  // Helper to build deduplicated GraphBranchSpec objects from a node's incident half-edges
   const collectBuildableBranches = (
     node: RoadNodeRenderDescriptor,
     halfEdges: readonly IncidentHalfEdge[]
   ): GraphBranchSpec[] => {
     const out: GraphBranchSpec[] = [];
+    const seenHalfEdges = new Set<string>();
     for (const he of halfEdges) {
+      const heKey = `${he.edgeId}:${he.endpoint}`;
+      if (seenHalfEdges.has(heKey)) continue;
+      seenHalfEdges.add(heKey);
+
       const edge = descriptors.roadEdgesById.get(he.edgeId);
       if (!edge || !edge.isAtGradeBuildable || !trimmedEndpoints.has(edge.id)) continue;
       const totalPolyLen = computePolylineLength(edge.points as [number, number][]);
@@ -743,9 +1901,9 @@ export function buildGraphAtGradeRoadGeometries(
         he.endpoint === 'start'
           ? edge.points[1]
           : edge.points[Math.max(0, edge.points.length - 2)];
-      const firstSegLen = Math.hypot(
-        adjacentPt[0] - endpointPt[0],
-        adjacentPt[1] - endpointPt[1]
+      const firstSegLen = Math.max(
+        0.05,
+        Math.hypot(adjacentPt[0] - endpointPt[0], adjacentPt[1] - endpointPt[1])
       );
       out.push({
         edge,
@@ -754,13 +1912,15 @@ export function buildGraphAtGradeRoadGeometries(
         nodePos: [node.position[0], node.position[1]],
         width: edge.width * roadWidthMultiplier,
         roadClass: edge.roadClass,
-        segmentLength: Math.max(firstSegLen, totalPolyLen),
+        firstSegmentLength: firstSegLen,
+        totalEdgeLength: totalPolyLen,
+        segmentLength: Math.min(firstSegLen, totalPolyLen),
       });
     }
     return out;
   };
 
-  // 3. Process topological road nodes in canonical order
+  // 2. Process topological road nodes in canonical order
   const pendingJunctions: PendingJunctionPolygon[] = [];
 
   for (const node of descriptors.roadNodes) {
@@ -783,11 +1943,14 @@ export function buildGraphAtGradeRoadGeometries(
           nodeCenter,
           vehBranches,
           false,
-          trimmedEndpoints
+          trimmedEndpoints,
+          diagnostics
         );
         if (solved) {
           pendingJunctions.push(solved);
           stats.branchingJunctionCount++;
+        } else {
+          stats.rejectedOrDegenerateCount++;
         }
       } else if (vehBranches.length === 2) {
         const joined = applyDegree2SharedContinuityPortal(
@@ -804,7 +1967,8 @@ export function buildGraphAtGradeRoadGeometries(
             nodeCenter,
             vehBranches,
             false,
-            trimmedEndpoints
+            trimmedEndpoints,
+            diagnostics
           );
           if (solved) {
             pendingJunctions.push(solved);
@@ -830,7 +1994,8 @@ export function buildGraphAtGradeRoadGeometries(
             nodeCenter,
             vehBranches,
             false,
-            trimmedEndpoints
+            trimmedEndpoints,
+            diagnostics
           );
           if (solved) {
             pendingJunctions.push(solved);
@@ -858,7 +2023,8 @@ export function buildGraphAtGradeRoadGeometries(
             nodeCenter,
             pathBranches,
             true,
-            trimmedEndpoints
+            trimmedEndpoints,
+            diagnostics
           );
           if (solved) {
             pendingJunctions.push(solved);
@@ -871,17 +2037,20 @@ export function buildGraphAtGradeRoadGeometries(
           nodeCenter,
           pathBranches,
           true,
-          trimmedEndpoints
+          trimmedEndpoints,
+          diagnostics
         );
         if (solved) {
           pendingJunctions.push(solved);
           stats.pathJunctionCount++;
+        } else {
+          stats.rejectedOrDegenerateCount++;
         }
       }
     }
   }
 
-  // 4. Resolve trimmed polylines and per-segment provenance sub-ribbons for all buildable edges
+  // 3. Resolve trimmed polylines and per-segment provenance sub-ribbons for all buildable edges
   // so multi-source simplified edges carry accurate per-segment InspectableFeatureInfo while
   // maintaining continuous shared portals at internal segment boundaries.
   const resolvedSubSegmentsByEdgeId = new Map<string, ResolvedEdgeSubSegment[]>();
@@ -1022,7 +2191,7 @@ export function buildGraphAtGradeRoadGeometries(
 
       const dot = tInX * tOutX + tInZ * tOutZ;
       const cosHalf = Math.sqrt(Math.max(0.1, (1 + dot) * 0.5));
-      const miterScale = Math.min(1.30, 1.0 / Math.max(0.76, cosHalf));
+      const miterScale = Math.min(1.25, 1.0 / Math.max(0.76, cosHalf));
       const halfW = (width / 2) * miterScale;
 
       internalPortals.push({
@@ -1037,18 +2206,27 @@ export function buildGraphAtGradeRoadGeometries(
       const subId = m === 1 ? edge.id : `${edge.id}#seg${j}`;
       const sids = [seg.sourceFeatureId, ...seg.deduplicatedFeatureIds];
       const uniqueSids = [...new Set(sids)];
-      const startPortal =
+      const rawStartPortal =
         j === 0
           ? tInfo.startPortal
             ? { left: tInfo.startPortal.left, right: tInfo.startPortal.right }
             : undefined
           : internalPortals[j - 1];
-      const endPortal =
+      const rawEndPortal =
         j === m - 1
           ? tInfo.endPortal
             ? { left: tInfo.endPortal.left, right: tInfo.endPortal.right }
             : undefined
           : internalPortals[j];
+
+      const sanitized = sanitizeSubSegmentPolylineAndPortals(
+        subPolylines[j],
+        width,
+        rawStartPortal,
+        rawEndPortal,
+        diagnostics,
+        subId
+      );
 
       const exemptIds = new Set<string>(tInfo.exemptFootprintIds);
       if (j > 0) exemptIds.add(`${edge.id}#seg${j - 1}`);
@@ -1058,14 +2236,14 @@ export function buildGraphAtGradeRoadGeometries(
         subId,
         edge,
         seg,
-        points: subPolylines[j],
+        points: sanitized.points,
         width,
         roadElevation,
         isPath,
         hasCapStart: j === 0 ? tInfo.hasCapStart : false,
         hasCapEnd: j === m - 1 ? tInfo.hasCapEnd : false,
-        startPortal,
-        endPortal,
+        startPortal: sanitized.startPortal,
+        endPortal: sanitized.endPortal,
         sourceFeatureId: seg.sourceFeatureId,
         sourceFeatureIds: uniqueSids,
         osmTags: sanitizeOsmTags(seg.osmTags),
@@ -1082,7 +2260,7 @@ export function buildGraphAtGradeRoadGeometries(
     });
   }
 
-  // 5. Track 2D polygon footprints of placed junctions and road ribbons for Boolean clipping
+  // 4. Track 2D polygon footprints of placed junctions and road ribbons for Boolean clipping
   const placedRoadFootprints: PlacedRoadFootprint[] = [];
 
   const registerRoadFootprint = (id: string, isPath: boolean, ring: [number, number][]) => {
@@ -1121,7 +2299,7 @@ export function buildGraphAtGradeRoadGeometries(
     }
   };
 
-  // 6. Triangulate and register junction polygons (vehicular junctions first, then path junctions)
+  // 5. Emit pre-validated, upward-wound junction polygon geometries
   const junctionGeometriesByClass = new Map<
     RoadClass,
     Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
@@ -1132,6 +2310,7 @@ export function buildGraphAtGradeRoadGeometries(
       junctionFeatureId,
       isPathJunction,
       polygonPoints,
+      validatedTriangles,
       sortedBranches,
       portals,
       dominantBranch,
@@ -1181,36 +2360,21 @@ export function buildGraphAtGradeRoadGeometries(
 
     registerRoadFootprint(junctionFeatureId, isPathJunction, polygonPoints);
 
-    const contour = polygonPoints.map(([x, z]) => new THREE.Vector2(x, z));
-    if (THREE.ShapeUtils.isClockWise(contour)) {
-      contour.reverse();
-    }
-    const earTriangles = THREE.ShapeUtils.triangulateShape(contour, []);
-
     const junctionVertices: number[] = [];
     const junctionIndices: number[] = [];
     const junctionNormals: number[] = [];
 
-    for (let pIdx = 0; pIdx < contour.length; pIdx++) {
-      junctionVertices.push(contour[pIdx].x, yElev, contour[pIdx].y);
+    for (let pIdx = 0; pIdx < polygonPoints.length; pIdx++) {
+      junctionVertices.push(polygonPoints[pIdx][0], yElev, polygonPoints[pIdx][1]);
       junctionNormals.push(0, 1, 0);
     }
 
-    for (const [i0, i1, i2] of earTriangles) {
-      const ax = contour[i1].x - contour[i0].x;
-      const az = contour[i1].y - contour[i0].y;
-      const bx = contour[i2].x - contour[i0].x;
-      const bz = contour[i2].y - contour[i0].y;
-      const crossY = az * bx - ax * bz;
-      if (crossY > 1e-7) {
-        junctionIndices.push(i0, i1, i2);
-      } else if (crossY < -1e-7) {
-        junctionIndices.push(i0, i2, i1);
-      }
+    for (const [i0, i1, i2] of validatedTriangles) {
+      junctionIndices.push(i0, i1, i2);
     }
 
     if (junctionIndices.length > 0) {
-      const junctionGeo = resourceManager.registerGeometry(new THREE.BufferGeometry());
+      const junctionGeo = new THREE.BufferGeometry();
       junctionGeo.setAttribute(
         'position',
         new THREE.Float32BufferAttribute(junctionVertices, 3)
@@ -1221,35 +2385,41 @@ export function buildGraphAtGradeRoadGeometries(
       );
       junctionGeo.setIndex(junctionIndices);
 
-      const cartoLabel = formatRoadCartoLabel(dominantClass);
-      if (!junctionGeometriesByClass.has(dominantClass)) {
-        junctionGeometriesByClass.set(dominantClass, []);
+      if (validateAndPruneHorizontalGeometry(junctionGeo)) {
+        resourceManager.registerGeometry(junctionGeo);
+        const cartoLabel = formatRoadCartoLabel(dominantClass);
+        if (!junctionGeometriesByClass.has(dominantClass)) {
+          junctionGeometriesByClass.set(dominantClass, []);
+        }
+        junctionGeometriesByClass.get(dominantClass)!.push({
+          geom: junctionGeo,
+          info: {
+            id: junctionFeatureId,
+            sourceFeatureId: domSeg?.sourceFeatureId || domEdge.sourceFeatureId || domEdge.id,
+            sourceFeatureIds: Array.from(junctionSourceIdsSet),
+            portalConnections: isPathJunction ? undefined : portalConnections,
+            name: domName ? `${domName} (Junction)` : 'Road Junction',
+            category: 'Road & Way',
+            cartoLabel,
+            primaryTag: `highway=${dominantClass}`,
+            subtype: dominantClass,
+            width: Number(dominantBranch.width.toFixed(1)),
+            elevation: yElev,
+            layer: 0,
+            isBridge: false,
+            isTunnel: false,
+            osmTags: sanitizeOsmTags(domSeg?.osmTags ?? domEdge.primaryOsmTags),
+          },
+        });
+        stats.renderedJunctionCount++;
+      } else {
+        junctionGeo.dispose();
+        stats.rejectedOrDegenerateCount++;
       }
-      junctionGeometriesByClass.get(dominantClass)!.push({
-        geom: junctionGeo,
-        info: {
-          id: junctionFeatureId,
-          sourceFeatureId: domSeg?.sourceFeatureId || domEdge.sourceFeatureId || domEdge.id,
-          sourceFeatureIds: Array.from(junctionSourceIdsSet),
-          portalConnections: isPathJunction ? undefined : portalConnections,
-          name: domName ? `${domName} (Junction)` : 'Road Junction',
-          category: 'Road & Way',
-          cartoLabel,
-          primaryTag: `highway=${dominantClass}`,
-          subtype: dominantClass,
-          width: Number(dominantBranch.width.toFixed(1)),
-          elevation: yElev,
-          layer: 0,
-          isBridge: false,
-          isTunnel: false,
-          osmTags: sanitizeOsmTags(domSeg?.osmTags ?? domEdge.primaryOsmTags),
-        },
-      });
-      stats.renderedJunctionCount++;
     }
   }
 
-  // 7. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
+  // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
   const sortedBuildableEdges = [...buildableEdges].sort((a, b) => {
     const aPath = a.tier === 'path' || isNonVehicularRoadClass(a.roadClass) ? 1 : 0;
     const bPath = b.tier === 'path' || isNonVehicularRoadClass(b.roadClass) ? 1 : 0;
@@ -1264,20 +2434,49 @@ export function buildGraphAtGradeRoadGeometries(
     for (const sub of subSegments) {
       try {
         let pts = sub.points;
+        if (pts.length < 2) {
+          stats.rejectedOrDegenerateCount++;
+          continue;
+        }
         const { width, roadElevation, isPath, sourceFeatureIds: sids } = sub;
-        const portalOpts: Pick<RoadRibbonOptions, 'startPortal' | 'endPortal'> = {
-          startPortal: sub.startPortal,
-          endPortal: sub.endPortal,
-        };
+        let activeStartPortal = sub.startPortal;
+        let activeEndPortal = sub.endPortal;
 
         const isClosedSubLoop =
           pts.length >= 4 &&
           Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) <
             0.05;
 
-        const outlinePoly = isClosedSubLoop
+        let outlinePoly = isClosedSubLoop
           ? null
-          : buildRoadRibbonOutlineRing(pts, width, portalOpts);
+          : buildGraphRibbonPolygonRing(pts, width, {
+              hasStartCap: sub.hasCapStart,
+              hasEndCap: sub.hasCapEnd,
+              startPortal: activeStartPortal,
+              endPortal: activeEndPortal,
+            });
+
+        // If skewed portals caused the outline ring to self-intersect, relax back to orthogonal portals
+        if (
+          !isClosedSubLoop &&
+          (activeStartPortal || activeEndPortal) &&
+          (!outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]))
+        ) {
+          const orthoOutline = buildGraphRibbonPolygonRing(pts, width, {
+            hasStartCap: sub.hasCapStart,
+            hasEndCap: sub.hasCapEnd,
+          });
+          if (orthoOutline && orthoOutline[0] && !hasRingSelfIntersection(orthoOutline[0])) {
+            activeStartPortal = undefined;
+            activeEndPortal = undefined;
+            outlinePoly = orthoOutline;
+            recordGraphRoadDiagnostic(
+              diagnostics,
+              'ribbon_skewed_portal_self_intersection_fallback',
+              sub.subId
+            );
+          }
+        }
 
         let geom: THREE.BufferGeometry | null = null;
         let resolvedClippedPolys: MultiPolygonCoords | null = null;
@@ -1418,7 +2617,13 @@ export function buildGraphAtGradeRoadGeometries(
                   shapeGeo.rotateX(-Math.PI / 2);
                   shapeGeo.translate(0, roadElevation, 0);
                   if (shapeGeo.hasAttribute('uv')) shapeGeo.deleteAttribute('uv');
-                  geom = resourceManager.registerGeometry(shapeGeo);
+                  if (validateAndPruneHorizontalGeometry(shapeGeo)) {
+                    geom = resourceManager.registerGeometry(shapeGeo);
+                  } else {
+                    shapeGeo.dispose();
+                    stats.rejectedOrDegenerateCount++;
+                    continue;
+                  }
                 } else {
                   stats.fullySubtractedCount++;
                   fullySubtractedRoadIds.add(sub.subId);
@@ -1441,21 +2646,11 @@ export function buildGraphAtGradeRoadGeometries(
                   if (diagnostics.clippingFailures.sampleIds.length < 10) {
                     diagnostics.clippingFailures.sampleIds.push(sids[0]);
                   }
-                  if (!diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed']) {
-                    diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed'] = {
-                      count: 0,
-                      sampleIds: [],
-                    };
-                  }
-                  diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed'].count++;
-                  if (
-                    diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed'].sampleIds
-                      .length < 10
-                  ) {
-                    diagnostics.rejectedInvalid.byReason[
-                      'path_boolean_clipping_failed'
-                    ].sampleIds.push(sids[0]);
-                  }
+                  recordGraphRoadDiagnostic(
+                    diagnostics,
+                    'path_boolean_clipping_failed',
+                    sids[0]
+                  );
                 }
 
                 const exteriorSubPolylines = buildSafeExteriorSubPolylines(
@@ -1496,15 +2691,21 @@ export function buildGraphAtGradeRoadGeometries(
                     g.setAttribute('position', new THREE.BufferAttribute(subRibbon.positions, 3));
                     g.setAttribute('normal', new THREE.BufferAttribute(subRibbon.normals, 3));
                     g.setIndex(new THREE.BufferAttribute(subRibbon.indices, 1));
-                    subGeos.push(g);
-                    registerRoadFootprint(sub.subId, isPath, subOutline[0]);
+                    if (validateAndPruneHorizontalGeometry(g)) {
+                      subGeos.push(g);
+                      registerRoadFootprint(sub.subId, isPath, subOutline[0]);
+                    } else {
+                      g.dispose();
+                    }
                   }
                 }
                 if (subGeos.length > 0) {
                   const mergedSafe = mergeGeometries(subGeos, false);
                   for (const sg of subGeos) sg.dispose();
-                  if (mergedSafe) {
+                  if (mergedSafe && validateAndPruneHorizontalGeometry(mergedSafe)) {
                     geom = resourceManager.registerGeometry(mergedSafe);
+                  } else if (mergedSafe) {
+                    mergedSafe.dispose();
                   }
                 }
                 if (!geom) {
@@ -1544,24 +2745,83 @@ export function buildGraphAtGradeRoadGeometries(
               continue;
             }
             pts = cleanedPts;
+            activeStartPortal = undefined;
+            activeEndPortal = undefined;
+            outlinePoly = cleanedOutline;
           }
 
-          const ribbon = generateRoadRibbon(pts, width, roadElevation, {
+          const buildValidatedRibbonGeometry = (
+            rPts: [number, number][],
+            opts: RoadRibbonOptions
+          ): THREE.BufferGeometry | null => {
+            const ribbon = generateRoadRibbon(rPts, width, roadElevation, opts);
+            if (!ribbon) return null;
+            const candidateGeo = new THREE.BufferGeometry();
+            candidateGeo.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
+            candidateGeo.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
+            candidateGeo.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+            if (validateAndPruneHorizontalGeometry(candidateGeo)) {
+              return candidateGeo;
+            }
+            candidateGeo.dispose();
+            return null;
+          };
+
+          let candidateGeo = buildValidatedRibbonGeometry(pts, {
             roundCaps: !isClosedSubLoop,
             hasStartCap: sub.hasCapStart,
             hasEndCap: sub.hasCapEnd,
-            startPortal: sub.startPortal,
-            endPortal: sub.endPortal,
+            startPortal: activeStartPortal,
+            endPortal: activeEndPortal,
           });
-          if (!ribbon) {
+
+          // If skewed portals caused a pinched/inverted quad on a short segment, fall back to orthogonal portals
+          if (!candidateGeo && (activeStartPortal || activeEndPortal)) {
+            activeStartPortal = undefined;
+            activeEndPortal = undefined;
+            recordGraphRoadDiagnostic(
+              diagnostics,
+              'ribbon_inverted_portal_quad_fallback',
+              sub.subId
+            );
+            candidateGeo = buildValidatedRibbonGeometry(pts, {
+              roundCaps: !isClosedSubLoop,
+              hasStartCap: sub.hasCapStart,
+              hasEndCap: sub.hasCapEnd,
+            });
+          }
+
+          // If tight interior vertices still caused a self-fold, clean the polyline and retry
+          if (!candidateGeo) {
+            const cleanedPts = cleanPolylineForClipping(pts);
+            if (cleanedPts.length >= 2) {
+              recordGraphRoadDiagnostic(
+                diagnostics,
+                'ribbon_tight_bend_cleaned_fallback',
+                sub.subId
+              );
+              candidateGeo = buildValidatedRibbonGeometry(cleanedPts, {
+                roundCaps: !isClosedSubLoop,
+                hasStartCap: sub.hasCapStart,
+                hasEndCap: sub.hasCapEnd,
+              });
+              if (candidateGeo) {
+                pts = cleanedPts;
+              }
+            }
+          }
+
+          if (!candidateGeo) {
             stats.rejectedOrDegenerateCount++;
+            recordGraphRoadDiagnostic(
+              diagnostics,
+              'ribbon_unrecoverable_inversion_rejected',
+              sub.subId
+            );
             continue;
           }
 
-          geom = resourceManager.registerGeometry(new THREE.BufferGeometry());
-          geom.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
-          geom.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
-          geom.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+          geom = resourceManager.registerGeometry(candidateGeo);
         }
 
         // Register footprint for downstream clipping
@@ -1573,10 +2833,10 @@ export function buildGraphAtGradeRoadGeometries(
           const midIdx = Math.floor(pts.length / 2);
           if (midIdx >= 1 && pts.length - midIdx >= 2) {
             const half1 = buildRoadRibbonOutlineRing(pts.slice(0, midIdx + 1), width, {
-              startPortal: sub.startPortal,
+              startPortal: activeStartPortal,
             });
             const half2 = buildRoadRibbonOutlineRing(pts.slice(midIdx), width, {
-              endPortal: sub.endPortal,
+              endPortal: activeEndPortal,
             });
             if (half1 && half1[0]) registerRoadFootprint(`${sub.subId}#h1`, isPath, half1[0]);
             if (half2 && half2[0]) registerRoadFootprint(`${sub.subId}#h2`, isPath, half2[0]);
@@ -1618,14 +2878,18 @@ export function buildGraphAtGradeRoadGeometries(
         stats.renderedRoadRibbonCount++;
 
         if (edge.roadClass === 'steps') {
-          const treadGeo = generateStepTreads(
+          const treadGeo = generateGraphStepTreads(
             pts,
             width,
             roadElevation + ELEVATION_POLICY.STEP_TREAD_OFFSET
           );
           if (treadGeo) {
-            resourceManager.registerGeometry(treadGeo);
-            roadsByClass.get(edge.roadClass)!.push({ geom: treadGeo, info: roadInfo });
+            if (validateAndPruneHorizontalGeometry(treadGeo)) {
+              resourceManager.registerGeometry(treadGeo);
+              roadsByClass.get(edge.roadClass)!.push({ geom: treadGeo, info: roadInfo });
+            } else {
+              treadGeo.dispose();
+            }
           }
         }
 
@@ -1639,7 +2903,7 @@ export function buildGraphAtGradeRoadGeometries(
     }
   }
 
-  // 8. Append junction geometries into their corresponding road class buckets
+  // 7. Append junction geometries into their corresponding road class buckets
   junctionGeometriesByClass.forEach((items, roadClass) => {
     if (!roadsByClass.has(roadClass)) {
       roadsByClass.set(roadClass, []);

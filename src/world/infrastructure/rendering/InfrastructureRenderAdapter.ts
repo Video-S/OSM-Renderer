@@ -169,16 +169,25 @@ export interface RoadNodeRenderDescriptor {
   /** Attached half-edges belonging exclusively to `'path'` road edges. */
   pathIncidentHalfEdges: readonly IncidentHalfEdge[];
   /**
-   * True when this node is cross-tier (`isCrossTier === true`) and has at most 1 vehicular half-edge
-   * (or when a path contacts a single through/terminating vehicular way without a vehicular-to-vehicular
-   * branch intersection). E2 must NOT perform vehicular carriageway junction trimming for path branches.
+   * True when this node is cross-tier (`isCrossTier === true`) and has at most 2 vehicular half-edges
+   * (i.e. a path contacts a terminating vehicular way [1 vehicular arm] or a continuous through-road
+   * [2 vehicular arms] without a vehicular-to-vehicular branch intersection).
+   * E2 must NOT perform vehicular carriageway junction trimming for path branches.
    */
   isCrossTierOnlyInteraction: boolean;
   /**
-   * True when at-grade (`layer === 0 && !isBridge && !isTunnel`) and `vehicularHalfEdgeCount >= 2`,
-   * indicating that E2 vehicular junction/miter synthesis applies across `vehicularIncidentHalfEdges`.
+   * True when at-grade (`layer === 0 && !isBridge && !isTunnel`), not cross-tier-only, and
+   * `vehicularHalfEdgeCount >= 3` (or an explicit multi-way vehicular branching junction),
+   * indicating that E2 full-width vehicular carriageway junction trimming and intersection asphalt
+   * synthesis applies across `vehicularIncidentHalfEdges`.
    */
   requiresVehicularJunctionTrimming: boolean;
+  /**
+   * True when at-grade (`layer === 0 && !isBridge && !isTunnel`) and `vehicularHalfEdgeCount === 2`,
+   * indicating that E2 degree-2 road continuity and miter join synthesis applies across the two
+   * continuous vehicular half-edges (as a separate concern from full-width branching junction trimming).
+   */
+  requiresVehicularContinuityMiter: boolean;
   /**
    * True when at-grade (`layer === 0 && !isBridge && !isTunnel`), `vehicularHalfEdgeCount === 0`,
    * and `pathHalfEdgeCount >= 2`.
@@ -1017,8 +1026,10 @@ export function buildInfrastructureRenderDescriptors(
     const vehicularHalfEdgeCount = vehicularIncidentHalfEdges.length;
     const pathHalfEdgeCount = pathIncidentHalfEdges.length;
     const isAtGradeScope = node.layer === 0 && !node.isBridge && !node.isTunnel;
-    const isCrossTierOnlyInteraction = node.isCrossTier && vehicularHalfEdgeCount <= 1;
-    const requiresVehicularJunctionTrimming = isAtGradeScope && vehicularHalfEdgeCount >= 2;
+    const isCrossTierOnlyInteraction = node.isCrossTier && vehicularHalfEdgeCount <= 2;
+    const requiresVehicularJunctionTrimming =
+      isAtGradeScope && !isCrossTierOnlyInteraction && vehicularHalfEdgeCount >= 3;
+    const requiresVehicularContinuityMiter = isAtGradeScope && vehicularHalfEdgeCount === 2;
     const requiresPathJunctionTrimming =
       isAtGradeScope && vehicularHalfEdgeCount === 0 && pathHalfEdgeCount >= 2;
 
@@ -1041,6 +1052,7 @@ export function buildInfrastructureRenderDescriptors(
       pathIncidentHalfEdges,
       isCrossTierOnlyInteraction,
       requiresVehicularJunctionTrimming,
+      requiresVehicularContinuityMiter,
       requiresPathJunctionTrimming,
       incidentEdgeIds: [...node.incidentEdgeIds],
       incidentHalfEdges: node.incidentHalfEdges.map(cloneIncidentHalfEdge),
@@ -1494,9 +1506,27 @@ export function validateInfrastructureRenderDescriptors(
         `RoadNode ${node.id} cannot require vehicular junction trimming when isCrossTierOnlyInteraction is true`
       );
     }
-    if (node.vehicularHalfEdgeCount < 2 && node.requiresVehicularJunctionTrimming) {
+    if (node.vehicularHalfEdgeCount < 3 && node.requiresVehicularJunctionTrimming) {
       errors.push(
         `RoadNode ${node.id} requiresVehicularJunctionTrimming with vehicularHalfEdgeCount=${node.vehicularHalfEdgeCount}`
+      );
+    }
+    if (node.requiresVehicularContinuityMiter && node.vehicularHalfEdgeCount !== 2) {
+      errors.push(
+        `RoadNode ${node.id} requiresVehicularContinuityMiter with vehicularHalfEdgeCount=${node.vehicularHalfEdgeCount}`
+      );
+    }
+    if (node.requiresVehicularContinuityMiter && node.requiresVehicularJunctionTrimming) {
+      errors.push(
+        `RoadNode ${node.id} cannot require both vehicular continuity miter and junction trimming`
+      );
+    }
+    if (
+      node.requiresVehicularContinuityMiter &&
+      (node.layer !== 0 || node.isBridge || node.isTunnel)
+    ) {
+      errors.push(
+        `RoadNode ${node.id} requiresVehicularContinuityMiter on non-at-grade node (layer=${node.layer}, bridge=${node.isBridge}, tunnel=${node.isTunnel})`
       );
     }
   }

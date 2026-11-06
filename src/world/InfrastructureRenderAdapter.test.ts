@@ -1049,6 +1049,7 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     assert.ok(centerJunction.degree >= 4);
     assert.ok(centerJunction.roles.includes('junction'));
     assert.equal(centerJunction.requiresVehicularJunctionTrimming, true);
+    assert.equal(centerJunction.requiresVehicularContinuityMiter, false);
     assert.equal(centerJunction.isCrossTierOnlyInteraction, false);
 
     // Cross-tier footway/road contact at [0, 40] (node 1004): 1 vehicular termination + 2 footway arms
@@ -1061,6 +1062,7 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     assert.equal(crossTierNode.isCrossTierOnlyInteraction, true);
     // Crucial E2 invariant: a single vehicular arm touching a path does NOT trigger full-width vehicular intersection trimming
     assert.equal(crossTierNode.requiresVehicularJunctionTrimming, false);
+    assert.equal(crossTierNode.requiresVehicularContinuityMiter, false);
     assert.equal(crossTierNode.requiresPathJunctionTrimming, false);
 
     // Parallel multi-edges between nodes 1002 and 1011
@@ -1619,5 +1621,224 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     }
 
     console.log('[M2.3-E1 Benchmarks]', JSON.stringify(benchmarkReport));
+  });
+
+  it('10. classifies cross-tier junction trimming vs degree-2 continuity miter across through-roads and branching intersections', () => {
+    // Exercises all 5 required cross-tier and vehicular intersection scenarios:
+    // 1) 2 vehicular arms + 1 footpath (continuous through-road with joining side footpath)
+    // 2) 2 vehicular arms + 2 footpaths (continuous through-road crossed by footpath)
+    // 3) 3 vehicular arms + 1 footpath (vehicular T-junction with connecting footpath)
+    // 4) 1 vehicular arm + 2 footpaths (terminating vehicular road with path arms)
+    // 5) Pure vehicular junction (3 vehicular arms, 0 footpaths)
+    // 6) Pure vehicular degree-2 road continuity (2 vehicular arms, 0 footpaths)
+    const roads: TestRoadFeature[] = [
+      // Case 1: Node 9011 at [0, 0] -> 2 vehicular half-edges + 1 footpath
+      makeRoad('way/c1-v1', [[-20, 0], [0, 0]], {
+        roadClass: 'secondary',
+        nodeIds: ['9010', '9011'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c1-v2', [[0, 0], [20, 0]], {
+        roadClass: 'secondary',
+        nodeIds: ['9011', '9012'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c1-p1', [[0, 0], [0, 20]], {
+        roadClass: 'footway',
+        nodeIds: ['9011', '9013'],
+        osmTags: { highway: 'footway' },
+      }),
+
+      // Case 2: Node 9021 at [0, 50] -> 2 vehicular half-edges + 2 footpaths
+      makeRoad('way/c2-v1', [[-20, 50], [0, 50]], {
+        roadClass: 'secondary',
+        nodeIds: ['9020', '9021'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c2-v2', [[0, 50], [20, 50]], {
+        roadClass: 'secondary',
+        nodeIds: ['9021', '9022'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c2-p1', [[0, 50], [0, 70]], {
+        roadClass: 'footway',
+        nodeIds: ['9021', '9023'],
+        osmTags: { highway: 'footway' },
+      }),
+      makeRoad('way/c2-p2', [[0, 50], [0, 30]], {
+        roadClass: 'footway',
+        nodeIds: ['9021', '9024'],
+        osmTags: { highway: 'footway' },
+      }),
+
+      // Case 3: Node 9031 at [0, 100] -> 3 vehicular half-edges + 1 footpath
+      makeRoad('way/c3-v1', [[-20, 100], [0, 100]], {
+        roadClass: 'secondary',
+        nodeIds: ['9030', '9031'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c3-v2', [[0, 100], [20, 100]], {
+        roadClass: 'secondary',
+        nodeIds: ['9031', '9032'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c3-v3', [[0, 100], [0, 80]], {
+        roadClass: 'secondary',
+        nodeIds: ['9031', '9033'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c3-p1', [[0, 100], [0, 120]], {
+        roadClass: 'footway',
+        nodeIds: ['9031', '9034'],
+        osmTags: { highway: 'footway' },
+      }),
+
+      // Case 4: Node 9041 at [0, 150] -> 1 vehicular half-edge + 2 footpaths
+      makeRoad('way/c4-v1', [[-20, 150], [0, 150]], {
+        roadClass: 'secondary',
+        nodeIds: ['9040', '9041'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c4-p1', [[0, 150], [0, 170]], {
+        roadClass: 'footway',
+        nodeIds: ['9041', '9042'],
+        osmTags: { highway: 'footway' },
+      }),
+      makeRoad('way/c4-p2', [[0, 150], [0, 130]], {
+        roadClass: 'footway',
+        nodeIds: ['9041', '9043'],
+        osmTags: { highway: 'footway' },
+      }),
+
+      // Case 5: Node 9051 at [0, 200] -> Pure vehicular junction (3 vehicular arms, 0 footpaths)
+      makeRoad('way/c5-v1', [[-20, 200], [0, 200]], {
+        roadClass: 'secondary',
+        nodeIds: ['9050', '9051'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c5-v2', [[0, 200], [20, 200]], {
+        roadClass: 'secondary',
+        nodeIds: ['9051', '9052'],
+        osmTags: { highway: 'secondary' },
+      }),
+      makeRoad('way/c5-v3', [[0, 200], [0, 220]], {
+        roadClass: 'secondary',
+        nodeIds: ['9051', '9053'],
+        osmTags: { highway: 'secondary' },
+      }),
+
+      // Case 6: Node 9061 at [0, 250] -> Pure vehicular degree-2 continuity (2 vehicular arms, 0 footpaths, attribute break)
+      makeRoad('way/c6-v1', [[-20, 250], [0, 250]], {
+        roadClass: 'secondary',
+        nodeIds: ['9060', '9061'],
+        surface: 'asphalt',
+        osmTags: { highway: 'secondary', surface: 'asphalt' },
+      }),
+      makeRoad('way/c6-v2', [[0, 250], [20, 250]], {
+        roadClass: 'secondary',
+        nodeIds: ['9061', '9062'],
+        surface: 'paving_stones',
+        osmTags: { highway: 'secondary', surface: 'paving_stones' },
+      }),
+    ];
+
+    const roadParts: UnchainedRoadPart[] = roads.map((r) => ({
+      id: `${r.id}-0`,
+      sourceFeatureId: r.sourceFeatureId || r.id,
+      hasExplicitSourceId: true,
+      partIndex: 0,
+      points: r.points.map((pt) => [pt[0], pt[1]] as [number, number]),
+      rawOsmNodeIds: r.nodeIds ? [...r.nodeIds] : r.points.map(() => undefined),
+      clippedAtStart: false,
+      clippedAtEnd: false,
+      roadClass: r.roadClass,
+      width: r.width,
+      lanes: r.lanes,
+      oneway: r.oneway,
+      surface: r.surface,
+      layer: r.layer ?? 0,
+      isBridge: r.isBridge ?? false,
+      isTunnel: r.isTunnel ?? false,
+      isCulvert: false,
+      osmTags: r.osmTags ? { ...r.osmTags } : undefined,
+    }));
+
+    const graph = buildInfrastructureGraph({
+      roadParts,
+      railwayParts: [],
+      infrastructurePoints: [],
+    });
+    const bundle = buildInfrastructureRenderDescriptors(graph);
+
+    // Validate the bundle conforms to all invariant checks
+    const validation = validateInfrastructureRenderDescriptors(bundle, graph);
+    assert.equal(validation.isValid, true);
+    assert.deepEqual(validation.errors, []);
+
+    // 1) 2 vehicular + 1 footpath
+    const node9011 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9011');
+    assert.ok(node9011, 'Expected node 9011');
+    assert.equal(node9011.vehicularHalfEdgeCount, 2);
+    assert.equal(node9011.pathHalfEdgeCount, 1);
+    assert.equal(node9011.isCrossTier, true);
+    assert.equal(node9011.isCrossTierOnlyInteraction, true);
+    assert.equal(node9011.requiresVehicularJunctionTrimming, false);
+    assert.equal(node9011.requiresVehicularContinuityMiter, true);
+    assert.equal(node9011.requiresPathJunctionTrimming, false);
+
+    // 2) 2 vehicular + 2 footpaths
+    const node9021 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9021');
+    assert.ok(node9021, 'Expected node 9021');
+    assert.equal(node9021.vehicularHalfEdgeCount, 2);
+    assert.equal(node9021.pathHalfEdgeCount, 2);
+    assert.equal(node9021.isCrossTier, true);
+    assert.equal(node9021.isCrossTierOnlyInteraction, true);
+    assert.equal(node9021.requiresVehicularJunctionTrimming, false);
+    assert.equal(node9021.requiresVehicularContinuityMiter, true);
+    assert.equal(node9021.requiresPathJunctionTrimming, false);
+
+    // 3) 3 vehicular + 1 footpath
+    const node9031 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9031');
+    assert.ok(node9031, 'Expected node 9031');
+    assert.equal(node9031.vehicularHalfEdgeCount, 3);
+    assert.equal(node9031.pathHalfEdgeCount, 1);
+    assert.equal(node9031.isCrossTier, true);
+    assert.equal(node9031.isCrossTierOnlyInteraction, false);
+    assert.equal(node9031.requiresVehicularJunctionTrimming, true);
+    assert.equal(node9031.requiresVehicularContinuityMiter, false);
+    assert.equal(node9031.requiresPathJunctionTrimming, false);
+
+    // 4) 1 vehicular + 2 footpaths
+    const node9041 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9041');
+    assert.ok(node9041, 'Expected node 9041');
+    assert.equal(node9041.vehicularHalfEdgeCount, 1);
+    assert.equal(node9041.pathHalfEdgeCount, 2);
+    assert.equal(node9041.isCrossTier, true);
+    assert.equal(node9041.isCrossTierOnlyInteraction, true);
+    assert.equal(node9041.requiresVehicularJunctionTrimming, false);
+    assert.equal(node9041.requiresVehicularContinuityMiter, false);
+    assert.equal(node9041.requiresPathJunctionTrimming, false);
+
+    // 5) Pure vehicular junction (3 vehicular arms)
+    const node9051 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9051');
+    assert.ok(node9051, 'Expected node 9051');
+    assert.equal(node9051.vehicularHalfEdgeCount, 3);
+    assert.equal(node9051.pathHalfEdgeCount, 0);
+    assert.equal(node9051.isCrossTier, false);
+    assert.equal(node9051.isCrossTierOnlyInteraction, false);
+    assert.equal(node9051.requiresVehicularJunctionTrimming, true);
+    assert.equal(node9051.requiresVehicularContinuityMiter, false);
+    assert.equal(node9051.requiresPathJunctionTrimming, false);
+
+    // 6) Pure vehicular degree-2 road continuity
+    const node9061 = bundle.roadNodes.find((n) => n.rawOsmNodeId === '9061');
+    assert.ok(node9061, 'Expected node 9061');
+    assert.equal(node9061.vehicularHalfEdgeCount, 2);
+    assert.equal(node9061.pathHalfEdgeCount, 0);
+    assert.equal(node9061.isCrossTier, false);
+    assert.equal(node9061.isCrossTierOnlyInteraction, false);
+    assert.equal(node9061.requiresVehicularJunctionTrimming, false);
+    assert.equal(node9061.requiresVehicularContinuityMiter, true);
+    assert.equal(node9061.requiresPathJunctionTrimming, false);
   });
 });

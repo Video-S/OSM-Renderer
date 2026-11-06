@@ -8,7 +8,7 @@
 
 > **cloneDescriptorOsmTags**(`tags?`): [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:635
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
 
 Recursively deep-clones JSON-compatible metadata (objects, arrays, primitives)
 to ensure descriptor metadata is completely decoupled and isolated from

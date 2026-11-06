@@ -6,7 +6,7 @@
 
 # Interface: RailwayEdgeRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:342
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:351
 
 Render-ready descriptor for a topological railway edge (Stage E3 handoff contract).
 
@@ -16,7 +16,7 @@ Render-ready descriptor for a topological railway edge (Stage E3 handoff contrac
 
 > **clippedAtEnd**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:384
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:393
 
 True if `points[points.length - 1]` was synthesized by region bounding-box clipping.
 
@@ -26,7 +26,7 @@ True if `points[points.length - 1]` was synthesized by region bounding-box clipp
 
 > **clippedAtStart**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:382
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:391
 
 True if `points[0]` was synthesized by region bounding-box clipping.
 
@@ -36,7 +36,7 @@ True if `points[0]` was synthesized by region bounding-box clipping.
 
 > **deduplicatedFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:406
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:415
 
 Canonically sorted list of exact-duplicate feature IDs merged into this edge's segments.
 
@@ -46,7 +46,7 @@ Canonically sorted list of exact-duplicate feature IDs merged into this edge's s
 
 > `optional` **electrified?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:364
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:373
 
 Raw electrification tag from OSM if present (e.g. `'contact_line'`, `'no'`).
 
@@ -56,7 +56,7 @@ Raw electrification tag from OSM if present (e.g. `'contact_line'`, `'no'`).
 
 > `optional` **endGradeTransitionId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:416
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:425
 
 Confirmed `GradeTransitionRelation.id` at the `'end'` (`toNodeId`) endpoint, if any.
 
@@ -66,7 +66,7 @@ Confirmed `GradeTransitionRelation.id` at the `'end'` (`toNodeId`) endpoint, if 
 
 > **endInwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:388
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:397
 
 Unit tangent `[dx, dz]` at `points[N-1]` pointing inward along the edge (`toNodeId -> points[N-2]`).
 
@@ -76,7 +76,7 @@ Unit tangent `[dx, dz]` at `points[N-1]` pointing inward along the edge (`toNode
 
 > **endNodeRoles**: readonly [`RailwayNodeRole`](../../../topology/types/type-aliases/RailwayNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:392
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:401
 
 Topological roles held by `toNodeId`.
 
@@ -86,7 +86,7 @@ Topological roles held by `toNodeId`.
 
 > **endTurnoutStatus**: [`TurnoutClassificationStatus`](../../../topology/types/type-aliases/TurnoutClassificationStatus.md) \| `"none"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:396
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:405
 
 Turnout classification status at `toNodeId`.
 
@@ -96,7 +96,7 @@ Turnout classification status at `toNodeId`.
 
 > **flatCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:412
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:421
 
 Confirmed `RailwayFlatCrossingRelation.id`s crossing this railway edge, ordered by arc-length.
 
@@ -106,7 +106,7 @@ Confirmed `RailwayFlatCrossingRelation.id`s crossing this railway edge, ordered 
 
 > **fromNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:346
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:355
 
 Start railway node ID (`points[0]`).
 
@@ -116,7 +116,7 @@ Start railway node ID (`points[0]`).
 
 > `optional` **gauge?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:362
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:371
 
 Raw gauge string from OSM tags if present (e.g. `'1435'`).
 
@@ -126,7 +126,7 @@ Raw gauge string from OSM tags if present (e.g. `'1435'`).
 
 > **gradeSeparatedCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:422
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:431
 
 All `GradeSeparatedCrossingRelation.id`s where this railway edge is the upper or lower way.
 
@@ -136,7 +136,7 @@ All `GradeSeparatedCrossingRelation.id`s where this railway edge is the upper or
 
 > **gradeTransitionIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:418
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:427
 
 All confirmed `GradeTransitionRelation.id`s attached to this railway edge.
 
@@ -146,7 +146,7 @@ All confirmed `GradeTransitionRelation.id`s attached to this railway edge.
 
 > **hasConfirmedSwitchAtEnd**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:400
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:409
 
 True iff `toNodeId` has a confirmed turnout switch (`endTurnoutStatus === 'confirmed'`).
 
@@ -156,7 +156,7 @@ True iff `toNodeId` has a confirmed turnout switch (`endTurnoutStatus === 'confi
 
 > **hasConfirmedSwitchAtStart**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:398
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:407
 
 True iff `fromNodeId` has a confirmed turnout switch (`startTurnoutStatus === 'confirmed'`).
 
@@ -166,7 +166,7 @@ True iff `fromNodeId` has a confirmed turnout switch (`startTurnoutStatus === 'c
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:344
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:353
 
 Canonical railway edge ID.
 
@@ -176,7 +176,7 @@ Canonical railway edge ID.
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:376
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:385
 
 True if railway edge is a bridge structure.
 
@@ -186,7 +186,7 @@ True if railway edge is a bridge structure.
 
 > **isClosedLoop**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:380
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:389
 
 True if `fromNodeId === toNodeId`.
 
@@ -196,7 +196,7 @@ True if `fromNodeId === toNodeId`.
 
 > **isSecondaryBranch**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:372
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:381
 
 True if classified as a secondary branch (`service=siding|yard|spur|crossover` or `usage=industrial|military`).
 
@@ -206,7 +206,7 @@ True if classified as a secondary branch (`service=siding|yard|spur|crossover` o
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:378
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:387
 
 True if railway edge is a tunnel structure.
 
@@ -216,7 +216,7 @@ True if railway edge is a tunnel structure.
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:374
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:383
 
 Effective vertical OSM layer.
 
@@ -226,7 +226,7 @@ Effective vertical OSM layer.
 
 > **lengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:356
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:365
 
 Cumulative Euclidean arc-length in meters.
 
@@ -236,7 +236,7 @@ Cumulative Euclidean arc-length in meters.
 
 > **levelCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:420
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:429
 
 All confirmed `LevelCrossingRelation.id`s along this railway edge, ordered by `railwayArcLengthMeters`.
 
@@ -246,7 +246,7 @@ All confirmed `LevelCrossingRelation.id`s along this railway edge, ordered by `r
 
 > `optional` **name?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:370
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:379
 
 Railway line/track name if present.
 
@@ -256,7 +256,7 @@ Railway line/track name if present.
 
 > **parallelIndex**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:350
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:359
 
 Zero-based parallel multi-edge index between `{fromNodeId, toNodeId}`.
 
@@ -266,7 +266,7 @@ Zero-based parallel multi-edge index between `{fromNodeId, toNodeId}`.
 
 > **points**: readonly \[`number`, `number`\][]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:352
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:361
 
 Ordered 2D metric polyline vertices `[x, z][]` in `fromNodeId -> toNodeId` order.
 
@@ -276,7 +276,7 @@ Ordered 2D metric polyline vertices `[x, z][]` in `fromNodeId -> toNodeId` order
 
 > **primaryOsmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:408
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:417
 
 Cloned OSM tags from the primary constituent segment for `InspectableFeatureInfo` construction.
 
@@ -286,7 +286,7 @@ Cloned OSM tags from the primary constituent segment for `InspectableFeatureInfo
 
 > **provenance**: [`EdgeProvenance`](../../../topology/types/interfaces/EdgeProvenance.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:410
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:419
 
 Complete per-segment OSMnx-style provenance covering `[0, lengthMeters]`.
 
@@ -296,7 +296,7 @@ Complete per-segment OSMnx-style provenance covering `[0, lengthMeters]`.
 
 > **railwayType**: [`RailwayType`](../../../../../types/MapFeature/type-aliases/RailwayType.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:358
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:367
 
 Classified OSM railway type (`'rail'`, `'tram'`, `'light_rail'`, `'subway'`, etc.).
 
@@ -306,7 +306,7 @@ Classified OSM railway type (`'rail'`, `'tram'`, `'light_rail'`, `'subway'`, etc
 
 > `optional` **service?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:366
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:375
 
 Raw railway service tag if present (e.g. `'siding'`, `'yard'`, `'spur'`, `'crossover'`).
 
@@ -316,7 +316,7 @@ Raw railway service tag if present (e.g. `'siding'`, `'yard'`, `'spur'`, `'cross
 
 > **sourceFeatureId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:402
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:411
 
 Primary original OSM source feature ID (`provenance.segments[0].sourceFeatureId`).
 
@@ -326,7 +326,7 @@ Primary original OSM source feature ID (`provenance.segments[0].sourceFeatureId`
 
 > **sourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:404
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:413
 
 Canonically sorted list of all original OSM source feature IDs contributing to this edge.
 
@@ -336,7 +336,7 @@ Canonically sorted list of all original OSM source feature IDs contributing to t
 
 > `optional` **startGradeTransitionId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:414
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:423
 
 Confirmed `GradeTransitionRelation.id` at the `'start'` (`fromNodeId`) endpoint, if any.
 
@@ -346,7 +346,7 @@ Confirmed `GradeTransitionRelation.id` at the `'start'` (`fromNodeId`) endpoint,
 
 > **startInwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:386
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:395
 
 Unit tangent `[dx, dz]` at `points[0]` pointing inward along the edge (`fromNodeId -> points[1]`).
 
@@ -356,7 +356,7 @@ Unit tangent `[dx, dz]` at `points[0]` pointing inward along the edge (`fromNode
 
 > **startNodeRoles**: readonly [`RailwayNodeRole`](../../../topology/types/type-aliases/RailwayNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:390
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:399
 
 Topological roles held by `fromNodeId`.
 
@@ -366,7 +366,7 @@ Topological roles held by `fromNodeId`.
 
 > **startTurnoutStatus**: [`TurnoutClassificationStatus`](../../../topology/types/type-aliases/TurnoutClassificationStatus.md) \| `"none"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:394
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:403
 
 Turnout classification status at `fromNodeId`.
 
@@ -376,7 +376,7 @@ Turnout classification status at `fromNodeId`.
 
 > **toNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:348
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:357
 
 End railway node ID (`points[points.length - 1]`).
 
@@ -386,7 +386,7 @@ End railway node ID (`points[points.length - 1]`).
 
 > `optional` **usage?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:368
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:377
 
 Raw railway usage tag if present (e.g. `'main'`, `'branch'`).
 
@@ -396,7 +396,7 @@ Raw railway usage tag if present (e.g. `'main'`, `'branch'`).
 
 > **vertexRawOsmNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:354
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:363
 
 Verified raw OSM node IDs aligned 1:1 with `points` (`undefined` where untagged or clipped).
 
@@ -406,6 +406,6 @@ Verified raw OSM node IDs aligned 1:1 with `points` (`undefined` where untagged 
 
 > **width**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:360
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:369
 
 Track bed width in meters.

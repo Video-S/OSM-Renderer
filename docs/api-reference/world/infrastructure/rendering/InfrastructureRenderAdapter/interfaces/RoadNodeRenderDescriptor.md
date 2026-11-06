@@ -30,7 +30,7 @@ Total attached half-edge count (`incidentHalfEdges.length`).
 
 > **gradeTransitionIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:194
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:203
 
 Confirmed `GradeTransitionRelation.id`s anchored at this road node.
 
@@ -50,7 +50,7 @@ Canonical road node ID (e.g. `"road_node:0|0|0:osm_5001"`).
 
 > **incidentEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:188
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:197
 
 Deduplicated, canonically sorted unique incident road edge IDs.
 
@@ -60,7 +60,7 @@ Deduplicated, canonically sorted unique incident road edge IDs.
 
 > **incidentHalfEdges**: readonly [`IncidentHalfEdge`](../../../topology/types/interfaces/IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:190
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:199
 
 All attached road half-edges (`incidentHalfEdges.length === degree`).
 
@@ -100,11 +100,12 @@ True if incident to both `'vehicular'` and `'path'` road edges.
 
 > **isCrossTierOnlyInteraction**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:176
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:177
 
-True when this node is cross-tier (`isCrossTier === true`) and has at most 1 vehicular half-edge
-(or when a path contacts a single through/terminating vehicular way without a vehicular-to-vehicular
-branch intersection). E2 must NOT perform vehicular carriageway junction trimming for path branches.
+True when this node is cross-tier (`isCrossTier === true`) and has at most 2 vehicular half-edges
+(i.e. a path contacts a terminating vehicular way [1 vehicular arm] or a continuous through-road
+[2 vehicular arms] without a vehicular-to-vehicular branch intersection).
+E2 must NOT perform vehicular carriageway junction trimming for path branches.
 
 ***
 
@@ -132,7 +133,7 @@ Effective vertical OSM layer.
 
 > **levelCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:196
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:205
 
 Confirmed `LevelCrossingRelation.id`s anchored at this road node.
 
@@ -172,7 +173,7 @@ Attached half-edges belonging exclusively to `'path'` road edges.
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:192
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:201
 
 Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matched this node.
 
@@ -212,10 +213,22 @@ Verified raw unprefixed OSM node ID if grounded in explicit OSM data.
 
 > **requiresPathJunctionTrimming**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:186
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:195
 
 True when at-grade (`layer === 0 && !isBridge && !isTunnel`), `vehicularHalfEdgeCount === 0`,
 and `pathHalfEdgeCount >= 2`.
+
+***
+
+### requiresVehicularContinuityMiter
+
+> **requiresVehicularContinuityMiter**: `boolean`
+
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:190
+
+True when at-grade (`layer === 0 && !isBridge && !isTunnel`) and `vehicularHalfEdgeCount === 2`,
+indicating that E2 degree-2 road continuity and miter join synthesis applies across the two
+continuous vehicular half-edges (as a separate concern from full-width branching junction trimming).
 
 ***
 
@@ -223,10 +236,12 @@ and `pathHalfEdgeCount >= 2`.
 
 > **requiresVehicularJunctionTrimming**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:181
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:184
 
-True when at-grade (`layer === 0 && !isBridge && !isTunnel`) and `vehicularHalfEdgeCount >= 2`,
-indicating that E2 vehicular junction/miter synthesis applies across `vehicularIncidentHalfEdges`.
+True when at-grade (`layer === 0 && !isBridge && !isTunnel`), not cross-tier-only, and
+`vehicularHalfEdgeCount >= 3` (or an explicit multi-way vehicular branching junction),
+indicating that E2 full-width vehicular carriageway junction trimming and intersection asphalt
+synthesis applies across `vehicularIncidentHalfEdges`.
 
 ***
 

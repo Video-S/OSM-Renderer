@@ -93,6 +93,12 @@ Prior to Stage E2:
 - Updated test 4 to recognize and inspect the width-transition patch; restored test 18, which the later agent had deleted. Test 18 checks visible cycleway surface coverage and source lineage without demanding a patch where another road completely occludes it.
 - **Pending verification:** Run the focused `npx tsx --test src/world/GraphRoadRendering.test.ts` then `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api`. No post-fix pass counts are claimed. TKT-008 stays `in_progress`.
 
+### 2026-11-06 — Smooth-width blending after blocky-junction feedback (pending verification)
+- Owner observed that restoring full-footprint clipping removed defects but left unnaturally square shoulders where differently sized cycleways or roads join. Full-width local unions are safe against holes, but they do not by themselves interpolate cross-section widths.
+- Retained the full-footprint union as the safety fallback, and expanded eligible local taper joins from almost perfectly straight to gentle two-arm bends (outward-tangent dot <= -0.82) or uniquely identified through-pairs at three-arm forks (dot <= -0.92). A vehicular three-arm taper requires matching road classes; nearly tied candidates, insufficient edge-length budgets, and failed geometric validation fall back without forcing a taper.
+- `GraphRoadRendering.test.ts` test 21 covers a gently curving 6m-to-2m cycleway and a same-class three-arm vehicular fork, checking surface coverage, original approach widths, absence of square shoulders, source provenance, and the existing strict overlap/normal/seam invariants.
+- **Verification remains pending:** This GitHub-only editing environment cannot execute the repository's npm suite; no new pass count is claimed. TKT-008 stays in_progress, and E3-E5 remain out of scope.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

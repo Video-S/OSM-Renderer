@@ -80,6 +80,12 @@ Prior to Stage E2:
 - Added GraphRoadRendering.test.ts test 18 for a cycleway fork crossed by an unrelated at-grade road, a cross-tier path fork, and an elevated bridge, including path-surface coverage and provenance.
 - Verification pending: These changes were committed through GitHub, but the npm commands cannot be executed in this environment. Previously recorded passing test counts predate the correction; they are not evidence of post-change success. TKT-008 remains in_progress.
 
+### 2026-11-06 — Unequal-width two-arm connection correction (pending verification)
+- Following owner feedback that cycleway connections still form square shoulders, corrected the concrete degree-2 width mismatch: `applyDegree2SharedContinuityPortal` no longer averages widths. Equal-width arms retain the existing miter; different-width arms use a graph-confirmed local junction patch.
+- For nearly collinear two-arm joins with sufficient edge length, the patch is a bounded trapezoid between two independently full-width orthogonal portals. Non-collinear or short cases retain the existing local full-footprint union; no source centerline or road widths are changed outside the local transition.
+- Added `GraphRoadRendering.test.ts` test 19 verifying a 6m-to-2m cycleway transition, preserved source lineage, full widths on either approach, a covered midpoint, and absence of square shoulders.
+- **Verification pending:** GitHub file-edit access cannot run `npm test`, `npm run lint`, `npm run build`, or `npm run docs:api` in the current environment. All earlier passing test totals predate this correction. Ticket remains `in_progress`; no owner sign-off recorded.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

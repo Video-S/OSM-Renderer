@@ -2809,5 +2809,83 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     legacyScene.dispose();
     previewScene.dispose();
   });
-});
+  it('17. covers full-width road corridors across T and acute junctions (including a negative control)', () => {
+    const layouts: Array<Array<{ points: [number, number][]; width: number }>> = [
+      [
+        { points: [[-36, 0], [0, 0]], width: 12 },
+        { points: [[0, 0], [36, 0]], width: 12 },
+        { points: [[0, -36], [0, 0]], width: 6 },
+      ],
+      [
+        { points: [[-36, 0], [0, 0]], width: 14 },
+        { points: [[0, 0], [36, 0]], width: 14 },
+        { points: [[0, 0], [30, 11]], width: 5.5 },
+      ],
+    ];
+    for (const layout of layouts) {
+      const specs: SyntheticRoadSpec[] = layout.map((road, i) => ({
+        id: `way/coverage-${i}`,
+        roadClass: i === 2 ? 'service' : 'primary',
+        points: road.points as [number, number][],
+        width: road.width,
+        nodeIds: i === 0 || (i === 2 && road.points[1][0] === 0 && road.points[1][1] === 0)
+          ? [`coverage-end-${i}`, 'coverage-center']
+          : ['coverage-center', `coverage-end-${i}`],
+      }));
+      const scene = buildGraphRoadScene(createDatasetFromSpecs(specs));
+      try {
+        assertRoadGroupGeometryInvariants(scene);
+        type Tri = [[number, number], [number, number], [number, number]];
+        const visible: Tri[] = [];
+        const withoutJunction: Tri[] = [];
+        scene.roadsGroup.traverse((object) => {
+          if (!(object as THREE.Mesh).isMesh || !object.name.startsWith('Roads_')) return;
+          const mesh = object as THREE.Mesh;
+          const positions = mesh.geometry.getAttribute('position');
+          const index = mesh.geometry.getIndex();
+          const count = index ? index.count / 3 : positions.count / 3;
+          for (let f = 0; f < count; f++) {
+            const ids = [0, 1, 2].map((k) => index ? index.getX(f * 3 + k) : f * 3 + k);
+            if (ids.some((i) => Math.abs(positions.getY(i) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+            const tri = ids.map((i) => [positions.getX(i), positions.getZ(i)] as [number, number]) as Tri;
+            visible.push(tri);
+            const info = resolveInspectedFeature({ object: mesh, faceIndex: f });
+            if (!info?.id.startsWith('junction-')) withoutJunction.push(tri);
+          }
+        });
+        const contains = (tri: Tri, x: number, z: number): boolean => {
+          const cross = (a: [number, number], b: [number, number]) =>
+            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+          const ab = cross(tri[0], tri[1]);
+          const bc = cross(tri[1], tri[2]);
+          const ca = cross(tri[2], tri[0]);
+          return (ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+            (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4);
+        };
+        const insideIntendedRoad = (x: number, z: number): boolean => layout.some((road) => {
+          const [a, b] = road.points;
+          const dx = b[0] - a[0], dz = b[1] - a[1];
+          const lengthSq = dx * dx + dz * dz;
+          const t = ((x - a[0]) * dx + (z - a[1]) * dz) / lengthSq;
+          const lateral = Math.abs((x - a[0]) * dz - (z - a[1]) * dx) / Math.sqrt(lengthSq);
+          return t >= 0.03 && t <= 0.97 && lateral < road.width / 2 - 0.45;
+        });
+        let sampled = 0, missing = 0, missingWithoutPatch = 0;
+        for (let x = -18.13; x < 18; x += 0.45) {
+          for (let z = -12.11; z < 12; z += 0.45) {
+            if (!insideIntendedRoad(x, z)) continue;
+            sampled++;
+            if (!visible.some((tri) => contains(tri, x, z))) missing++;
+            if (!withoutJunction.some((tri) => contains(tri, x, z))) missingWithoutPatch++;
+          }
+        }
+        assert.ok(sampled > 300, 'Expected substantial source-footprint coverage');
+        assert.equal(missing, 0, `Missing ${missing} of ${sampled} expected road interior points`);
+        assert.ok(missingWithoutPatch > 0, 'Negative control must detect a hole without the junction patch');
+      } finally {
+        scene.dispose();
+      }
+    }
+  });
 
+});

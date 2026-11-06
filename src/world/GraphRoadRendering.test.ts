@@ -2945,6 +2945,31 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       assert.equal(pathPatches.length, 2, 'Both cycleway fork patches must remain inspectable');
       assert.ok(pathPatches.some((patch) => patch.info.sourceFeatureIds.includes('way/mixed-bike-north')),
         'Cross-tier path junction must preserve the source-feature lineage');
+
+      const cyclewayMesh = scene.roadsGroup.children.find((obj) => obj.name === 'Roads_cycleway') as THREE.Mesh;
+      assert.ok(cyclewayMesh, 'Expected the green cycleway surface to render');
+      const positions = cyclewayMesh.geometry.getAttribute('position');
+      const indices = cyclewayMesh.geometry.getIndex();
+      const coversPoint = (x: number, z: number): boolean => {
+        const triangles = indices ? indices.count / 3 : positions.count / 3;
+        for (let face = 0; face < triangles; face++) {
+          const ids = [0, 1, 2].map((k) => indices ? indices.getX(face * 3 + k) : face * 3 + k);
+          if (ids.some((i) => Math.abs(positions.getY(i) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+          const points = ids.map((i) => [positions.getX(i), positions.getZ(i)] as [number, number]);
+          const cross = (a: [number, number], b: [number, number]) =>
+            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+          const ab = cross(points[0], points[1]);
+          const bc = cross(points[1], points[2]);
+          const ca = cross(points[2], points[0]);
+          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+        }
+        return false;
+      };
+      assert.ok(coversPoint(0, 0),
+        'The unconnected elevated bridge must not remove the cycleway fork throat');
+      assert.ok(coversPoint(80, 5),
+        'Cross-tier bicycle arms must connect outside the overlapping vehicular surface');
     } finally {
       scene.dispose();
     }

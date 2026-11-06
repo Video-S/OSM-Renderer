@@ -2905,4 +2905,49 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('18. clips cycleway fork patches against actual at-grade roads without joining unrelated infrastructure', () => {
+    const data = createDatasetFromSpecs([
+      // Path-only fork with a separate road crossing its local junction footprint.
+      { id: 'way/bike-west', roadClass: 'cycleway', width: 3.5,
+        points: [[-30, 0], [0, 0]], nodeIds: ['bike-west', 'bike-fork'] },
+      { id: 'way/bike-east', roadClass: 'cycleway', width: 3.5,
+        points: [[0, 0], [30, 0]], nodeIds: ['bike-fork', 'bike-east'] },
+      { id: 'way/bike-north', roadClass: 'cycleway', width: 3.5,
+        points: [[0, 0], [0, 30]], nodeIds: ['bike-fork', 'bike-north'] },
+      { id: 'way/veh-crossing-bike', roadClass: 'service', width: 2,
+        points: [[-30, 2], [30, 2]], nodeIds: ['veh-west', 'veh-east'] },
+
+      // Path fork meeting a single vehicular arm: neither a vehicular branch
+      // junction nor a reason to leave the path-only fork unmeshed.
+      { id: 'way/mixed-bike-west', roadClass: 'cycleway', width: 3.5,
+        points: [[50, 0], [80, 0]], nodeIds: ['mixed-west', 'mixed-fork'] },
+      { id: 'way/mixed-bike-east', roadClass: 'cycleway', width: 3.5,
+        points: [[80, 0], [110, 0]], nodeIds: ['mixed-fork', 'mixed-east'] },
+      { id: 'way/mixed-bike-north', roadClass: 'cycleway', width: 3.5,
+        points: [[80, 0], [80, 30]], nodeIds: ['mixed-fork', 'mixed-north'] },
+      { id: 'way/veh-terminating-at-fork', roadClass: 'residential', width: 7,
+        points: [[80, -30], [80, 0]], nodeIds: ['veh-south', 'mixed-fork'] },
+
+      // At-grade path must not be cut by this unrelated elevated bridge.
+      { id: 'way/elevated-bike-overpass', roadClass: 'secondary', width: 9,
+        points: [[-25, -25], [25, 25]], nodeIds: ['bridge-south', 'bridge-north'],
+        layer: 1, isBridge: true },
+    ]);
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const stats: GraphRoadRenderStats = scene.roadsGroup.userData.graphRoadStats;
+      assert.equal(stats.branchingJunctionCount, 0,
+        'Neither cycleway fork may create a vehicular branching junction');
+      assert.equal(stats.pathJunctionCount, 2,
+        'Pure and cross-tier cycleway forks both require path junction patches');
+      const pathPatches = junctionRanges.filter((range) => range.info.id.startsWith('path-junction-'));
+      assert.equal(pathPatches.length, 2, 'Both cycleway fork patches must remain inspectable');
+      assert.ok(pathPatches.some((patch) => patch.info.sourceFeatureIds.includes('way/mixed-bike-north')),
+        'Cross-tier path junction must preserve the source-feature lineage');
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });

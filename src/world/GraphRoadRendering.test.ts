@@ -2975,4 +2975,54 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('19. tapers an unequal-width cycleway through-node rather than forming square shoulders', () => {
+    const data = createDatasetFromSpecs([
+      { id: 'way/width-wide', roadClass: 'cycleway', width: 6,
+        points: [[0, -35], [0, 0]], nodeIds: ['width-south', 'width-join'] },
+      { id: 'way/width-narrow', roadClass: 'cycleway', width: 2,
+        points: [[0, 0], [0, 35]], nodeIds: ['width-join', 'width-north'] },
+    ]);
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const pathPatches = junctionRanges.filter((r) => r.info.id.startsWith('path-junction-'));
+      assert.equal(pathPatches.length, 1, 'The width change must be represented by a local path patch');
+      assert.deepEqual(
+        [...pathPatches[0].info.sourceFeatureIds].sort(),
+        ['way/width-narrow', 'way/width-wide'],
+        'Width transition must retain both original OSM source feature identities'
+      );
+
+      const mesh = scene.roadsGroup.children.find((obj) => obj.name === 'Roads_cycleway') as THREE.Mesh;
+      assert.ok(mesh, 'Cycleway geometry must exist');
+      const pos = mesh.geometry.getAttribute('position');
+      const index = mesh.geometry.getIndex();
+      const containsPoint = (x: number, z: number): boolean => {
+        const triangleCount = index ? index.count / 3 : pos.count / 3;
+        const cross = (a: [number, number], b: [number, number]) =>
+          (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+        for (let face = 0; face < triangleCount; face++) {
+          const ids = [0, 1, 2].map((k) => index ? index.getX(face * 3 + k) : face * 3 + k);
+          if (ids.some((id) => Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+          const [a, b, c] = ids.map((id) => [pos.getX(id), pos.getZ(id)] as [number, number]);
+          const ab = cross(a, b), bc = cross(b, c), ca = cross(c, a);
+          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+        }
+        return false;
+      };
+
+      assert.ok(containsPoint(2.7, -10), 'Wide side must retain its full 6m corridor');
+      assert.ok(containsPoint(-2.7, -10), 'Wide side must retain both curbs');
+      assert.ok(containsPoint(0.8, 10), 'Narrow side must retain its full 2m corridor');
+      assert.ok(containsPoint(-0.8, 10), 'Narrow side must retain both curbs');
+      assert.ok(containsPoint(1.5, 0) && containsPoint(-1.5, 0),
+        'Midpoint of a 6m-to-2m transition must remain covered');
+      assert.ok(!containsPoint(2.6, 0) && !containsPoint(-2.6, 0),
+        'Local taper must not preserve the wide road as a square shoulder at the shared node');
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });

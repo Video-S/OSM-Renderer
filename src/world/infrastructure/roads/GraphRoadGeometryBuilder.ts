@@ -762,13 +762,6 @@ function applyDegree2SharedContinuityPortal(
     return false;
   }
 
-  // If the two arms have drastically different widths at a sharp bend, use boundary-derived beveling
-  const widthRatio =
-    Math.max(b0.width, b1.width) / Math.max(0.1, Math.min(b0.width, b1.width));
-  if (widthRatio > 1.75 && dot > -0.85) {
-    return false;
-  }
-
   // Forward tangent flowing from b0 into nodeCenter (-b0.dir) and out along b1 (+b1.dir)
   let tx = -b0.dir[0] + b1.dir[0];
   let tz = -b0.dir[1] + b1.dir[1];

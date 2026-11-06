@@ -1197,30 +1197,38 @@ function solveBoundaryDerivedJunctionNode(
   }
 
   const trimDists: number[] = [];
-  // Find two opposing through-arms with unequal widths. This can be a simple
-  // two-arm width change or the continuous pair at a three-arm fork. Other
-  // junctions retain the established local full-footprint union.
+  // Two connected through-arms with different widths need a local taper,
+  // otherwise the full-width footprint union leaves square shoulders at the node.
+  // A gentle centerline bend is still continuity: 35° for two arms, 23° for
+  // three-arm forks. Do not invent a mainline at ambiguous branching nodes.
   let widthTransitionPair: [number, number] | null = null;
-  let strongestOpposition = -0.95;
+  const maxThroughArmDot = k === 2 ? -0.82 : -0.92;
+  const taperCandidates: Array<{ pair: [number, number]; dot: number }> = [];
   if (k === 2 || k === 3) {
     for (let i = 0; i < k; i++) {
       for (let j = i + 1; j < k; j++) {
         const a = sortedBranches[i];
         const b = sortedBranches[j];
-        // Only path-tier forks currently have a validated three-arm taper;
-        // leave vehicular branching junctions on the full-footprint union.
-        if (k === 3 && !isPathJunction) continue;
+        // Different vehicular classes may have deliberately distinct carriageways.
+        // For a three-arm road fork, blend only a geometrically continuous
+        // same-class pair. Cycleways use the same path-tier rule.
+        if (k === 3 && !isPathJunction && a.roadClass !== b.roadClass) continue;
         const dot = a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
         const delta = Math.abs(a.width - b.width);
-        if (a.edge.id === b.edge.id || dot > strongestOpposition || delta <= 1e-3) continue;
-        const minimumTaperArmLength = delta * 0.65;
-        if (maxTrimDists[i] < minimumTaperArmLength || maxTrimDists[j] < minimumTaperArmLength) {
-          continue;
-        }
-        widthTransitionPair = [i, j];
-        strongestOpposition = dot;
+        if (a.edge.id === b.edge.id || dot > maxThroughArmDot || delta <= 1e-3) continue;
+        const minTaperLength = delta * 0.65;
+        if (maxTrimDists[i] < minTaperLength || maxTrimDists[j] < minTaperLength) continue;
+        taperCandidates.push({ pair: [i, j], dot });
       }
     }
+  }
+  taperCandidates.sort((a, b) => a.dot - b.dot);
+  // If two through-pairs are almost equally aligned, preserve the ordinary
+  // footprint union instead of guessing which branch should be continuous.
+  if (taperCandidates.length > 0 &&
+      (k === 2 || taperCandidates.length === 1 ||
+       taperCandidates[1].dot - taperCandidates[0].dot >= 0.10)) {
+    widthTransitionPair = taperCandidates[0].pair;
   }
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 

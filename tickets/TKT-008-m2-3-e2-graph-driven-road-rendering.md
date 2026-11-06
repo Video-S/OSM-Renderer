@@ -82,8 +82,8 @@ Prior to Stage E2:
 
 ### 2026-11-06 — Unequal-width two-arm connection correction (pending verification)
 - Following owner feedback that cycleway connections still form square shoulders, corrected the concrete degree-2 width mismatch: `applyDegree2SharedContinuityPortal` no longer averages widths. Equal-width arms retain the existing miter; different-width arms use a graph-confirmed local junction patch.
-- For nearly collinear two-arm joins with sufficient edge length, the patch is a bounded trapezoid between two independently full-width orthogonal portals. Non-collinear or short cases retain the existing local full-footprint union; no source centerline or road widths are changed outside the local transition.
-- Added `GraphRoadRendering.test.ts` test 19 verifying a 6m-to-2m cycleway transition, preserved source lineage, full widths on either approach, a covered midpoint, and absence of square shoulders.
+- For nearly opposite through-arms with sufficient edge length, in either two-arm joins or three-arm forks, the patch contains a bounded local taper between the independently full-width orthogonal portals. At a three-arm fork the remaining branch is joined through a local Boolean union. Non-collinear or short cases retain the existing complete footprint union; widths outside the local transition remain unchanged.
+- Added `GraphRoadRendering.test.ts` tests 19 and 20: a 6m-to-2m cycleway width transition and an unequal-width three-arm cycleway fork, checking full-width external approaches, local transition coverage without square shoulders, and source provenance.
 - **Verification pending:** GitHub file-edit access cannot run `npm test`, `npm run lint`, `npm run build`, or `npm run docs:api` in the current environment. All earlier passing test totals predate this correction. Ticket remains `in_progress`; no owner sign-off recorded.
 
 ## Related files and documentation

@@ -2171,11 +2171,12 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
       'Repeated discovery of confirmed crossing must not emit an unresolved duplicate'
     );
 
-    // 7. Regression: Annotation offset within 0.15 m does NOT expand the event-deduplication radius
-    // Point feature is placed at [80, -0.08] (0.08 m offset from road vertex '9701' at [80, 0]), matching road vertex '9701'.
-    // The road crosses RailF (way/980 at x = 80) at [80, 0].
-    // The same road loops back and crosses RailF again at [80, 0.09] (0.09 m away from physical crossing, but only 0.17 m away from the point annotation).
-    // Because the deduplication radius is keyed strictly to the physical crossing position (0.02 m), the second crossing at [80, 0.09] must NOT be suppressed!
+    // 7. Regression: Crossing Anchor Consistency & Annotation Offset Isolation
+    // - A road crosses the same railway at [80, 0] and [80, 0.09].
+    // - The first road crossing vertex has verified OSM ID '9701'.
+    // - railway=level_crossing point ID '9701' is located at [80, 0.08] (closer to the second crossing at [80, 0.09]!).
+    // - The first crossing MUST be confirmed at [80, 0], with consistent roadNodeId, edge ID, and arc-length offset.
+    // - The second crossing MUST remain independently unresolved at [80, 0.09].
     const annotationOffsetSource: TopologySourceData = {
       roadParts: [
         makeRoadPart({
@@ -2183,7 +2184,7 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
           points: [
             [75, 0.00],
             [80, 0.00],
-            [85, 0.04],
+            [85, 0.045],
             [85, 0.09],
             [75, 0.09],
           ],
@@ -2207,7 +2208,7 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
           id: 'node/9701',
           hasExplicitSourceId: true,
           rawOsmNodeId: '9701',
-          point: [80, -0.08], // Offset by 0.08 m from physical crossing [80, 0.00]
+          point: [80, 0.08], // Located at [80, 0.08]: distance to [80, 0.00] is 0.08 m; distance to [80, 0.09] is only 0.01 m!
           kind: 'railway_level_crossing',
           osmTags: { railway: 'level_crossing' },
         },
@@ -2216,10 +2217,25 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
 
     const annotationOffsetGraph = buildInfrastructureGraph(annotationOffsetSource);
     assert.equal(annotationOffsetGraph.levelCrossings.length, 1);
-    assert.equal(annotationOffsetGraph.levelCrossings[0].rawOsmNodeId, '9701');
+    const confirmedLc = annotationOffsetGraph.levelCrossings[0];
+    assert.equal(confirmedLc.rawOsmNodeId, '9701');
     assert.ok(
-      Math.abs(annotationOffsetGraph.levelCrossings[0].position[1] - 0.00) < 1e-4,
-      'Confirmed level crossing position must be at physical geometric crossing (z = 0.00)'
+      Math.abs(confirmedLc.position[0] - 80) < 1e-4,
+      `Expected confirmed crossing at x = 80, got ${confirmedLc.position[0]}`
+    );
+    assert.ok(
+      Math.abs(confirmedLc.position[1] - 0.00) < 1e-4,
+      `Expected confirmed level crossing at verified vertex z = 0.00 (not nearby intersection z = 0.09), got ${confirmedLc.position[1]}`
+    );
+    assert.ok(confirmedLc.roadNodeId, 'Expected confirmed crossing to retain roadNodeId for verified vertex');
+    const roadNode = annotationOffsetGraph.roads.nodes.get(confirmedLc.roadNodeId!);
+    assert.ok(roadNode, 'Retained roadNode must exist');
+    assert.equal(roadNode.rawOsmNodeId, '9701');
+    assert.ok(Math.abs(roadNode.z - 0.00) < 1e-4, 'Road node must be at verified vertex z = 0.00');
+    assert.ok(confirmedLc.roadEdgeId.includes('way/970-0'));
+    assert.ok(
+      Math.abs(confirmedLc.roadArcLengthMeters - 5.0) < 1e-3,
+      `Expected roadArcLengthMeters = 5.0 m at verified vertex [80, 0], got ${confirmedLc.roadArcLengthMeters}`
     );
 
     const secondCrossing = annotationOffsetGraph.diagnostics.unresolvedCrossings.filter(
@@ -2231,7 +2247,56 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
     assert.equal(
       secondCrossing.length,
       1,
-      'Annotation offset must not expand event-deduplication radius to suppress second crossing 0.09 m away'
+      'Second crossing at [80, 0.09] must remain independently unresolved'
+    );
+
+    // 8. Regression: Ambiguous multiple intersections equidistant to verified anchor emit unresolved diagnostic rather than choosing arbitrarily
+    // Symmetrical V-shape road crossing vertical rail at x = 80.05 at [80.05, -0.05] and [80.05, +0.05] (equidistant from verified vertex [80.00, 0.00])
+    const ambiguousAnchorSource: TopologySourceData = {
+      roadParts: [
+        makeRoadPart({
+          id: 'way/990-0',
+          points: [
+            [85, -0.10],
+            [80, 0.00],
+            [85, 0.10],
+          ],
+          rawOsmNodeIds: ['9900', '9901', '9902'],
+          roadClass: 'secondary',
+        }),
+      ],
+      railwayParts: [
+        makeRailwayPart({
+          id: 'way/995-0',
+          points: [
+            [80.05, -10],
+            [80.05, 20],
+          ],
+          rawOsmNodeIds: ['9950', '9951'],
+          railwayType: 'rail',
+        }),
+      ],
+      infrastructurePoints: [
+        {
+          id: 'node/9901',
+          hasExplicitSourceId: true,
+          rawOsmNodeId: '9901',
+          point: [80, 0.00],
+          kind: 'railway_level_crossing',
+          osmTags: { railway: 'level_crossing' },
+        },
+      ],
+    };
+
+    const ambiguousAnchorGraph = buildInfrastructureGraph(ambiguousAnchorSource);
+    assert.equal(
+      ambiguousAnchorGraph.levelCrossings.length,
+      0,
+      'Ambiguous multiple intersections equidistant to anchor must not confirm level crossing'
+    );
+    assert.equal(
+      ambiguousAnchorGraph.diagnostics.unresolvedInfrastructurePoints?.[0]?.reason,
+      'ambiguous_multiple_candidate_nodes'
     );
   });
 });

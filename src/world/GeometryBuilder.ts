@@ -50,6 +50,7 @@ import {
 import {
   adaptInfrastructureGraphToRenderDescriptors,
   buildInfrastructureRenderDescriptors,
+  cloneDescriptorOsmTags,
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
@@ -68,6 +69,7 @@ export {
   SceneResourceManager,
   adaptInfrastructureGraphToRenderDescriptors,
   buildInfrastructureRenderDescriptors,
+  cloneDescriptorOsmTags,
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,

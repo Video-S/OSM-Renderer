@@ -8,7 +8,7 @@
 
 > **cleanPolylineForClipping**(`points`): \[`number`, `number`\][]
 
-Defined in: world/GeometryBuilder.ts:800
+Defined in: world/GeometryBuilder.ts:802
 
 Cleans a 2D polyline before retrying Boolean clipping by filtering non-finite points,
 deduplicating near-coincident consecutive vertices, and removing near-180-degree fold-back spikes.

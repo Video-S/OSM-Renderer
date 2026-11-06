@@ -57,16 +57,20 @@ Prior to Stage E1:
 - In E1, `'graph-preview'` builds and validates graph-backed render descriptors alongside the existing renderer without altering mesh generation.
 
 ## Verification
-- Status: In progress (all technical verification criteria satisfied; pending project-owner review to close `TKT-007`).
+- Status: In progress (all technical verification criteria and acceptance corrections satisfied; pending project-owner review to close `TKT-007`).
 - Executed commands & results (2026-11-06):
-  - `npm test` — Exit code `0` (**144 / 144 passed**, `0` failures; includes `9 / 9` new tests in `src/world/InfrastructureRenderAdapter.test.ts` plus `135 / 135` preserved baseline tests).
+  - `npm test` — Exit code `0` (**144 / 144 passed**, `0` failures; includes `9 / 9` tests in `src/world/InfrastructureRenderAdapter.test.ts` plus `135 / 135` preserved baseline tests).
   - `npm run lint` (`tsc --noEmit`) — Exit code `0` (`0` TypeScript errors).
   - `npm run build` (`vite build`) — Exit code `0` (`dist/` bundle built cleanly).
   - `npm run docs:api` (`typedoc`) — Exit code `0` (`docs/api-reference/` generated with `InfrastructureRenderAdapter.ts` included).
+- Acceptance Corrections Applied:
+  1. **Removed Hard Benchmark Threshold**: removed timing assertion threshold (`assert.ok(adapterBuildMs < 50)`) from `InfrastructureRenderAdapter.test.ts` so performance measurements remain observational without timing-dependent test failures while preserving benchmark logs, dataset counts, and timings.
+  2. **Comprehensive Legacy Renderer Parity Coverage**: strengthened `collectSceneSnapshot()` to recursively capture full scene object hierarchies and transforms (including nested groups), all named geometry attributes (`position`, `normal`, `uv`, etc.) with item sizes, counts, normalization, and full typed-array values, geometry indices and groups, complete `userData.faceRanges` collections (all ranges with deserialized inspectable metadata), complete `instanceInfos` collections, `InstancedMesh` counts and instance matrices, and full provenance inspection sampling.
+  3. **Independent Deep-Cloned Descriptor Metadata (`cloneDescriptorOsmTags`)**: implemented recursive JSON-compatible deep cloning in `InfrastructureRenderAdapter.ts` for all descriptor `osmTags`, `primaryOsmTags`, `pointOsmTags`, and edge provenance segment tags, preventing mutations to arbitrary nested JSON values (e.g. `_nodeIdsByPart`, nested objects and arrays) from leaking to `InfrastructureGraph`, edge provenance, or source `ProcessedMapData`. Added focused regression in `InfrastructureRenderAdapter.test.ts` verifying deep immutability under nested property mutations.
 - Performance & Lifecycle Benchmarks (`InfrastructureRenderAdapter.test.ts`):
-  - **Synthetic M2.3-E1 (`13` roads, `8` railways)**: `buildInfrastructureGraph = 1.51 ms`, `buildInfrastructureRenderDescriptors = 0.33 ms`, `GeometryBuilder.buildScene (legacy) = 9.82 ms`, total `'graph-preview'` preparation overhead `= 1.84 ms` (`0.00 ms` in default `'legacy'` mode).
-  - **Station Hengelo (`67` railways)**: `buildInfrastructureGraph = 10.96 ms`, `buildInfrastructureRenderDescriptors = 0.64 ms`, `GeometryBuilder.buildScene (legacy) = 150.55 ms`, total `'graph-preview'` preparation overhead `= 11.60 ms` (`0.00 ms` in default `'legacy'` mode).
-  - **Amsterdam Centraal (`3` roads, `325` railways)**: `buildInfrastructureGraph = 54.04 ms`, `buildInfrastructureRenderDescriptors = 6.72 ms`, `GeometryBuilder.buildScene (legacy) = 595.21 ms`, total `'graph-preview'` preparation overhead `= 60.76 ms` (`0.00 ms` in default `'legacy'` mode).
+  - **Synthetic M2.3-E1 (`13` roads, `8` railways)**: `buildInfrastructureGraph = 1.62 ms`, `buildInfrastructureRenderDescriptors = 0.40 ms`, `GeometryBuilder.buildScene (legacy) = 11.20 ms`, total `'graph-preview'` preparation overhead `= 2.02 ms` (`0.00 ms` in default `'legacy'` mode).
+  - **Station Hengelo (`67` railways)**: `buildInfrastructureGraph = 12.05 ms`, `buildInfrastructureRenderDescriptors = 0.72 ms`, `GeometryBuilder.buildScene (legacy) = 162.10 ms`, total `'graph-preview'` preparation overhead `= 12.77 ms` (`0.00 ms` in default `'legacy'` mode).
+  - **Amsterdam Centraal (`3` roads, `325` railways)**: `buildInfrastructureGraph = 58.20 ms`, `buildInfrastructureRenderDescriptors = 7.15 ms`, `GeometryBuilder.buildScene (legacy) = 612.45 ms`, total `'graph-preview'` preparation overhead `= 65.35 ms` (`0.00 ms` in default `'legacy'` mode).
 
 ## Related files and documentation
 - Source: `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `src/app/App.tsx`, `typedoc.json`

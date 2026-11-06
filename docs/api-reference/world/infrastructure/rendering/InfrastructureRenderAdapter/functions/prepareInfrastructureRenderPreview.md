@@ -8,7 +8,7 @@
 
 > **prepareInfrastructureRenderPreview**(`input`, `options?`): [`InfrastructureRenderPreviewResult`](../interfaces/InfrastructureRenderPreviewResult.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1592
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1617
 
 Prepares the Stage E1 infrastructure render preview for a dataset.
 

@@ -8,7 +8,7 @@
 
 > **parseInfrastructureRenderSource**(`raw`): [`InfrastructureRenderSource`](../type-aliases/InfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:70
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:69
 
 Parses a raw string value into a valid `InfrastructureRenderSource`,
 resolving any absent or unrecognized value safely to `'legacy'`.

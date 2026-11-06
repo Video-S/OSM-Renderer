@@ -8,7 +8,7 @@
 
 > **createShapesFromMultiPolygon**(`mp`): `Shape`[]
 
-Defined in: world/GeometryBuilder.ts:620
+Defined in: world/GeometryBuilder.ts:622
 
 Converts a resolved MultiPolygon (which may contain disconnected outer polygons and interior holes)
 into an array of winding-normalized THREE.Shape instances.

@@ -6,7 +6,6 @@ import {
 } from '../../../types/MapFeature';
 import {
   buildInfrastructureGraph,
-  cloneOsmTags,
   compareStringsCodeUnit,
   EdgeProvenance,
   EdgeSegmentProvenance,
@@ -628,6 +627,32 @@ export interface InfrastructureRenderPreviewResult {
   timing: InfrastructureRenderPreviewTiming;
 }
 
+/**
+ * Recursively deep-clones JSON-compatible metadata (objects, arrays, primitives)
+ * to ensure descriptor metadata is completely decoupled and isolated from
+ * `InfrastructureGraph`, edge provenance, and source `ProcessedMapData`.
+ */
+export function cloneDescriptorOsmTags(
+  tags?: RawGeoJsonProperties
+): RawGeoJsonProperties {
+  if (!tags) return {};
+  return deepCloneDescriptorMetadata(tags);
+}
+
+function deepCloneDescriptorMetadata<T>(val: T): T {
+  if (val === null || typeof val !== 'object') {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map((item) => deepCloneDescriptorMetadata(item)) as unknown as T;
+  }
+  const copy: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    copy[k] = deepCloneDescriptorMetadata(v);
+  }
+  return copy as T;
+}
+
 function clonePoint2D(pt: readonly [number, number]): [number, number] {
   return [pt[0], pt[1]];
 }
@@ -656,7 +681,7 @@ function cloneSegmentProvenance(seg: EdgeSegmentProvenance): EdgeSegmentProvenan
     sourceStartVertexIndex: seg.sourceStartVertexIndex,
     sourceEndVertexIndex: seg.sourceEndVertexIndex,
     reversedRelativeToSource: seg.reversedRelativeToSource,
-    osmTags: cloneOsmTags(seg.osmTags),
+    osmTags: cloneDescriptorOsmTags(seg.osmTags),
   };
 }
 
@@ -717,7 +742,7 @@ function cloneUnresolvedInfrastructurePoint(
     position: [p.position[0], p.position[1]],
     candidateNodeIds: [...p.candidateNodeIds],
     reason: p.reason,
-    osmTags: cloneOsmTags(p.osmTags),
+    osmTags: cloneDescriptorOsmTags(p.osmTags),
   };
 }
 
@@ -1019,7 +1044,7 @@ export function buildInfrastructureRenderDescriptors(
       requiresPathJunctionTrimming,
       incidentEdgeIds: [...node.incidentEdgeIds],
       incidentHalfEdges: node.incidentHalfEdges.map(cloneIncidentHalfEdge),
-      pointOsmTags: node.pointOsmTags ? cloneOsmTags(node.pointOsmTags) : undefined,
+      pointOsmTags: node.pointOsmTags ? cloneDescriptorOsmTags(node.pointOsmTags) : undefined,
       gradeTransitionIds: [...new Set(roadNodeGradeTransitions.get(node.id) ?? [])].sort(
         compareStringsCodeUnit
       ),
@@ -1047,7 +1072,7 @@ export function buildInfrastructureRenderDescriptors(
       primarySeg?.sourceFeatureId ?? clonedProv.sourceFeatureIds[0] ?? edge.id;
     const sourceFeatureIds = collectAllSourceFeatureIds(clonedProv, sourceFeatureId);
     const deduplicatedFeatureIds = collectDeduplicatedFeatureIds(clonedProv);
-    const primaryOsmTags = primarySeg ? cloneOsmTags(primarySeg.osmTags) : {};
+    const primaryOsmTags = primarySeg ? cloneDescriptorOsmTags(primarySeg.osmTags) : {};
 
     const orderedLcIds = [...(roadEdgeLevelCrossings.get(edge.id) ?? [])]
       .sort((a, b) => a.arc - b.arc || compareStringsCodeUnit(a.id, b.id))
@@ -1149,7 +1174,7 @@ export function buildInfrastructureRenderDescriptors(
       isConfirmedSwitch,
       isUnresolvedSwitch,
       turnoutTopology: clonedTurnout,
-      pointOsmTags: node.pointOsmTags ? cloneOsmTags(node.pointOsmTags) : undefined,
+      pointOsmTags: node.pointOsmTags ? cloneDescriptorOsmTags(node.pointOsmTags) : undefined,
       flatCrossingIds: [...new Set(railNodeFlatCrossings.get(node.id) ?? [])].sort(
         compareStringsCodeUnit
       ),
@@ -1180,7 +1205,7 @@ export function buildInfrastructureRenderDescriptors(
       primarySeg?.sourceFeatureId ?? clonedProv.sourceFeatureIds[0] ?? edge.id;
     const sourceFeatureIds = collectAllSourceFeatureIds(clonedProv, sourceFeatureId);
     const deduplicatedFeatureIds = collectDeduplicatedFeatureIds(clonedProv);
-    const primaryOsmTags = primarySeg ? cloneOsmTags(primarySeg.osmTags) : {};
+    const primaryOsmTags = primarySeg ? cloneDescriptorOsmTags(primarySeg.osmTags) : {};
 
     const orderedFcIds = [...(railEdgeFlatCrossings.get(edge.id) ?? [])]
       .sort((a, b) => a.arc - b.arc || compareStringsCodeUnit(a.id, b.id))
@@ -1260,7 +1285,7 @@ export function buildInfrastructureRenderDescriptors(
         crossingAngleRad: fc.crossingAngleRad,
         confidence: fc.confidence,
         allowsBranchInterchange: false,
-        pointOsmTags: fc.pointOsmTags ? cloneOsmTags(fc.pointOsmTags) : undefined,
+        pointOsmTags: fc.pointOsmTags ? cloneDescriptorOsmTags(fc.pointOsmTags) : undefined,
       };
     }
   );
@@ -1287,7 +1312,7 @@ export function buildInfrastructureRenderDescriptors(
       railwaySourceFeatureIds: railEdge ? [...railEdge.sourceFeatureIds] : [],
       crossingAngleRad: lc.crossingAngleRad,
       confidence: lc.confidence,
-      pointOsmTags: lc.pointOsmTags ? cloneOsmTags(lc.pointOsmTags) : undefined,
+      pointOsmTags: lc.pointOsmTags ? cloneDescriptorOsmTags(lc.pointOsmTags) : undefined,
     };
   });
 

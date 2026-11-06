@@ -6,7 +6,7 @@
 
 # Interface: RoadNodeRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:139
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:138
 
 Render-ready descriptor for a topological road node (Stage E2 handoff contract).
 
@@ -20,7 +20,7 @@ never trigger false vehicular carriageway asphalt junction trimming (`ADR-0002`,
 
 > **degree**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:157
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:156
 
 Total attached half-edge count (`incidentHalfEdges.length`).
 
@@ -30,7 +30,7 @@ Total attached half-edge count (`incidentHalfEdges.length`).
 
 > **gradeTransitionIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:195
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:194
 
 Confirmed `GradeTransitionRelation.id`s anchored at this road node.
 
@@ -40,7 +40,7 @@ Confirmed `GradeTransitionRelation.id`s anchored at this road node.
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:141
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:140
 
 Canonical road node ID (e.g. `"road_node:0|0|0:osm_5001"`).
 
@@ -50,7 +50,7 @@ Canonical road node ID (e.g. `"road_node:0|0|0:osm_5001"`).
 
 > **incidentEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:189
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:188
 
 Deduplicated, canonically sorted unique incident road edge IDs.
 
@@ -60,7 +60,7 @@ Deduplicated, canonically sorted unique incident road edge IDs.
 
 > **incidentHalfEdges**: readonly [`IncidentHalfEdge`](../../../topology/types/interfaces/IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:191
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:190
 
 All attached road half-edges (`incidentHalfEdges.length === degree`).
 
@@ -70,7 +70,7 @@ All attached road half-edges (`incidentHalfEdges.length === degree`).
 
 > **isBoundaryClipped**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:155
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:154
 
 True if synthesized at the loaded region clipping boundary.
 
@@ -80,7 +80,7 @@ True if synthesized at the loaded region clipping boundary.
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:151
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:150
 
 True if node belongs to a bridge vertical scope.
 
@@ -90,7 +90,7 @@ True if node belongs to a bridge vertical scope.
 
 > **isCrossTier**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:163
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:162
 
 True if incident to both `'vehicular'` and `'path'` road edges.
 
@@ -100,7 +100,7 @@ True if incident to both `'vehicular'` and `'path'` road edges.
 
 > **isCrossTierOnlyInteraction**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:177
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:176
 
 True when this node is cross-tier (`isCrossTier === true`) and has at most 1 vehicular half-edge
 (or when a path contacts a single through/terminating vehicular way without a vehicular-to-vehicular
@@ -112,7 +112,7 @@ branch intersection). E2 must NOT perform vehicular carriageway junction trimmin
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:153
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:152
 
 True if node belongs to a tunnel vertical scope.
 
@@ -122,7 +122,7 @@ True if node belongs to a tunnel vertical scope.
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:149
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:148
 
 Effective vertical OSM layer.
 
@@ -132,7 +132,7 @@ Effective vertical OSM layer.
 
 > **levelCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:197
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:196
 
 Confirmed `LevelCrossingRelation.id`s anchored at this road node.
 
@@ -142,7 +142,7 @@ Confirmed `LevelCrossingRelation.id`s anchored at this road node.
 
 > **nodeIdOrigin**: [`NodeIdOrigin`](../../../topology/types/type-aliases/NodeIdOrigin.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:145
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:144
 
 Provenance of node identity (`'explicit_osm' | 'coordinate_fallback' | 'boundary_clip'`).
 
@@ -152,7 +152,7 @@ Provenance of node identity (`'explicit_osm' | 'coordinate_fallback' | 'boundary
 
 > **pathHalfEdgeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:167
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:166
 
 Number of attached half-edges belonging to `'path'` road edges.
 
@@ -162,7 +162,7 @@ Number of attached half-edges belonging to `'path'` road edges.
 
 > **pathIncidentHalfEdges**: readonly [`IncidentHalfEdge`](../../../topology/types/interfaces/IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:171
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:170
 
 Attached half-edges belonging exclusively to `'path'` road edges.
 
@@ -172,7 +172,7 @@ Attached half-edges belonging exclusively to `'path'` road edges.
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:193
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:192
 
 Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matched this node.
 
@@ -182,7 +182,7 @@ Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matche
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:147
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:146
 
 World coordinates `[x, z]` in local meters.
 
@@ -192,7 +192,7 @@ World coordinates `[x, z]` in local meters.
 
 > **primaryRole**: [`RoadNodeRole`](../../../topology/types/type-aliases/RoadNodeRole.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:159
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:158
 
 Primary topological role selected by precedence.
 
@@ -202,7 +202,7 @@ Primary topological role selected by precedence.
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:143
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:142
 
 Verified raw unprefixed OSM node ID if grounded in explicit OSM data.
 
@@ -212,7 +212,7 @@ Verified raw unprefixed OSM node ID if grounded in explicit OSM data.
 
 > **requiresPathJunctionTrimming**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:187
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:186
 
 True when at-grade (`layer === 0 && !isBridge && !isTunnel`), `vehicularHalfEdgeCount === 0`,
 and `pathHalfEdgeCount >= 2`.
@@ -223,7 +223,7 @@ and `pathHalfEdgeCount >= 2`.
 
 > **requiresVehicularJunctionTrimming**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:182
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:181
 
 True when at-grade (`layer === 0 && !isBridge && !isTunnel`) and `vehicularHalfEdgeCount >= 2`,
 indicating that E2 vehicular junction/miter synthesis applies across `vehicularIncidentHalfEdges`.
@@ -234,7 +234,7 @@ indicating that E2 vehicular junction/miter synthesis applies across `vehicularI
 
 > **roles**: readonly [`RoadNodeRole`](../../../topology/types/type-aliases/RoadNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:161
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:160
 
 Non-exclusive canonically sorted list of all topological roles on this node.
 
@@ -244,7 +244,7 @@ Non-exclusive canonically sorted list of all topological roles on this node.
 
 > **vehicularHalfEdgeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:165
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:164
 
 Number of attached half-edges belonging to `'vehicular'` road edges.
 
@@ -254,6 +254,6 @@ Number of attached half-edges belonging to `'vehicular'` road edges.
 
 > **vehicularIncidentHalfEdges**: readonly [`IncidentHalfEdge`](../../../topology/types/interfaces/IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:169
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:168
 
 Attached half-edges belonging exclusively to `'vehicular'` road edges.

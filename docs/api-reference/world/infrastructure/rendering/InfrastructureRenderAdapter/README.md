@@ -36,6 +36,7 @@
 ## Functions
 
 - [buildInfrastructureRenderDescriptors](functions/buildInfrastructureRenderDescriptors.md)
+- [cloneDescriptorOsmTags](functions/cloneDescriptorOsmTags.md)
 - [normalizeInfrastructureRenderOptions](functions/normalizeInfrastructureRenderOptions.md)
 - [parseInfrastructureRenderOptionsFromSearch](functions/parseInfrastructureRenderOptionsFromSearch.md)
 - [parseInfrastructureRenderSource](functions/parseInfrastructureRenderSource.md)

@@ -43,6 +43,12 @@ Re-exports [buildInfrastructureRenderDescriptors](../infrastructure/rendering/In
 
 ***
 
+### cloneDescriptorOsmTags
+
+Re-exports [cloneDescriptorOsmTags](../infrastructure/rendering/InfrastructureRenderAdapter/functions/cloneDescriptorOsmTags.md)
+
+***
+
 ### DEFAULT\_INFRASTRUCTURE\_RENDER\_OPTIONS
 
 Re-exports [DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS](../infrastructure/rendering/InfrastructureRenderAdapter/variables/DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.md)

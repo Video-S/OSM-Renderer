@@ -1,12 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import polygonClipping from 'polygon-clipping';
 import {
   ProcessedMapData,
   RoadClass,
   RoadFeature,
 } from '../types/MapFeature';
 import { ELEVATION_POLICY } from './ElevationPolicy';
+import { MultiPolygonCoords, computeMultiPolygonArea } from './PlanarLayerValidator';
 import {
   auditGraphRoadMeshIntegrity,
   BuiltSceneGeometry,
@@ -2750,36 +2752,51 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     assertRoadGroupGeometryInvariants(sceneWithoutSide);
     assertRoadGroupGeometryInvariants(sceneWithSide);
 
-    // Extract all vertices of Roads_primary with |x| > 18.0 m (outside the local junction region at [0, 0])
-    const collectExteriorPrimaryVertices = (scene: BuiltSceneGeometry): string[] => {
-      const mesh = scene.roadsGroup.children.find(
-        (c) => c.name === 'Roads_primary'
-      ) as THREE.Mesh;
+    // Boolean clipping can re-triangulate a whole road without changing its surface.
+    // Compare occupied area outside the junction, not tessellation-dependent vertex IDs.
+    const exteriorPrimarySurface = (scene: BuiltSceneGeometry): MultiPolygonCoords => {
+      const mesh = scene.roadsGroup.children.find((c) => c.name === 'Roads_primary') as THREE.Mesh;
       assert.ok(mesh, 'Expected Roads_primary mesh');
-      const pos = mesh.geometry.attributes.position;
-      const idx = mesh.geometry.index!;
-      const used = new Set<number>();
-      for (let i = 0; i < idx.count; i++) {
-        used.add(idx.getX(i));
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex();
+      const triPolys: MultiPolygonCoords = [];
+      const faceCount = idx ? idx.count / 3 : pos.count / 3;
+      for (let f = 0; f < faceCount; f++) {
+        const ids = [0, 1, 2].map((i) => idx ? idx.getX(f * 3 + i) : f * 3 + i);
+        if (ids.some((i) => Math.abs(pos.getY(i) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+        const ring: [number, number][] = ids.map((i) => [pos.getX(i), pos.getZ(i)]);
+        ring.push([ring[0][0], ring[0][1]]);
+        triPolys.push([ring]);
       }
-      const coords = new Set<string>();
-      for (const vi of used) {
-        const vx = pos.getX(vi);
-        const vz = pos.getZ(vi);
-        if (Math.abs(vx) > 18.0) {
-          coords.add(`${vx.toFixed(3)},${vz.toFixed(3)}`);
-        }
-      }
-      return Array.from(coords).sort();
+      assert.ok(triPolys.length > 0, 'Expected primary road surface triangles');
+      const merged = polygonClipping.union(
+        triPolys[0] as unknown as polygonClipping.Geom,
+        ...(triPolys.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+      const exteriorMask: MultiPolygonCoords = [
+        [[[-200, -200], [-18, -200], [-18, 200], [-200, 200], [-200, -200]]],
+        [[[18, -200], [200, -200], [200, 200], [18, 200], [18, -200]]],
+      ];
+      return polygonClipping.intersection(
+        merged as unknown as polygonClipping.Geom,
+        exteriorMask as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
     };
 
-    const exteriorWithoutSide = collectExteriorPrimaryVertices(sceneWithoutSide);
-    const exteriorWithSide = collectExteriorPrimaryVertices(sceneWithSide);
-    assert.ok(exteriorWithoutSide.length >= 16, 'Expected exterior curve & cap vertices on main road');
-    assert.deepEqual(
-      exteriorWithSide,
-      exteriorWithoutSide,
-      'Adding a side road at [0, 0] must not alter main road vertices outside the local junction region (|x| > 18m)'
+    const exteriorBefore = exteriorPrimarySurface(sceneWithoutSide);
+    const exteriorAfter = exteriorPrimarySurface(sceneWithSide);
+    const lost = polygonClipping.difference(
+      exteriorBefore as unknown as polygonClipping.Geom,
+      exteriorAfter as unknown as polygonClipping.Geom
+    ) as unknown as MultiPolygonCoords;
+    const gained = polygonClipping.difference(
+      exteriorAfter as unknown as polygonClipping.Geom,
+      exteriorBefore as unknown as polygonClipping.Geom
+    ) as unknown as MultiPolygonCoords;
+    const changedArea = computeMultiPolygonArea(lost) + computeMultiPolygonArea(gained);
+    assert.ok(
+      changedArea <= 0.2,
+      `Adding a side road changed ${changedArea.toFixed(4)}m² of main-road surface outside |x| <= 18m`
     );
 
     // Also verify legacy and graph-preview modes remain 100% identical to each other on dataWithSide

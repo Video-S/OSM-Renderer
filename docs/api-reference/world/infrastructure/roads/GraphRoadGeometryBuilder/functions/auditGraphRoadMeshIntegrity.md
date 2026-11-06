@@ -8,7 +8,7 @@
 
 > **auditGraphRoadMeshIntegrity**(`roadsRoot`): [`GraphRoadMeshIntegrityReport`](../interfaces/GraphRoadMeshIntegrityReport.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:209
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:210
 
 Audits all horizontal at-grade road, path, step-tread, and junction triangles under `roadsRoot`
 by computing actual geometric face normals from indexed triangle positions via `cross(v1 - v0, v2 - v0)`.

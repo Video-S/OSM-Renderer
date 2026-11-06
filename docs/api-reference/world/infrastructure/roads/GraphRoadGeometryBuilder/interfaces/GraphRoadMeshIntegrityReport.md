@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadMeshIntegrityReport
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:160
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:161
 
 Summary report produced by `auditGraphRoadMeshIntegrity()`.
 
@@ -16,7 +16,7 @@ Summary report produced by `auditGraphRoadMeshIntegrity()`.
 
 > **auditedMeshCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:162
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:163
 
 Total horizontal at-grade road/path/step/junction meshes inspected.
 
@@ -26,7 +26,7 @@ Total horizontal at-grade road/path/step/junction meshes inspected.
 
 > **auditedTriangleCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:164
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:165
 
 Total indexed triangles inspected across all audited at-grade road/path/junction features.
 
@@ -36,7 +36,7 @@ Total indexed triangles inspected across all audited at-grade road/path/junction
 
 > **degenerateTriangles**: [`GraphRoadDegenerateTriangleDefect`](GraphRoadDegenerateTriangleDefect.md)[]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:174
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:175
 
 Degenerate triangles (`area <= 1e-6 m²`) reported separately from winding defects.
 
@@ -46,7 +46,7 @@ Degenerate triangles (`area <= 1e-6 m²`) reported separately from winding defec
 
 > **negativelyWoundCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:168
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:169
 
 Number of triangles with inverted/downward geometric winding (`geomNormal.y < 0`).
 
@@ -56,7 +56,7 @@ Number of triangles with inverted/downward geometric winding (`geomNormal.y < 0`
 
 > **storedNormalMismatchCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:170
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:171
 
 Number of triangles whose stored vertex normals disagree with the geometric face normal (`dot <= 0.99`).
 
@@ -66,7 +66,7 @@ Number of triangles whose stored vertex normals disagree with the geometric face
 
 > **upwardTriangleCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:166
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:167
 
 Number of non-degenerate horizontal triangles with valid upward `+Y` geometric winding (`geomNormal.y > 0.99`).
 
@@ -76,6 +76,6 @@ Number of non-degenerate horizontal triangles with valid upward `+Y` geometric w
 
 > **windingDefects**: [`GraphRoadWindingDefect`](GraphRoadWindingDefect.md)[]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:172
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:173
 
 Winding and normal orientation defects with full feature and coordinate attribution.

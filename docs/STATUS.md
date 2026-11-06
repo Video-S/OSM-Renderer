@@ -80,12 +80,12 @@
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C, M2.3-D, M2.3-E1 & M2.3-E2 Tests** | `npm test` | **158 / 158 passed** (0 failures) |
+| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C, M2.3-D, M2.3-E1 & M2.3-E2 Tests** | `npm test` | **161 / 161 passed** (0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
 
-*(Historical baselines preserved: M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` lint errors, clean production build and API docs.)*
+*(Historical baselines preserved: initial M2.3-E2 stabilization baseline on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` lint errors, clean production build and API docs.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -98,8 +98,8 @@
 | `RailwayNetworkTopology.test.ts` (`M2.3-C`) | 18 |
 | `CrossModalTopology.test.ts` (`M2.3-D`) | 9 |
 | `InfrastructureRenderAdapter.test.ts` (`M2.3-E1`) | 10 |
-| `GraphRoadRendering.test.ts` (`M2.3-E2`) | 13 |
-| **Total** | **158** |
+| `GraphRoadRendering.test.ts` (`M2.3-E2`) | 16 |
+| **Total** | **161** |
 
 ---
 
@@ -111,7 +111,7 @@
    - **Stage C (`M2.3-C` / `TKT-005` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints`, pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
    - **Stage D (`M2.3-D` / `TKT-006` — `closed`)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories, implemented `CrossModalAnalyzer` and `buildInfrastructureGraph` for level crossings, grade transitions, and grade-separated crossings, and added `9` automated tests in `src/world/CrossModalTopology.test.ts` (`135 / 135` Stage D baseline).
    - **Stage E1 (`M2.3-E1` / `TKT-007` — `closed`)**: Implemented pure graph-to-renderer adapter (`src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`), independent road and railway switches, memoized single shared `InfrastructureGraph` preview preparation, and `10` automated tests in `src/world/InfrastructureRenderAdapter.test.ts` (`145 / 145` Stage E1 baseline).
-   - **Stage E2 (`M2.3-E2` / `TKT-008` — `in_progress`, pending project-owner review)**: Implemented graph-driven at-grade road ribbon, transactional degree-2 continuity join and boundary-derived junction polygon builder, and geometric triangle winding/normal auditor (`auditGraphRoadMeshIntegrity` in `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`), selectable via `roads: 'graph'` (`?topologyRoads=graph`) while keeping `railways` restricted to `'legacy' | 'graph-preview'`, and added `13` automated test suites in `src/world/GraphRoadRendering.test.ts` (`158 / 158` total tests).
+   - **Stage E2 (`M2.3-E2` / `TKT-008` — `in_progress`, pending project-owner review)**: Implemented graph-driven at-grade road ribbon, non-pinching degree-2 continuity joins, localized road-footprint junction polygon synthesis (`solveBoundaryDerivedJunctionNode`), and geometric triangle winding/normal auditor (`auditGraphRoadMeshIntegrity` in `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`), selectable via `roads: 'graph'` (`?topologyRoads=graph`) while keeping `railways` restricted to `'legacy' | 'graph-preview'`, and added `16` automated test suites in `src/world/GraphRoadRendering.test.ts` (`161 / 161` total tests).
    - **Stage E3 (`M2.3-E3` — Planned, requires separate explicit approval)**: Graph-driven railway rendering and switches (`RailwayEdgeRenderDescriptor` / `RailwayNodeRenderDescriptor` / `RailwayFlatCrossingRenderDescriptor` consumption).
    - **Stage E4 (`M2.3-E4` — Planned, requires separate explicit approval)**: Level crossings, bridges, and tunnels (`LevelCrossingRenderDescriptor` / `GradeTransitionRenderDescriptor` / `GradeSeparatedCrossingRenderDescriptor` consumption).
    - **Stage E5 (`M2.3-E5` — Planned, requires separate explicit approval)**: Legacy cleanup and regression hardening.

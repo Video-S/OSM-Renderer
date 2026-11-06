@@ -19,6 +19,7 @@ import {
 import {
   COORDINATE_SNAP_QUANTUM,
   MultiPolygonCoords,
+  computeMultiPolygonArea,
   filterDegenerateBooleanArtifacts,
 } from '../../PlanarLayerValidator';
 import { SceneResourceManager } from '../../SceneResourceManager';
@@ -507,8 +508,7 @@ interface PendingJunctionPolygon {
   nodeId: string;
   junctionFeatureId: string;
   isPathJunction: boolean;
-  polygonPoints: [number, number][];
-  validatedTriangles: Array<[number, number, number]>;
+  junctionMultiPoly: MultiPolygonCoords;
   sortedBranches: GraphBranchSpec[];
   portals: Array<{ left: [number, number]; right: [number, number]; center: [number, number] }>;
   dominantBranch: GraphBranchSpec;
@@ -775,10 +775,9 @@ function applyDegree2SharedContinuityPortal(
   const nz = tx;
 
   const cosHalf = Math.sqrt(Math.max(0.1, (1 - dot) * 0.5));
-  const miterScale = Math.min(1.25, 1.0 / Math.max(0.75, cosHalf));
-  const avgHalfW = (b0.width + b1.width) * 0.25 * miterScale;
-  const maxSafeHalfW = Math.min(b0.firstSegmentLength, b1.firstSegmentLength) * 0.75;
-  const halfW = Math.min(avgHalfW, Math.max(avgHalfW * 0.5, maxSafeHalfW));
+  const miterScale = Math.min(1.35, 1.0 / Math.max(0.75, cosHalf));
+  // Preserve full perpendicular road width across degree-2 continuity joins without clamping halfW by segment length
+  const halfW = (b0.width + b1.width) * 0.25 * miterScale;
 
   const t0 = trimmedEndpoints.get(b0.edge.id);
   const t1 = trimmedEndpoints.get(b1.edge.id);
@@ -867,149 +866,227 @@ function applyDegree2SharedContinuityPortal(
 }
 
 /**
- * Validates and triangulates a candidate junction polygon ring `[x, z][]` around `nodeCenter`.
- *
- * Enforces:
- * - Finite coordinates within `maxAllowedRadius` of `nodeCenter`.
- * - Minimum 3 unique non-collinear vertices (deduplicating consecutive vertices `< 1e-3 m` and
- *   folding spikes).
- * - Positive signed area `>= 0.05 m²` in ascending `atan2(z, x)` winding order around `nodeCenter`
- *   (preventing inside-out polygons).
- * - Zero self-intersections (`!hasRingSelfIntersection`).
- * - Clean earcut triangulation in `(x, -z)` 2D space producing `>= 1` non-degenerate upward-facing
- *   triangles (`crossY > 0`) and `0` inverted triangles.
+ * Computes the Euclidean distance from 2D point `pt` to segment `a -> b`.
  */
-function validateAndTriangulateJunctionRing(
-  rawPoints: [number, number][],
-  nodeCenter: [number, number],
-  maxAllowedRadius: number
-): {
-  polygonPoints: [number, number][];
-  validatedTriangles: Array<[number, number, number]>;
-} | null {
-  if (!rawPoints || rawPoints.length < 3) return null;
-
-  // 1. Deduplicate near-coincident consecutive vertices
-  const deduped: [number, number][] = [];
-  for (let i = 0; i < rawPoints.length; i++) {
-    const pt = rawPoints[i];
-    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return null;
-    if (Math.hypot(pt[0] - nodeCenter[0], pt[1] - nodeCenter[1]) > maxAllowedRadius) {
-      return null;
-    }
-    const prev =
-      deduped.length > 0 ? deduped[deduped.length - 1] : rawPoints[rawPoints.length - 1];
-    if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
-      deduped.push([pt[0], pt[1]]);
-    }
+function distPointToSeg2D(
+  pt: readonly [number, number],
+  a: readonly [number, number],
+  b: readonly [number, number]
+): number {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq <= 1e-12) {
+    return Math.hypot(pt[0] - a[0], pt[1] - a[1]);
   }
-  if (deduped.length < 3) return null;
-
-  // 2. Reject any candidate ring containing a near-180-degree fold-back spike
-  // rather than deleting portal vertices
-  const polygonPoints = deduped;
-  const n = polygonPoints.length;
-  for (let i = 0; i < n; i++) {
-    const prev = polygonPoints[(i - 1 + n) % n];
-    const curr = polygonPoints[i];
-    const next = polygonPoints[(i + 1) % n];
-    const v1x = curr[0] - prev[0];
-    const v1z = curr[1] - prev[1];
-    const v2x = next[0] - curr[0];
-    const v2z = next[1] - curr[1];
-    const l1 = Math.hypot(v1x, v1z);
-    const l2 = Math.hypot(v2x, v2z);
-    if (l1 <= 1e-3 || l2 <= 1e-3) continue;
-    const cosA = (v1x * v2x + v1z * v2z) / (l1 * l2);
-    if (cosA < -0.992) {
-      return null;
-    }
-  }
-
-  // 3. Check closed ring self-intersection
-  const closedRing: [number, number][] = [
-    ...polygonPoints,
-    [polygonPoints[0][0], polygonPoints[0][1]],
-  ];
-  if (hasRingSelfIntersection(closedRing)) {
-    return null;
-  }
-
-  // 4. Verify positive signed area in ascending atan2(z, x) order (not inside-out)
-  let signedArea2 = 0;
-  for (let i = 0; i < polygonPoints.length; i++) {
-    const p0 = polygonPoints[i];
-    const p1 = polygonPoints[(i + 1) % polygonPoints.length];
-    signedArea2 += p0[0] * p1[1] - p1[0] * p0[1];
-  }
-  const signedAreaXZ = signedArea2 * 0.5;
-  if (!Number.isFinite(signedAreaXZ) || signedAreaXZ < 0.05) {
-    return null;
-  }
-
-  // 5. Triangulate in 2D (x, z) space. Because signedAreaXZ > 0, contourXZ is 2D CCW
-  // (!THREE.ShapeUtils.isClockWise(contourXZ)), and each 2D CCW triangle [i0, i1, i2]
-  // maps to 3D +Y upward-facing triangle [i0, i2, i1] in right-handed (X, Y, Z) coordinates.
-  const contourXZ = polygonPoints.map(([x, z]) => new THREE.Vector2(x, z));
-  if (THREE.ShapeUtils.isClockWise(contourXZ)) {
-    return null;
-  }
-
-  const earTriangles = THREE.ShapeUtils.triangulateShape(contourXZ, []);
-  if (!earTriangles || earTriangles.length === 0) {
-    return null;
-  }
-
-  const validatedTriangles: Array<[number, number, number]> = [];
-  let triAreaSum = 0;
-
-  for (const [e0, e1, e2] of earTriangles) {
-    // Map 2D (x, z) CCW [e0, e1, e2] to 3D (X, Y, Z) +Y upward [e0, e2, e1]
-    const i0 = e0;
-    const i1 = e2;
-    const i2 = e1;
-    const p0 = polygonPoints[i0];
-    const p1 = polygonPoints[i1];
-    const p2 = polygonPoints[i2];
-    if (!p0 || !p1 || !p2) return null;
-
-    const ax = p1[0] - p0[0];
-    const az = p1[1] - p0[1];
-    const bx = p2[0] - p0[0];
-    const bz = p2[1] - p0[1];
-    // 3D cross product Y component: (v1 - v0) x (v2 - v0)
-    const crossY = az * bx - ax * bz;
-    const area = Math.abs(crossY) * 0.5;
-
-    if (area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
-      // Omit collinear zero-area earcut sliver triangle
-      continue;
-    }
-    if (crossY <= 0) {
-      // Reject if any non-degenerate triangle is inverted
-      return null;
-    }
-
-    validatedTriangles.push([i0, i1, i2]);
-    triAreaSum += area;
-  }
-
-  if (
-    validatedTriangles.length === 0 ||
-    Math.abs(triAreaSum - signedAreaXZ) > Math.max(0.05, signedAreaXZ * 0.05)
-  ) {
-    return null;
-  }
-
-  return { polygonPoints, validatedTriangles };
+  const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dz) / lenSq));
+  return Math.hypot(pt[0] - (a[0] + t * dx), pt[1] - (a[1] + t * dz));
 }
 
 /**
- * Computes boundary-derived branch portals and a validated, upward-triangulated junction polygon
- * around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
+ * Computes minimum distance from `pt` to any boundary segment of `multiPoly`.
+ */
+function distPointToMultiPolygonBoundary(
+  pt: readonly [number, number],
+  multiPoly: MultiPolygonCoords
+): number {
+  let minDist = Infinity;
+  for (const poly of multiPoly) {
+    for (const ring of poly) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const d = distPointToSeg2D(pt, ring[i], ring[i + 1]);
+        if (d < minDist) minDist = d;
+      }
+    }
+  }
+  return minDist;
+}
+
+/**
+ * Resolves the effective exposed portal endpoints along the segment `rightPt -> leftPt`
+ * on the boundary of `junctionMultiPoly` (and optionally `clippedRoadMultiPoly` when the road
+ * ribbon was clipped against the junction patch).
+ */
+function resolveEffectivePortalOnJunctionBoundary(
+  leftPt: [number, number],
+  rightPt: [number, number],
+  junctionMultiPoly: MultiPolygonCoords,
+  clippedRoadMultiPoly?: MultiPolygonCoords | null
+): { left: [number, number]; right: [number, number] } | null {
+  const dLeftJunc = distPointToMultiPolygonBoundary(leftPt, junctionMultiPoly);
+  const dRightJunc = distPointToMultiPolygonBoundary(rightPt, junctionMultiPoly);
+  const dLeftRoad = clippedRoadMultiPoly
+    ? distPointToMultiPolygonBoundary(leftPt, clippedRoadMultiPoly)
+    : 0;
+  const dRightRoad = clippedRoadMultiPoly
+    ? distPointToMultiPolygonBoundary(rightPt, clippedRoadMultiPoly)
+    : 0;
+
+  if (dLeftJunc <= 0.015 && dRightJunc <= 0.015 && dLeftRoad <= 0.015 && dRightRoad <= 0.015) {
+    return { left: leftPt, right: rightPt };
+  }
+
+  // If the road was clipped against the junction, find shared boundary vertices where
+  // clippedRoadMultiPoly and junctionMultiPoly meet (distance <= 0.012 m to both boundaries).
+  if (clippedRoadMultiPoly) {
+    const sharedPts: [number, number][] = [];
+    for (const poly of clippedRoadMultiPoly) {
+      for (const ring of poly) {
+        for (const pt of ring) {
+          if (distPointToMultiPolygonBoundary(pt, junctionMultiPoly) <= 0.012) {
+            sharedPts.push([pt[0], pt[1]]);
+          }
+        }
+      }
+    }
+    for (const poly of junctionMultiPoly) {
+      for (const ring of poly) {
+        for (const pt of ring) {
+          if (distPointToMultiPolygonBoundary(pt, clippedRoadMultiPoly) <= 0.012) {
+            sharedPts.push([pt[0], pt[1]]);
+          }
+        }
+      }
+    }
+    if (sharedPts.length >= 2) {
+      const pdx = leftPt[0] - rightPt[0];
+      const pdz = leftPt[1] - rightPt[1];
+      let minProj = Infinity;
+      let maxProj = -Infinity;
+      let bestRight = sharedPts[0];
+      let bestLeft = sharedPts[0];
+      for (const pt of sharedPts) {
+        const proj = (pt[0] - rightPt[0]) * pdx + (pt[1] - rightPt[1]) * pdz;
+        if (proj < minProj) {
+          minProj = proj;
+          bestRight = pt;
+        }
+        if (proj > maxProj) {
+          maxProj = proj;
+          bestLeft = pt;
+        }
+      }
+      if (Math.hypot(bestLeft[0] - bestRight[0], bestLeft[1] - bestRight[1]) >= 0.05) {
+        return { left: bestLeft, right: bestRight };
+      }
+    }
+  }
+
+  // Intersect portal segment P(t) = rightPt + t * (leftPt - rightPt) with junctionMultiPoly boundary segments
+  const pdx = leftPt[0] - rightPt[0];
+  const pdz = leftPt[1] - rightPt[1];
+  const pLenSq = pdx * pdx + pdz * pdz;
+  if (pLenSq <= 1e-8) return null;
+
+  const crossings: number[] = [];
+  for (const poly of junctionMultiPoly) {
+    for (const ring of poly) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const q0 = ring[i];
+        const q1 = ring[i + 1];
+        const qdx = q1[0] - q0[0];
+        const qdz = q1[1] - q0[1];
+        const det = pdx * qdz - pdz * qdx;
+        if (Math.abs(det) > 1e-7) {
+          const rx = q0[0] - rightPt[0];
+          const rz = q0[1] - rightPt[1];
+          const t = (rx * qdz - rz * qdx) / det;
+          const u = (rx * pdz - rz * pdx) / det;
+          if (t >= -0.02 && t <= 1.02 && u >= -0.02 && u <= 1.02) {
+            crossings.push(Math.max(0, Math.min(1, t)));
+          }
+        }
+        if (distPointToSeg2D(q0, rightPt, leftPt) <= 0.012) {
+          const t = ((q0[0] - rightPt[0]) * pdx + (q0[1] - rightPt[1]) * pdz) / pLenSq;
+          if (t >= -0.02 && t <= 1.02) {
+            crossings.push(Math.max(0, Math.min(1, t)));
+          }
+        }
+      }
+    }
+  }
+
+  const tStart =
+    dRightJunc <= 0.015 ? 0 : crossings.length > 0 ? Math.min(...crossings) : 0;
+  const tEnd =
+    dLeftJunc <= 0.015 ? 1 : crossings.length > 0 ? Math.max(...crossings) : 1;
+
+  if (tEnd - tStart < 0.02) {
+    return { left: leftPt, right: rightPt };
+  }
+
+  return {
+    right: [rightPt[0] + tStart * pdx, rightPt[1] + tStart * pdz],
+    left: [rightPt[0] + tEnd * pdx, rightPt[1] + tEnd * pdz],
+  };
+}
+
+/**
+ * Extracts the exact sub-polyline along `points` between arc-length offsets `sStart` and `sEnd`
+ * (`0 <= sStart <= sEnd <= totalLength`) without the 45% endpoint clamp of `trimPolylineByArcLength`.
+ * Preserves all intermediate polyline vertices strictly inside `(sStart, sEnd)`.
+ */
+function extractPolylineSpan(
+  points: readonly (readonly [number, number])[],
+  sStart: number,
+  sEnd: number
+): [number, number][] {
+  if (!points || points.length < 2) {
+    return points ? points.map((pt) => [pt[0], pt[1]]) : [];
+  }
+  const cumDist: number[] = [0];
+  for (let i = 0; i < points.length - 1; i++) {
+    const d = Math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1]);
+    cumDist.push(cumDist[i] + d);
+  }
+  const totalLen = cumDist[cumDist.length - 1];
+  if (totalLen <= 1e-6) {
+    return [
+      [points[0][0], points[0][1]],
+      [points[points.length - 1][0], points[points.length - 1][1]],
+    ];
+  }
+
+  const a = Math.max(0, Math.min(totalLen, sStart));
+  const b = Math.max(a, Math.min(totalLen, sEnd));
+
+  const sampleAt = (s: number): [number, number] => {
+    if (s <= 0) return [points[0][0], points[0][1]];
+    if (s >= totalLen) return [points[points.length - 1][0], points[points.length - 1][1]];
+    for (let i = 0; i < points.length - 1; i++) {
+      const d0 = cumDist[i];
+      const d1 = cumDist[i + 1];
+      if (s <= d1 || i === points.length - 2) {
+        const segLen = d1 - d0;
+        if (segLen <= 1e-9) return [points[i][0], points[i][1]];
+        const t = Math.max(0, Math.min(1, (s - d0) / segLen));
+        return [
+          points[i][0] + t * (points[i + 1][0] - points[i][0]),
+          points[i][1] + t * (points[i + 1][1] - points[i][1]),
+        ];
+      }
+    }
+    return [points[points.length - 1][0], points[points.length - 1][1]];
+  };
+
+  const out: [number, number][] = [sampleAt(a)];
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = cumDist[i];
+    if (d > a + 1e-4 && d < b - 1e-4) {
+      out.push([points[i][0], points[i][1]]);
+    }
+  }
+  out.push(sampleAt(b));
+  return out;
+}
+
+/**
+ * Constructs a localized road-footprint union junction patch and full-width orthogonal branch
+ * portals around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
  *
- * Transactionally validates all branch portals, trim distances, polygon self-intersections,
- * and triangle orientations BEFORE committing any state to `trimmedEndpoints`.
+ * Preserves each incident road's full intended width (`bBranch.width`) and curved centerline
+ * geometry right up to the local junction cut line `s = trimDist`, and takes the 2D Boolean union
+ * of the overlapping local road footprints so road boundaries never pinch or stretch into wedges.
  */
 function solveBoundaryDerivedJunctionNode(
   nodeId: string,
@@ -1054,7 +1131,11 @@ function solveBoundaryDerivedJunctionNode(
     -bBranch.dir[1],
     bBranch.dir[0],
   ]);
+  const maxBranchWidth = Math.max(...sortedBranches.map((b) => b.width));
 
+  // Local trim budget per branch: bounded by a tight local radius multiple of road width and
+  // total edge length budget (never clamped by firstSegmentLength so curved roads with dense vertices
+  // retain their full curvature through the junction).
   const maxTrimDists: number[] = sortedBranches.map((bBranch) => {
     const tRec = trimmedEndpoints.get(bBranch.edge.id);
     const existingOtherTrim = tRec
@@ -1063,24 +1144,25 @@ function solveBoundaryDerivedJunctionNode(
         : tRec.startTrimDist
       : 0;
     const isSelfLoop = bBranch.edge.fromNodeId === bBranch.edge.toNodeId;
-    const maxByFirstSeg = Math.max(0.12, bBranch.firstSegmentLength * 0.80);
+    const localRadiusCap = Math.max(bBranch.width, maxBranchWidth) * 1.65;
     const maxByTotalRatio = Math.max(
       0.12,
-      bBranch.totalEdgeLength * (isSelfLoop ? 0.35 : 0.45)
+      bBranch.totalEdgeLength * (isSelfLoop ? 0.32 : 0.42)
     );
     const remainingBudget = Math.max(
       0.12,
-      (bBranch.totalEdgeLength - existingOtherTrim - 0.20) * (isSelfLoop ? 0.45 : 0.80)
+      (bBranch.totalEdgeLength -
+        existingOtherTrim -
+        Math.min(0.20, bBranch.totalEdgeLength * 0.10)) *
+        (isSelfLoop ? 0.45 : 0.82)
     );
-    return Math.min(maxByFirstSeg, maxByTotalRatio, remainingBudget);
+    return Math.min(localRadiusCap, maxByTotalRatio, remainingBudget);
   });
 
-  const corners: [number, number][] = [];
-  const innerCornerTA: number[] = new Array(k).fill(0);
-  const innerCornerTB: number[] = new Array(k).fill(0);
-  const isConvexInnerCorner: boolean[] = new Array(k).fill(false);
-  const wasInnerCornerClamped: boolean[] = new Array(k).fill(false);
-  const hasExplicitCornerVertex: boolean[] = new Array(k).fill(false);
+  const sectorDet: number[] = new Array(k).fill(0);
+  const sectorTA: number[] = new Array(k).fill(0);
+  const sectorTB: number[] = new Array(k).fill(0);
+  const reflexCorners: Array<[number, number] | undefined> = new Array(k).fill(undefined);
 
   for (let i = 0; i < k; i++) {
     const next = (i + 1) % k;
@@ -1102,40 +1184,19 @@ function solveBoundaryDerivedJunctionNode(
     const dB = bB.dir;
 
     const det = dA[0] * dB[1] - dA[1] * dB[0];
-    let cornerX: number;
-    let cornerZ: number;
+    sectorDet[i] = det;
 
     if (Math.abs(det) > 0.06) {
       const dx = pB[0] - pA[0];
       const dz = pB[1] - pA[1];
       const tA = (dx * dB[1] - dz * dB[0]) / det;
       const tB = (dx * dA[1] - dz * dA[0]) / det;
+      sectorTA[i] = tA;
+      sectorTB[i] = tB;
 
-      if (det > 0 && tA > 0 && tB > 0) {
-        // Case 1: Convex inner crotch between adjacent branches bA and bB
-        isConvexInnerCorner[i] = true;
-        hasExplicitCornerVertex[i] = true;
-        innerCornerTA[i] = tA;
-        innerCornerTB[i] = tB;
-        const clampedTA = Math.min(tA, maxTrimDists[i]);
-        const clampedTB = Math.min(tB, maxTrimDists[next]);
-        if (clampedTA === tA && clampedTB === tB) {
-          cornerX = pA[0] + tA * dA[0];
-          cornerZ = pA[1] + tA * dA[1];
-        } else {
-          wasInnerCornerClamped[i] = true;
-          const cAx = pA[0] + clampedTA * dA[0];
-          const cAz = pA[1] + clampedTA * dA[1];
-          const cBx = pB[0] + clampedTB * dB[0];
-          const cBz = pB[1] + clampedTB * dB[1];
-          cornerX = (cAx + cBx) * 0.5;
-          cornerZ = (cAz + cBz) * 0.5;
-        }
-      } else if (det < 0 && tA <= 0 && tB <= 0) {
-        // Case 2: True reflex outer corner (angle between bA and bB > 180 degrees)
-        hasExplicitCornerVertex[i] = true;
-        cornerX = pA[0] + tA * dA[0];
-        cornerZ = pA[1] + tA * dA[1];
+      if (det < -0.06 && tA <= 0 && tB <= 0) {
+        let cornerX = pA[0] + tA * dA[0];
+        let cornerZ = pA[1] + tA * dA[1];
         const cDist = Math.hypot(cornerX - nodeCenter[0], cornerZ - nodeCenter[1]);
         const maxOuterDist = 1.25 * Math.max(bA.width, bB.width);
         if (cDist > maxOuterDist && cDist > 1e-4) {
@@ -1143,120 +1204,52 @@ function solveBoundaryDerivedJunctionNode(
           cornerX = nodeCenter[0] + (cornerX - nodeCenter[0]) * scale;
           cornerZ = nodeCenter[1] + (cornerZ - nodeCenter[1]) * scale;
         }
-      } else {
-        // Case 3: Near-180-degree or obtuse unequal-width transition (tA and tB have opposite signs):
-        // Connect portals[i].left directly to portals[next].right without an intermediate spike vertex.
-        cornerX = (pA[0] + pB[0]) * 0.5;
-        cornerZ = (pA[1] + pB[1]) * 0.5;
+        reflexCorners[i] = [snapCoord(cornerX), snapCoord(cornerZ)];
       }
-    } else {
-      // Collinear / antiparallel curb transition
-      cornerX = (pA[0] + pB[0]) * 0.5;
-      cornerZ = (pA[1] + pB[1]) * 0.5;
     }
-
-    corners.push([cornerX, cornerZ]);
   }
 
-  const portals: Array<{
-    left: [number, number];
-    right: [number, number];
-    center: [number, number];
-  }> = [];
   const trimDists: number[] = [];
+  const wasTrimClamped: boolean[] = [];
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 
   for (let i = 0; i < k; i++) {
-    const bBranch = sortedBranches[i];
-    const prevCorner = corners[(i - 1 + k) % k];
-    const nextCorner = corners[i];
-    const n = branchNormals[i];
-
-    const projPrev =
-      (prevCorner[0] - nodeCenter[0]) * bBranch.dir[0] +
-      (prevCorner[1] - nodeCenter[1]) * bBranch.dir[1];
-    const projNext =
-      (nextCorner[0] - nodeCenter[0]) * bBranch.dir[0] +
-      (nextCorner[1] - nodeCenter[1]) * bBranch.dir[1];
-
-    let trimDist = Math.max(0.1, projPrev, projNext) + 0.02;
-    trimDist = Math.min(trimDist, maxTrimDists[i]);
-    trimDists.push(trimDist);
-
-    const centerPortal: [number, number] = [
-      nodeCenter[0] + bBranch.dir[0] * trimDist,
-      nodeCenter[1] + bBranch.dir[1] * trimDist,
-    ];
-    const leftPortal: [number, number] = [
-      centerPortal[0] + n[0] * (bBranch.width / 2),
-      centerPortal[1] + n[1] * (bBranch.width / 2),
-    ];
-    const rightPortal: [number, number] = [
-      centerPortal[0] - n[0] * (bBranch.width / 2),
-      centerPortal[1] - n[1] * (bBranch.width / 2),
-    ];
-
-    portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
-  }
-
-  // Save orthogonal un-snapped portals in case we need a clean portal-only fallback
-  const orthogonalPortals = portals.map((p) => ({
-    left: [p.left[0], p.left[1]] as [number, number],
-    right: [p.right[0], p.right[1]] as [number, number],
-    center: [p.center[0], p.center[1]] as [number, number],
-  }));
-
-  // Snap inner corners where adjacent portals meet or overlap angularly
-  for (let i = 0; i < k; i++) {
+    const prev = (i - 1 + k) % k;
     const next = (i + 1) % k;
-    const bA = sortedBranches[i];
-    const bB = sortedBranches[next];
-    const nA = branchNormals[i];
-    const nB = branchNormals[next];
+    const bBranch = sortedBranches[i];
 
-    const vLeftX = portals[i].left[0] - nodeCenter[0];
-    const vLeftZ = portals[i].left[1] - nodeCenter[1];
-    const vRightX = portals[next].right[0] - nodeCenter[0];
-    const vRightZ = portals[next].right[1] - nodeCenter[1];
-    // In ascending atan2(z, x) order, if vLeft x vRight < 0, portals[i].left has crossed past portals[next].right
-    const portalsCrossedAngularly = vLeftX * vRightZ - vLeftZ * vRightX < -1e-4;
+    const reqLeft =
+      sectorDet[i] > 0.06 && sectorTA[i] > 0
+        ? sectorTA[i] + 0.12
+        : Math.abs(bBranch.width - sortedBranches[next].width) * 0.35 + 0.25;
+    const reqRight =
+      sectorDet[prev] > 0.06 && sectorTB[prev] > 0
+        ? sectorTB[prev] + 0.12
+        : Math.abs(bBranch.width - sortedBranches[prev].width) * 0.35 + 0.25;
 
-    if (wasInnerCornerClamped[i] || portalsCrossedAngularly) {
-      // Partition the outer span [portals[i].right -> portals[next].left] proportionally to branch widths
-      // so both portals remain strictly positive in width and share a non-crossing inner seam vertex.
-      const rA = portals[i].right;
-      const lB = portals[next].left;
-      const alpha = bA.width / Math.max(1e-3, bA.width + bB.width);
-      const seamPt: [number, number] = [
-        rA[0] + alpha * (lB[0] - rA[0]),
-        rA[1] + alpha * (lB[1] - rA[1]),
-      ];
-      const widthA = (seamPt[0] - rA[0]) * nA[0] + (seamPt[1] - rA[1]) * nA[1];
-      const widthB = (lB[0] - seamPt[0]) * nB[0] + (lB[1] - seamPt[1]) * nB[1];
-      if (widthA >= bA.width * 0.20 && widthB >= bB.width * 0.20) {
-        corners[i] = seamPt;
-        portals[i].left = [seamPt[0], seamPt[1]];
-        portals[next].right = [seamPt[0], seamPt[1]];
-      }
-    } else if (isConvexInnerCorner[i]) {
-      const cPt = corners[i];
-      if (innerCornerTA[i] >= trimDists[i] - 0.05) {
-        const widthA =
-          (cPt[0] - portals[i].right[0]) * nA[0] +
-          (cPt[1] - portals[i].right[1]) * nA[1];
-        if (widthA >= bA.width * 0.25) {
-          portals[i].left = [cPt[0], cPt[1]];
-        }
-      }
-      if (innerCornerTB[i] >= trimDists[next] - 0.05) {
-        const widthB =
-          (portals[next].left[0] - cPt[0]) * nB[0] +
-          (portals[next].left[1] - cPt[1]) * nB[1];
-        if (widthB >= bB.width * 0.25) {
-          portals[next].right = [cPt[0], cPt[1]];
+    let maxPairReq = 0;
+    if (k >= 4) {
+      for (let j = 0; j < k; j++) {
+        if (j === i || j === prev || j === next) continue;
+        const other = sortedBranches[j];
+        const cosTheta =
+          bBranch.dir[0] * other.dir[0] + bBranch.dir[1] * other.dir[1];
+        if (cosTheta > -0.15) {
+          const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
+          const pairDist =
+            (other.width * 0.5 + bBranch.width * 0.5 * Math.max(0, cosTheta)) /
+              Math.max(0.30, sinTheta) +
+            0.10;
+          if (pairDist > maxPairReq) maxPairReq = pairDist;
         }
       }
     }
+
+    const minStub = Math.min(bBranch.width * 0.30, 1.2);
+    const rawTrimDist = Math.max(0.15, minStub, reqLeft, reqRight, maxPairReq);
+    const trimDist = Math.min(rawTrimDist, maxTrimDists[i]);
+    trimDists.push(trimDist);
+    wasTrimClamped.push(rawTrimDist > maxTrimDists[i] + 1e-4);
   }
 
   // Validate that no edge's startTrimDist + endTrimDist exceeds available edge length
@@ -1280,82 +1273,271 @@ function solveBoundaryDerivedJunctionNode(
     trimSumByEdgeId.set(bBranch.edge.id, nextSum);
   }
 
-  // Validate portal widths on all branches
-  const portalsHaveValidWidths = (
-    candidatePortals: Array<{
-      left: [number, number];
-      right: [number, number];
-      center: [number, number];
-    }>
-  ): boolean => {
-    for (let i = 0; i < k; i++) {
-      const p = candidatePortals[i];
-      const n = branchNormals[i];
-      const bBranch = sortedBranches[i];
-      const w = (p.left[0] - p.right[0]) * n[0] + (p.left[1] - p.right[1]) * n[1];
-      if (!Number.isFinite(w) || w < bBranch.width * 0.20) {
-        return false;
+  const portals: Array<{
+    left: [number, number];
+    right: [number, number];
+    center: [number, number];
+  }> = [];
+  const unionInputs: MultiPolygonCoords = [];
+  const rawContourPts: [number, number][] = [];
+  const coreHubPts: [number, number][] = [];
+
+  for (let i = 0; i < k; i++) {
+    const prev = (i - 1 + k) % k;
+    const bBranch = sortedBranches[i];
+    const trimDist = trimDists[i];
+
+    // Extract the branch's local curved centerline on [0, trimDist] oriented outward from nodeCenter
+    const rawLocalPts =
+      bBranch.endpoint === 'start'
+        ? extractPolylineSpan(bBranch.edge.points, 0, trimDist)
+        : extractPolylineSpan(
+            bBranch.edge.points,
+            Math.max(0, bBranch.totalEdgeLength - trimDist),
+            bBranch.totalEdgeLength
+          )
+            .slice()
+            .reverse();
+
+    const localPts: [number, number][] = [[nodeCenter[0], nodeCenter[1]]];
+    for (let pIdx = 1; pIdx < rawLocalPts.length; pIdx++) {
+      const pt = rawLocalPts[pIdx];
+      const prevPt = localPts[localPts.length - 1];
+      if (Math.hypot(pt[0] - prevPt[0], pt[1] - prevPt[1]) > 0.01) {
+        localPts.push([pt[0], pt[1]]);
+      } else if (pIdx === rawLocalPts.length - 1 && localPts.length >= 2) {
+        localPts[localPts.length - 1] = [pt[0], pt[1]];
       }
     }
-    return true;
+    if (localPts.length < 2) {
+      localPts.push([
+        nodeCenter[0] + bBranch.dir[0] * trimDist,
+        nodeCenter[1] + bBranch.dir[1] * trimDist,
+      ]);
+    }
+
+    const pPrev = localPts[localPts.length - 2];
+    const pCut = localPts[localPts.length - 1];
+    const segDx = pCut[0] - pPrev[0];
+    const segDz = pCut[1] - pPrev[1];
+    const segLen = Math.hypot(segDx, segDz) || 1e-6;
+    const tCutX = segDx / segLen;
+    const tCutZ = segDz / segLen;
+    const nCutX = -tCutZ;
+    const nCutZ = tCutX;
+    const halfW = bBranch.width * 0.5;
+
+    // Strictly orthogonal, 100% full-width portal at pCut
+    const centerPortal: [number, number] = [snapCoord(pCut[0]), snapCoord(pCut[1])];
+    const leftPortal: [number, number] = [
+      snapCoord(pCut[0] + nCutX * halfW),
+      snapCoord(pCut[1] + nCutZ * halfW),
+    ];
+    const rightPortal: [number, number] = [
+      snapCoord(pCut[0] - nCutX * halfW),
+      snapCoord(pCut[1] - nCutZ * halfW),
+    ];
+    portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
+
+    // Generate full-width local ribbon along localPts to capture any curve inside [0, trimDist]
+    const stubRibbon = generateRoadRibbon(localPts, bBranch.width, 0, {
+      roundCaps: false,
+      endPortal: { left: leftPortal, right: rightPortal },
+    });
+
+    const leftChain: [number, number][] = [];
+    const rightChain: [number, number][] = [];
+    if (stubRibbon && stubRibbon.positions.length >= localPts.length * 6) {
+      const pos = stubRibbon.positions;
+      for (let v = 0; v < localPts.length; v++) {
+        const lIdx = v * 2;
+        const rIdx = v * 2 + 1;
+        leftChain.push([snapCoord(pos[lIdx * 3]), snapCoord(pos[lIdx * 3 + 2])]);
+        rightChain.push([snapCoord(pos[rIdx * 3]), snapCoord(pos[rIdx * 3 + 2])]);
+      }
+      leftChain[leftChain.length - 1] = leftPortal;
+      rightChain[rightChain.length - 1] = rightPortal;
+    } else {
+      const n0 = branchNormals[i];
+      leftChain.push(
+        [
+          snapCoord(nodeCenter[0] + n0[0] * halfW),
+          snapCoord(nodeCenter[1] + n0[1] * halfW),
+        ],
+        leftPortal
+      );
+      rightChain.push(
+        [
+          snapCoord(nodeCenter[0] - n0[0] * halfW),
+          snapCoord(nodeCenter[1] - n0[1] * halfW),
+        ],
+        rightPortal
+      );
+    }
+
+    // Advance inner curb starts in inner-crotch sectors so a wider road never pokes its s=0 corner
+    // out the back of a narrower adjacent road.
+    const sLeftStart =
+      sectorDet[i] > 0.06 &&
+      sectorTA[i] > 0 &&
+      sectorTB[i] >= -sortedBranches[i].width * 0.45
+        ? Math.min(sectorTA[i], trimDist * 0.92)
+        : 0;
+    const sRightStart =
+      sectorDet[prev] > 0.06 &&
+      sectorTB[prev] > 0 &&
+      sectorTA[prev] >= -bBranch.width * 0.45
+        ? Math.min(sectorTB[prev], trimDist * 0.92)
+        : 0;
+
+    const leftChainLen = computePolylineLength(leftChain);
+    const rightChainLen = computePolylineLength(rightChain);
+
+    const activeLeftChain =
+      sLeftStart > 0.02 && leftChainLen > sLeftStart + 0.02
+        ? extractPolylineSpan(leftChain, sLeftStart, leftChainLen).map(
+            (pt) => [snapCoord(pt[0]), snapCoord(pt[1])] as [number, number]
+          )
+        : leftChain;
+    const activeRightChain =
+      sRightStart > 0.02 && rightChainLen > sRightStart + 0.02
+        ? extractPolylineSpan(rightChain, sRightStart, rightChainLen).map(
+            (pt) => [snapCoord(pt[0]), snapCoord(pt[1])] as [number, number]
+          )
+        : rightChain;
+
+    activeLeftChain[activeLeftChain.length - 1] = leftPortal;
+    activeRightChain[activeRightChain.length - 1] = rightPortal;
+
+    for (const pt of activeRightChain) {
+      rawContourPts.push(pt);
+    }
+    for (let m = activeLeftChain.length - 1; m >= 0; m--) {
+      rawContourPts.push(activeLeftChain[m]);
+    }
+    coreHubPts.push(activeRightChain[0], activeLeftChain[0]);
+    if (reflexCorners[i]) {
+      rawContourPts.push(reflexCorners[i]!);
+      coreHubPts.push(reflexCorners[i]!);
+    }
+
+    // Also add the 4-sided arm strip (without snappedCenter pinch vertex) to unionInputs for fallback
+    const stripRing: [number, number][] = [
+      ...activeRightChain,
+      ...activeLeftChain.slice().reverse(),
+      activeRightChain[0],
+    ];
+    const dedupedStrip: [number, number][] = [];
+    for (const pt of stripRing) {
+      if (
+        dedupedStrip.length === 0 ||
+        Math.hypot(
+          pt[0] - dedupedStrip[dedupedStrip.length - 1][0],
+          pt[1] - dedupedStrip[dedupedStrip.length - 1][1]
+        ) > 1e-4
+      ) {
+        dedupedStrip.push([pt[0], pt[1]]);
+      }
+    }
+    if (
+      dedupedStrip.length >= 2 &&
+      (dedupedStrip[0][0] !== dedupedStrip[dedupedStrip.length - 1][0] ||
+        dedupedStrip[0][1] !== dedupedStrip[dedupedStrip.length - 1][1])
+    ) {
+      dedupedStrip.push([dedupedStrip[0][0], dedupedStrip[0][1]]);
+    }
+    if (dedupedStrip.length >= 4 && !hasRingSelfIntersection(dedupedStrip)) {
+      unionInputs.push([dedupedStrip]);
+    }
+  }
+
+  // Deduplicate and clean rawContourPts
+  const cleanRingPoints = (pts: [number, number][]): [number, number][] => {
+    const deduped: [number, number][] = [];
+    for (const pt of pts) {
+      const prev = deduped.length > 0 ? deduped[deduped.length - 1] : pts[pts.length - 1];
+      if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
+        deduped.push([snapCoord(pt[0]), snapCoord(pt[1])]);
+      }
+    }
+    // Prune any near-180-degree collinear back-spikes at inner crotch transitions
+    let changed = true;
+    while (changed && deduped.length > 3) {
+      changed = false;
+      for (let i = 0; i < deduped.length; i++) {
+        const prev = deduped[(i - 1 + deduped.length) % deduped.length];
+        const curr = deduped[i];
+        const next = deduped[(i + 1) % deduped.length];
+        const d1 = Math.hypot(curr[0] - prev[0], curr[1] - prev[1]);
+        const d2 = Math.hypot(next[0] - curr[0], next[1] - curr[1]);
+        if (d1 < 1e-3 || d2 < 1e-3) {
+          deduped.splice(i, 1);
+          changed = true;
+          break;
+        }
+        const cosA =
+          ((curr[0] - prev[0]) * (next[0] - curr[0]) +
+            (curr[1] - prev[1]) * (next[1] - curr[1])) /
+          (d1 * d2);
+        if (cosA < -0.992) {
+          deduped.splice(i, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (deduped.length >= 3) {
+      deduped.push([deduped[0][0], deduped[0][1]]);
+    }
+    return deduped;
   };
 
-  const maxBranchWidth = Math.max(...sortedBranches.map((b) => b.width));
-  const maxTrim = Math.max(...trimDists);
-  const maxAllowedRadius = maxBranchWidth * 2.5 + maxTrim * 1.5 + 1.0;
-
-  // Build candidate 1: boundary-derived ring including explicit inner/reflex corner vertices
-  const rawCandidate1: [number, number][] = [];
-  for (let i = 0; i < k; i++) {
-    rawCandidate1.push(portals[i].right);
-    rawCandidate1.push(portals[i].left);
-    if (hasExplicitCornerVertex[i]) {
-      rawCandidate1.push(corners[i]);
+  let solidMultiPoly: MultiPolygonCoords = [];
+  const candidateContourRing = cleanRingPoints(rawContourPts);
+  if (candidateContourRing.length >= 4 && !hasRingSelfIntersection(candidateContourRing)) {
+    solidMultiPoly = [[candidateContourRing]];
+  } else {
+    const coreRing = cleanRingPoints(coreHubPts);
+    if (coreRing.length >= 4 && !hasRingSelfIntersection(coreRing)) {
+      unionInputs.push([coreRing]);
+    }
+    if (unionInputs.length > 0) {
+      try {
+        const rawUnion: MultiPolygonCoords =
+          unionInputs.length === 1
+            ? [unionInputs[0]]
+            : (polygonClipping.union(
+                unionInputs[0] as unknown as polygonClipping.Geom,
+                ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
+              ) as unknown as MultiPolygonCoords);
+        const cleanedUnion = filterDegenerateBooleanArtifacts(rawUnion);
+        solidMultiPoly = cleanedUnion
+          .map((poly) => [poly[0]])
+          .filter((poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0]));
+      } catch {
+        solidMultiPoly = [];
+      }
     }
   }
 
-  let activePortals = portals;
-  let validated = portalsHaveValidWidths(portals)
-    ? validateAndTriangulateJunctionRing(rawCandidate1, nodeCenter, maxAllowedRadius)
-    : null;
-
-  // Candidate 2 fallback: direct portal-to-portal boundary with snapped portals (omitting intermediate corners)
-  if (!validated && portalsHaveValidWidths(portals)) {
-    const rawCandidate2: [number, number][] = [];
-    for (let i = 0; i < k; i++) {
-      rawCandidate2.push(portals[i].right);
-      rawCandidate2.push(portals[i].left);
-    }
-    validated = validateAndTriangulateJunctionRing(
-      rawCandidate2,
-      nodeCenter,
-      maxAllowedRadius
-    );
+  if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
+    recordGraphRoadDiagnostic(diagnostics, 'junction_polygon_validation_failed', nodeId);
+    return null;
   }
 
-  // Candidate 3 fallback: orthogonal un-snapped portals
-  if (!validated && portalsHaveValidWidths(orthogonalPortals)) {
-    const rawCandidate3: [number, number][] = [];
-    for (let i = 0; i < k; i++) {
-      rawCandidate3.push(orthogonalPortals[i].right);
-      rawCandidate3.push(orthogonalPortals[i].left);
-    }
-    validated = validateAndTriangulateJunctionRing(
-      rawCandidate3,
-      nodeCenter,
-      maxAllowedRadius
-    );
-    if (validated) {
-      activePortals = orthogonalPortals;
-    }
+  // Validate 3D triangulation and upward face normals before committing trimmedEndpoints
+  const testShapes = createShapesFromMultiPolygon(solidMultiPoly);
+  if (testShapes.length === 0) {
+    recordGraphRoadDiagnostic(diagnostics, 'junction_polygon_validation_failed', nodeId);
+    return null;
   }
+  const testGeo = new THREE.ShapeGeometry(testShapes);
+  testGeo.rotateX(-Math.PI / 2);
+  const isValidGeo = validateAndPruneHorizontalGeometry(testGeo);
+  testGeo.dispose();
 
-  if (!validated) {
-    recordGraphRoadDiagnostic(
-      diagnostics,
-      'junction_polygon_validation_failed',
-      nodeId
-    );
+  if (!isValidGeo) {
+    recordGraphRoadDiagnostic(diagnostics, 'junction_polygon_validation_failed', nodeId);
     return null;
   }
 
@@ -1363,7 +1545,7 @@ function solveBoundaryDerivedJunctionNode(
   for (let i = 0; i < k; i++) {
     const bBranch = sortedBranches[i];
     const trimDist = trimDists[i];
-    const { left: leftPortal, right: rightPortal, center: centerPortal } = activePortals[i];
+    const { left: leftPortal, right: rightPortal, center: centerPortal } = portals[i];
     const tRec = trimmedEndpoints.get(bBranch.edge.id);
     if (tRec) {
       if (bBranch.endpoint === 'start') {
@@ -1377,7 +1559,9 @@ function solveBoundaryDerivedJunctionNode(
         tRec.endTrimDist = Math.max(tRec.endTrimDist, trimDist);
         tRec.hasCapEnd = false;
       }
-      tRec.exemptFootprintIds.add(junctionFeatureId);
+      if (!wasTrimClamped[i]) {
+        tRec.exemptFootprintIds.add(junctionFeatureId);
+      }
     }
   }
 
@@ -1396,18 +1580,17 @@ function solveBoundaryDerivedJunctionNode(
     nodeId,
     junctionFeatureId,
     isPathJunction,
-    polygonPoints: validated.polygonPoints,
-    validatedTriangles: validated.validatedTriangles,
+    junctionMultiPoly: solidMultiPoly,
     sortedBranches,
-    portals: activePortals,
+    portals,
     dominantBranch,
   };
 }
 
 /**
  * Sanitizes a sub-segment centerline polyline and its optional `startPortal` / `endPortal`
- * so interior polyline vertices never fall behind a skewed portal corner and endpoint portals
- * never invert relative to the first/last segment tangent.
+ * while preserving interior curve vertices and confining any degree-2 width step to a local
+ * transition zone near the node.
  */
 function sanitizeSubSegmentPolylineAndPortals(
   rawPoints: [number, number][],
@@ -1454,24 +1637,37 @@ function sanitizeSubSegmentPolylineAndPortals(
       }
     : undefined;
 
-  // Prune interior vertices near start that lie inside the longitudinal overhang of startPortal
-  if (startPortal && pts.length > 2) {
+  // Merge sub-meter stub vertices right next to startPortal only when startPortal overhang +
+  // the interior bend overhang at pts[1] would physically invert the first quad.
+  if (pts.length > 2) {
     while (pts.length > 2) {
       const p0 = pts[0];
       const p1 = pts[1];
-      const dx = p1[0] - p0[0];
-      const dz = p1[1] - p0[1];
-      const segLen = Math.hypot(dx, dz);
-      if (segLen < 1e-4) {
+      const p2 = pts[2];
+      const dx0 = p1[0] - p0[0];
+      const dz0 = p1[1] - p0[1];
+      const segLen0 = Math.hypot(dx0, dz0);
+      if (segLen0 < 1e-4) {
         pts.splice(1, 1);
         continue;
       }
-      const tx = dx / segLen;
-      const tz = dz / segLen;
-      const projL = (startPortal.left[0] - p0[0]) * tx + (startPortal.left[1] - p0[1]) * tz;
-      const projR = (startPortal.right[0] - p0[0]) * tx + (startPortal.right[1] - p0[1]) * tz;
-      const maxOverhang = Math.max(0, projL, projR);
-      if (segLen <= maxOverhang + width * 0.25) {
+      const tx0 = dx0 / segLen0;
+      const tz0 = dz0 / segLen0;
+      let portalOverhang = 0;
+      if (startPortal) {
+        const projL = (startPortal.left[0] - p0[0]) * tx0 + (startPortal.left[1] - p0[1]) * tz0;
+        const projR = (startPortal.right[0] - p0[0]) * tx0 + (startPortal.right[1] - p0[1]) * tz0;
+        portalOverhang = Math.max(0, projL, projR);
+      }
+      const dx1 = p2[0] - p1[0];
+      const dz1 = p2[1] - p1[1];
+      const segLen1 = Math.hypot(dx1, dz1) || 1e-6;
+      const dot = (tx0 * dx1 + tz0 * dz1) / segLen1;
+      const sinHalf = Math.sqrt(Math.max(0, (1 - dot) * 0.5));
+      const cosHalf = Math.sqrt(Math.max(0.1, (1 + dot) * 0.5));
+      const bendOverhang = (width * 0.5 * sinHalf) / Math.max(0.75, cosHalf);
+
+      if (segLen0 <= portalOverhang + bendOverhang + 0.05) {
         pts.splice(1, 1);
       } else {
         break;
@@ -1479,25 +1675,38 @@ function sanitizeSubSegmentPolylineAndPortals(
     }
   }
 
-  // Prune interior vertices near end that lie inside the longitudinal overhang of endPortal
-  if (endPortal && pts.length > 2) {
+  // Merge sub-meter stub vertices right next to endPortal only when endPortal overhang +
+  // the interior bend overhang at pts[last - 1] would physically invert the last quad.
+  if (pts.length > 2) {
     while (pts.length > 2) {
       const last = pts.length - 1;
       const pn = pts[last];
       const pPrev = pts[last - 1];
-      const dx = pn[0] - pPrev[0];
-      const dz = pn[1] - pPrev[1];
-      const segLen = Math.hypot(dx, dz);
-      if (segLen < 1e-4) {
+      const pPrev2 = pts[last - 2];
+      const dx0 = pn[0] - pPrev[0];
+      const dz0 = pn[1] - pPrev[1];
+      const segLen0 = Math.hypot(dx0, dz0);
+      if (segLen0 < 1e-4) {
         pts.splice(last - 1, 1);
         continue;
       }
-      const tx = dx / segLen;
-      const tz = dz / segLen;
-      const projL = (pn[0] - endPortal.left[0]) * tx + (pn[1] - endPortal.left[1]) * tz;
-      const projR = (pn[0] - endPortal.right[0]) * tx + (pn[1] - endPortal.right[1]) * tz;
-      const maxOverhang = Math.max(0, projL, projR);
-      if (segLen <= maxOverhang + width * 0.25) {
+      const tx0 = dx0 / segLen0;
+      const tz0 = dz0 / segLen0;
+      let portalOverhang = 0;
+      if (endPortal) {
+        const projL = (pn[0] - endPortal.left[0]) * tx0 + (pn[1] - endPortal.left[1]) * tz0;
+        const projR = (pn[0] - endPortal.right[0]) * tx0 + (pn[1] - endPortal.right[1]) * tz0;
+        portalOverhang = Math.max(0, projL, projR);
+      }
+      const dx1 = pPrev[0] - pPrev2[0];
+      const dz1 = pPrev[1] - pPrev2[1];
+      const segLen1 = Math.hypot(dx1, dz1) || 1e-6;
+      const dot = (tx0 * dx1 + tz0 * dz1) / segLen1;
+      const sinHalf = Math.sqrt(Math.max(0, (1 - dot) * 0.5));
+      const cosHalf = Math.sqrt(Math.max(0.1, (1 + dot) * 0.5));
+      const bendOverhang = (width * 0.5 * sinHalf) / Math.max(0.75, cosHalf);
+
+      if (segLen0 <= portalOverhang + bendOverhang + 0.05) {
         pts.splice(last - 1, 1);
       } else {
         break;
@@ -2299,18 +2508,18 @@ export function buildGraphAtGradeRoadGeometries(
     }
   };
 
-  // 5. Emit pre-validated, upward-wound junction polygon geometries
+  // 5. Emit pre-validated, upward-wound junction polygon geometries from localized footprint unions
   const junctionGeometriesByClass = new Map<
     RoadClass,
     Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
   >();
+  const junctionMultiPolyByFeatureId = new Map<string, MultiPolygonCoords>();
 
   for (const junc of pendingJunctions) {
     const {
       junctionFeatureId,
       isPathJunction,
-      polygonPoints,
-      validatedTriangles,
+      junctionMultiPoly,
       sortedBranches,
       portals,
       dominantBranch,
@@ -2349,41 +2558,35 @@ export function buildGraphAtGradeRoadGeometries(
           : touching.endSourceId
         : branchSids[0];
 
+      const effectivePortal =
+        resolveEffectivePortalOnJunctionBoundary(
+          bPortal.left,
+          bPortal.right,
+          junctionMultiPoly
+        ) ?? bPortal;
+
       portalConnections.push({
         roadFeatureId: touchingSubId,
         sourceFeatureId: touchingSourceId,
         endpoint: bBranch.endpoint,
-        left: bBranch.endpoint === 'start' ? bPortal.left : bPortal.right,
-        right: bBranch.endpoint === 'start' ? bPortal.right : bPortal.left,
+        left: bBranch.endpoint === 'start' ? effectivePortal.left : effectivePortal.right,
+        right: bBranch.endpoint === 'start' ? effectivePortal.right : effectivePortal.left,
       });
     }
 
-    registerRoadFootprint(junctionFeatureId, isPathJunction, polygonPoints);
-
-    const junctionVertices: number[] = [];
-    const junctionIndices: number[] = [];
-    const junctionNormals: number[] = [];
-
-    for (let pIdx = 0; pIdx < polygonPoints.length; pIdx++) {
-      junctionVertices.push(polygonPoints[pIdx][0], yElev, polygonPoints[pIdx][1]);
-      junctionNormals.push(0, 1, 0);
+    for (const polyRings of junctionMultiPoly) {
+      if (polyRings[0]) {
+        registerRoadFootprint(junctionFeatureId, isPathJunction, polyRings[0]);
+      }
     }
+    junctionMultiPolyByFeatureId.set(junctionFeatureId, junctionMultiPoly);
 
-    for (const [i0, i1, i2] of validatedTriangles) {
-      junctionIndices.push(i0, i1, i2);
-    }
-
-    if (junctionIndices.length > 0) {
-      const junctionGeo = new THREE.BufferGeometry();
-      junctionGeo.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(junctionVertices, 3)
-      );
-      junctionGeo.setAttribute(
-        'normal',
-        new THREE.Float32BufferAttribute(junctionNormals, 3)
-      );
-      junctionGeo.setIndex(junctionIndices);
+    const shapes = createShapesFromMultiPolygon(junctionMultiPoly);
+    if (shapes.length > 0) {
+      const junctionGeo = new THREE.ShapeGeometry(shapes);
+      junctionGeo.rotateX(-Math.PI / 2);
+      junctionGeo.translate(0, yElev, 0);
+      if (junctionGeo.hasAttribute('uv')) junctionGeo.deleteAttribute('uv');
 
       if (validateAndPruneHorizontalGeometry(junctionGeo)) {
         resourceManager.registerGeometry(junctionGeo);
@@ -2420,6 +2623,7 @@ export function buildGraphAtGradeRoadGeometries(
   }
 
   // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
+  const clippedPolysBySubId = new Map<string, MultiPolygonCoords>();
   const sortedBuildableEdges = [...buildableEdges].sort((a, b) => {
     const aPath = a.tier === 'path' || isNonVehicularRoadClass(a.roadClass) ? 1 : 0;
     const bPath = b.tier === 'path' || isNonVehicularRoadClass(b.roadClass) ? 1 : 0;
@@ -2500,7 +2704,7 @@ export function buildGraphAtGradeRoadGeometries(
           const candidateFootprints: PlacedRoadFootprint[] = [];
           for (const fp of placedRoadFootprints) {
             if (!isPath && fp.isPath) continue;
-            // For vehicular ribbons, skip footprints that share an exact 1D portal with this sub-segment
+            // Skip footprints that share an exact 1D unclamped portal with this sub-segment
             if (!isPath && sub.exemptFootprintIds.has(fp.id)) continue;
             if (isPath && fp.isPath && sub.exemptFootprintIds.has(fp.id)) continue;
             if (
@@ -2517,7 +2721,7 @@ export function buildGraphAtGradeRoadGeometries(
             const outlineHasSelfIntersection =
               !outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]);
 
-            let requiresClipping = isPath || outlineHasSelfIntersection;
+            let requiresClipping = outlineHasSelfIntersection;
             const overlappingPolys: Array<[number, number][][]> = [];
             const overlappingBoxes: Array<{
               minX: number;
@@ -2534,7 +2738,9 @@ export function buildGraphAtGradeRoadGeometries(
                     fp.poly as unknown as polygonClipping.Geom
                   ) as unknown as MultiPolygonCoords;
                   const cleanedInter = filterDegenerateBooleanArtifacts(inter);
-                  if (cleanedInter.length > 0) {
+                  const interArea = computeMultiPolygonArea(cleanedInter);
+                  const minTriggerArea = sub.exemptFootprintIds.has(fp.id) ? 5e-4 : 0;
+                  if (cleanedInter.length > 0 && interArea > minTriggerArea) {
                     requiresClipping = true;
                     overlappingPolys.push(fp.poly);
                     overlappingBoxes.push({
@@ -2545,18 +2751,21 @@ export function buildGraphAtGradeRoadGeometries(
                     });
                   }
                 } catch {
-                  requiresClipping = true;
-                  overlappingPolys.push(fp.poly);
-                  overlappingBoxes.push({
-                    minX: fp.minX,
-                    maxX: fp.maxX,
-                    minZ: fp.minZ,
-                    maxZ: fp.maxZ,
-                  });
+                  if (!sub.exemptFootprintIds.has(fp.id)) {
+                    requiresClipping = true;
+                    overlappingPolys.push(fp.poly);
+                    overlappingBoxes.push({
+                      minX: fp.minX,
+                      maxX: fp.maxX,
+                      minZ: fp.minZ,
+                      maxZ: fp.maxZ,
+                    });
+                  }
                 }
               }
             } else {
               for (const fp of candidateFootprints) {
+                if (sub.exemptFootprintIds.has(fp.id)) continue;
                 overlappingPolys.push(fp.poly);
                 overlappingBoxes.push({
                   minX: fp.minX,
@@ -2826,6 +3035,7 @@ export function buildGraphAtGradeRoadGeometries(
 
         // Register footprint for downstream clipping
         if (resolvedClippedPolys) {
+          clippedPolysBySubId.set(sub.subId, resolvedClippedPolys);
           for (const polyRings of resolvedClippedPolys) {
             if (polyRings[0]) registerRoadFootprint(sub.subId, isPath, polyRings[0]);
           }
@@ -2903,8 +3113,44 @@ export function buildGraphAtGradeRoadGeometries(
     }
   }
 
-  // 7. Append junction geometries into their corresponding road class buckets
+  // 7. Synchronize junction portalConnections against any clipped or fully-subtracted road ribbons
+  // and append junction geometries into their corresponding road class buckets.
   junctionGeometriesByClass.forEach((items, roadClass) => {
+    for (const item of items) {
+      const conns = item.info.portalConnections;
+      const juncPoly = junctionMultiPolyByFeatureId.get(item.info.id);
+      if (Array.isArray(conns) && juncPoly) {
+        const refinedConns: RoadPortalConnectionSpec[] = [];
+        for (const c of conns) {
+          if (fullySubtractedRoadIds.has(c.roadFeatureId)) {
+            continue;
+          }
+          const clippedRoadPoly = clippedPolysBySubId.get(c.roadFeatureId);
+          if (clippedRoadPoly) {
+            const rawLeft = c.endpoint === 'start' ? c.left : c.right;
+            const rawRight = c.endpoint === 'start' ? c.right : c.left;
+            const resolved = resolveEffectivePortalOnJunctionBoundary(
+              rawLeft,
+              rawRight,
+              juncPoly,
+              clippedRoadPoly
+            );
+            if (resolved) {
+              refinedConns.push({
+                ...c,
+                left: c.endpoint === 'start' ? resolved.left : resolved.right,
+                right: c.endpoint === 'start' ? resolved.right : resolved.left,
+              });
+            } else {
+              refinedConns.push(c);
+            }
+          } else {
+            refinedConns.push(c);
+          }
+        }
+        item.info.portalConnections = refinedConns;
+      }
+    }
     if (!roadsByClass.has(roadClass)) {
       roadsByClass.set(roadClass, []);
     }

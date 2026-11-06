@@ -1162,7 +1162,6 @@ function solveBoundaryDerivedJunctionNode(
   const sectorDet: number[] = new Array(k).fill(0);
   const sectorTA: number[] = new Array(k).fill(0);
   const sectorTB: number[] = new Array(k).fill(0);
-  const reflexCorners: Array<[number, number] | undefined> = new Array(k).fill(undefined);
 
   for (let i = 0; i < k; i++) {
     const next = (i + 1) % k;
@@ -1193,24 +1192,10 @@ function solveBoundaryDerivedJunctionNode(
       const tB = (dx * dA[1] - dz * dA[0]) / det;
       sectorTA[i] = tA;
       sectorTB[i] = tB;
-
-      if (det < -0.06 && tA <= 0 && tB <= 0) {
-        let cornerX = pA[0] + tA * dA[0];
-        let cornerZ = pA[1] + tA * dA[1];
-        const cDist = Math.hypot(cornerX - nodeCenter[0], cornerZ - nodeCenter[1]);
-        const maxOuterDist = 1.25 * Math.max(bA.width, bB.width);
-        if (cDist > maxOuterDist && cDist > 1e-4) {
-          const scale = maxOuterDist / cDist;
-          cornerX = nodeCenter[0] + (cornerX - nodeCenter[0]) * scale;
-          cornerZ = nodeCenter[1] + (cornerZ - nodeCenter[1]) * scale;
-        }
-        reflexCorners[i] = [snapCoord(cornerX), snapCoord(cornerZ)];
-      }
     }
   }
 
   const trimDists: number[] = [];
-  const wasTrimClamped: boolean[] = [];
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 
   for (let i = 0; i < k; i++) {
@@ -1249,7 +1234,6 @@ function solveBoundaryDerivedJunctionNode(
     const rawTrimDist = Math.max(0.15, minStub, reqLeft, reqRight, maxPairReq);
     const trimDist = Math.min(rawTrimDist, maxTrimDists[i]);
     trimDists.push(trimDist);
-    wasTrimClamped.push(rawTrimDist > maxTrimDists[i] + 1e-4);
   }
 
   // Validate that no edge's startTrimDist + endTrimDist exceeds available edge length
@@ -1278,17 +1262,9 @@ function solveBoundaryDerivedJunctionNode(
     right: [number, number];
     center: [number, number];
   }> = [];
-  const portalVectors: Array<{
-    tCut: [number, number];
-    nCut: [number, number];
-    width: number;
-  }> = [];
   const unionInputs: MultiPolygonCoords = [];
-  const rawContourPts: [number, number][] = [];
-  const coreHubPts: [number, number][] = [];
 
   for (let i = 0; i < k; i++) {
-    const prev = (i - 1 + k) % k;
     const bBranch = sortedBranches[i];
     const trimDist = trimDists[i];
 
@@ -1343,7 +1319,6 @@ function solveBoundaryDerivedJunctionNode(
       snapCoord(pCut[1] - nCutZ * halfW),
     ];
     portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
-    portalVectors.push({ tCut: [tCutX, tCutZ], nCut: [nCutX, nCutZ], width: bBranch.width });
 
     // Generate full-width local ribbon along localPts to capture any curve inside [0, trimDist]
     const stubRibbon = generateRoadRibbon(localPts, bBranch.width, 0, {
@@ -1381,52 +1356,7 @@ function solveBoundaryDerivedJunctionNode(
       );
     }
 
-    // Advance inner curb starts in inner-crotch sectors so a wider road never pokes its s=0 corner
-    // out the back of a narrower adjacent road.
-    const sLeftStart =
-      sectorDet[i] > 0.06 &&
-      sectorTA[i] > 0 &&
-      sectorTB[i] >= -sortedBranches[i].width * 0.45
-        ? Math.min(sectorTA[i], trimDist * 0.92)
-        : 0;
-    const sRightStart =
-      sectorDet[prev] > 0.06 &&
-      sectorTB[prev] > 0 &&
-      sectorTA[prev] >= -bBranch.width * 0.45
-        ? Math.min(sectorTB[prev], trimDist * 0.92)
-        : 0;
-
-    const leftChainLen = computePolylineLength(leftChain);
-    const rightChainLen = computePolylineLength(rightChain);
-
-    const activeLeftChain =
-      sLeftStart > 0.02 && leftChainLen > sLeftStart + 0.02
-        ? extractPolylineSpan(leftChain, sLeftStart, leftChainLen).map(
-            (pt) => [snapCoord(pt[0]), snapCoord(pt[1])] as [number, number]
-          )
-        : leftChain;
-    const activeRightChain =
-      sRightStart > 0.02 && rightChainLen > sRightStart + 0.02
-        ? extractPolylineSpan(rightChain, sRightStart, rightChainLen).map(
-            (pt) => [snapCoord(pt[0]), snapCoord(pt[1])] as [number, number]
-          )
-        : rightChain;
-
-    activeLeftChain[activeLeftChain.length - 1] = leftPortal;
-    activeRightChain[activeRightChain.length - 1] = rightPortal;
-
-    for (const pt of activeRightChain) {
-      rawContourPts.push(pt);
-    }
-    for (let m = activeLeftChain.length - 1; m >= 0; m--) {
-      rawContourPts.push(activeLeftChain[m]);
-    }
-    coreHubPts.push(activeRightChain[0], activeLeftChain[0]);
-    if (reflexCorners[i]) {
-      rawContourPts.push(reflexCorners[i]!);
-      coreHubPts.push(reflexCorners[i]!);
-    }
-
+    // The complete curb chains, not shortened or pinched corner chains, define this local road footprint.
     // Authoritative full-width road footprint stub from nodeCenter to the cut portal
     const fullStripRing: [number, number][] = [
       ...rightChain,
@@ -1458,117 +1388,27 @@ function solveBoundaryDerivedJunctionNode(
     }
   }
 
-  // Deduplicate and clean rawContourPts for fallback
-  const cleanRingPoints = (pts: [number, number][]): [number, number][] => {
-    const deduped: [number, number][] = [];
-    for (const pt of pts) {
-      const prev = deduped.length > 0 ? deduped[deduped.length - 1] : pts[pts.length - 1];
-      if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
-        deduped.push([snapCoord(pt[0]), snapCoord(pt[1])]);
-      }
-    }
-    // Prune any near-180-degree collinear back-spikes at inner crotch transitions
-    let changed = true;
-    while (changed && deduped.length > 3) {
-      changed = false;
-      for (let i = 0; i < deduped.length; i++) {
-        const prev = deduped[(i - 1 + deduped.length) % deduped.length];
-        const curr = deduped[i];
-        const next = deduped[(i + 1) % deduped.length];
-        const d1 = Math.hypot(curr[0] - prev[0], curr[1] - prev[1]);
-        const d2 = Math.hypot(next[0] - curr[0], next[1] - curr[1]);
-        if (d1 < 1e-3 || d2 < 1e-3) {
-          deduped.splice(i, 1);
-          changed = true;
-          break;
-        }
-        const cosA =
-          ((curr[0] - prev[0]) * (next[0] - curr[0]) +
-            (curr[1] - prev[1]) * (next[1] - curr[1])) /
-          (d1 * d2);
-        if (cosA < -0.992) {
-          deduped.splice(i, 1);
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (deduped.length >= 3) {
-      deduped.push([deduped[0][0], deduped[0][1]]);
-    }
-    return deduped;
-  };
-
-  // Authoritative junction surface: direct Boolean union of all incident branch stubs
-  let solidMultiPoly: MultiPolygonCoords = [];
-  if (unionInputs.length > 0) {
-    try {
-      let rawUnion: MultiPolygonCoords =
-        unionInputs.length === 1
-          ? [unionInputs[0]]
-          : (polygonClipping.union(
-              unionInputs[0] as unknown as polygonClipping.Geom,
-              ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
-            ) as unknown as MultiPolygonCoords);
-
-      // Clip away any lateral or corner protrusions beyond any branch's cut portal into the road corridor
-      for (let i = 0; i < k; i++) {
-        const { left: lp, right: rp } = portals[i];
-        const { tCut, nCut, width } = portalVectors[i];
-        const extDist = 0.5;
-        const margin = 0.05;
-        const pL0: [number, number] = [
-          snapCoord(lp[0] + nCut[0] * margin),
-          snapCoord(lp[1] + nCut[1] * margin),
-        ];
-        const pR0: [number, number] = [
-          snapCoord(rp[0] - nCut[0] * margin),
-          snapCoord(rp[1] - nCut[1] * margin),
-        ];
-        const pR1: [number, number] = [
-          snapCoord(pR0[0] + tCut[0] * extDist),
-          snapCoord(pR0[1] + tCut[1] * extDist),
-        ];
-        const pL1: [number, number] = [
-          snapCoord(pL0[0] + tCut[0] * extDist),
-          snapCoord(pL0[1] + tCut[1] * extDist),
-        ];
-        const roadCorridorPoly: [number, number][][] = [[pL0, pL1, pR1, pR0, pL0]];
-
-        try {
-          const diff = polygonClipping.difference(
-            rawUnion as unknown as polygonClipping.Geom,
-            roadCorridorPoly as unknown as polygonClipping.Geom
-          ) as unknown as MultiPolygonCoords;
-          if (diff && diff.length > 0) {
-            rawUnion = diff;
-          }
-        } catch {
-          // ignore difference exception
-        }
-      }
-
-      const cleanedUnion = filterDegenerateBooleanArtifacts(rawUnion);
-      solidMultiPoly = cleanedUnion
-        .filter((poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0]))
-        .map((poly) => {
-          const validOuter = poly[0];
-          const validHoles = poly
-            .slice(1)
-            .filter((hole) => hole.length >= 4 && !hasRingSelfIntersection(hole));
-          return [validOuter, ...validHoles];
-        });
-    } catch {
-      solidMultiPoly = [];
-    }
+  // Every incident full-width stub must participate. A union of only some branches
+  // may be valid geometry but would leave uncovered roads after endpoint trimming.
+  if (unionInputs.length !== k) {
+    recordGraphRoadDiagnostic(diagnostics, 'junction_invalid_full_width_stub', nodeId);
+    return null;
   }
 
-  // Fallback to cleaned stitched contour only if Boolean union failed or produced no valid polygons
-  if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
-    const candidateContourRing = cleanRingPoints(rawContourPts);
-    if (candidateContourRing.length >= 4 && !hasRingSelfIntersection(candidateContourRing)) {
-      solidMultiPoly = [[candidateContourRing]];
-    }
+  // Construct the patch from the full-width footprint union, with no post-union
+  // corridor cutouts. The ribbon pass clips genuine overlap against this patch.
+  let solidMultiPoly: MultiPolygonCoords = [];
+  try {
+    const rawUnion = polygonClipping.union(
+      unionInputs[0] as unknown as polygonClipping.Geom,
+      ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords;
+    solidMultiPoly = filterDegenerateBooleanArtifacts(rawUnion).filter(
+      (poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
+    );
+  } catch {
+    recordGraphRoadDiagnostic(diagnostics, 'junction_footprint_union_failed', nodeId);
+    return null;
   }
 
   if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
@@ -1610,9 +1450,8 @@ function solveBoundaryDerivedJunctionNode(
         tRec.endTrimDist = Math.max(tRec.endTrimDist, trimDist);
         tRec.hasCapEnd = false;
       }
-      if (!wasTrimClamped[i]) {
-        tRec.exemptFootprintIds.add(junctionFeatureId);
-      }
+      // Do not exempt incident ribbons from this patch: local overlap is removed
+      // by the same Boolean difference used for all other road footprints.
     }
   }
 

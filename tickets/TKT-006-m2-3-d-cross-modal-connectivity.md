@@ -2,10 +2,10 @@
 id: TKT-006
 title: M2.3-D Cross-Modal Connectivity, Level Crossings, Grade Transitions, and InfrastructureGraph Orchestration
 type: feature
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-05
-updated: 2026-11-05
+updated: 2026-11-06
 ---
 
 # TKT-006: M2.3-D Cross-Modal Connectivity, Level Crossings, Grade Transitions, and InfrastructureGraph Orchestration
@@ -57,23 +57,24 @@ Prior to Stage D:
 - [x] Comprehensive automated test suite (`src/world/CrossModalTopology.test.ts`) passing via `npm test`, covering `T-03`, `T-04`, `T-13`, `T-14`, `T-15`, `T-17`, all 5 infrastructure point categories, MultiLineString/clipping provenance, Stage C flat-diamond non-interchange preservation, diagnostic aggregation, determinism, immutability, and `GeometryBuilder` mesh-buffer invariance.
 - [x] Reproducible performance benchmark recorded on synthetic and real Station Hengelo / Amsterdam Centraal OSM extracts (`parseGeoJson`, road graph, railway graph, cross-modal/grade-transition analysis, and total `buildInfrastructureGraph` time).
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
-- [ ] Project owner reviews Stage D implementation to close `TKT-006`.
+- [x] Project owner reviews Stage D implementation to close `TKT-006`.
 
 ## Implementation notes
 - Stage D strictly excludes Stage E (`GeometryBuilder.ts`, `RailwayGeometryBuilder.ts`, `RailwayTopology.ts` renderer integration).
-- `TKT-006` remains `in_progress` pending project-owner review and acceptance.
+- Accepted and closed by project owner on 2026-11-06 (`135 / 135` passing tests baseline preserved).
 
 ## Verification
-- Status: Implemented and verified (`135 / 135` tests passing); `in_progress` pending project-owner review.
+- Status: Verified and closed (`135 / 135` tests passing; accepted by project owner on 2026-11-06).
 - Verification steps:
   - `npm test` — `135 / 135 passed` (`0` failures), including `9 / 9` in `src/world/CrossModalTopology.test.ts`.
   - `npm run lint` (`tsc --noEmit`) — `0` errors.
   - `npm run build` (`vite build`) — clean production build (`dist/`).
   - `npm run docs:api` (`typedoc`) — generated API documentation (`docs/api-reference/`).
-- Event-Deduplication Consistency Fix:
+- Event-Deduplication Consistency & Crossing Anchor Consistency Fixes:
   - `isRoadRailPairEventAlreadyHandled()` in `CrossModalAnalyzer.ts` updated to use `SAME_PAIR_EVENT_DEDUP_TOLERANCE_METERS` (`0.02 m`) instead of `DEFAULT_NODE_SNAP_TOLERANCE_METERS` (`0.15 m`).
-  - `markRoadRailPairEventHandled()` updated to track only the single exact physical crossing position (`crossingHit.point`), eliminating spurious suppression radius expansion caused by offset point annotation locations.
-  - Verified with 3 new regression sub-assertions in Test 9 of `CrossModalTopology.test.ts`: co-survival of confirmed and unresolved crossings on the same edge pair $0.10\text{ m}$ apart, prevention of duplicate unresolved emission upon repeated discovery of confirmed crossings, and isolation of point annotation offsets within $0.15\text{ m}$ from the deduplication radius.
+  - `markRoadRailPairEventHandled()` updated to track only the single exact physical crossing position (`crossingHit.point`), eliminating spurious suppression radius expansion caused by offset or conflicting point annotation locations.
+  - Point-based level-crossing confirmation in `CrossModalAnalyzer.ts` anchors candidate intersections to the verified matching way vertex coordinate (`anchorVertexPos`), emitting `'ambiguous_multiple_candidate_nodes'` when multiple intersections lie equidistant within `0.02 m` of the verified anchor.
+  - Verified with regression sub-assertions in Test 9 of `CrossModalTopology.test.ts`: co-survival of confirmed and unresolved crossings on the same edge pair `0.10 m` apart, prevention of duplicate unresolved emission upon repeated discovery of confirmed crossings, crossing anchor consistency when a point annotation at `[80, 0.08]` matches road vertex `'9701'` at `[80, 0.00]` while `[80, 0.09]` remains unresolved, and ambiguity rejection for equidistant intersections.
 - Recorded Stage D Performance Benchmarks (Independent Measurement Runs):
   - **Station Hengelo Real OSM Extract**: `parseGeoJson = 3.92 ms`, component runs (`buildRoadNetwork = 0.02 ms`, `buildRailwayNetwork = 11.34 ms`, `analyzeCrossModal = 3.69 ms`), independent full-graph run `buildInfrastructureGraph = 12.96 ms` (`railNodes: 48`, `railEdges: 62`, `railwayConfirmedSwitchCount: 23`, `railwayFlatCrossingCount: 3`, `unresolvedCrossings: 9`, `unresolvedInfrastructurePoints: 1`).
   - **Amsterdam Centraal Real OSM Extract**: `parseGeoJson = 18.50 ms`, component runs (`buildRoadNetwork = 0.64 ms`, `buildRailwayNetwork = 88.39 ms`, `analyzeCrossModal = 13.33 ms`), independent full-graph run `buildInfrastructureGraph = 67.01 ms` (`roadNodes: 6`, `roadEdges: 3`, `railNodes: 331`, `railEdges: 314`, `gradeTransitionCount: 70`, `gradeSeparatedCrossingCount: 114`, `unresolvedCrossings: 31`, `unresolvedInfrastructurePoints: 31`).

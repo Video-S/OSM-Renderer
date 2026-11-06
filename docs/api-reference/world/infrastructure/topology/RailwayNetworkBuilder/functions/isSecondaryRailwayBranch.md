@@ -2,7 +2,7 @@
 
 ***
 
-[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/InfrastructureGraph](../README.md) / isSecondaryRailwayBranch
+[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/RailwayNetworkBuilder](../README.md) / isSecondaryRailwayBranch
 
 # Function: isSecondaryRailwayBranch()
 

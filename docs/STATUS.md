@@ -3,7 +3,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, & Stage C `M2.3-C` / `TKT-005` complete & closed; Stage D `M2.3-D` / `TKT-006` implemented & `in_progress` pending project-owner review; Stage `E` requires explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, & Stage D `M2.3-D` / `TKT-006` complete & closed; Stage E1 `M2.3-E1` / `TKT-007` implemented & `in_progress` pending project-owner review; Stages `E2–E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -23,6 +23,7 @@
    - Interior OSM junction splitting, self-loops / P-loops, isolated closed loops (`loop_anchor`), parallel multi-edges (`parallelIndex`), `incidentHalfEdges` vs. `incidentEdgeIds` degree invariants, non-interstitial degree-2 simplification with road/railway attribute and one-way guards, pre-simplification protection of confirmed crossing and portal nodes, per-segment provenance (`reversedRelativeToSource`), and strict `1 mm` vertex-by-vertex duplicate detection.
    - Conservative railway turnout (`1-to-2` throat) classification (`confirmed`, `unresolved_main_vs_diverging`, `unresolved_throat`), non-interconnecting flat diamond crossing (`RailwayFlatCrossingRelation`) resolution with strict non-interchange between crossing tracks, complete unresolved four-arm railway crossing diagnostics across all three 4-arm arrangements (`2` interior occurrences, `1` interior + `2` endpoints, `4` endpoints, including `'ambiguous_railway_crossing_track_pairing'`), and conservative point-annotation matching (`diagnostics.unresolvedInfrastructurePoints`).
    - Cross-modal and vertical connectivity analysis (`CrossModalAnalyzer.ts`, `buildInfrastructureGraph`): confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation` for `road_rail_level_crossing` and `pedestrian_rail_crossing`, rejecting untagged 2D intersections and point-tag/tier conflicts), road crosswalk preservation (`highway_crossing` role), same-domain road and railway grade transitions (`GradeTransitionRelation` across Tier 1 explicit OSM portal nodes and Tier 2 `0.15 m` terminal collinear coordinate fallback, plus `0.80 m` diagnostic horizon in `UnresolvedGradeTransitionCandidate`), and grade-separated overpasses/underpasses (`GradeSeparatedCrossingRelation`).
+   - Graph-to-renderer adapter and safe preview integration (`M2.3-E1` / `TKT-007`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`): pure, deterministic transformation of `InfrastructureGraph` into render-ready road, railway, and cross-domain descriptors (`InfrastructureRenderDescriptorBundle`) with complete source-feature lineage (`sourceFeatureToRoadEdgeIds`, `sourceFeatureToRailwayEdgeIds`, `roadFeatureLineage`, `railwayFeatureLineage`), contract validation (`validateInfrastructureRenderDescriptors`), and independent `'legacy' | 'graph-preview'` developer switches (`?topologyRoads=...&topologyRailways=...`) preserving 100% legacy 3D renderer invariance.
 3. **Procedural Geometry Synthesis**:
    - Uniform `ROAD_SURFACE = 0.050 m` at-grade road baseline with boundary-derived junction meshing and miter limits.
    - Carriageway-vs-path 2D Boolean clipping removing coplanar overlapping road surfaces.
@@ -50,7 +51,7 @@
 
 ---
 
-## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), & M2.3-C (`TKT-005` — `closed`)
+## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), & M2.3-D (`TKT-006` — `closed`)
 
 - **Milestone 2.1 (`TKT-002` — Closed)**:
    - Benchmarked and validated **Candidate B** (Hybrid Close-Zoom 3D Instanced Sleepers & Extruded Rails + Medium/Far Procedural UV-Ribbons) across synthetic 65-way switchyard fixtures and real Overpass OSM extracts (**Station Hengelo** `67` ways and **Amsterdam Centraal** `160` ways).
@@ -67,19 +68,21 @@
    - Implemented non-destructive `ProcessedMapData.topologySource` capture before `seenRoadSegments` and `chainContiguousRoads`, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`) with strict renderer metadata isolation, pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts` (`108 / 108` Stage B baseline).
 - **Milestone 2.3 — Stage C (`M2.3-C` / `TKT-005` — Closed)**:
    - Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints` (`railway=switch`, `railway=railway_crossing`), pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`) with conservative turnout (`1-to-2` throat) classification, non-interconnecting flat diamond crossing (`RailwayFlatCrossingRelation`) support, complete unresolved 4-arm crossing diagnostics, conservative point-annotation matching (`diagnostics.unresolvedInfrastructurePoints`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
+- **Milestone 2.3 — Stage D (`M2.3-D` / `TKT-006` — Closed)**:
+   - Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories (`railway_switch`, `railway_crossing_flat`, `railway_level_crossing`, `railway_ped_crossing`, `highway_crossing`), implemented `CrossModalAnalyzer` (`src/world/infrastructure/topology/CrossModalAnalyzer.ts`) and `buildInfrastructureGraph` (`src/world/infrastructure/topology/InfrastructureGraph.ts`) for confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation`), same-domain road/railway grade transitions (`GradeTransitionRelation`), and grade-separated crossings (`GradeSeparatedCrossingRelation`), protected crossing and portal nodes against degree-2 simplification, enforced event-specific `0.02 m` crossing deduplication and verified anchor association, and added `9` comprehensive automated test suites in `src/world/CrossModalTopology.test.ts` (`135 / 135` Stage D baseline).
 
 ---
 
-## Verified Test & Build Results (2026-11-05 — Stage D `M2.3-D` Verification)
+## Verified Test & Build Results (2026-11-06 — Stage E1 `M2.3-E1` Verification)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C & M2.3-D Tests** | `npm test` | **135 / 135 passed** (0 failures) |
+| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C, M2.3-D & M2.3-E1 Tests** | `npm test` | **144 / 144 passed** (0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
 
-*(Historical baselines preserved: M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` lint errors, clean production build and API docs.)*
+*(Historical baselines preserved: M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` lint errors, clean production build and API docs.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -91,18 +94,23 @@
 | `RoadNetworkTopology.test.ts` (`M2.3-B`) | 16 |
 | `RailwayNetworkTopology.test.ts` (`M2.3-C`) | 18 |
 | `CrossModalTopology.test.ts` (`M2.3-D`) | 9 |
-| **Total** | **135** |
+| `InfrastructureRenderAdapter.test.ts` (`M2.3-E1`) | 9 |
+| **Total** | **144** |
 
 ---
 
 ## Active & Planned Milestones
 
-1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage D Implemented, Pending Owner Review`)**:
+1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage E1 Implemented, Pending Owner Review`)**:
    - **Stage A (`M2.3-A` / `TKT-003` — `closed`)**: Source audit completed and **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Accepted`) approved by project owner.
    - **Stage B (`M2.3-B` / `TKT-004` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource` road capture, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts` (`108 / 108` Stage B baseline).
    - **Stage C (`M2.3-C` / `TKT-005` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints`, pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
-   - **Stage D (`M2.3-D` / `TKT-006` — `in_progress`, pending project-owner review)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories (`railway_switch`, `railway_crossing_flat`, `railway_level_crossing`, `railway_ped_crossing`, `highway_crossing`), implemented `CrossModalAnalyzer` (`src/world/infrastructure/topology/CrossModalAnalyzer.ts`) and `buildInfrastructureGraph` (`src/world/infrastructure/topology/InfrastructureGraph.ts`) for confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation`), same-domain road/railway grade transitions (`GradeTransitionRelation`), and grade-separated crossings (`GradeSeparatedCrossingRelation`), protected crossing and portal nodes against degree-2 simplification, and added `9` comprehensive automated test suites in `src/world/CrossModalTopology.test.ts` (`135 / 135` total tests).
-   - **Stage E (`M2.3-E` — Planned, requires explicit approval)**: Renderer integration (`GeometryBuilder` road junction trimming and portal transition consumption) with full regression preservation.
+   - **Stage D (`M2.3-D` / `TKT-006` — `closed`)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories, implemented `CrossModalAnalyzer` and `buildInfrastructureGraph` for level crossings, grade transitions, and grade-separated crossings, and added `9` automated tests in `src/world/CrossModalTopology.test.ts` (`135 / 135` Stage D baseline).
+   - **Stage E1 (`M2.3-E1` / `TKT-007` — `in_progress`, pending project-owner review)**: Implemented pure graph-to-renderer adapter (`src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`), independent road and railway `'legacy' | 'graph-preview'` switches (`?topologyRoads=...&topologyRailways=...`), memoized single shared `InfrastructureGraph` preview preparation, and `9` automated tests in `src/world/InfrastructureRenderAdapter.test.ts` proving 100% legacy renderer invariance (`144 / 144` total tests).
+   - **Stage E2 (`M2.3-E2` — Planned, requires separate explicit approval)**: Graph-driven road rendering and intersections (`RoadEdgeRenderDescriptor` / `RoadNodeRenderDescriptor` consumption).
+   - **Stage E3 (`M2.3-E3` — Planned, requires separate explicit approval)**: Graph-driven railway rendering and switches (`RailwayEdgeRenderDescriptor` / `RailwayNodeRenderDescriptor` / `RailwayFlatCrossingRenderDescriptor` consumption).
+   - **Stage E4 (`M2.3-E4` — Planned, requires separate explicit approval)**: Level crossings, bridges, and tunnels (`LevelCrossingRenderDescriptor` / `GradeTransitionRenderDescriptor` / `GradeSeparatedCrossingRenderDescriptor` consumption).
+   - **Stage E5 (`M2.3-E5` — Planned, requires separate explicit approval)**: Legacy cleanup and regression hardening.
 2. **Milestone 2.4: Road Surface Markings (`Planned`)**:
    - Goalpost 2 procedural road surface markings (lane dividers, directional arrows, crosswalks, stop bars) consuming `InfrastructureGraph` topology and per-segment provenance.
 

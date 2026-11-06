@@ -6,18 +6,17 @@
 
 # world/infrastructure/topology/InfrastructureGraph
 
-## Variables
-
-- [GRADE\_TRANSITION\_DIAGNOSTIC\_RADIUS\_METERS](variables/GRADE_TRANSITION_DIAGNOSTIC_RADIUS_METERS.md)
-
 ## Functions
 
-- [analyzeCrossModal](functions/analyzeCrossModal.md)
 - [buildInfrastructureGraph](functions/buildInfrastructureGraph.md)
-- [buildRailwayNetwork](functions/buildRailwayNetwork.md)
-- [isSecondaryRailwayBranch](functions/isSecondaryRailwayBranch.md)
 
 ## References
+
+### analyzeCrossModal
+
+Re-exports [analyzeCrossModal](../CrossModalAnalyzer/functions/analyzeCrossModal.md)
+
+***
 
 ### areVerticesAndNodeIdsEqual
 
@@ -34,6 +33,12 @@ Re-exports [BaseInfrastructureEdge](../types/interfaces/BaseInfrastructureEdge.m
 ### BaseInfrastructureNode
 
 Re-exports [BaseInfrastructureNode](../types/interfaces/BaseInfrastructureNode.md)
+
+***
+
+### buildRailwayNetwork
+
+Re-exports [buildRailwayNetwork](../RailwayNetworkBuilder/functions/buildRailwayNetwork.md)
 
 ***
 
@@ -145,6 +150,12 @@ Re-exports [getRoadTier](../RoadNetworkBuilder/functions/getRoadTier.md)
 
 ***
 
+### GRADE\_TRANSITION\_DIAGNOSTIC\_RADIUS\_METERS
+
+Re-exports [GRADE_TRANSITION_DIAGNOSTIC_RADIUS_METERS](../CrossModalAnalyzer/variables/GRADE_TRANSITION_DIAGNOSTIC_RADIUS_METERS.md)
+
+***
+
 ### GradeSeparatedCrossingRelation
 
 Re-exports [GradeSeparatedCrossingRelation](../types/interfaces/GradeSeparatedCrossingRelation.md)
@@ -190,6 +201,12 @@ Re-exports [InfrastructurePointKind](../types/type-aliases/InfrastructurePointKi
 ### InfrastructurePointMetadata
 
 Re-exports [InfrastructurePointMetadata](../types/interfaces/InfrastructurePointMetadata.md)
+
+***
+
+### isSecondaryRailwayBranch
+
+Re-exports [isSecondaryRailwayBranch](../RailwayNetworkBuilder/functions/isSecondaryRailwayBranch.md)
 
 ***
 

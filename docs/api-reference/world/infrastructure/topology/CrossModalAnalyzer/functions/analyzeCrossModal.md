@@ -2,7 +2,7 @@
 
 ***
 
-[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/InfrastructureGraph](../README.md) / analyzeCrossModal
+[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/CrossModalAnalyzer](../README.md) / analyzeCrossModal
 
 # Function: analyzeCrossModal()
 

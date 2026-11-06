@@ -2,7 +2,7 @@
 
 ***
 
-[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/InfrastructureGraph](../README.md) / buildRailwayNetwork
+[3D Map Viewer API Reference](../../../../../README.md) / [world/infrastructure/topology/RailwayNetworkBuilder](../README.md) / buildRailwayNetwork
 
 # Function: buildRailwayNetwork()
 

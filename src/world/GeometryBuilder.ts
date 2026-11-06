@@ -47,8 +47,40 @@ import {
   buildRailwayInfrastructure,
   type RailwayPrototypeResult,
 } from './infrastructure/railways/RailwayGeometryBuilder';
+import {
+  adaptInfrastructureGraphToRenderDescriptors,
+  buildInfrastructureRenderDescriptors,
+  DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
+  normalizeInfrastructureRenderOptions,
+  parseInfrastructureRenderOptionsFromSearch,
+  parseInfrastructureRenderSource,
+  prepareInfrastructureRenderPreview,
+  requiresInfrastructureGraphPreview,
+  validateInfrastructureRenderDescriptors,
+  type InfrastructureRenderDescriptorBundle,
+  type InfrastructureRenderOptions,
+  type InfrastructureRenderPreviewResult,
+  type InfrastructureRenderSource,
+  type InfrastructureRenderValidationReport,
+} from './infrastructure/rendering/InfrastructureRenderAdapter';
 
-export { SceneResourceManager };
+export {
+  SceneResourceManager,
+  adaptInfrastructureGraphToRenderDescriptors,
+  buildInfrastructureRenderDescriptors,
+  DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
+  normalizeInfrastructureRenderOptions,
+  parseInfrastructureRenderOptionsFromSearch,
+  parseInfrastructureRenderSource,
+  prepareInfrastructureRenderPreview,
+  requiresInfrastructureGraphPreview,
+  validateInfrastructureRenderDescriptors,
+  type InfrastructureRenderDescriptorBundle,
+  type InfrastructureRenderOptions,
+  type InfrastructureRenderPreviewResult,
+  type InfrastructureRenderSource,
+  type InfrastructureRenderValidationReport,
+};
 
 
 export interface GeometryBuilderOptions {
@@ -56,6 +88,8 @@ export interface GeometryBuilderOptions {
   roadWidthMultiplier?: number;
   bevelEnabled?: boolean;
   initialCameraZoom?: number;
+  infrastructureRenderOptions?: Partial<InfrastructureRenderOptions>;
+  infrastructureRenderPreview?: InfrastructureRenderPreviewResult | null;
 }
 
 export interface FaceFeatureRange {
@@ -85,6 +119,8 @@ export interface BuiltSceneGeometry {
     forestTreesCount?: number;
   };
   resources: SceneResourceManager;
+  infrastructureRenderOptions: InfrastructureRenderOptions;
+  infrastructureRenderPreview: InfrastructureRenderPreviewResult | null;
   dispose: () => void;
   updateTheme: (theme: MapStyleTheme) => void;
   updateCameraZoom?: (zoom: number) => void;
@@ -1882,7 +1918,14 @@ function buildStreetFurnitureGeometry(
 }
 
 export class GeometryBuilder {
-  private options: Required<GeometryBuilderOptions>;
+  private options: {
+    buildingHeightMultiplier: number;
+    roadWidthMultiplier: number;
+    bevelEnabled: boolean;
+    initialCameraZoom: number;
+    infrastructureRenderOptions: InfrastructureRenderOptions;
+    infrastructureRenderPreview: InfrastructureRenderPreviewResult | null | undefined;
+  };
 
   constructor(options: GeometryBuilderOptions = {}) {
     this.options = {
@@ -1890,11 +1933,22 @@ export class GeometryBuilder {
       roadWidthMultiplier: options.roadWidthMultiplier ?? 1.0,
       bevelEnabled: options.bevelEnabled ?? false,
       initialCameraZoom: options.initialCameraZoom ?? 1.0,
+      infrastructureRenderOptions: normalizeInfrastructureRenderOptions(
+        options.infrastructureRenderOptions
+      ),
+      infrastructureRenderPreview: options.infrastructureRenderPreview,
     };
   }
 
   buildScene(data: ProcessedMapData, theme: MapStyleTheme): BuiltSceneGeometry {
     const resourceManager = new SceneResourceManager();
+    const infrastructureRenderOptions = this.options.infrastructureRenderOptions;
+    let infrastructureRenderPreview: InfrastructureRenderPreviewResult | null =
+      this.options.infrastructureRenderPreview !== undefined
+        ? this.options.infrastructureRenderPreview
+        : requiresInfrastructureGraphPreview(infrastructureRenderOptions)
+          ? prepareInfrastructureRenderPreview(data, infrastructureRenderOptions)
+          : null;
 
     const buildingsGroup = new THREE.Group();
     buildingsGroup.name = 'BuildingsGroup';
@@ -4652,6 +4706,8 @@ export class GeometryBuilder {
       for (const group of allGroups) {
         group.clear();
       }
+      infrastructureRenderPreview = null;
+      builtScene.infrastructureRenderPreview = null;
       resourceManager.dispose();
     };
 
@@ -4752,7 +4808,7 @@ export class GeometryBuilder {
       railwayInfrastructureResult?.updateCameraZoom(zoom);
     };
 
-    return {
+    const builtScene: BuiltSceneGeometry = {
       buildingsGroup,
       roadsGroup,
       railwaysGroup,
@@ -4773,9 +4829,13 @@ export class GeometryBuilder {
         forestTreesCount: treePlacements.length,
       },
       resources: resourceManager,
+      infrastructureRenderOptions,
+      infrastructureRenderPreview,
       dispose,
       updateTheme,
       updateCameraZoom,
     };
+
+    return builtScene;
   }
 }

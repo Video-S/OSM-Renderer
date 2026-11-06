@@ -8,7 +8,7 @@
 
 > **generateParkingStallMarkings**(`polygon`, `isIndividualSpace`, `yElev`, `existingSpaceBoxes`, `higherOverlappingMultiPolygon?`, `resolvedMultiPolygon?`): `BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>
 
-Defined in: world/GeometryBuilder.ts:1255
+Defined in: world/GeometryBuilder.ts:1291
 
 Generates crisp painted parking stall lines for either an individual `amenity=parking_space` polygon
 or a surface `amenity=parking` lot polygon (including resolved MultiPolygons with interior holes).

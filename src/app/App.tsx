@@ -28,7 +28,16 @@ import {
 } from 'lucide-react';
 import { LocalGeoJsonProvider } from '../world/LocalGeoJsonProvider';
 import { OsmApiProvider } from '../world/OsmApiProvider';
-import { GeometryBuilder, BuiltSceneGeometry } from '../world/GeometryBuilder';
+import {
+  GeometryBuilder,
+  BuiltSceneGeometry,
+  DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
+  normalizeInfrastructureRenderOptions,
+  parseInfrastructureRenderOptionsFromSearch,
+  prepareInfrastructureRenderPreview,
+  requiresInfrastructureGraphPreview,
+  type InfrastructureRenderOptions,
+} from '../world/GeometryBuilder';
 import {
   ProcessedMapData,
   MapStyleTheme,
@@ -114,6 +123,14 @@ export default function App() {
   const activePrototypeRef = useRef<BuiltRailwayPrototypeResult | null>(null);
   const currentCameraZoomRef = useRef<number>(1.0);
   const latestTelemetryRef = useRef<LiveWebGLTelemetrySnapshot | null>(null);
+
+  // Milestone 2.3 Stage E1 independent graph-to-renderer preview switches (default 'legacy')
+  const [infrastructureRenderOptions, setInfrastructureRenderOptions] =
+    useState<InfrastructureRenderOptions>(() =>
+      typeof window !== 'undefined'
+        ? parseInfrastructureRenderOptionsFromSearch(window.location.search)
+        : { ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS }
+    );
 
   // Layer visibility toggles
   const [showBuildings, setShowBuildings] = useState<boolean>(true);
@@ -317,6 +334,9 @@ export default function App() {
     } else if ((protoParam as string) === 'baseline') {
       setRailwayPrototypeMode('production');
     }
+    setInfrastructureRenderOptions(
+      parseInfrastructureRenderOptionsFromSearch(window.location.search)
+    );
     const themeParam = params.get('theme');
     if (themeParam && MAP_THEMES[themeParam]) {
       setSelectedThemeId(themeParam);
@@ -359,6 +379,15 @@ export default function App() {
   const useProductionSceneRailways =
     railwayPrototypeMode === 'production' || (railwayPrototypeMode as string) === 'baseline';
 
+  // Milestone 2.3-E1: Build one shared InfrastructureGraph + render descriptor bundle per dataset
+  // when either road or railway preview mode is active; completely skipped in default 'legacy' mode.
+  const infrastructureRenderPreview = useMemo(() => {
+    if (!mapData || !requiresInfrastructureGraphPreview(infrastructureRenderOptions)) {
+      return null;
+    }
+    return prepareInfrastructureRenderPreview(mapData, infrastructureRenderOptions);
+  }, [mapData, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
+
   // Generate 3D Scene Geometries when geometric parameters or railway mode change.
   // When railwayPrototypeMode is 'candidateA', 'candidateB', or 'disabled', pass railways: []
   // to GeometryBuilder so the non-railway map is 100% identical and railway bridges are never duplicated.
@@ -375,6 +404,8 @@ export default function App() {
       roadWidthMultiplier: roadWidthMultiplier,
       bevelEnabled: bevelEnabled,
       initialCameraZoom: currentCameraZoomRef.current,
+      infrastructureRenderOptions,
+      infrastructureRenderPreview,
     });
 
     const sceneData: ProcessedMapData = useProductionSceneRailways
@@ -403,7 +434,15 @@ export default function App() {
     setCpuBuildTimeMs(Number((performance.now() - t0).toFixed(2)));
     activeSceneRef.current = scene;
     setBuiltGeometry(scene);
-  }, [mapData, heightMultiplier, roadWidthMultiplier, bevelEnabled, useProductionSceneRailways]);
+  }, [
+    mapData,
+    heightMultiplier,
+    roadWidthMultiplier,
+    bevelEnabled,
+    useProductionSceneRailways,
+    infrastructureRenderOptions,
+    infrastructureRenderPreview,
+  ]);
 
   // Build or dispose the isolated M2.1 Railway Prototype group when mode, options, or mapData changes
   useEffect(() => {
@@ -493,6 +532,12 @@ export default function App() {
 
     (window as any).__M21_LAB__ = {
       setMode: (mode: RailwayPrototypeMode) => setRailwayPrototypeMode(mode),
+      setInfrastructureRenderOptions: (opts: Partial<InfrastructureRenderOptions>) =>
+        setInfrastructureRenderOptions((prev) =>
+          normalizeInfrastructureRenderOptions({ ...prev, ...opts })
+        ),
+      getInfrastructureRenderOptions: () => infrastructureRenderOptions,
+      getInfrastructureRenderPreview: () => infrastructureRenderPreview,
       setPrototypeOptions: (opts: Partial<BuildRailwayPrototypeOptions>) =>
         setPrototypeOptions((prev) => ({ ...prev, ...opts })),
       getPrototypeOptions: () => prototypeOptions,
@@ -537,6 +582,20 @@ export default function App() {
         locationId: activeLocationId,
         regionName: mapData?.regionName,
         prototypeMode: railwayPrototypeMode,
+        infrastructureRenderOptions,
+        infrastructurePreviewStats: infrastructureRenderPreview
+          ? {
+              graphBuildTimeMs: infrastructureRenderPreview.timing.graphBuildTimeMs,
+              adapterBuildTimeMs: infrastructureRenderPreview.timing.adapterBuildTimeMs,
+              validationTimeMs: infrastructureRenderPreview.timing.validationTimeMs,
+              totalPreviewTimeMs: infrastructureRenderPreview.timing.totalPreviewTimeMs,
+              isValid: infrastructureRenderPreview.validation?.isValid ?? false,
+              roadEdgeCount: infrastructureRenderPreview.validation?.roadEdgeCount ?? 0,
+              roadNodeCount: infrastructureRenderPreview.validation?.roadNodeCount ?? 0,
+              railwayEdgeCount: infrastructureRenderPreview.validation?.railwayEdgeCount ?? 0,
+              railwayNodeCount: infrastructureRenderPreview.validation?.railwayNodeCount ?? 0,
+            }
+          : null,
         prototypeOptions,
         activeZone: activePrototypeZone,
         themeId: selectedThemeId,
@@ -740,6 +799,8 @@ export default function App() {
     activeLocationId,
     mapData,
     railwayPrototypeMode,
+    infrastructureRenderOptions,
+    infrastructureRenderPreview,
     prototypeOptions,
     activePrototypeZone,
     selectedThemeId,

@@ -3089,4 +3089,88 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('21. preserves smoothly tapered geometry at gentle cycleway bends and same-class vehicular forks', () => {
+    const scenarios: Array<{
+      label: string;
+      type: 'cycleway' | 'residential';
+      junctionPrefix: string;
+      specs: SyntheticRoadSpec[];
+      absentShoulder: [number, number];
+      covered: Array<[number, number]>;
+    }> = [
+      {
+        label: '25-degree continuous bicycle bend, 6m to 2m',
+        type: 'cycleway',
+        junctionPrefix: 'path-junction-',
+        specs: [
+          { id: 'way/bend-wide', roadClass: 'cycleway', width: 6,
+            points: [[0, -35], [0, 0]], nodeIds: ['bend-south', 'bend-center'] },
+          { id: 'way/bend-narrow', roadClass: 'cycleway', width: 2,
+            points: [[0, 0], [14, 30]], nodeIds: ['bend-center', 'bend-north'] },
+        ],
+        absentShoulder: [-2.7, 0],
+        covered: [[0, 0], [-2.7, -12], [2.7, -12], [4.7, 10]],
+      },
+      {
+        label: 'connected three-arm residential junction with differing through widths',
+        type: 'residential',
+        junctionPrefix: 'junction-',
+        specs: [
+          { id: 'way/veh-wide', roadClass: 'residential', width: 6,
+            points: [[0, -35], [0, 0]], nodeIds: ['veh-south', 'veh-center'] },
+          { id: 'way/veh-narrow', roadClass: 'residential', width: 2,
+            points: [[0, 0], [0, 35]], nodeIds: ['veh-center', 'veh-north'] },
+          { id: 'way/veh-east', roadClass: 'residential', width: 2,
+            points: [[0, 0], [30, 0]], nodeIds: ['veh-center', 'veh-east-end'] },
+        ],
+        absentShoulder: [-2.7, 0],
+        covered: [[0, 0], [-2.7, -12], [0.8, 12], [10, 0]],
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const scene = buildGraphRoadScene(createDatasetFromSpecs(scenario.specs));
+      try {
+        const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+        const patches = junctionRanges.filter((range) =>
+          range.info.id.startsWith(scenario.junctionPrefix)
+        );
+        assert.equal(patches.length, 1, scenario.label + ': expected one local transition patch');
+        assert.deepEqual(
+          [...patches[0].info.sourceFeatureIds].sort(),
+          scenario.specs.map((spec) => spec.id).sort(),
+          scenario.label + ': the connection must preserve original OSM provenance'
+        );
+
+        const mesh = scene.roadsGroup.children.find((obj) =>
+          obj.name === 'Roads_' + scenario.type
+        ) as THREE.Mesh;
+        assert.ok(mesh, scenario.label + ': expected surface mesh');
+        const pos = mesh.geometry.getAttribute('position');
+        const idx = mesh.geometry.getIndex();
+        const contains = (x: number, z: number): boolean => {
+          const n = idx ? idx.count / 3 : pos.count / 3;
+          const cross = (a: [number, number], b: [number, number]) =>
+            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+          for (let f = 0; f < n; f++) {
+            const ids = [0, 1, 2].map((i) => idx ? idx.getX(f * 3 + i) : f * 3 + i);
+            if (ids.some((i) => Math.abs(pos.getY(i) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+            const [a, b, c] = ids.map((i) => [pos.getX(i), pos.getZ(i)] as [number, number]);
+            const ab = cross(a, b), bc = cross(b, c), ca = cross(c, a);
+            if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+                (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+          }
+          return false;
+        };
+        for (const [x, z] of scenario.covered) {
+          assert.ok(contains(x, z), scenario.label + ': missing source-width road surface at ' + x + ',' + z);
+        }
+        assert.ok(!contains(...scenario.absentShoulder),
+          scenario.label + ': wide road must transition instead of forming an abrupt shoulder');
+      } finally {
+        scene.dispose();
+      }
+    }
+  });
+
 });

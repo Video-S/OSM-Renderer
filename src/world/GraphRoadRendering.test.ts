@@ -3025,4 +3025,51 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('20. blends an unequal-width through-road into a connected three-arm cycleway fork', () => {
+    const data = createDatasetFromSpecs([
+      { id: 'way/fork-wide', roadClass: 'cycleway', width: 6,
+        points: [[0, -35], [0, 0]], nodeIds: ['fork-south', 'fork-center'] },
+      { id: 'way/fork-narrow', roadClass: 'cycleway', width: 2,
+        points: [[0, 0], [0, 35]], nodeIds: ['fork-center', 'fork-north'] },
+      { id: 'way/fork-branch', roadClass: 'cycleway', width: 2,
+        points: [[0, 0], [30, 0]], nodeIds: ['fork-center', 'fork-east'] },
+    ]);
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const patches = junctionRanges.filter((r) => r.info.id.startsWith('path-junction-'));
+      assert.equal(patches.length, 1, 'A three-way cycleway fork needs one connected local patch');
+      assert.deepEqual(
+        [...patches[0].info.sourceFeatureIds].sort(),
+        ['way/fork-branch', 'way/fork-narrow', 'way/fork-wide'],
+        'The fork must retain all three OSM source features'
+      );
+      const mesh = scene.roadsGroup.children.find((obj) => obj.name === 'Roads_cycleway') as THREE.Mesh;
+      assert.ok(mesh);
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex();
+      const covers = (x: number, z: number): boolean => {
+        const count = idx ? idx.count / 3 : pos.count / 3;
+        const cross = (a: [number, number], b: [number, number]) =>
+          (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+        for (let face = 0; face < count; face++) {
+          const ids = [0, 1, 2].map((k) => idx ? idx.getX(face * 3 + k) : face * 3 + k);
+          if (ids.some((id) => Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+          const [a, b, c] = ids.map((id) => [pos.getX(id), pos.getZ(id)] as [number, number]);
+          const ab = cross(a, b), bc = cross(b, c), ca = cross(c, a);
+          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+        }
+        return false;
+      };
+      assert.ok(covers(-2.7, -10), 'Wider approach must retain its original width');
+      assert.ok(covers(0.8, 10), 'Narrow through-road must retain its original width');
+      assert.ok(covers(10, 0), 'The third branch must connect');
+      assert.ok(covers(-1.2, 0), 'Taper and fork must cover the common origin');
+      assert.ok(!covers(-2.6, 0), 'The wide arm must not create a square shoulder at the fork');
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });

@@ -114,6 +114,14 @@ Prior to Stage E2:
 - `way/326971927` is a 2.13m-long tertiary segment between OSM nodes `2316882945` and `543807770`, with two connected 3.5m Prins Hendrikkade cycleways at the latter node. Added source-derived test 23 covering its full-width short-connector provenance and overlapping road/path geometry. No unverified special-case renderer change was made for this feature.
 - **Verification pending:** This GitHub-only editing environment cannot run the repository npm commands. Last verified 166/166 baseline predates these two additions. TKT-008 remains in_progress; no E3-E5 work.
 
+### 2026-11-07 — Exact source-provenance ribbon extraction (pending execution and visual verification)
+- The prior acute-fork patch changed geometry near `node/6387677253`, but the owner confirmed that neither marked artifact improved. Do not claim those visual defects were resolved.
+- Source inspection found a definite correctness bug in `GraphRoadGeometryBuilder.ts`: Stage 3 splits simplified multi-source graph edges using `trimPolylineByArcLength`, which clamps each requested end trim to 45% of the **whole graph edge**. Thus a 60m original OSM way at one end of a 180m simplified edge can incorrectly create a 99m source ribbon. The resulting overlapping geometry is later clipped, obscuring the original error.
+- Changed only the per-provenance sub-ribbon extraction to the existing exact `extractPolylineSpan(edge.points, spanStart, spanEnd)` helper. Graph edge endpoint trims and unrelated bridge/tunnel behavior are unchanged.
+- Strengthened GraphRoadRendering.test.ts test 7 to assert that each source-specific face range remains within the original OSM way's projected longitudinal span (allowing end caps). This fails against the old 45%-clamped extraction but tests a real geometry invariant rather than only preserved source IDs.
+- Real source follow-up: `way/682105414` also participates in a separate 2.4m-to-3.5m three-cycleway junction at `node/3192273979`, and `way/326971927` is a 2.13m tertiary connector near `node/2316882945` and `node/543807770`. A different local source configuration may still need investigation if the updated rendering does not improve.
+- **Verification pending:** npm tests, lint, build, API docs and browser comparison have not been run in this GitHub editing session. TKT-008 remains `in_progress`.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

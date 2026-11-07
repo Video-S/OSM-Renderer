@@ -129,6 +129,12 @@ Prior to Stage E2:
 - **No production geometry algorithm was changed.** Visual reporting is intentionally delegated to project-owner screenshots; no screenshot automation or debug overlay is introduced. TKT-008 stays `in_progress`.
 - **Verification pending:** GitHub-only editing access cannot run npm commands; run `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` before acceptance. No new passing test count is claimed.
 
+### 2026-11-07 — Junction lab corrected to southern Prins Hendrikkade fork (pending verification)
+- The project owner clarified that the preceding isolated `?fixture=prins-fork` lab targeted the **wrong northern junction** at `node/3192273979`.
+- The fixture now uses exact source GeoJSON for the **southern** acute-angle cycleway fork at `node/6387677253` (lon 4.8979247, lat 52.3773823): ways `682105412`, `682105414`, and `1068343582`, all 2.4m default-width cycleways, retaining their original tag and per-vertex OSM node arrays.
+- Updated the existing URL fixture's center and test 24 to verify the correct shared three-way node and original default widths. No new URL or production geometry solver changes.
+- **Verification pending:** Re-run npm test, lint, build, docs:api and compare graph/legacy view of the corrected southern junction. No post-edit pass claims; TKT-008 remains in_progress.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

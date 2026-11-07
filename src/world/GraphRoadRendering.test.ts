@@ -3179,4 +3179,93 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('22. covers the source-derived acute Prins Hendrikkade cycleway fork beyond its overlapping branches', () => {
+    // Metre-projected, translated coordinates from the Amsterdam Centraal GeoJSON
+    // around OSM node/6387677253. The two outgoing 2.4m cycleways are only
+    // ~17 degrees apart, so their physical footprints overlap for ~8m.
+    // An arbitrary width*1.65 (~4m) junction cap leaves an exposed square end.
+    const scene = buildGraphRoadScene(createDatasetFromSpecs([
+      { id: 'way/682105412', roadClass: 'cycleway', width: 2.4, oneway: true,
+        points: [[18.410, -17.616], [11.393, -9.023], [8.034, -6.196], [0, 0]],
+        nodeIds: ['7412318359', '6937400522', '9768030085', '6387677253'] },
+      { id: 'way/682105414', roadClass: 'cycleway', width: 2.4,
+        points: [[0, 0], [-12.417, 11.656], [-17.381, 16.630], [-29.864, 28.586]],
+        nodeIds: ['6387677253', '12568540632', '12715398409', '9768030061'] },
+      { id: 'way/1068343582', roadClass: 'cycleway', width: 2.4, oneway: true,
+        points: [[0, 0], [14.973, -21.309], [20.403, -28.945], [22.534, -32.097]],
+        nodeIds: ['6387677253', '7412318360', '7283039106', '6937400524'] },
+    ]));
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const patch = junctionRanges.find((range) =>
+        range.info.id.startsWith('path-junction-') &&
+        range.info.sourceFeatureIds.includes('way/682105414')
+      );
+      assert.ok(patch, 'Real OSM fork must produce a shared cycleway junction patch');
+      assert.deepEqual([...patch.info.sourceFeatureIds].sort(),
+        ['way/1068343582', 'way/682105412', 'way/682105414'].sort());
+
+      const mesh = scene.roadsGroup.children.find((object) =>
+        object.name === 'Roads_cycleway'
+      ) as THREE.Mesh;
+      assert.ok(mesh, 'Source cycleway meshes should be emitted');
+      const ranges = mesh.userData.faceRanges as FaceFeatureRange[];
+      const selectedRange = ranges.find((range) => range.info.id === patch.info.id);
+      assert.ok(selectedRange, 'Junction triangles must belong to the cycleway material');
+      const positions = mesh.geometry.getAttribute('position');
+      const index = mesh.geometry.getIndex();
+      const inside = (x: number, z: number): boolean => {
+        for (let face = selectedRange.startFace; face < selectedRange.endFace; face++) {
+          const ids = [0, 1, 2].map((i) => index ? index.getX(face * 3 + i) : face * 3 + i);
+          const pts = ids.map((i) => [positions.getX(i), positions.getZ(i)] as [number, number]);
+          const cross = (a: [number, number], b: [number, number]) =>
+            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+          const ab = cross(pts[0], pts[1]);
+          const bc = cross(pts[1], pts[2]);
+          const ca = cross(pts[2], pts[0]);
+          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+        }
+        return false;
+      };
+      assert.ok(inside(4.15, -4.3),
+        'The fork patch must cover overlapping centerlines 6m from the shared OSM node');
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('23. preserves the 2.13m Martelaarsgracht connector at its real cycleway crossing', () => {
+    // Real GeoJSON way/326971927 is 2.13m long. It joins tertiary ways at
+    // OSM nodes 2316882945 and 543807770, the latter also shared by two
+    // cycleways. Keep complete provenance and avoid collapsed/overlapping faces.
+    const scene = buildGraphRoadScene(createDatasetFromSpecs([
+      { id: 'way/1358135035', roadClass: 'tertiary', width: 3.844, oneway: true,
+        points: [[6.214, 18.662], [6.674, 12.239], [5.855, 7.86], [3.874, 3.924], [1.691, 1.302]],
+        nodeIds: ['5791719653', '12568540650', '12568540649', '12568540648', '2316882945'] },
+      { id: 'way/326971927', roadClass: 'tertiary', width: 3.844, oneway: true,
+        points: [[1.691, 1.302], [0, 0]],
+        nodeIds: ['2316882945', '543807770'] },
+      { id: 'way/180236785', roadClass: 'tertiary', width: 3.844, oneway: true,
+        points: [[0, 0], [-5.460, -2.789], [-31.224, -11.416], [-71.039, -25.567]],
+        nodeIds: ['543807770', '3192274051', '9986193291', '3177828067'] },
+      { id: 'way/740992986', roadClass: 'cycleway', width: 3.5,
+        points: [[-4.809, 16.934], [-3.018, 11.870], [-1.716, 6.053], [0, 0]],
+        nodeIds: ['801819126', '6937400532', '6961595180', '543807770'] },
+      { id: 'way/741023803', roadClass: 'cycleway', width: 3.5,
+        points: [[0, 0], [0.964, -2.377], [1.379, -3.436], [1.534, -3.682],
+          [2.100, -4.598], [2.572, -5.258], [4.048, -7.560], [4.736, -8.600], [7.675, -13.015]],
+        nodeIds: ['543807770', '11392634782', '9959600356', '9959600353',
+          '6987414442', '9959600352', '6987414441', '6961595178', '3192273979'] },
+    ], { minX: -90, maxX: 35, minZ: -45, maxZ: 45 }));
+    try {
+      const { faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+      assert.ok([...faceRangesById.values()].some((range) =>
+        range.info.sourceFeatureIds.includes('way/326971927')
+      ), 'The real 2.13m connector must remain inspectable after simplification');
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });

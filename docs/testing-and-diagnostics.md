@@ -189,13 +189,13 @@ For targeted visual sanity checks, the following inspection points may be useful
 
 ### E2 isolated Prins Hendrikkade junction visual fixture
 
-Open `?fixture=prins-fork` to load three original OSM cycleways from the project owner's Amsterdam export at shared node `3192273979`, centered on the junction at approximately 8 CSS px/m. This developer fixture runs the regular application scene and defaults roads to `graph` unless an explicit `topologyRoads` query is provided. It performs no Overpass request and does not modify normal map presets.
+Open `?fixture=prins-fork` to load three original OSM cycleways from the project owner's Amsterdam export at shared node `6387677253` (the **southern**, acute-angle fork), centered on that junction at approximately 8 CSS px/m. This developer fixture runs the regular application scene and defaults roads to `graph` unless an explicit `topologyRoads` query is provided. It performs no Overpass request and does not modify normal map presets.
 
 - `?fixture=prins-fork&topologyRoads=graph&zoom=8` — E2 graph road geometry.
 - `?fixture=prins-fork&topologyRoads=legacy&zoom=8` — legacy geometry A/B reference.
 - `&azimuth=0` or `&azimuth=45` — reproducible rotation for side-by-side screenshots.
 
-Fixture source: `src/world/prototype/PrinsHendrikkadeForkFixture.json`. It preserves original OSM coordinates, way IDs `682105414`, `730316728`, and `741023803`, per-vertex node IDs, meaningful tags, and the explicitly tagged 3.5m cycleway width (other cycleways use the 2.4m default). The source is clipped to 60m around the junction during ingestion. `GraphRoadRendering.test.ts` checks that the correct three-way graph node and widths survive parsing and reach the production graph renderer. This fixture is for diagnosing junction geometry, not a reference for whole-Amsterdam rendering.
+Fixture source: `src/world/prototype/PrinsHendrikkadeForkFixture.json`. It preserves original OSM coordinates, way IDs `682105412`, `682105414`, and `1068343582`, per-vertex node IDs, and meaningful tags. All three southern-fork cycleways use the 2.4m default width; the earlier northern 3.5m width-transition fixture was replaced. The source is clipped to 60m around the junction during ingestion. `GraphRoadRendering.test.ts` checks that the correct three-way graph node and widths survive parsing and reach the production graph renderer. This fixture is for diagnosing junction geometry, not a reference for whole-Amsterdam rendering.
 
 ## 6. How to Report Verification Results
 

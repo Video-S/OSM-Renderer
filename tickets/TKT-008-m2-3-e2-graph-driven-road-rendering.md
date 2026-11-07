@@ -148,6 +148,13 @@ Prior to Stage E2:
 - Removed the previous experimental additive fillet helper, which could not address the shoulder at the artificial cut boundary. Updated source-derived E2 test 22 and fixture test 24 to assert direct ribbon behavior and way provenance rather than an artificial junction patch. Replaced the synthetic fillet test 25 with a comparison of actual rendered triangle coverage against the direct union of all three full-width source ribbons over the real junction area.
 - **Verification pending:** This environment cannot execute the repository npm suite. Run focused E2 tests, npm test, npm run lint, npm run build and npm run docs:api, then compare the same graph/legacy dev-map camera. No new pass counts claimed, and TKT-008 remains in_progress.
 
+### 2026-11-07 — Outer-contour experiment rejected; exact rendered-footprint comparison added (pending execution)
+- Owner authorized a local outer-boundary smoothing experiment after the full-ribbon fork change made no visible difference.
+- Reconstructed the original three 2.4m OSM cycleway ribbons at southern node `6387677253` with Shapely and measured their true union. A 1.0m-round morphological closing, restricted to an 8m radius near the shared junction, adds just `0.000649 m²`. The source union is already smooth along the outside fork shoulders; smoothing it cannot meaningfully cure the visible square step.
+- **No production geometry smoothing was applied**, because it failed the agreed measurable-improvement gate. This supersedes the previous speculation that the final source contour itself required filleting.
+- Strengthened source-grounded `GraphRoadRendering.test.ts` test 25: it now unions the actual emitted Three.js triangle footprints, clips both rendered and source-union surfaces to a 24m square around the explicit OSM node, and measures exact positive-area `missingSqm` and `extraSqm` including mismatch bounds. It rejects differences above `0.03 m²`, avoiding coarse grid samples missing a narrow rectangular shoulder.
+- **Verification pending:** the GitHub connector cannot execute npm. Run the focused `npx tsx --test src/world/GraphRoadRendering.test.ts`; its `[E2 Prins southern fork exact surface delta]` report gives actionable mismatch dimensions. Then run `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api`. Keep TKT-008 `in_progress` and E3-E5 out of scope.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

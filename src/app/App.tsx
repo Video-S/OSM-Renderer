@@ -61,6 +61,7 @@ import {
   RAILWAY_PROTOTYPE_ZONE_PRESETS,
   RailwayPrototypeZoneId,
 } from '../world/prototype/RailwayTestFixtures';
+import prinsHendrikkadeForkFixture from '../world/prototype/PrinsHendrikkadeForkFixture.json';
 import {
   computeGroupGeometryStats,
   LiveWebGLTelemetrySnapshot,
@@ -209,6 +210,41 @@ export default function App() {
     }));
   };
 
+  // Tiny source-grounded E2 repro: exactly three OSM cycleways meeting at node/3192273979.
+  // No background network call, railway prototype scene, or separate renderer.
+  const loadPrinsHendrikkadeForkFixture = (
+    overrideZoom?: number,
+    overrideAzimuthDeg?: number
+  ) => {
+    setLoading(true);
+    setError(null);
+    setHoveredFeature(null);
+    setSelectedFeature(null);
+    setActiveLocationId('m23_prins_fork');
+    try {
+      const data = localProvider.parseGeoJson(
+        prinsHendrikkadeForkFixture,
+        'M2.3-E2 Junction Lab · Prins Hendrikkade',
+        [4.8970979, 52.3779471],
+        60
+      );
+      setCurrentRawGeoJson(prinsHendrikkadeForkFixture);
+      setMapData(data);
+      setStatusMessage('Loaded isolated Prins Hendrikkade OSM junction');
+      setExplicitPose((prev) => ({
+        target: [0, 0, 0],
+        zoom: overrideZoom ?? 8.0,
+        azimuthRad: ((overrideAzimuthDeg ?? 45) * Math.PI) / 180,
+        signal: prev.signal + 1,
+      }));
+    } catch (err: any) {
+      console.error('Failed to load Prins Hendrikkade junction fixture:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadLiveHengeloPreset = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
@@ -334,8 +370,13 @@ export default function App() {
     } else if ((protoParam as string) === 'baseline') {
       setRailwayPrototypeMode('production');
     }
+    // The isolated junction lab is specifically for E2 graph-road visuals.
+    // Keep an explicit topologyRoads query value authoritative for A/B comparison.
+    const isForkFixture = params.get('fixture') === 'prins-fork';
     setInfrastructureRenderOptions(
-      parseInfrastructureRenderOptionsFromSearch(window.location.search)
+      isForkFixture && !params.has('topologyRoads')
+        ? { roads: 'graph', railways: 'legacy' }
+        : parseInfrastructureRenderOptionsFromSearch(window.location.search)
     );
     const themeParam = params.get('theme');
     if (themeParam && MAP_THEMES[themeParam]) {
@@ -363,6 +404,8 @@ export default function App() {
 
     if (fixtureParam === 'switchyard') {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam);
+    } else if (fixtureParam === 'prins-fork') {
+      loadPrinsHendrikkadeForkFixture(zoomParam, azParam);
     } else if (fixtureParam === 'amsterdam') {
       loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
     } else if (fixtureParam === 'hengelo') {

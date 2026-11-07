@@ -1512,7 +1512,13 @@ function solveBoundaryDerivedJunctionNode(
             const bz = c0[1] + (c1[1] - c0[1]) * t;
             const u = Math.min(1, (walked + segLength * t) / localLength);
             const ease = (1 - u) * (1 - u) * (1 + 2 * u);
-            const grow = (deltaHalfWidth / baseHalfWidth) * ease;
+            // A mathematically zero-width taper tip makes its two contour
+            // edges fold back 180 degrees, which the strict polygon validator
+            // correctly rejects. End with a sub-visual 2cm cross-section so
+            // the polygon is nondegenerate at the orthogonal cut portal.
+            const endFringe = Math.min(0.02, deltaHalfWidth * 0.1);
+            const grow = (endFringe + (deltaHalfWidth - endFringe) * ease) /
+              baseHalfWidth;
             originalChain.push([snapCoord(bx), snapCoord(bz)]);
             outerChain.push([
               snapCoord(bx + (bx - cx) * grow),

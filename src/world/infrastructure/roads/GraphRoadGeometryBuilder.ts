@@ -1258,6 +1258,60 @@ function solveBoundaryDerivedJunctionNode(
        taperCandidates[1].dot - taperCandidates[0].dot >= 0.10)) {
     widthTransitionPair = taperCandidates[0].pair;
   }
+  // A two-way road can split into TWO narrower, same-class branches on
+  // opposite sides of its continuation. No single through-arm can represent
+  // that width transition: choosing one creates a shoulder on the other side.
+  // Allow one additional DIFFERENT-class arm (e.g. the service road at
+  // Industriestraat node/45929045), but never guess across 5+ arm junctions.
+  let splitMergeTransition: {
+    trunkIndex: number;
+    outerBranches: Array<{ index: number; side: -1 | 1 }>;
+  } | null = null;
+  if (!isPathJunction && (k === 3 || k === 4)) {
+    const trunkIndex = sortedBranches.findIndex((candidate) =>
+      sortedBranches.every((other) =>
+        other === candidate || candidate.width > other.width + 0.50
+      )
+    );
+    if (trunkIndex >= 0) {
+      const trunk = sortedBranches[trunkIndex];
+      const narrowIndices = sortedBranches
+        .map((branch, index) => ({ branch, index }))
+        .filter(({ branch }) =>
+          branch.roadClass === trunk.roadClass &&
+          branch.edge.id !== trunk.edge.id
+        );
+      const extraArms = sortedBranches.filter((branch) =>
+        branch.roadClass !== trunk.roadClass
+      );
+      if (narrowIndices.length === 2 &&
+          extraArms.length === k - 3 &&
+          Math.abs(narrowIndices[0].branch.width - narrowIndices[1].branch.width) < 0.05 &&
+          narrowIndices.every(({ branch }) =>
+            trunk.width - branch.width >= 0.50 &&
+            branch.totalEdgeLength >= 4 &&
+            -trunk.dir[0] * branch.dir[0] - trunk.dir[1] * branch.dir[1] > 0.72
+          )) {
+        const forward: [number, number] = [-trunk.dir[0], -trunk.dir[1]];
+        const cross = narrowIndices.map(({ branch }) =>
+          forward[0] * branch.dir[1] - forward[1] * branch.dir[0]
+        );
+        if (cross[0] * cross[1] < -0.01 &&
+            Math.abs(cross[0]) > 0.06 && Math.abs(cross[1]) > 0.06) {
+          splitMergeTransition = {
+            trunkIndex,
+            outerBranches: narrowIndices.map(({ index }, i) => ({
+              index,
+              side: (cross[i] > 0 ? 1 : -1) as -1 | 1,
+            })),
+          };
+          // An ordinary pair taper would arbitrarily favor one of the arms.
+          widthTransitionPair = null;
+        }
+      }
+    }
+  }
+
   const junctionFeatureId = isPathJunction ? `path-junction-${nodeId}` : `junction-${nodeId}`;
 
   for (let i = 0; i < k; i++) {
@@ -1334,6 +1388,7 @@ function solveBoundaryDerivedJunctionNode(
     center: [number, number];
   }> = [];
   const unionInputs: MultiPolygonCoords = [];
+  const splitMergeFins: MultiPolygonCoords = [];
 
   for (let i = 0; i < k; i++) {
     const bBranch = sortedBranches[i];
@@ -1427,6 +1482,53 @@ function solveBoundaryDerivedJunctionNode(
       );
     }
 
+    // Split/merge outer-curb transition. Preserve the original full-width
+    // stub, then add a small smooth-sided fin from the wide trunk's outer
+    // shoulder to THIS narrow branch's outer portal. Each side is independent:
+    // there is no bridge across the legitimate gap between the two branches.
+    const splitOuter = splitMergeTransition?.outerBranches.find((b) => b.index === i);
+    if (splitOuter && trimDist >= 2.0) {
+      const trunk = sortedBranches[splitMergeTransition!.trunkIndex];
+      const forward: [number, number] = [-trunk.dir[0], -trunk.dir[1]];
+      const side = splitOuter.side;
+      const originOuter: [number, number] = [
+        snapCoord(nodeCenter[0] - forward[1] * side * trunk.width * 0.5),
+        snapCoord(nodeCenter[1] + forward[0] * side * trunk.width * 0.5),
+      ];
+      const branchOuter = side === 1 ? leftChain : rightChain;
+      const endOuter = branchOuter[branchOuter.length - 1];
+      const handleLength = Math.min(trimDist * 0.40, 3.5);
+      const p1: [number, number] = [
+        originOuter[0] + forward[0] * handleLength,
+        originOuter[1] + forward[1] * handleLength,
+      ];
+      const p2: [number, number] = [
+        endOuter[0] - tCutX * handleLength,
+        endOuter[1] - tCutZ * handleLength,
+      ];
+      const finRing: [number, number][] = [originOuter];
+      for (let step = 1; step <= 12; step++) {
+        const t = step / 12;
+        const u = 1 - t;
+        finRing.push([
+          snapCoord(u * u * u * originOuter[0] + 3 * u * u * t * p1[0] +
+            3 * u * t * t * p2[0] + t * t * t * endOuter[0]),
+          snapCoord(u * u * u * originOuter[1] + 3 * u * u * t * p1[1] +
+            3 * u * t * t * p2[1] + t * t * t * endOuter[1]),
+        ]);
+      }
+      // Follow the unchanged original outside curb backward from the portal.
+      // Do not insert the portal twice or introduce a new interior shortcut.
+      for (let c = branchOuter.length - 2; c >= 0; c--) {
+        finRing.push(branchOuter[c]);
+      }
+      finRing.push(originOuter);
+      if (!hasRingSelfIntersection(finRing) &&
+          computeMultiPolygonArea([[finRing]]) >= 0.05) {
+        splitMergeFins.push([finRing]);
+      }
+    }
+
     // The complete curb chains, not shortened or pinched corner chains, define this local road footprint.
     // Authoritative full-width road footprint stub from nodeCenter to the cut portal
     const fullStripRing: [number, number][] = [
@@ -1466,12 +1568,43 @@ function solveBoundaryDerivedJunctionNode(
     return null;
   }
 
+  // Additive split/merge fins change the FINAL outline while retaining
+  // every original full-width stub. Require BOTH outside curbs, a measurable
+  // addition, and a strict area budget. Otherwise use the existing solver.
+  let splitMergePoly: MultiPolygonCoords | null = null;
+  if (splitMergeTransition && splitMergeFins.length === 2) {
+    try {
+      const base = filterDegenerateBooleanArtifacts(
+        polygonClipping.union(
+          unionInputs[0] as unknown as polygonClipping.Geom,
+          ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
+        ) as unknown as MultiPolygonCoords
+      );
+      const candidate = filterDegenerateBooleanArtifacts(
+        polygonClipping.union(
+          base as unknown as polygonClipping.Geom,
+          ...(splitMergeFins as unknown as polygonClipping.Geom[])
+        ) as unknown as MultiPolygonCoords
+      );
+      const addedArea = computeMultiPolygonArea(candidate) -
+        computeMultiPolygonArea(base);
+      if (addedArea >= 0.20 &&
+          addedArea < maxBranchWidth * maxBranchWidth &&
+          candidate.length > 0 &&
+          candidate.every((poly) => poly[0] && !hasRingSelfIntersection(poly[0]))) {
+        splitMergePoly = candidate;
+      }
+    } catch {
+      // Use the original local footprint union if a fin cannot be unioned.
+    }
+  }
+
   // Bridge the independent full-width portals of a continuous unequal-width
   // pair with a bounded taper instead of the wide arm's square shoulder.
   // A third diverging arm joins the taper through the same local footprint union.
   // On tight bends, short edges, or invalid contours, keep the ordinary union.
-  let solidMultiPoly: MultiPolygonCoords = [];
-  if (widthTransitionPair) {
+  let solidMultiPoly: MultiPolygonCoords = splitMergePoly ?? [];
+  if (widthTransitionPair && solidMultiPoly.length === 0) {
     const [a, b] = widthTransitionPair;
     const transitionRing: [number, number][] = [
       portals[a].left, portals[a].right,

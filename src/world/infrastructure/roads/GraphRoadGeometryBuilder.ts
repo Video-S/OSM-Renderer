@@ -1079,6 +1079,108 @@ function extractPolylineSpan(
 }
 
 /**
+ * Rounds only the two concave exterior shoulders immediately surrounding an acute
+ * equal-width path fork. The Boolean union remains the authoritative surface:
+ * the quadratic corner fillets may *add* a small amount of asphalt but must
+ * never remove the original road footprint or move a cut portal.
+ *
+ * Do not soften the central split island: it lies farther from the shared node
+ * and is valid space between the two diverging cycleways.
+ */
+export function blendAcuteJunctionShoulders(
+  footprint: MultiPolygonCoords,
+  nodeCenter: readonly [number, number],
+  width: number,
+  portals: readonly { left: readonly [number, number]; right: readonly [number, number] }[]
+): MultiPolygonCoords {
+  if (footprint.length !== 1 || footprint[0].length !== 1 || width <= 0) return footprint;
+  const sourceRing = footprint[0][0];
+  if (sourceRing.length < 5) return footprint;
+  const vertices = sourceRing.slice(0, -1);
+  const n = vertices.length;
+  let signedArea2 = 0;
+  for (let i = 0; i < n; i++) {
+    const p = vertices[i], q = vertices[(i + 1) % n];
+    signedArea2 += p[0] * q[1] - q[0] * p[1];
+  }
+  if (Math.abs(signedArea2) < 1e-5) return footprint;
+  const winding = Math.sign(signedArea2);
+  const portalEndpoints = portals.flatMap((portal) => [portal.left, portal.right]);
+  const out: [number, number][] = [];
+  let blendedCorners = 0;
+
+  for (let i = 0; i < n; i++) {
+    const prev = vertices[(i - 1 + n) % n];
+    const vertex = vertices[i];
+    const next = vertices[(i + 1) % n];
+    const ax = vertex[0] - prev[0], az = vertex[1] - prev[1];
+    const bx = next[0] - vertex[0], bz = next[1] - vertex[1];
+    const lenA = Math.hypot(ax, az), lenB = Math.hypot(bx, bz);
+    const cross = ax * bz - az * bx;
+    const turnAngle = Math.atan2(Math.abs(cross), ax * bx + az * bz);
+    const distanceToNode = Math.hypot(vertex[0] - nodeCenter[0], vertex[1] - nodeCenter[1]);
+    const protectedPortal = portalEndpoints.some((p) =>
+      Math.hypot(vertex[0] - p[0], vertex[1] - p[1]) <= 0.08
+    );
+
+    // Concave corners are small gaps in the union's exterior curb, not the
+    // valid convex tips around the diverging branch end portals.
+    if (
+      cross * winding >= -1e-5 ||
+      turnAngle < 0.045 || turnAngle > 2.1 ||
+      distanceToNode > width * 1.5 ||
+      lenA < 0.2 || lenB < 0.2 ||
+      protectedPortal
+    ) {
+      out.push([vertex[0], vertex[1]]);
+      continue;
+    }
+
+    // Interpolate only inside the junction. The tangent ends remain on the
+    // original curb segments, and the nearby graph-defined portals stay fixed.
+    const offset = Math.min(width * 0.55, lenA * 0.72, lenB * 0.72);
+    if (offset < 0.12) {
+      out.push([vertex[0], vertex[1]]);
+      continue;
+    }
+    const before: [number, number] = [
+      vertex[0] - ax / lenA * offset, vertex[1] - az / lenA * offset,
+    ];
+    const after: [number, number] = [
+      vertex[0] + bx / lenB * offset, vertex[1] + bz / lenB * offset,
+    ];
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const u = 1 - t;
+      out.push([
+        snapCoord(u * u * before[0] + 2 * u * t * vertex[0] + t * t * after[0]),
+        snapCoord(u * u * before[1] + 2 * u * t * vertex[1] + t * t * after[1]),
+      ]);
+    }
+    blendedCorners++;
+  }
+  if (blendedCorners === 0) return footprint;
+  out.push([out[0][0], out[0][1]]);
+  if (hasRingSelfIntersection(out)) return footprint;
+  const result: MultiPolygonCoords = [[out]];
+  try {
+    // This must be additive rounding only. Never reintroduce the old
+    // missing-surface regression by shaving source-width road footprints.
+    const lost = polygonClipping.difference(
+      footprint as unknown as polygonClipping.Geom,
+      result as unknown as polygonClipping.Geom
+    ) as unknown as MultiPolygonCoords;
+    const gainedArea = computeMultiPolygonArea(result) - computeMultiPolygonArea(footprint);
+    if (computeMultiPolygonArea(lost) > 0.002 || gainedArea < -0.002 ||
+        gainedArea > width * width * 0.2) {
+      return footprint;
+    }
+  } catch {
+    return footprint;
+  }
+  return result;
+}
+
+/**
  * Constructs a localized road-footprint union junction patch and full-width orthogonal branch
  * portals around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
  *
@@ -1509,6 +1611,23 @@ function solveBoundaryDerivedJunctionNode(
   if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
     recordGraphRoadDiagnostic(diagnostics, 'junction_polygon_validation_failed', nodeId);
     return null;
+  }
+
+  // Restrict aesthetic curb rounding to equal-width acute cycleway forks.
+  // Never change unrelated width transitions, vehicular junctions, or grade connections.
+  const equalWidthFork = k === 3 && isPathJunction &&
+    sortedBranches.every((branch) =>
+      Math.abs(branch.width - sortedBranches[0].width) <= 1e-3
+    );
+  const acuteDivergence = equalWidthFork && sortedBranches.some((a, i) =>
+    sortedBranches.some((b, j) => j > i && a.edge.id !== b.edge.id &&
+      a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1] > 0.90 &&
+      a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1] < 0.9998)
+  );
+  if (acuteDivergence) {
+    solidMultiPoly = blendAcuteJunctionShoulders(
+      solidMultiPoly, nodeCenter, maxBranchWidth, portals
+    );
   }
 
   // Validate 3D triangulation and upward face normals before committing trimmedEndpoints

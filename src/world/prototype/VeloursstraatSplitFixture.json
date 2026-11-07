@@ -1,0 +1,255 @@
+{
+  "type": "FeatureCollection",
+  "name": "Veloursstraat real OSM split-merge junctions 45922126 and 5207303141",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "way/537835346",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "foot": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "1",
+        "lit": "yes",
+        "maxspeed": "50",
+        "mofa": "use_sidepath",
+        "name": "Veloursstraat",
+        "oneway": "yes",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/537835346",
+        "_nodeIds": [
+          "5207303122",
+          "5207303123",
+          "5207303141"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7975478,
+            52.2602005
+          ],
+          [
+            6.7974511,
+            52.2599126
+          ],
+          [
+            6.7974172,
+            52.2597561
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/537835350",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "foot": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "2",
+        "lit": "yes",
+        "maxspeed": "50",
+        "mofa": "use_sidepath",
+        "name": "Veloursstraat",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/537835350",
+        "_nodeIds": [
+          "45922126",
+          "5207303141"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7972256,
+            52.2595372
+          ],
+          [
+            6.7974172,
+            52.2597561
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/537835352",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "foot": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "1",
+        "lit": "yes",
+        "maxspeed": "50",
+        "mofa": "use_sidepath",
+        "name": "Veloursstraat",
+        "oneway": "yes",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/537835352",
+        "_nodeIds": [
+          "5207303134",
+          "5207303133",
+          "5207303132",
+          "5207303131",
+          "5207303130",
+          "5207303129",
+          "45922126"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7969625,
+            52.2593416
+          ],
+          [
+            6.7970041,
+            52.2593503
+          ],
+          [
+            6.7970691,
+            52.2593739
+          ],
+          [
+            6.7971257,
+            52.2594103
+          ],
+          [
+            6.7971776,
+            52.2594519
+          ],
+          [
+            6.7972059,
+            52.2594865
+          ],
+          [
+            6.7972256,
+            52.2595372
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/537835353",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "foot": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "1",
+        "lit": "yes",
+        "maxspeed": "50",
+        "mofa": "use_sidepath",
+        "name": "Veloursstraat",
+        "oneway": "yes",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/537835353",
+        "_nodeIds": [
+          "5207303141",
+          "45923683",
+          "5207303125",
+          "45924696",
+          "1240356683",
+          "13382746342",
+          "45926177",
+          "3784312574"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7974172,
+            52.2597561
+          ],
+          [
+            6.7975304,
+            52.2598733
+          ],
+          [
+            6.7976304,
+            52.2600552
+          ],
+          [
+            6.7976888,
+            52.2601799
+          ],
+          [
+            6.7977471,
+            52.2603415
+          ],
+          [
+            6.7977538,
+            52.2603655
+          ],
+          [
+            6.7978501,
+            52.2607087
+          ],
+          [
+            6.7978368,
+            52.260828
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/6669954",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "foot": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "1",
+        "lit": "yes",
+        "maxspeed": "50",
+        "mofa": "use_sidepath",
+        "name": "Veloursstraat",
+        "oneway": "yes",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/6669954",
+        "_nodeIds": [
+          "45922126",
+          "45921726",
+          "4348259701",
+          "45921628",
+          "5207303140"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7972256,
+            52.2595372
+          ],
+          [
+            6.7971087,
+            52.2594727
+          ],
+          [
+            6.7970355,
+            52.2594394
+          ],
+          [
+            6.7970031,
+            52.2594293
+          ],
+          [
+            6.7969271,
+            52.2594099
+          ]
+        ]
+      }
+    }
+  ]
+}

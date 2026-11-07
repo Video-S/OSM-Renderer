@@ -210,7 +210,7 @@ export default function App() {
     }));
   };
 
-  // Tiny source-grounded E2 repro: exactly three OSM cycleways meeting at node/3192273979.
+  // Tiny source-grounded E2 repro: three cycleways at southern node/6387677253.
   // No background network call, railway prototype scene, or separate renderer.
   const loadPrinsHendrikkadeForkFixture = (
     overrideZoom?: number,
@@ -224,13 +224,13 @@ export default function App() {
     try {
       const data = localProvider.parseGeoJson(
         prinsHendrikkadeForkFixture,
-        'M2.3-E2 Junction Lab · Prins Hendrikkade',
-        [4.8970979, 52.3779471],
+        'M2.3-E2 Junction Lab · Prins Hendrikkade South',
+        [4.8979247, 52.3773823],
         60
       );
       setCurrentRawGeoJson(prinsHendrikkadeForkFixture);
       setMapData(data);
-      setStatusMessage('Loaded isolated Prins Hendrikkade OSM junction');
+      setStatusMessage('Loaded southern Prins Hendrikkade acute cycleway fork');
       setExplicitPose((prev) => ({
         target: [0, 0, 0],
         zoom: overrideZoom ?? 8.0,

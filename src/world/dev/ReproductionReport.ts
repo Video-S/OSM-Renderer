@@ -12,6 +12,7 @@ import {
 } from '../infrastructure/rendering/InfrastructureRenderAdapter';
 import { RailwayPrototypeMode } from '../prototype/RailwayPrototypeBuilder';
 import { unprojectToGeo } from '../WorldCoordinates';
+import { buildRoadNetwork } from '../infrastructure/topology/RoadNetworkBuilder';
 
 /**
  * Serialized representation of camera pose for reproducible bug reports.
@@ -84,6 +85,7 @@ export interface SelectedObjectRecord {
   osmTags: Record<string, string | number | boolean>;
   explicitWidthTag?: string | number | boolean;
   inferredWidth?: number;
+  inferredWidthMeters?: number;
   elevation?: number;
   layer?: number;
   isBridge?: boolean;
@@ -102,6 +104,7 @@ export interface SelectedObjectRecord {
  */
 export interface SelectedAreaRecord {
   spatialBoxMeters: { minX: number; maxX: number; minZ: number; maxZ: number };
+  boundsMeters: { minX: number; maxX: number; minZ: number; maxZ: number };
   boundsGeo: { minLon: number; maxLon: number; minLat: number; maxLat: number };
 }
 
@@ -397,7 +400,11 @@ export function buildReproductionPackage(
     wireframe?: boolean;
     heightMultiplier?: number;
   },
-  maybeCamera?: SerializedCameraPose
+  maybeCamera?: SerializedCameraPose,
+  maybeOptions?: {
+    selectedFeatures?: InspectableFeatureInfo[];
+    focusedFeatureId?: string | null;
+  }
 ): DeveloperReproductionPackage {
   let report: Omit<DefectIssueReportMeta, 'createdAt'> & { createdAt?: string };
   let selectedFeature: InspectableFeatureInfo | null | undefined;
@@ -436,6 +443,8 @@ export function buildReproductionPackage(
     mapData = maybeMapData ?? null;
     fullRawGeoJson = maybeRawGeoJson;
     selectedFeature = maybeSelectedFeature;
+    selectedFeatures = maybeOptions?.selectedFeatures;
+    focusedFeatureId = maybeOptions?.focusedFeatureId;
     spatialBoxMeters = maybeSpatialBox ?? undefined;
     infrastructureRenderOptions =
       maybeConfig?.infrastructureRenderOptions ?? DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS;
@@ -548,6 +557,9 @@ export function buildReproductionPackage(
       }
     }
 
+    const resolvedInferredWidth =
+      feat.width ?? (feat as any).inferredWidthMeters ?? (feat as any).widthMeters;
+
     return {
       id: feat.id,
       osmId,
@@ -557,7 +569,8 @@ export function buildReproductionPackage(
       primaryTag: feat.primaryTag,
       osmTags: feat.osmTags ?? {},
       explicitWidthTag,
-      inferredWidth: feat.width,
+      inferredWidth: resolvedInferredWidth,
+      inferredWidthMeters: resolvedInferredWidth,
       elevation: feat.elevation,
       layer: feat.layer,
       isBridge: feat.isBridge,
@@ -589,6 +602,7 @@ export function buildReproductionPackage(
     );
     selectedArea = {
       spatialBoxMeters: { ...spatialBoxMeters },
+      boundsMeters: { ...spatialBoxMeters },
       boundsGeo: {
         minLon: Math.min(minLon, maxLon),
         maxLon: Math.max(minLon, maxLon),
@@ -643,7 +657,7 @@ export function buildReproductionPackage(
       })
       .map((n: any) => ({
         id: n.id,
-        osmNodeId: n.osmNodeId,
+        osmNodeId: n.rawOsmNodeId ?? n.osmNodeId,
         role: n.primaryRole,
         degree: n.degree,
         position: n.position,
@@ -655,6 +669,73 @@ export function buildReproductionPackage(
         nodes: relNodes,
         edges: relEdges,
       };
+    }
+  } else if (mapData) {
+    try {
+      const roadNet = buildRoadNetwork(mapData).roads;
+      const relevantEdgeIds = new Set<string>();
+      const relEdges: GraphContextSummary['edges'] = [];
+
+      for (const edge of roadNet.edges.values()) {
+        const sourceIds = edge.provenance?.sourceFeatureIds ?? [];
+        const primarySourceId = sourceIds[0];
+        const firstSegTags = edge.provenance?.segments?.[0]?.osmTags;
+        const matchesSelected =
+          (primarySourceId && targetIds.includes(primarySourceId)) ||
+          sourceIds.some((sid) => targetIds.includes(sid)) ||
+          targetIds.includes(edge.id);
+        const inBox =
+          spatialBoxMeters &&
+          edge.points.some(
+            (p) =>
+              p[0] >= spatialBoxMeters.minX &&
+              p[0] <= spatialBoxMeters.maxX &&
+              p[1] >= spatialBoxMeters.minZ &&
+              p[1] <= spatialBoxMeters.maxZ
+          );
+        if (matchesSelected || inBox || (targetIds.length === 0 && !spatialBoxMeters)) {
+          relEdges.push({
+            id: edge.id,
+            sourceFeatureId: primarySourceId,
+            roadClass: edge.roadClass,
+            inferredWidth: edge.width,
+            osmWidthTag:
+              firstSegTags?.width !== undefined ? String(firstSegTags.width) : undefined,
+            fromNodeId: edge.fromNodeId,
+            toNodeId: edge.toNodeId,
+          });
+          relevantEdgeIds.add(edge.id);
+        }
+      }
+
+      const relNodes: GraphContextSummary['nodes'] = Array.from(roadNet.nodes.values())
+        .filter((n) => {
+          const touchesRelEdge = n.incidentEdgeIds.some((eid) => relevantEdgeIds.has(eid));
+          const inBox =
+            spatialBoxMeters &&
+            n.x >= spatialBoxMeters.minX &&
+            n.x <= spatialBoxMeters.maxX &&
+            n.z >= spatialBoxMeters.minZ &&
+            n.z <= spatialBoxMeters.maxZ;
+          return touchesRelEdge || inBox;
+        })
+        .map((n) => ({
+          id: n.id,
+          osmNodeId: n.rawOsmNodeId,
+          role: n.primaryRole || n.roles[0] || 'endpoint',
+          degree: n.degree,
+          position: [n.x, n.z] as [number, number],
+          incidentEdgeIds: [...n.incidentEdgeIds],
+        }));
+
+      if (relNodes.length > 0 || relEdges.length > 0) {
+        graphContext = {
+          nodes: relNodes,
+          edges: relEdges,
+        };
+      }
+    } catch {
+      // Non-fatal fallback if road network cannot be built
     }
   }
 
@@ -706,6 +787,17 @@ export function buildReproductionPackage(
     };
   }
 
+  const explicitTargetIdSet = new Set(targetIds);
+  const autoContextCount =
+    explicitTargetIdSet.size > 0
+      ? extractedFeatures.filter(
+          (f: any) =>
+            !explicitTargetIdSet.has(
+              String(f.id ?? f.properties?.id ?? f.properties?.['@id'] ?? '')
+            )
+        ).length
+      : extractedFeatures.length;
+
   return {
     formatVersion: '1.0',
     generator: 'OSM-Renderer-DevTools',
@@ -732,7 +824,7 @@ export function buildReproductionPackage(
     selectedObjects: selectedObjects.length > 0 ? selectedObjects : undefined,
     focusedFeatureId: focusedFeatureId ?? primarySelected?.id ?? null,
     graphContext,
-    connectedContextFeatureCount: extractedFeatures.length,
+    connectedContextFeatureCount: autoContextCount,
     inspection,
     geoJson: {
       type: 'FeatureCollection',
@@ -786,6 +878,7 @@ export function validateReproductionPackage(data: any): {
         primaryTag: insp.primaryTag,
         osmTags: insp.osmTags || {},
         inferredWidth: insp.inferredWidth,
+        inferredWidthMeters: insp.inferredWidth,
         elevation: insp.elevation,
         layer: insp.layer,
         isBridge: insp.isBridge,
@@ -798,9 +891,15 @@ export function validateReproductionPackage(data: any): {
 
   // Restore selectedArea with fallback to legacy selectedBoxMeters
   let restoredArea: SelectedAreaRecord | undefined = data.selectedArea;
-  if (!restoredArea && data.selectedBoxMeters) {
+  if (restoredArea && !restoredArea.boundsMeters && restoredArea.spatialBoxMeters) {
+    restoredArea = {
+      ...restoredArea,
+      boundsMeters: restoredArea.spatialBoxMeters,
+    };
+  } else if (!restoredArea && data.selectedBoxMeters) {
     restoredArea = {
       spatialBoxMeters: data.selectedBoxMeters,
+      boundsMeters: data.selectedBoxMeters,
       boundsGeo: data.boundsGeo || { minLon: 0, maxLon: 0, minLat: 0, maxLat: 0 },
     };
   }

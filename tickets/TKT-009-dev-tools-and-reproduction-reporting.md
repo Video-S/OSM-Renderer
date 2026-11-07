@@ -60,11 +60,16 @@ Prior to this ticket:
 - Railway controls reflect actual implemented capabilities (`production`, `candidateA`, `candidateB`, `disabled`, and `graph-preview` adapter preview), strictly excluding E3–E5 functionality.
 - The reproduction export preserves `_nodeIds` and coordinates so when imported via `LocalGeoJsonProvider`, `RoadNetworkBuilder` and `GeometryBuilder` reproduce the exact same topological graph and geometry.
 - Area Selection (Spatial Box Tool) disables `CameraController` / `MapControls` (`enabled={false}`, `enablePan={false}`, `enableRotate={false}`) while active, enabling smooth pointer click-and-drag raycasting on the metric ground plane ($Y=0$) with a live amber drag preview and cyan committed boundary box. Feature hover and individual clicks are suppressed during area selection.
+- **Hengelo Real-World Test Refinements**:
+  - **Non-Blocking Area Selection**: Added `raycast={() => null}` to `DevTools_SpatialSelectionBox` and `DevTools_SelectionHighlight` meshes/lines, and auto-deactivated the area-draw mode upon box completion so clicks inside an existing area selection pass directly through to underlying roads, railways, and junctions.
+  - **Multi-Object Selection & List Synchronization**: Added `selectedFeatures: InspectableFeatureInfo[]` and `focusedFeatureId` state so users can click multiple objects inside or outside an area selection, inspect a focused item (highlighted in amber while secondary selected objects are highlighted in cyan), remove individual objects, or clear the entire selection.
+  - **Focused Reproduction Package Extraction**: Filtered out non-physical route relations (`route=bus`, `route=bicycle`, `type=route`, `boundary=administrative`) and bounded spatial-box node expansion to local vertices within a 40 m margin so municipal transit routes and multi-kilometer trunk ways do not pull ~230 unrelated features into the export. Explicitly distinguished `selectedObjects` from `connectedContextFeatureCount` and included `selectedArea` and `graphContext`.
+  - **Complete Import Restoration**: Importing a reproduction package restores `selectedArea` (`selectedBoxMeters`), `selectedObjects` (`selectedFeatures`), `focusedFeatureId`, camera pose, and renderer configuration.
 
 ## Verification
 - Status: Closed / Verified
-- Automated test command: `npm test` -> 181 passing tests (0 failures, 9 suites).
-- Targeted test suite: `npx tsx --test src/world/DevToolsAndReproduction.test.ts` -> 8 passing tests (0 failures, 5 suites).
+- Automated test command: `npm test` -> 184 passing tests (0 failures, 10 suites).
+- Targeted test suite: `npx tsx --test src/world/DevToolsAndReproduction.test.ts` -> 11 passing tests (0 failures, 6 suites, including Hengelo junction `way/230163945`, `way/230163947`, `way/532064931`, `node/45928009`, `node/45929045` regression tests).
 - Linting: `npm run lint` (`tsc --noEmit`) -> exit code 0 (clean).
 - Build: `npm run build` (`vite build`) -> exit code 0 (clean).
 - API Documentation: `npm run docs:api` (`typedoc`) -> exit code 0 (markdown generated at `./docs/api-reference`).
@@ -73,4 +78,5 @@ Prior to this ticket:
 - Source: `src/app/App.tsx`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`, `src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`, `src/world/GeometryBuilder.ts`
 - Tests: `src/world/DevToolsAndReproduction.test.ts`
 - Documentation: `docs/architecture.md`, `docs/testing-and-diagnostics.md`, `GEMINI.md`
+
 

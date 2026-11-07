@@ -31,6 +31,7 @@ import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { MAP_THEMES } from '../styles/mapThemes';
 import { UnchainedRoadPart } from './infrastructure/topology/types';
 import realOsmExtracts from './prototype/realOsmRailwayExtracts.json';
+import prinsHendrikkadeForkFixture from './prototype/PrinsHendrikkadeForkFixture.json';
 
 /**
  * Helper to create a synthetic `RoadFeature` together with its matching raw `topologySource`
@@ -3296,6 +3297,63 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       assert.ok([...faceRangesById.values()].some((range) =>
         range.info.sourceFeatureIds.includes('way/326971927')
       ), 'The real 2.13m connector must remain inspectable after simplification');
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('24. loads the isolated real Prins Hendrikkade E2 dev fixture with explicit three-way connectivity and original widths', () => {
+    const sourceIds = ['way/682105414', 'way/730316728', 'way/741023803'];
+    const provider = new LocalGeoJsonProvider();
+    const data = provider.parseGeoJson(
+      prinsHendrikkadeForkFixture,
+      'M2.3-E2 Junction Lab · Prins Hendrikkade',
+      [4.8970979, 52.3779471],
+      60
+    );
+    const rawParts = data.topologySource?.roadParts ?? [];
+    assert.deepEqual(
+      [...new Set(rawParts.map((part) => part.sourceFeatureId))].sort(),
+      sourceIds.slice().sort(),
+      'The fixture must include exactly the three source OSM cycleways'
+    );
+    assert.ok(
+      rawParts.every((part) =>
+        part.rawOsmNodeIds.includes('3192273979') &&
+        part.points.length === part.rawOsmNodeIds.length
+      ),
+      'All three ways must retain verified source node/3192273979'
+    );
+
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph',
+      railways: 'legacy',
+    });
+    assert.ok(preview.graph, 'The graph must be constructed for the junction lab');
+    const junction = [...preview.graph.roads.nodes.values()].find(
+      (node) => node.rawOsmNodeId === '3192273979'
+    );
+    assert.ok(junction, 'The shared explicit OSM junction node must survive graph simplification');
+    assert.equal(junction.degree, 3, 'The node must have three incident half-edges');
+    const widths = junction.incidentEdgeIds
+      .map((id) => preview.graph!.roads.edges.get(id)?.width)
+      .filter((width): width is number => typeof width === 'number')
+      .sort((a, b) => a - b);
+    assert.equal(widths.length, 3);
+    assert.ok(Math.abs(widths[0] - 2.4) < 1e-3 &&
+              Math.abs(widths[1] - 2.4) < 1e-3 &&
+              Math.abs(widths[2] - 3.5) < 1e-3,
+      'The actual OSM fork has two default 2.4m cycleways and one width=3.5m cycleway');
+
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+    try {
+      assertRoadGroupGeometryInvariants(scene);
+      const stats = scene.roadsGroup.userData.graphRoadStats as GraphRoadRenderStats;
+      assert.ok(stats.pathJunctionCount >= 1,
+        'The three-way path junction must produce a visible graph-driven junction');
     } finally {
       scene.dispose();
     }

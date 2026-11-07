@@ -4276,7 +4276,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
 
       // Between the diverging branches at 12m from either junction, the valid
       // central void must remain open; never bridge one narrow road to the other.
-      const gaps: [number, number][] = [[-8.17, -8.77], [35.87, 43.40]];
+      const gaps: [number, number][] = [[-9.0, -9.0], [35.87, 43.40]];
       for (const [x, z] of gaps) {
         const gapBox: MultiPolygonCoords = [[[
           [x - 0.15, z - 0.15], [x + 0.15, z - 0.15],

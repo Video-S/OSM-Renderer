@@ -9,12 +9,12 @@ import {
 } from '../types/MapFeature';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { MultiPolygonCoords, computeMultiPolygonArea } from './PlanarLayerValidator';
-import { blendAcuteJunctionShoulders } from './infrastructure/roads/GraphRoadGeometryBuilder';
 import {
   auditGraphRoadMeshIntegrity,
   BuiltSceneGeometry,
   FaceFeatureRange,
   generateRoadRibbon,
+  buildRoadRibbonOutlineRing,
   GeometryBuilder,
   GraphRoadMeshIntegrityReport,
   GraphRoadRenderStats,
@@ -3231,40 +3231,14 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
         nodeIds: ['6387677253', '7412318360', '7283039106', '6937400524'] },
     ]));
     try {
-      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
-      const patch = junctionRanges.find((range) =>
-        range.info.id.startsWith('path-junction-') &&
-        range.info.sourceFeatureIds.includes('way/682105414')
-      );
-      assert.ok(patch, 'Real OSM fork must produce a shared cycleway junction patch');
-      assert.deepEqual([...patch.info.sourceFeatureIds].sort(),
-        ['way/1068343582', 'way/682105412', 'way/682105414'].sort());
-
-      const mesh = scene.roadsGroup.children.find((object) =>
-        object.name === 'Roads_cycleway'
-      ) as THREE.Mesh;
-      assert.ok(mesh, 'Source cycleway meshes should be emitted');
-      const ranges = mesh.userData.faceRanges as FaceFeatureRange[];
-      const selectedRange = ranges.find((range) => range.info.id === patch.info.id);
-      assert.ok(selectedRange, 'Junction triangles must belong to the cycleway material');
-      const positions = mesh.geometry.getAttribute('position');
-      const index = mesh.geometry.getIndex();
-      const inside = (x: number, z: number): boolean => {
-        for (let face = selectedRange.startFace; face < selectedRange.endFace; face++) {
-          const ids = [0, 1, 2].map((i) => index ? index.getX(face * 3 + i) : face * 3 + i);
-          const pts = ids.map((i) => [positions.getX(i), positions.getZ(i)] as [number, number]);
-          const cross = (a: [number, number], b: [number, number]) =>
-            (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
-          const ab = cross(pts[0], pts[1]);
-          const bc = cross(pts[1], pts[2]);
-          const ca = cross(pts[2], pts[0]);
-          if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
-              (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
-        }
-        return false;
-      };
-      assert.ok(inside(4.15, -4.3),
-        'The fork patch must cover overlapping centerlines 6m from the shared OSM node');
+      const { faceRangesById, junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      assert.equal(junctionRanges.filter((r) => r.info.id.startsWith('path-junction-')).length, 0,
+        'The acute equal-width fork must not introduce a cut-and-patch shoulder');
+      for (const wayId of ['way/682105412', 'way/682105414', 'way/1068343582']) {
+        assert.ok([...faceRangesById.values()].some((range) =>
+          range.info.sourceFeatureIds.includes(wayId)
+        ), 'Each original cycleway must retain inspectable geometry: ' + wayId);
+      }
     } finally {
       scene.dispose();
     }
@@ -3351,51 +3325,102 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     try {
       assertRoadGroupGeometryInvariants(scene);
       const stats = scene.roadsGroup.userData.graphRoadStats as GraphRoadRenderStats;
-      assert.ok(stats.pathJunctionCount >= 1,
-        'The three-way path junction must produce a visible graph-driven junction');
+      assert.equal(stats.pathJunctionCount, 0,
+        'The acute equal-width cycleway fork must use its complete ribbons without a junction patch');
     } finally {
       scene.dispose();
     }
   });
 
-  it('25. rounds only the concave external shoulders of an acute equal-width fork while retaining all source pavement and portals', () => {
-    // Local metre-space outline of the three 2.4m full-width stubs at
-    // Prins Hendrikkade node/6387677253. The two southern branches remain
-    // distinct; only the two concave shoulders around the northern stem are filleted.
-    const ring: [number, number][] = [
-      [-1.34, 0.39], [-0.91, 0.8], [3.89, 7.54],
-      [5.85, 6.15], [5.55, 5.74], [5.95, 6.04],
-      [7.41, 4.14], [0.77, -0.92], [0.29, -1.37], [-1.34, 0.39],
-    ];
-    const source: MultiPolygonCoords = [[ring]];
-    const portals = [
-      { left: [-1.34, 0.39] as [number, number], right: [0.29, -1.37] as [number, number] },
-      { left: [3.89, 7.54] as [number, number], right: [5.85, 6.15] as [number, number] },
-      { left: [5.95, 6.04] as [number, number], right: [7.41, 4.14] as [number, number] },
-    ];
+  it('25. matches the real acute cycleway fork surface to the union of its full-width source ribbons', () => {
+    const data = new LocalGeoJsonProvider().parseGeoJson(
+      prinsHendrikkadeForkFixture,
+      'M2.3-E2 Junction Lab · Prins Hendrikkade South',
+      [4.8979247, 52.3773823],
+      60
+    );
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph', railways: 'legacy',
+    });
+    assert.ok(preview.graph);
+    const node = [...preview.graph.roads.nodes.values()].find((n) =>
+      n.rawOsmNodeId === '6387677253'
+    );
+    assert.ok(node);
+    const sourceRings = node.incidentEdgeIds.map((id) => {
+      const edge = preview.graph!.roads.edges.get(id);
+      assert.ok(edge);
+      return buildRoadRibbonOutlineRing(
+        edge.points.map((p) => [p[0], p[1]] as [number, number]),
+        edge.width
+      );
+    });
+    assert.ok(sourceRings.every((ring) => ring && ring.length > 0));
+    const expected = polygonClipping.union(
+      sourceRings[0] as polygonClipping.Geom,
+      ...sourceRings.slice(1) as polygonClipping.Geom[]
+    ) as MultiPolygonCoords;
 
-    const smoothed = blendAcuteJunctionShoulders(source, [0, 0], 2.4, portals);
-    assert.ok(smoothed[0][0].length > ring.length,
-      'Fillets should introduce curved boundary vertices near the junction');
-    const output = smoothed[0][0];
-    for (const portal of portals) {
-      assert.ok(output.some((p) => p[0] === portal.left[0] && p[1] === portal.left[1]),
-        'Fillet must not move any left cut portal');
-      assert.ok(output.some((p) => p[0] === portal.right[0] && p[1] === portal.right[1]),
-        'Fillet must not move any right cut portal');
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+    try {
+      assertRoadGroupGeometryInvariants(scene);
+      const mesh = scene.roadsGroup.children.find((obj) =>
+        obj.name === 'Roads_cycleway'
+      ) as THREE.Mesh;
+      assert.ok(mesh, 'The actual graph road renderer must emit the three cycleways');
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex();
+      const triangles: Array<[[number, number], [number, number], [number, number]]> = [];
+      for (let f = 0; f < (idx ? idx.count / 3 : pos.count / 3); f++) {
+        const ids = [0, 1, 2].map((i) => idx ? idx.getX(f * 3 + i) : f * 3 + i);
+        if (ids.some((id) => Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+        triangles.push(ids.map((id) => [pos.getX(id), pos.getZ(id)] as [number, number]) as
+          [[number, number], [number, number], [number, number]]);
+      }
+      const containsTri = (tri: [[number, number], [number, number], [number, number]], x: number, z: number) => {
+        const cross = (a: [number, number], b: [number, number]) =>
+          (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+        const a = cross(tri[0], tri[1]), b = cross(tri[1], tri[2]), c = cross(tri[2], tri[0]);
+        return (a >= -1e-5 && b >= -1e-5 && c >= -1e-5) ||
+               (a <= 1e-5 && b <= 1e-5 && c <= 1e-5);
+      };
+      const inRing = (ring: [number, number][], x: number, z: number) => {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a = ring[i], b = ring[j];
+          if (((a[1] > z) !== (b[1] > z)) &&
+              x < ((b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0])) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      };
+      const inExpected = (x: number, z: number) => expected.some((poly) =>
+        inRing(poly[0], x, z) && !poly.slice(1).some((hole) => inRing(hole, x, z))
+      );
+      let missed = 0, extra = 0, sourceSamples = 0;
+      // Source projection and triangulation may disagree at a few rasterized
+      // boundary samples, but not across a whole square-shouldered region.
+      for (let dx = -10.13; dx <= 10; dx += 0.48) {
+        for (let dz = -10.17; dz <= 10; dz += 0.48) {
+          const x = node.position[0] + dx, z = node.position[1] + dz;
+          const expectedHere = inExpected(x, z);
+          const actualHere = triangles.some((tri) => containsTri(tri, x, z));
+          if (expectedHere) sourceSamples++;
+          if (expectedHere && !actualHere) missed++;
+          if (!expectedHere && actualHere) extra++;
+        }
+      }
+      assert.ok(sourceSamples > 120, 'Fixture must sample substantial fork surface area');
+      assert.ok(missed <= 3 && extra <= 3,
+        'Graph fork must match full-width source union within ~0.7m² sampled area (missing ' +
+        missed + ', extra ' + extra + ')');
+    } finally {
+      scene.dispose();
     }
-    assert.ok(output.some((p) => p[0] === 5.55 && p[1] === 5.74),
-      'The tip of the valid open area between diverging branches must not move');
-
-    const removed = polygonClipping.difference(
-      source as unknown as polygonClipping.Geom,
-      smoothed as unknown as polygonClipping.Geom
-    ) as unknown as MultiPolygonCoords;
-    assert.ok(computeMultiPolygonArea(removed) <= 0.002,
-      'Fillets must not remove any meaningful source-width road surface');
-    const addedArea = computeMultiPolygonArea(smoothed) - computeMultiPolygonArea(source);
-    assert.ok(addedArea > 0 && addedArea < 0.15,
-      'Junction shoulder blend should add only a very small local surface area');
   });
 
 });

@@ -3303,12 +3303,12 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
   });
 
   it('24. loads the isolated real Prins Hendrikkade E2 dev fixture with explicit three-way connectivity and original widths', () => {
-    const sourceIds = ['way/682105414', 'way/730316728', 'way/741023803'];
+    const sourceIds = ['way/682105412', 'way/682105414', 'way/1068343582'];
     const provider = new LocalGeoJsonProvider();
     const data = provider.parseGeoJson(
       prinsHendrikkadeForkFixture,
-      'M2.3-E2 Junction Lab · Prins Hendrikkade',
-      [4.8970979, 52.3779471],
+      'M2.3-E2 Junction Lab · Prins Hendrikkade South',
+      [4.8979247, 52.3773823],
       60
     );
     const rawParts = data.topologySource?.roadParts ?? [];
@@ -3319,10 +3319,10 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     );
     assert.ok(
       rawParts.every((part) =>
-        part.rawOsmNodeIds.includes('3192273979') &&
+        part.rawOsmNodeIds.includes('6387677253') &&
         part.points.length === part.rawOsmNodeIds.length
       ),
-      'All three ways must retain verified source node/3192273979'
+      'All three ways must retain verified source node/6387677253'
     );
 
     const preview = prepareInfrastructureRenderPreview(data, {
@@ -3331,7 +3331,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     });
     assert.ok(preview.graph, 'The graph must be constructed for the junction lab');
     const junction = [...preview.graph.roads.nodes.values()].find(
-      (node) => node.rawOsmNodeId === '3192273979'
+      (node) => node.rawOsmNodeId === '6387677253'
     );
     assert.ok(junction, 'The shared explicit OSM junction node must survive graph simplification');
     assert.equal(junction.degree, 3, 'The node must have three incident half-edges');
@@ -3340,10 +3340,8 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       .filter((width): width is number => typeof width === 'number')
       .sort((a, b) => a - b);
     assert.equal(widths.length, 3);
-    assert.ok(Math.abs(widths[0] - 2.4) < 1e-3 &&
-              Math.abs(widths[1] - 2.4) < 1e-3 &&
-              Math.abs(widths[2] - 3.5) < 1e-3,
-      'The actual OSM fork has two default 2.4m cycleways and one width=3.5m cycleway');
+    assert.ok(widths.every((width) => Math.abs(width - 2.4) < 1e-3),
+      'The southern acute OSM fork has three default-width 2.4m cycleways');
 
     const scene = new GeometryBuilder({
       infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },

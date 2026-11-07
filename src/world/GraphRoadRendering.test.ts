@@ -4168,5 +4168,131 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('29. softly joins the outer shoulders of the real Industriestraat 3- and 4-arm split junctions', () => {
+    // Metric projection of the original OSM source centerlines in the second
+    // Hengelo issue-report export, anchored at node/45928009. This retains
+    // each explicit OSM node identity and both independently tagged widths.
+    const specs: SyntheticRoadSpec[] = [
+      { id: 'way/230163945', roadClass: 'secondary', width: 7.2, oneway: false,
+        points: [[0, 0], [28.808, 33.630]],
+        nodeIds: ['45928009', '45929045'] },
+      { id: 'way/532064931', roadClass: 'secondary', width: 4.464, oneway: true,
+        points: [[-9.682, -14.204], [-3.291, -6.212], [0, 0]],
+        nodeIds: ['2386918158', '2386918165', '45928009'] },
+      { id: 'way/230163947', roadClass: 'secondary', width: 4.464, oneway: true,
+        points: [[0, 0], [-3.986, -2.594], [-8.020, -4.842]],
+        nodeIds: ['45928009', '2386918164', '2386918160'] },
+      { id: 'way/6671227', roadClass: 'secondary', width: 4.464, oneway: true,
+        points: [[28.808, 33.630], [34.899, 36.969], [40.063, 42.224]],
+        nodeIds: ['45929045', '45929507', '5163845620'] },
+      { id: 'way/230163948', roadClass: 'secondary', width: 4.464, oneway: true,
+        points: [[48.042, 64.699], [37.147, 49.515], [30.313, 41.311], [28.808, 33.630]],
+        nodeIds: ['2386918196', '5163845616', '2386918181', '45929045'] },
+      { id: 'way/6671166', roadClass: 'service', width: 3.6, oneway: true,
+        points: [[28.808, 33.630], [23.820, 39.830], [12.258, 50.806],
+          [9.607, 53.467], [4.708, 58.521]],
+        nodeIds: ['45929045', '5163847839', '14076450996', '8006544523', '7589198827'] },
+    ];
+    const data = createDatasetFromSpecs(specs);
+    const expectedRings = specs.map((spec) =>
+      buildRoadRibbonOutlineRing(spec.points, spec.width!)
+    );
+    assert.ok(expectedRings.every((ring) => ring && ring.length > 0));
+    const sourceUnion = polygonClipping.union(
+      expectedRings[0] as unknown as polygonClipping.Geom,
+      ...(expectedRings.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords;
+
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      assert.ok(junctionRanges.some((r) =>
+        r.info.id.includes('osm_45928009')), 'Southern three-arm junction must be meshed');
+      assert.ok(junctionRanges.some((r) =>
+        r.info.id.includes('osm_45929045')), 'Northern four-arm junction must be meshed');
+
+      const triangles: MultiPolygonCoords = [];
+      for (const obj of scene.roadsGroup.children) {
+        if (obj.name !== 'Roads_secondary' && obj.name !== 'Roads_service') continue;
+        const mesh = obj as THREE.Mesh;
+        const pos = mesh.geometry.getAttribute('position');
+        const idx = mesh.geometry.getIndex();
+        for (let face = 0; face < (idx ? idx.count / 3 : pos.count / 3); face++) {
+          const ids = [0, 1, 2].map((i) => idx ? idx.getX(face * 3 + i) : face * 3 + i);
+          if (ids.some((id) =>
+            Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001
+          )) continue;
+          const pts = ids.map((id) =>
+            [pos.getX(id), pos.getZ(id)] as [number, number]
+          );
+          const twiceArea = Math.abs(
+            (pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) -
+            (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0])
+          );
+          if (twiceArea < 1e-8) continue;
+          triangles.push([[pts[0], pts[1], pts[2], pts[0]]]);
+        }
+      }
+      assert.ok(triangles.length > 0, 'The actual road meshes must contain triangles');
+      const renderedUnion = polygonClipping.union(
+        triangles[0] as unknown as polygonClipping.Geom,
+        ...(triangles.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+
+      for (const { node, center } of [
+        { node: '45928009', center: [0, 0] },
+        { node: '45929045', center: [28.808, 33.630] },
+      ]) {
+        const [x, z] = center;
+        const box: MultiPolygonCoords = [[[
+          [x - 9, z - 9], [x + 9, z - 9],
+          [x + 9, z + 9], [x - 9, z + 9], [x - 9, z - 9],
+        ]]];
+        const original = polygonClipping.intersection(
+          sourceUnion as unknown as polygonClipping.Geom,
+          box as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const emitted = polygonClipping.intersection(
+          renderedUnion as unknown as polygonClipping.Geom,
+          box as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const missing = polygonClipping.difference(
+          original as unknown as polygonClipping.Geom,
+          emitted as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const added = polygonClipping.difference(
+          emitted as unknown as polygonClipping.Geom,
+          original as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const missingSqm = computeMultiPolygonArea(missing);
+        const addedSqm = computeMultiPolygonArea(added);
+        assert.ok(missingSqm < 0.10,
+          'Split ' + node + ' must retain original source-width coverage: missing ' + missingSqm + 'm²');
+        assert.ok(addedSqm > 0.20,
+          'Split ' + node + ' must visibly change BOTH outside shoulders: added ' + addedSqm + 'm²');
+        assert.ok(addedSqm < 16,
+          'Split ' + node + ' must remain localized: added ' + addedSqm + 'm²');
+      }
+
+      // Between the diverging branches at 12m from either junction, the valid
+      // central void must remain open; never bridge one narrow road to the other.
+      const gaps: [number, number][] = [[-8.17, -8.77], [35.87, 43.40]];
+      for (const [x, z] of gaps) {
+        const gapBox: MultiPolygonCoords = [[[
+          [x - 0.15, z - 0.15], [x + 0.15, z - 0.15],
+          [x + 0.15, z + 0.15], [x - 0.15, z + 0.15], [x - 0.15, z - 0.15],
+        ]]];
+        const gapFootprint = polygonClipping.intersection(
+          renderedUnion as unknown as polygonClipping.Geom,
+          gapBox as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        assert.ok(computeMultiPolygonArea(gapFootprint) < 0.001,
+          'Must preserve the central void between distinct split lanes near ' + x + ',' + z);
+      }
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });
 

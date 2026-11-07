@@ -2817,6 +2817,12 @@ export function buildGraphAtGradeRoadGeometries(
               }
 
               if (clippedSuccess) {
+                // Grid snapping in the remainder filter can introduce folded boundaries.
+                // Resolve them before triangulation, then use this same surface for
+                // clipping footprints and junction portal reconciliation.
+                if (diffResult.length > 0) {
+                  diffResult = polygonClipping.union(diffResult) as MultiPolygonCoords;
+                }
                 resolvedClippedPolys = diffResult;
                 const shapes = createShapesFromMultiPolygon(diffResult);
                 if (shapes.length > 0) {

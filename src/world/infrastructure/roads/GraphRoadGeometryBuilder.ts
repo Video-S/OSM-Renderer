@@ -1530,11 +1530,23 @@ function solveBoundaryDerivedJunctionNode(
           }
           walked += segLength;
         }
+        // Cap the one-sided fin with the SAME nonzero fringe used by the
+        // smoothstep profile. Previously both chains ended at endOuter, making
+        // a zero-width cusp: hasRingSelfIntersection correctly rejected the
+        // near-180-degree fold-back and silently selected the plain union.
+        // A 1.4cm transverse cap remains within portal boundary tolerance.
         const endOuter = branchOuter[branchOuter.length - 1];
-        outerChain.push(endOuter);
+        const endCenter = localPts[localPts.length - 1];
+        const endFringe = Math.min(0.014, deltaHalfWidth * 0.1);
+        outerChain.push([
+          snapCoord(endOuter[0] + (endOuter[0] - endCenter[0]) *
+            (endFringe / baseHalfWidth)),
+          snapCoord(endOuter[1] + (endOuter[1] - endCenter[1]) *
+            (endFringe / baseHalfWidth)),
+        ]);
         originalChain.push(endOuter);
         const finRing: [number, number][] = [
-          ...outerChain, ...originalChain.slice(0, -1).reverse(), outerChain[0],
+          ...outerChain, ...originalChain.slice().reverse(), outerChain[0],
         ];
         if (!hasRingSelfIntersection(finRing) &&
             computeMultiPolygonArea([[finRing]]) >= 0.05) {

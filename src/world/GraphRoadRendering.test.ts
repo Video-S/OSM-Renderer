@@ -3373,51 +3373,85 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       assert.ok(mesh, 'The actual graph road renderer must emit the three cycleways');
       const pos = mesh.geometry.getAttribute('position');
       const idx = mesh.geometry.getIndex();
-      const triangles: Array<[[number, number], [number, number], [number, number]]> = [];
+
+      // Use the exact *emitted* triangle footprints, not a sparse sampling grid.
+      // A narrow square shoulder is visually obvious at 8px/m but might affect
+      // only 1-2 samples in the former 0.48m lattice.
+      const renderedTriangles: MultiPolygonCoords = [];
       for (let f = 0; f < (idx ? idx.count / 3 : pos.count / 3); f++) {
         const ids = [0, 1, 2].map((i) => idx ? idx.getX(f * 3 + i) : f * 3 + i);
         if (ids.some((id) => Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
-        triangles.push(ids.map((id) => [pos.getX(id), pos.getZ(id)] as [number, number]) as
-          [[number, number], [number, number], [number, number]]);
+        const vertices = ids.map((id) =>
+          [pos.getX(id), pos.getZ(id)] as [number, number]
+        );
+        const twiceArea = Math.abs(
+          (vertices[1][0] - vertices[0][0]) * (vertices[2][1] - vertices[0][1]) -
+          (vertices[1][1] - vertices[0][1]) * (vertices[2][0] - vertices[0][0])
+        );
+        if (twiceArea < 1e-8) continue;
+        renderedTriangles.push([[
+          vertices[0], vertices[1], vertices[2], vertices[0],
+        ]]);
       }
-      const containsTri = (tri: [[number, number], [number, number], [number, number]], x: number, z: number) => {
-        const cross = (a: [number, number], b: [number, number]) =>
-          (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
-        const a = cross(tri[0], tri[1]), b = cross(tri[1], tri[2]), c = cross(tri[2], tri[0]);
-        return (a >= -1e-5 && b >= -1e-5 && c >= -1e-5) ||
-               (a <= 1e-5 && b <= 1e-5 && c <= 1e-5);
+      assert.ok(renderedTriangles.length > 0, 'Expected cycleway triangles to compare');
+
+      const renderedUnion = polygonClipping.union(
+        renderedTriangles[0] as unknown as polygonClipping.Geom,
+        ...(renderedTriangles.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+
+      // The geometry can extend beyond this fixture. Restrict the comparison to
+      // the first 12m around the explicit shared OSM junction, where the square
+      // shoulder actually occurs; ignore remote caps and map boundary clipping.
+      const [cx, cz] = node.position;
+      const localBounds: MultiPolygonCoords = [[[
+        [cx - 12, cz - 12], [cx + 12, cz - 12],
+        [cx + 12, cz + 12], [cx - 12, cz + 12], [cx - 12, cz - 12],
+      ]]];
+      const expectedLocal = polygonClipping.intersection(
+        expected as unknown as polygonClipping.Geom,
+        localBounds as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      const renderedLocal = polygonClipping.intersection(
+        renderedUnion as unknown as polygonClipping.Geom,
+        localBounds as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      const missing = polygonClipping.difference(
+        expectedLocal as unknown as polygonClipping.Geom,
+        renderedLocal as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      const extra = polygonClipping.difference(
+        renderedLocal as unknown as polygonClipping.Geom,
+        expectedLocal as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+
+      const missingSqm = computeMultiPolygonArea(missing);
+      const extraSqm = computeMultiPolygonArea(extra);
+      const extent = (multi: MultiPolygonCoords) => {
+        const vertices = multi.flatMap((polygon) => polygon.flat());
+        if (vertices.length === 0) return null;
+        return {
+          minX: Math.min(...vertices.map((v) => v[0])),
+          minZ: Math.min(...vertices.map((v) => v[1])),
+          maxX: Math.max(...vertices.map((v) => v[0])),
+          maxZ: Math.max(...vertices.map((v) => v[1])),
+        };
       };
-      const inRing = (ring: [number, number][], x: number, z: number) => {
-        let inside = false;
-        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-          const a = ring[i], b = ring[j];
-          if (((a[1] > z) !== (b[1] > z)) &&
-              x < ((b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0])) {
-            inside = !inside;
-          }
-        }
-        return inside;
-      };
-      const inExpected = (x: number, z: number) => expected.some((poly) =>
-        inRing(poly[0], x, z) && !poly.slice(1).some((hole) => inRing(hole, x, z))
-      );
-      let missed = 0, extra = 0, sourceSamples = 0;
-      // Source projection and triangulation may disagree at a few rasterized
-      // boundary samples, but not across a whole square-shouldered region.
-      for (let dx = -10.13; dx <= 10; dx += 0.48) {
-        for (let dz = -10.17; dz <= 10; dz += 0.48) {
-          const x = node.position[0] + dx, z = node.position[1] + dz;
-          const expectedHere = inExpected(x, z);
-          const actualHere = triangles.some((tri) => containsTri(tri, x, z));
-          if (expectedHere) sourceSamples++;
-          if (expectedHere && !actualHere) missed++;
-          if (!expectedHere && actualHere) extra++;
-        }
-      }
-      assert.ok(sourceSamples > 120, 'Fixture must sample substantial fork surface area');
-      assert.ok(missed <= 3 && extra <= 3,
-        'Graph fork must match full-width source union within ~0.7m² sampled area (missing ' +
-        missed + ', extra ' + extra + ')');
+      console.log('[E2 Prins southern fork exact surface delta]', JSON.stringify({
+        nodeId: node.rawOsmNodeId,
+        expectedSqm: computeMultiPolygonArea(expectedLocal),
+        renderedSqm: computeMultiPolygonArea(renderedLocal),
+        missingSqm, extraSqm,
+        missingExtent: extent(missing),
+        extraExtent: extent(extra),
+        renderedTriangles: renderedTriangles.length,
+      }));
+      // A 0.03m² tolerance absorbs floating-point triangulation jitter without
+      // silently accepting the centimetre-to-metre-scale rectangular shoulders
+      // that the old sample-count test could miss.
+      assert.ok(missingSqm <= 0.03 && extraSqm <= 0.03,
+        'Rendered fork differs from the union of its source-width ribbons: ' +
+        JSON.stringify({ missingSqm, extraSqm, missingExtent: extent(missing), extraExtent: extent(extra) }));
     } finally {
       scene.dispose();
     }

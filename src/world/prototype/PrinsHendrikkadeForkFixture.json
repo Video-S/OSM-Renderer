@@ -1,0 +1,198 @@
+{
+  "type": "FeatureCollection",
+  "name": "M2.3-E2 · Prins Hendrikkade fork · node/3192273979",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "way/682105414",
+      "properties": {
+        "highway": "cycleway",
+        "lit": "yes",
+        "mofa": "designated",
+        "moped": "no",
+        "name": "Prins Hendrikkade",
+        "sidewalk": "separate",
+        "smoothness": "intermediate",
+        "surface": "paving_stones",
+        "traffic_sign": "NL:G11",
+        "id": "way/682105414",
+        "_nodeIds": [
+          "6387677253",
+          "12568540632",
+          "12715398409",
+          "9768030061",
+          "12888310465",
+          "12715398408",
+          "12888310466",
+          "7072162147",
+          "6479057960",
+          "3192273979"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            4.8979247,
+            52.3773823
+          ],
+          [
+            4.8977412,
+            52.3774863
+          ],
+          [
+            4.8976678,
+            52.3775307
+          ],
+          [
+            4.8974833,
+            52.3776374
+          ],
+          [
+            4.8974169,
+            52.3776771
+          ],
+          [
+            4.8973551,
+            52.3777168
+          ],
+          [
+            4.8972974,
+            52.3777571
+          ],
+          [
+            4.8972458,
+            52.3777984
+          ],
+          [
+            4.8971745,
+            52.3778764
+          ],
+          [
+            4.8970979,
+            52.3779471
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/730316728",
+      "properties": {
+        "highway": "cycleway",
+        "lit": "yes",
+        "mofa": "no",
+        "moped": "no",
+        "name": "Martelaarsgracht",
+        "oneway": "yes",
+        "sidewalk": "separate",
+        "smoothness": "intermediate",
+        "traffic_sign": "NL:G11",
+        "id": "way/730316728",
+        "_nodeIds": [
+          "7385175488",
+          "12888310467",
+          "7072162143",
+          "3192274053",
+          "3192273979"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            4.8966864,
+            52.3779112
+          ],
+          [
+            4.8967972,
+            52.3779346
+          ],
+          [
+            4.8968974,
+            52.3779416
+          ],
+          [
+            4.8969887,
+            52.3779448
+          ],
+          [
+            4.8970979,
+            52.3779471
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/741023803",
+      "properties": {
+        "highway": "cycleway",
+        "lit": "yes",
+        "lit:indirect": "yes",
+        "mofa": "designated",
+        "moped": "no",
+        "name": "Prins Hendrikkade",
+        "oneway": "no",
+        "smoothness": "good",
+        "surface": "asphalt",
+        "surface:colour": "red",
+        "traffic_sign": "NL:G11",
+        "width": "3.50",
+        "id": "way/741023803",
+        "_nodeIds": [
+          "543807770",
+          "11392634782",
+          "9959600356",
+          "9959600353",
+          "6987414442",
+          "9959600352",
+          "6987414441",
+          "6961595178",
+          "3192273979"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            4.8969839,
+            52.3780636
+          ],
+          [
+            4.8969983,
+            52.3780423
+          ],
+          [
+            4.8970045,
+            52.3780328
+          ],
+          [
+            4.8970068,
+            52.3780306
+          ],
+          [
+            4.8970152,
+            52.3780224
+          ],
+          [
+            4.8970222,
+            52.3780165
+          ],
+          [
+            4.8970441,
+            52.3779959
+          ],
+          [
+            4.8970543,
+            52.3779866
+          ],
+          [
+            4.8970979,
+            52.3779471
+          ]
+        ]
+      }
+    }
+  ]
+}

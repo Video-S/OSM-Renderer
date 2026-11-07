@@ -135,6 +135,13 @@ Prior to Stage E2:
 - Updated the existing URL fixture's center and test 24 to verify the correct shared three-way node and original default widths. No new URL or production geometry solver changes.
 - **Verification pending:** Re-run npm test, lint, build, docs:api and compare graph/legacy view of the corrected southern junction. No post-edit pass claims; TKT-008 remains in_progress.
 
+### 2026-11-07 — Real-fork graph-vs-legacy visual comparison and concave-shoulder fillet experiment
+- Project-owner screenshots of the corrected `?fixture=prins-fork` show the graph and legacy renders have very similar Y-shaped coverage, including the long open space between the two southbound cycleways. All three source ways are 2.4m wide; prior unequal-width taper heuristics do not apply to this fixture.
+- The artifact is a sharp *external* curb shoulder where the shared northern cycleway widens into the diverging paths. The interior dark area is preserved as a valid gap between the two distinct source centerlines.
+- Added a constrained, additive quadratic fillet to the two concave shoulders of equal-width three-arm path forks with a distinct acute branch pair. The solver keeps the original full-width polygon union as its source of truth, does not move any cut portals, skips the split-island tip, and falls back unchanged if the fillet loses meaningful original area, creates a self-intersection, or adds excessive surface.
+- Added test 25 against source-derived metric outline to verify both shoulders soften, all portal endpoints stay fixed, the split-island tip stays open, and nearly all original surface coverage remains. Existing test 24 continues to exercise the production graph renderer on the real OSM fixture.
+- **Verification and visual acceptance pending:** Run the focused E2 suite, lint, build, and docs; compare the same graph/legacy junction lab screenshot. No tests were executed through this GitHub-only editing environment. TKT-008 stays in_progress.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

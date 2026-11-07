@@ -1296,8 +1296,11 @@ function solveBoundaryDerivedJunctionNode(
         const cross = narrowIndices.map(({ branch }) =>
           forward[0] * branch.dir[1] - forward[1] * branch.dir[0]
         );
-        if (cross[0] * cross[1] < -0.01 &&
-            Math.abs(cross[0]) > 0.06 && Math.abs(cross[1]) > 0.06) {
+        // Opposite signed lateral offsets with a nontrivial product suffice.
+        // A branch can be almost collinear with the trunk while still forming
+        // one side of a genuine split (Veloursstraat node/5207303141: 0.042).
+        // Requiring each branch to exceed 0.06 rejected that valid case.
+        if (cross[0] * cross[1] < -0.01) {
           splitMergeTransition = {
             trunkIndex,
             outerBranches: narrowIndices.map(({ index }, i) => ({

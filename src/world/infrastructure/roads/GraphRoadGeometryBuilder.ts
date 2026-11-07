@@ -12,10 +12,7 @@ import {
   getRoadElevation,
   isNonVehicularRoadClass,
 } from '../../ElevationPolicy';
-import {
-  computePolylineLength,
-  trimPolylineByArcLength,
-} from '../../BridgeAndTunnelBuilder';
+import { computePolylineLength } from '../../BridgeAndTunnelBuilder';
 import {
   COORDINATE_SNAP_QUANTUM,
   MultiPolygonCoords,
@@ -2345,11 +2342,11 @@ export function buildGraphAtGradeRoadGeometries(
     const subPolylines: [number, number][][] = [];
     for (let j = 0; j < m; j++) {
       const { spanStart, spanEnd } = activeSpans[j];
-      const subPts = trimPolylineByArcLength(
-        edge.points as [number, number][],
-        spanStart,
-        totalLen - spanEnd
-      );
+      // Source-provenance spans may occupy only the first or last few metres of
+      // a much longer simplified edge. trimPolylineByArcLength caps each trim
+      // at 45% of the entire edge and therefore expands those spans, creating
+      // overlapping ribbons, accidental clipping, and misplaced face ranges.
+      const subPts = extractPolylineSpan(edge.points, spanStart, spanEnd);
       if (j === 0 && tInfo.start && subPts.length >= 2) {
         subPts[0] = [tInfo.start[0], tInfo.start[1]];
       }

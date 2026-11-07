@@ -25,6 +25,7 @@ import {
   TreePine,
   MousePointerClick,
   X,
+  Wrench,
 } from 'lucide-react';
 import { LocalGeoJsonProvider } from '../world/LocalGeoJsonProvider';
 import { OsmApiProvider } from '../world/OsmApiProvider';
@@ -48,6 +49,8 @@ import { MapScene } from '../scene/MapScene';
 import { Fallback2DMap } from '../scene/Fallback2DMap';
 import { CameraController } from '../scene/CameraController';
 import { AddressSearchModal, GeocodeResult } from '../components/AddressSearchModal';
+import { DevToolsPanel } from '../components/DevToolsPanel';
+import { DeveloperReproductionPackage } from '../world/dev/ReproductionReport';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { detectWebGLSupport } from '../utils/webglCheck';
 import {
@@ -163,6 +166,21 @@ export default function App() {
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedFeature, setSelectedFeature] = useState<InspectableFeatureInfo | null>(null);
 
+  // Developer Tools Interface State
+  const [isDevToolsOpen, setIsDevToolsOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get('devtools') === 'true' || p.get('devtools') === '1';
+  });
+  const [showGraphOverlay, setShowGraphOverlay] = useState<boolean>(false);
+  const [isSpatialSelectActive, setIsSpatialSelectActive] = useState<boolean>(false);
+  const [selectedBoxMeters, setSelectedBoxMeters] = useState<{
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  } | null>(null);
+
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'layers' | 'inspector' | 'style' | 'stats' | 'info'>('layers');
 
@@ -273,6 +291,63 @@ export default function App() {
       azimuthRad: (azimuthDeg * Math.PI) / 180,
       signal: prev.signal + 1,
     }));
+  };
+
+  const handleImportReproductionPackage = (pkg: DeveloperReproductionPackage) => {
+    setLoading(true);
+    setError(null);
+    setHoveredFeature(null);
+    setSelectedFeature(null);
+    setActiveLocationId(`repro_${Date.now()}`);
+
+    try {
+      const defaultCenter: [number, number] = [4.897, 52.377];
+      const parsedData = localProvider.parseGeoJson(
+        pkg.geoJson,
+        pkg.report?.title || 'Imported Reproduction Scenario',
+        defaultCenter
+      );
+
+      setCurrentRawGeoJson(pkg.geoJson);
+      setMapData(parsedData);
+
+      if (pkg.configuration?.infrastructureRenderOptions) {
+        setInfrastructureRenderOptions(
+          normalizeInfrastructureRenderOptions(pkg.configuration.infrastructureRenderOptions)
+        );
+      }
+      if (pkg.configuration?.railwayPrototypeMode) {
+        setRailwayPrototypeMode(pkg.configuration.railwayPrototypeMode);
+      }
+      if (pkg.configuration?.themeId && MAP_THEMES[pkg.configuration.themeId]) {
+        setSelectedThemeId(pkg.configuration.themeId);
+      }
+      if (typeof pkg.configuration?.roadWidthMultiplier === 'number') {
+        setRoadWidthMultiplier(pkg.configuration.roadWidthMultiplier);
+      }
+      if (typeof pkg.configuration?.wireframe === 'boolean') {
+        setWireframe(pkg.configuration.wireframe);
+      }
+
+      if (pkg.camera) {
+        setExplicitPose((prev) => ({
+          target: pkg.camera.target || [0, 0, 0],
+          zoom: pkg.camera.zoom || 1.0,
+          azimuthRad:
+            typeof pkg.camera.azimuthDeg === 'number'
+              ? (pkg.camera.azimuthDeg * Math.PI) / 180
+              : undefined,
+          signal: prev.signal + 1,
+        }));
+      }
+
+      setStatusMessage(`Loaded reproduction: ${pkg.report?.title || 'Imported Scenario'}`);
+    } catch (err: any) {
+      console.error('Failed to import reproduction package:', err);
+      setError(`Failed to import reproduction package: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
 
@@ -1043,6 +1118,7 @@ export default function App() {
                   minZoom={0.15}
                   maxZoom={16.0}
                   explicitPose={explicitPose}
+                  controlsEnabled={!isSpatialSelectActive}
                 />
 
                 <MapScene
@@ -1079,6 +1155,11 @@ export default function App() {
                   onFpsUpdate={setFps}
                   onHoverFeature={handleHoverFeature}
                   onSelectFeature={handleSelectFeature}
+                  selectedFeature={selectedFeature}
+                  selectedBoxMeters={selectedBoxMeters}
+                  isSpatialSelectActive={isSpatialSelectActive}
+                  onSpatialBoxChange={setSelectedBoxMeters}
+                  showGraphOverlay={showGraphOverlay}
                 />
               </Canvas>
             </ErrorBoundary>
@@ -1236,6 +1317,25 @@ export default function App() {
               <span>Reset</span>
             </button>
           </div>
+
+          {/* Dev Tools Toggle Button */}
+          <button
+            type="button"
+            data-testid="btn-toggle-devtools"
+            onClick={() => setIsDevToolsOpen((v) => !v)}
+            title="Open Developer Tools (Rendering controls, geometry inspection, issue reporting & fixtures)"
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl shadow-lg transition active:scale-95 cursor-pointer ${
+              isDevToolsOpen
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border border-amber-300'
+                : 'bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-amber-300'
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span>Dev Tools</span>
+            {showGraphOverlay && (
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse ml-0.5" />
+            )}
+          </button>
         </div>
       </header>
 
@@ -2130,6 +2230,58 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onSelectLocation={handleSelectAddress}
         currentGeoJson={currentRawGeoJson}
+      />
+
+      {/* Unified Developer Tools Panel */}
+      <DevToolsPanel
+        isOpen={isDevToolsOpen}
+        onClose={() => setIsDevToolsOpen(false)}
+        infrastructureRenderOptions={infrastructureRenderOptions}
+        onChangeInfrastructureRenderOptions={(opts) =>
+          setInfrastructureRenderOptions((prev) =>
+            normalizeInfrastructureRenderOptions({ ...prev, ...opts })
+          )
+        }
+        railwayPrototypeMode={railwayPrototypeMode}
+        onChangeRailwayPrototypeMode={(mode) => setRailwayPrototypeMode(mode)}
+        wireframe={wireframe}
+        onToggleWireframe={() => setWireframe((v) => !v)}
+        showGraphOverlay={showGraphOverlay}
+        onToggleGraphOverlay={() => setShowGraphOverlay((v) => !v)}
+        selectedFeature={selectedFeature}
+        onSelectFeature={(feat) => setSelectedFeature(feat)}
+        isSpatialSelectActive={isSpatialSelectActive}
+        onToggleSpatialSelect={() => setIsSpatialSelectActive((v) => !v)}
+        selectedBoxMeters={selectedBoxMeters}
+        onClearSpatialBox={() => setSelectedBoxMeters(null)}
+        mapData={mapData}
+        currentRawGeoJson={currentRawGeoJson}
+        themeId={selectedThemeId}
+        roadWidthMultiplier={roadWidthMultiplier}
+        heightMultiplier={heightMultiplier}
+        currentCameraPose={{
+          target: explicitPose.target,
+          zoom: currentCameraZoomRef.current || explicitPose.zoom,
+          azimuthDeg: explicitPose.azimuthRad
+            ? Math.round((explicitPose.azimuthRad * 180) / Math.PI)
+            : 45,
+        }}
+        onApplyCameraPose={(pose) => {
+          setExplicitPose((prev) => ({
+            target: pose.target,
+            zoom: pose.zoom,
+            azimuthRad:
+              typeof pose.azimuthDeg === 'number'
+                ? (pose.azimuthDeg * Math.PI) / 180
+                : prev.azimuthRad,
+            signal: prev.signal + 1,
+          }));
+        }}
+        onLoadSwitchyard={(zone) => loadSwitchyardFixture(zone)}
+        onLoadPrinsFork={() => loadPrinsHendrikkadeForkFixture()}
+        onLoadHengelo={() => loadLiveHengeloPreset()}
+        onLoadAmsterdam={() => loadLiveAmsterdamPreset()}
+        onImportReproductionPackage={handleImportReproductionPackage}
       />
     </div>
   );

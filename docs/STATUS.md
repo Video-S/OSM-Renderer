@@ -41,6 +41,12 @@
 6. **Interactive Inspection & Styling**:
    - 4 built-in visual themes (`tactical`, `daylight`, `dusk`, `blueprint`) with in-place material updating.
    - Raycast feature inspection via `faceRanges` binary search and instanced sleeper `instanceInfos` mapping 3D faces/instances back to OSM tags.
+7. **Developer Tools Interface & Self-Contained Reproduction Reporting (`TKT-009`)**:
+   - In-app runtime panel (`src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`) replacing manual URL parameter editing.
+   - Instant in-memory switching between road engines (`legacy`, `graph`, `graph-preview`) and railway implementations (`production`, `candidateA`, `candidateB`, `disabled`, `graph-preview`) without page reloads.
+   - Interactive spatial bounding box selection and 3D visual highlight overlays for features and topological nodes.
+   - 1-click loading of development fixtures (`prins-fork` acute cycleway fork, `switchyard` benchmark with zone camera presets, `hengelo`, `amsterdam`).
+   - Self-contained `.json` defect report export and re-import bundling selected OSM features, connected incident context (preserving original OSM node identities), configuration, camera pose, and developer notes.
 
 ---
 

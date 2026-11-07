@@ -8,4 +8,4 @@
 
 > `const` **CameraController**: `React.FC`\<[`CameraControllerProps`](../interfaces/CameraControllerProps.md)\>
 
-Defined in: scene/CameraController.tsx:186
+Defined in: scene/CameraController.tsx:187

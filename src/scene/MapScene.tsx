@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { BuiltSceneGeometry, resolveInspectedFeature } from '../world/GeometryBuilder';
@@ -29,6 +29,11 @@ export interface MapSceneProps {
     clientPos?: { x: number; y: number }
   ) => void;
   onSelectFeature?: (feature: InspectableFeatureInfo | null) => void;
+  selectedFeature?: InspectableFeatureInfo | null;
+  selectedBoxMeters?: { minX: number; maxX: number; minZ: number; maxZ: number } | null;
+  isSpatialSelectActive?: boolean;
+  onSpatialBoxChange?: (box: { minX: number; maxX: number; minZ: number; maxZ: number } | null) => void;
+  showGraphOverlay?: boolean;
 }
 
 function computePercentile(sorted: number[], p: number): number {
@@ -58,8 +63,13 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onClickBuilding,
   onHoverFeature,
   onSelectFeature,
+  selectedFeature,
+  selectedBoxMeters,
+  isSpatialSelectActive = false,
+  onSpatialBoxChange,
+  showGraphOverlay = false,
 }) => {
-  const { gl, events } = useThree();
+  const { gl, events, camera } = useThree();
   const lastHoverTimeRef = useRef<number>(0);
   const lastHoverRaycastMsRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
@@ -78,10 +88,114 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
   const activeRailwaysGroup = railwayGroupOverride || builtGeometry.railwaysGroup;
 
-  // Suppress R3F CPU raycasting across MapRoot while user is actively dragging to pan/orbit the camera
+  // Spatial area drag state
+  const isDraggingBoxRef = useRef(false);
+  const dragStartPointRef = useRef<[number, number] | null>(null);
+  const [liveDragBox, setLiveDragBox] = useState<{ minX: number; maxX: number; minZ: number; maxZ: number } | null>(null);
+
+  // Ground plane unprojection helper for area selection
+  const getGroundCoords = (clientX: number, clientY: number): [number, number] | null => {
+    const dom = gl.domElement;
+    if (!dom) return null;
+    const rect = dom.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const ndcY = -(((clientY - rect.top) / rect.height) * 2 - 1);
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(groundPlane, hit)) {
+      return [hit.x, hit.z];
+    }
+    return null;
+  };
+
+  // Handle spatial area drag selection on canvas when isSpatialSelectActive is true
   useEffect(() => {
     const dom = gl.domElement;
     if (!dom) return;
+
+    if (!isSpatialSelectActive) {
+      dom.style.cursor = 'default';
+      setLiveDragBox(null);
+      isDraggingBoxRef.current = false;
+      dragStartPointRef.current = null;
+      return;
+    }
+
+    // Set crosshair cursor to clearly indicate area selection mode
+    dom.style.cursor = 'crosshair';
+
+    const onPointerDown = (ev: PointerEvent) => {
+      if (ev.button !== 0) return;
+      const pt = getGroundCoords(ev.clientX, ev.clientY);
+      if (!pt) return;
+
+      isDraggingBoxRef.current = true;
+      dragStartPointRef.current = pt;
+      setLiveDragBox({ minX: pt[0], maxX: pt[0], minZ: pt[1], maxZ: pt[1] });
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!isDraggingBoxRef.current || !dragStartPointRef.current) return;
+      const pt = getGroundCoords(ev.clientX, ev.clientY);
+      if (!pt) return;
+
+      const start = dragStartPointRef.current;
+      const minX = Math.min(start[0], pt[0]);
+      const maxX = Math.max(start[0], pt[0]);
+      const minZ = Math.min(start[1], pt[1]);
+      const maxZ = Math.max(start[1], pt[1]);
+      setLiveDragBox({ minX, maxX, minZ, maxZ });
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+
+    const onPointerUp = (ev: PointerEvent) => {
+      if (!isDraggingBoxRef.current || !dragStartPointRef.current) return;
+      const pt = getGroundCoords(ev.clientX, ev.clientY) || dragStartPointRef.current;
+      const start = dragStartPointRef.current;
+      const minX = Math.min(start[0], pt[0]);
+      const maxX = Math.max(start[0], pt[0]);
+      const minZ = Math.min(start[1], pt[1]);
+      const maxZ = Math.max(start[1], pt[1]);
+
+      isDraggingBoxRef.current = false;
+      dragStartPointRef.current = null;
+      setLiveDragBox(null);
+
+      // Only commit if the box has a discernible dimension (> 0.5m)
+      if (maxX - minX >= 0.5 || maxZ - minZ >= 0.5) {
+        onSpatialBoxChange?.({ minX, maxX, minZ, maxZ });
+      }
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+
+    dom.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      dom.style.cursor = 'default';
+      dom.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [gl, camera, isSpatialSelectActive, onSpatialBoxChange]);
+
+  // Suppress R3F CPU raycasting across MapRoot while user is actively dragging to pan/orbit the camera
+  useEffect(() => {
+    const dom = gl.domElement;
+    if (!dom || isSpatialSelectActive) return;
     let isPointerDown = false;
     let downX = 0;
     let downY = 0;
@@ -122,7 +236,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
       window.removeEventListener('pointerup', restoreEvents);
       window.removeEventListener('pointercancel', restoreEvents);
     };
-  }, [gl, events]);
+  }, [gl, events, isSpatialSelectActive]);
 
   // Bracket WebGLRenderer.render with EXT_disjoint_timer_query_webgl2 and capture exact post-render gl.info
   useEffect(() => {
@@ -374,6 +488,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
   const handlePointerMove = (e: any) => {
     e.stopPropagation();
+    if (isSpatialSelectActive) {
+      if (onHoverFeature) onHoverFeature(null, { x: 0, y: 0 });
+      return;
+    }
     const buttons = e.buttons ?? e.nativeEvent?.buttons ?? 0;
     if (buttons !== 0) return;
     const now = performance.now();
@@ -408,6 +526,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
   };
 
   const handleClick = (e: any) => {
+    // Suppress mesh click-selection while in spatial area selection mode
+    if (isSpatialSelectActive) return;
     // Ignore drag-releases when panning/orbiting camera
     if (typeof e.delta === 'number' && e.delta > 6) return;
     e.stopPropagation();
@@ -490,6 +610,73 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
       {/* Buildings layer */}
       {showBuildings && <primitive object={builtGeometry.buildingsGroup} />}
+
+      {/* 3D Visual Selection Highlight Overlay */}
+      {selectedFeature && (
+        <group name="DevTools_SelectionHighlight">
+          {/* Highlight bounding ring / footprint indicator */}
+          <mesh position={[0, (selectedFeature.elevation ?? 0.05) + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[1.5, 2.2, 32]} />
+            <meshBasicMaterial color="#06b6d4" side={THREE.DoubleSide} transparent opacity={0.85} depthTest={false} />
+          </mesh>
+        </group>
+      )}
+
+      {/* Spatial Area Selection Box Overlay */}
+      {(liveDragBox || selectedBoxMeters) && (
+        <group name="DevTools_SpatialSelectionBox">
+          {(() => {
+            const b = liveDragBox || selectedBoxMeters!;
+            const w = Math.max(b.maxX - b.minX, 0.5);
+            const d = Math.max(b.maxZ - b.minZ, 0.5);
+            const cx = (b.minX + b.maxX) / 2;
+            const cz = (b.minZ + b.maxZ) / 2;
+            return (
+              <group position={[cx, 0.08, cz]}>
+                <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[w, d]} />
+                  <meshBasicMaterial
+                    color={liveDragBox ? '#f59e0b' : '#06b6d4'}
+                    transparent
+                    opacity={liveDragBox ? 0.35 : 0.22}
+                    depthWrite={false}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+                <lineSegments rotation={[-Math.PI / 2, 0, 0]}>
+                  <edgesGeometry args={[new THREE.PlaneGeometry(w, d)]} />
+                  <lineBasicMaterial
+                    color={liveDragBox ? '#fbbf24' : '#22d3ee'}
+                    linewidth={2}
+                  />
+                </lineSegments>
+              </group>
+            );
+          })()}
+        </group>
+      )}
+
+      {/* Topology Graph Nodes Visual Overlay */}
+      {showGraphOverlay && builtGeometry.infrastructureRenderPreview?.descriptors?.roadNodes && (
+        <group name="DevTools_GraphNodesOverlay">
+          {builtGeometry.infrastructureRenderPreview.descriptors.roadNodes.map((n) => (
+            <mesh key={n.id} position={[n.position[0], 0.09, n.position[1]]}>
+              <sphereGeometry args={[n.degree >= 3 ? 0.9 : 0.5, 12, 12]} />
+              <meshBasicMaterial
+                color={
+                  n.primaryRole === 'junction'
+                    ? '#f59e0b'
+                    : n.primaryRole === 'cross_tier'
+                    ? '#a855f7'
+                    : n.primaryRole === 'dead_end'
+                    ? '#ef4444'
+                    : '#06b6d4'
+                }
+              />
+            </mesh>
+          ))}
+        </group>
+      )}
     </group>
   );
 };

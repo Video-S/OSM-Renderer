@@ -18,6 +18,14 @@ Defined in: scene/CameraController.tsx:22
 
 ***
 
+### controlsEnabled?
+
+> `optional` **controlsEnabled?**: `boolean`
+
+Defined in: scene/CameraController.tsx:39
+
+***
+
 ### explicitPose?
 
 > `optional` **explicitPose?**: `object`

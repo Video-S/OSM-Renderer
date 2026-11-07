@@ -75,6 +75,13 @@ flowchart TD
   - All intermediate temporary geometries created during merging (e.g., individual road segment strips or individual building prisms) are tracked by `SceneResourceManager.registerIntermediateGeometry()` and immediately freed via `releaseIntermediateGeometry()`.
   - When a dataset is reloaded or the component unmounts, `BuiltSceneGeometry.dispose()` performs a single-pass disposal of all retained scene geometries and materials.
 
+### Developer Tools & Reproduction Architecture (`TKT-009`)
+- **Centralized Developer State (`App.tsx`, `DevToolsPanel.tsx`)**: Unifies rendering controls (`infrastructureRenderOptions`, `railwayPrototypeMode`), diagnostic overlays (`wireframe`, `showGraphOverlay`), spatial area selection (`isSpatialSelectActive`, `selectedBoxMeters`), and fixture navigation (`onLoadSwitchyard`, `onLoadPrinsFork`, etc.) into explicit application state without fractured state containers.
+- **Reproduction Pipeline (`src/world/dev/ReproductionReport.ts`)**:
+  - `extractConnectedOsmFeatures`: Isolates target OSM features (via click selection or 2D spatial box) along with immediate connected incident context sharing verified OSM node IDs, strictly preserving `_nodeIds` and coordinates without fabricating synthetic junctions.
+  - `buildReproductionPackage`: Compiles issue metadata, active rendering configuration, camera pose, and GeoJSON `FeatureCollection` into a portable JSON package.
+  - `validateReproductionPackage` & `LocalGeoJsonProvider.parseGeoJson`: Re-imports exported reports to reconstitute the exact dataset, camera position, and renderer options in-memory.
+
 ---
 
 ## 5. Architectural Boundaries

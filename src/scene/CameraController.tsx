@@ -36,6 +36,7 @@ export interface CameraControllerProps {
     azimuthRad?: number;
     signal: number;
   };
+  controlsEnabled?: boolean;
 }
 
 export const DEFAULT_CAMERA_POS: [number, number, number] = [380, 460, 380];
@@ -196,6 +197,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   maxZoom = 16.0,
   initialZoom = DEFAULT_INITIAL_ZOOM,
   explicitPose,
+  controlsEnabled = true,
 }) => {
   const controlsRef = useRef<MapControlsImpl>(null);
   const { camera, invalidate, gl, size } = useThree();
@@ -468,6 +470,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       <MapControls
         ref={controlsRef}
         makeDefault
+        enabled={controlsEnabled}
         minPolarAngle={fixedTiltAngle}
         maxPolarAngle={fixedTiltAngle}
         minZoom={minZoom}
@@ -480,9 +483,9 @@ export const CameraController: React.FC<CameraControllerProps> = ({
           MIDDLE: THREE.MOUSE.DOLLY,
           RIGHT: THREE.MOUSE.ROTATE,
         }}
-        enableRotate
+        enableRotate={controlsEnabled}
         enableZoom
-        enablePan
+        enablePan={controlsEnabled}
       />
     </>
   );

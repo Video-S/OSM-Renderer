@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_CAMERA\_TARGET**: \[`number`, `number`, `number`\]
 
-Defined in: scene/CameraController.tsx:42
+Defined in: scene/CameraController.tsx:43

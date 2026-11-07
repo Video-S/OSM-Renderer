@@ -98,16 +98,16 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **Localized Road-Footprint Junction & Curve/Width Preservation Regressions (Suites 14, 15 & 16)**: Verifies that straight roads retain 100% of their intended width at junction portals when side roads join (`Suite 14`), curved roads retain all intermediate curve bends and full width near junctions and across short-segment degree-2 continuity joins (`Suite 14`), acute unequal-width Y-junctions (`14.0 m` trunk + `5.5 m` slip road at `22°`) follow localized road footprints without exaggerated triangular chord wedges and short roads between two junctions retain full width (`Suite 15`), and adding a side road at a junction node leaves main-road vertex geometry outside the local junction region 100% invariant (`Suite 16`).
    - **Strict Source-of-Truth Isolation, 10-Permutation Determinism & Mode Isolation**: Proves that scrambling or clearing `mapData.roads` has zero effect on `roads: 'graph'` output, verifies bit-for-bit identical geometry across 10 seeded permutations of input feature order, exact `legacy` vs. `graph-preview` parity, `railwaysGroup` invariance when `roads === 'graph'`, 4-theme updates, and zero leaked GPU resources on `dispose()`.
 
-### Recorded Verification Status (2026-11-06 — Stage E2 `M2.3-E2` Verification)
+### Recorded Verification Status (2026-11-07 — Stage E2 & Developer Tools `TKT-009` Verification)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **161 / 161 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts` + `18` in `RailwayNetworkTopology.test.ts` + `9` in `CrossModalTopology.test.ts` + `10` in `InfrastructureRenderAdapter.test.ts` + `16` in `GraphRoadRendering.test.ts`) |
+| `npm test` | **181 / 181 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts` + `18` in `RailwayNetworkTopology.test.ts` + `9` in `CrossModalTopology.test.ts` + `10` in `InfrastructureRenderAdapter.test.ts` + `28` in `GraphRoadRendering.test.ts` + `8` in `DevToolsAndReproduction.test.ts`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |
 
-*(Historical baselines preserved: initial M2.3-E2 stabilization baseline on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
+*(Historical baselines preserved: M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 
 
 ---
@@ -196,6 +196,31 @@ Open `?fixture=prins-fork` to load three original OSM cycleways from the project
 - `&azimuth=0` or `&azimuth=45` — reproducible rotation for side-by-side screenshots.
 
 Fixture source: `src/world/prototype/PrinsHendrikkadeForkFixture.json`. It preserves original OSM coordinates, way IDs `682105412`, `682105414`, and `1068343582`, per-vertex node IDs, and meaningful tags. All three southern-fork cycleways use the 2.4m default width; the earlier northern 3.5m width-transition fixture was replaced. The source is clipped to 60m around the junction during ingestion. `GraphRoadRendering.test.ts` checks that the correct three-way graph node and widths survive parsing and reach the production graph renderer. This fixture is for diagnosing junction geometry, not a reference for whole-Amsterdam rendering.
+
+### 5.1 In-App Developer Tools & Self-Contained Reproduction Reporting (`TKT-009`)
+
+To eliminate error-prone manual URL parameter editing and page reloads, a centralized Developer Tools panel (`src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`) is available via the **Dev Tools** button in the top navigation bar or programmatically via `window.__DEV_TOOLS__`:
+
+1. **Runtime Rendering Controls**:
+   - **Road Engine**: Switch between `Legacy (Pre-M2.3-E2)` and `Graph-Driven (M2.3-E2)` rendering, or view `Graph Adapter Topology Preview (E1)`. Switching takes effect immediately in-memory without reloading the page or losing camera focus.
+   - **Railway Engine**: Select `Production (Candidate B)` or isolated prototypes (`Candidate A (Dynamic Multi-LOD)`, `Disabled`), or view `Graph Adapter Topology Preview`. (Railway controls strictly reflect implemented capabilities; E3–E5 are unauthorized).
+   - **Overlays**: Toggle scene wireframe and visual 3D topological graph nodes (`#f59e0b` junction, `#a855f7` cross-tier, `#ef4444` dead-end, `#06b6d4` intermediate/curve).
+
+2. **Geometry & Junction Inspection with Highlighting**:
+   - Click any road, railway, or building to view its OSM IDs, tags, coordinates, inferred physical widths, graph connectivity, and renderer provenance.
+   - Activate **Spatial Box Select** to drag a bounding box directly on the map canvas. Selected geometry is highlighted in 3D with a cyan boundary plane and accent ring.
+
+3. **Self-Contained Reproduction Export & Import**:
+   - Fill in a concise issue report (Title, Category, Severity, Expected Behavior, Description).
+   - Click **Export Repro Package (.json)** to generate a self-contained bundle containing:
+     - The minimal GeoJSON `FeatureCollection` including primary selected features and directly connected incident context sharing verified OSM node IDs (preserving original OSM node identities without fabricating synthetic junctions).
+     - Active rendering configuration (`infrastructureRenderOptions`, `railwayPrototypeMode`, `themeId`, `roadWidthMultiplier`).
+     - Camera pose (`target`, `zoom`, `azimuthDeg`).
+     - Selected feature diagnostics and developer notes.
+   - Click **Import Reproduction Package** or drop a `.json` file to instantly load the scenario, set the camera pose, apply the exact rendering engine, and reproduce the defect without manual URL configuration.
+
+4. **Fixture Library**:
+   - 1-click loading for canonical test fixtures: `Prins Hendrikkade South Fork (M2.3-E2)`, `Railway Switchyard & Throat (M2.1)`, `Station Hengelo Live`, and `Amsterdam Centraal Live`.
 
 ## 6. How to Report Verification Results
 

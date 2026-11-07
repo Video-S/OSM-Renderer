@@ -34,6 +34,7 @@ import { MAP_THEMES } from '../styles/mapThemes';
 import { UnchainedRoadPart } from './infrastructure/topology/types';
 import realOsmExtracts from './prototype/realOsmRailwayExtracts.json';
 import prinsHendrikkadeForkFixture from './prototype/PrinsHendrikkadeForkFixture.json';
+import veloursstraatSplitFixture from './prototype/VeloursstraatSplitFixture.json';
 
 /**
  * Helper to create a synthetic `RoadFeature` together with its matching raw `topologySource`
@@ -4289,6 +4290,138 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
         assert.ok(computeMultiPolygonArea(gapFootprint) < 0.001,
           'Must preserve the central void between distinct split lanes near ' + x + ',' + z);
       }
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('30. blends the near-collinear Veloursstraat split without bridging its two lanes', () => {
+    // Five complete original ways from the second real Developer Tools report.
+    // node/5207303141 joins the 7.2m undivided secondary way to TWO
+    // 4.464m one-way secondaries. One branch has a signed lateral cross of
+    // only 0.042 against the trunk continuation, below the OLD 0.06 gate.
+    const data = new LocalGeoJsonProvider().parseGeoJson(
+      veloursstraatSplitFixture,
+      'Veloursstraat split-merge regression',
+      [6.7973, 52.2597],
+      350
+    );
+    const sourceIds = [
+      'way/537835346', 'way/537835350', 'way/537835352',
+      'way/537835353', 'way/6669954',
+    ];
+    assert.deepEqual(
+      [...new Set((data.topologySource?.roadParts ?? []).map((p) => p.sourceFeatureId))].sort(),
+      sourceIds,
+      'Real original OSM ways must survive ingestion and retain their identities'
+    );
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph', railways: 'legacy',
+    });
+    assert.ok(preview.graph);
+    const graphNodes = [...preview.graph.roads.nodes.values()];
+    const junctions = ['45922126', '5207303141'].map((id) => {
+      const node = graphNodes.find((n) => n.rawOsmNodeId === id);
+      assert.ok(node, 'Must preserve OSM node/' + id);
+      assert.equal(node.degree, 3, 'Both split junctions have three actual arms');
+      const widths = node.incidentEdgeIds.map((edgeId) =>
+        preview.graph!.roads.edges.get(edgeId)?.width
+      ).filter((w): w is number => typeof w === 'number').sort((a, b) => a - b);
+      assert.equal(widths.length, 3);
+      assert.ok(Math.abs(widths[0] - 4.464) < 1e-3 &&
+                Math.abs(widths[1] - 4.464) < 1e-3 &&
+                Math.abs(widths[2] - 7.2) < 1e-3,
+        'Expected the actual 4.464 / 4.464 / 7.2m physical widths');
+      return node;
+    });
+
+    const sourceRings = (data.topologySource?.roadParts ?? []).map((p) =>
+      buildRoadRibbonOutlineRing(p.points as [number, number][], p.width)
+    );
+    assert.equal(sourceRings.length, 5);
+    assert.ok(sourceRings.every((ring) => ring && ring.length > 0));
+    const sourceUnion = polygonClipping.union(
+      sourceRings[0] as unknown as polygonClipping.Geom,
+      ...(sourceRings.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords;
+
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      for (const id of ['45922126', '5207303141']) {
+        assert.ok(junctionRanges.some((range) => range.info.id.includes('osm_' + id)),
+          'Expected a real graph junction patch at OSM node/' + id);
+      }
+      const mesh = scene.roadsGroup.children.find((o) => o.name === 'Roads_secondary') as THREE.Mesh;
+      assert.ok(mesh, 'Expected a real secondary-road surface mesh');
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex();
+      const triangles: MultiPolygonCoords = [];
+      for (let face = 0; face < (idx ? idx.count / 3 : pos.count / 3); face++) {
+        const ids = [0, 1, 2].map((i) => idx ? idx.getX(face * 3 + i) : face * 3 + i);
+        if (ids.some((id) => Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001)) continue;
+        const p = ids.map((id) => [pos.getX(id), pos.getZ(id)] as [number, number]);
+        const cross = Math.abs(
+          (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) -
+          (p[1][1] - p[0][1]) * (p[2][0] - p[0][0])
+        );
+        if (cross < 1e-8) continue;
+        triangles.push([[p[0], p[1], p[2], p[0]]]);
+      }
+      assert.ok(triangles.length > 0);
+      const rendered = polygonClipping.union(
+        triangles[0] as unknown as polygonClipping.Geom,
+        ...(triangles.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+
+      for (const node of junctions) {
+        const x = node.x, z = node.z;
+        const localBox: MultiPolygonCoords = [[[
+          [x - 9, z - 9], [x + 9, z - 9], [x + 9, z + 9],
+          [x - 9, z + 9], [x - 9, z - 9],
+        ]]];
+        const original = polygonClipping.intersection(
+          sourceUnion as unknown as polygonClipping.Geom,
+          localBox as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const emitted = polygonClipping.intersection(
+          rendered as unknown as polygonClipping.Geom,
+          localBox as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const missingArea = computeMultiPolygonArea(polygonClipping.difference(
+          original as unknown as polygonClipping.Geom,
+          emitted as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords);
+        const addedArea = computeMultiPolygonArea(polygonClipping.difference(
+          emitted as unknown as polygonClipping.Geom,
+          original as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords);
+        assert.ok(missingArea < 0.30,
+          'Must retain source road footprint at node ' + node.rawOsmNodeId + ': ' + missingArea + 'm²');
+        assert.ok(addedArea > 0.40 && addedArea < 25,
+          'Must measurably soften BOTH outer shoulders at node ' +
+          node.rawOsmNodeId + ': ' + addedArea + 'm²');
+      }
+
+      // At 14m along the angular bisector of the two northern split arms,
+      // their actual source-width road surfaces leave an open center gap.
+      // The taper must never connect the branches through that void.
+      const northern = junctions[1];
+      const gx = northern.x + 4.57, gz = northern.z - 13.23;
+      const gapBox: MultiPolygonCoords = [[[
+        [gx - 0.20, gz - 0.20], [gx + 0.20, gz - 0.20],
+        [gx + 0.20, gz + 0.20], [gx - 0.20, gz + 0.20],
+        [gx - 0.20, gz - 0.20],
+      ]]];
+      const gapCovered = polygonClipping.intersection(
+        rendered as unknown as polygonClipping.Geom,
+        gapBox as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      assert.ok(computeMultiPolygonArea(gapCovered) < 0.001,
+        'Must keep the genuine opening between the one-way split branches');
     } finally {
       scene.dispose();
     }

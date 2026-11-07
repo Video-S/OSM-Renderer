@@ -1617,6 +1617,7 @@ function solveBoundaryDerivedJunctionNode(
   // Never change unrelated width transitions, vehicular junctions, or grade connections.
   const equalWidthFork = k === 3 && isPathJunction &&
     sortedBranches.every((branch) =>
+      branch.roadClass === 'cycleway' &&
       Math.abs(branch.width - sortedBranches[0].width) <= 1e-3
     );
   const acuteDivergence = equalWidthFork && sortedBranches.some((a, i) =>

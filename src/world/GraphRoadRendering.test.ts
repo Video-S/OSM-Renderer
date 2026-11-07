@@ -1771,7 +1771,13 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       );
 
       // Run full geometric triangle winding and normal audit + ZFightingValidator
-      const { integrityReport } = assertRoadGroupGeometryInvariants(graphScene);
+      const { integrityReport, faceRangesById } = assertRoadGroupGeometryInvariants(graphScene);
+      if (ds.name === 'Dense 270-Way Urban Road Network') {
+        assert.ok(
+          faceRangesById.has('road_edge:way/urb-v-6-0-0:seg_0:p_0'),
+          'Clipping at the diagonal crossing must preserve the connected vertical road surface'
+        );
+      }
 
       const gStats: GraphRoadRenderStats = graphScene.roadsGroup.userData.graphRoadStats;
       assert.ok(gStats, `Expected graphRoadStats on ${ds.name}`);

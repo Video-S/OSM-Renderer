@@ -215,3 +215,7 @@ When `infrastructureRenderOptions.roads === 'graph'`, Stage 6A–C of `GeometryB
 4. **Geometric Triangle Winding & Normal Audit (`auditGraphRoadMeshIntegrity`)**:
    - `auditGraphRoadMeshIntegrity(roadsRoot)` reads actual indexed triangle positions, computes geometric face normals via `cross(v1 - v0, v2 - v0)`, verifies that every non-degenerate (`area > 1e-6 m²`) horizontal at-grade road, path, step-tread, and junction triangle faces upward (`geomNormal.y > 0.99`) and agrees with stored vertex normals (`dot > 0.99`), reports degenerate triangles separately, and attributes any defect to `meshName`, `faceIndex`, `featureId`, `sourceFeatureId`, and world-space `vertices`.
 
+
+### Clipped road footprint finalization
+
+After Boolean subtraction, graph road remainders are conditioned on the coordinate grid. A polygon union resolves any folded boundaries introduced by conditioning before triangulation. The same finalized polygons supply clipping footprints and junction portal reconciliation. Winding, overlap, and continuity validation remain mandatory.

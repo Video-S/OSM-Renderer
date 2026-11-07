@@ -5,7 +5,7 @@ type: feature
 status: in_progress
 priority: high
 created: 2026-11-06
-updated: 2026-11-06
+updated: 2026-11-07
 ---
 
 # TKT-008: M2.3-E2 Graph-Driven Road Rendering and Junction Geometry
@@ -98,6 +98,14 @@ Prior to Stage E2:
 - Retained the full-footprint union as the safety fallback, and expanded eligible local taper joins from almost perfectly straight to gentle two-arm bends (outward-tangent dot <= -0.82) or uniquely identified through-pairs at three-arm forks (dot <= -0.92). A vehicular three-arm taper requires matching road classes; nearly tied candidates, insufficient edge-length budgets, and failed geometric validation fall back without forcing a taper.
 - `GraphRoadRendering.test.ts` test 21 covers a gently curving 6m-to-2m cycleway and a same-class three-arm vehicular fork, checking surface coverage, original approach widths, absence of square shoulders, source provenance, and the existing strict overlap/normal/seam invariants.
 - **Verification remains pending:** This GitHub-only editing environment cannot execute the repository's npm suite; no new pass count is claimed. TKT-008 stays in_progress, and E3-E5 remain out of scope.
+
+### 2026-11-07 — Clipped road footprint repair verified
+- Reproduced the current baseline with the committed Bun lockfile. The full suite had 165 passing tests and one failure in E2 scenario 10. The dense urban fixture lost `road_edge:way/urb-v-6-0-0:seg_0:p_0` after clipped polygon triangulation failed the winding check.
+- Resolve folded boundaries with a polygon union after remainder conditioning and before triangulation. The finalized polygon is also used for downstream clipping and portal reconciliation.
+- Added an explicit emitted-road assertion to the dense urban regression. Existing overlap, winding, and seam checks remain enforced.
+- Verification completed with exit code 0 for `node --import tsx --test src/world/*.test.ts` (166/166 passed), `npm run lint`, `npm run build`, and `npm run docs:api`. The direct Node invocation runs the same test files because the `npm test` launcher fails with EPERM opening its IPC socket in this sandbox.
+- Build emitted existing configuration and bundle-size warnings. API generation succeeded; generated reference churn was excluded because exported interfaces did not change.
+- Browser visual review is pending. This is a bounded footprint repair. TKT-008 remains `in_progress` awaiting owner acceptance.
 
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`

@@ -1142,6 +1142,12 @@ function solveBoundaryDerivedJunctionNode(
       if (i === j) continue;
       const other = sortedBranches[j];
       if (branch.edge.id === other.edge.id) continue;
+      // The longer clearance is needed only for similarly sized, same-class
+      // branches that genuinely travel alongside each other. Applying it to a
+      // narrow residential slip road joining a wide trunk road extends the
+      // whole trunk junction far beyond its established local trim budget.
+      if (branch.roadClass !== other.roadClass ||
+          Math.abs(branch.width - other.width) > 1e-3) continue;
       const dot = branch.dir[0] * other.dir[0] + branch.dir[1] * other.dir[1];
       if (dot <= 0) continue; // opposite through-arms do not overlap downstream
       const sine = Math.abs(branch.dir[0] * other.dir[1] -

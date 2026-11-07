@@ -2505,7 +2505,12 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       return 3.0;
     }
 
-    const nominal = isOneWay ? Math.max(base * 0.62, 3.6) : base;
+    // OSM oneway= specifies traversal direction, not a minimum motor-vehicle
+    // lane width. Applying the 3.6m motor-road floor to cycleways incorrectly
+    // widens one-way bicycle paths (e.g. the Prins Hendrikkade southern fork).
+    const nominal = roadClass === 'cycleway'
+      ? base
+      : isOneWay ? Math.max(base * 0.62, 3.6) : base;
 
     if (props.width) {
       const parsed = parseFloat(String(props.width));

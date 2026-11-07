@@ -35,6 +35,7 @@ import { UnchainedRoadPart } from './infrastructure/topology/types';
 import realOsmExtracts from './prototype/realOsmRailwayExtracts.json';
 import prinsHendrikkadeForkFixture from './prototype/PrinsHendrikkadeForkFixture.json';
 import veloursstraatSplitFixture from './prototype/VeloursstraatSplitFixture.json';
+import parallelwegSplitFixture from './prototype/ParallelwegSplitFixture.json';
 
 /**
  * Helper to create a synthetic `RoadFeature` together with its matching raw `topologySource`
@@ -4422,6 +4423,146 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       ) as unknown as MultiPolygonCoords;
       assert.ok(computeMultiPolygonArea(gapCovered) < 0.001,
         'Must keep the genuine opening between the one-way split branches');
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('31. blends the asymmetric Parallelweg four-arm split without filling its central lane gap', () => {
+    // Real OSM report around node/45922214: 7.2m two-way secondary,
+    // two 4.464m one-way secondaries, and a 5.4m residential side arm.
+    // The narrow branches straddle the trunk at signed crosses
+    // +0.132 and -0.071. Their -0.00936 product narrowly missed the
+    // former arbitrary -0.01 cutoff despite genuine two-sided geometry.
+    const data = new LocalGeoJsonProvider().parseGeoJson(
+      parallelwegSplitFixture,
+      'Parallelweg LS four-arm split regression',
+      [6.7960455, 52.259573],
+      300
+    );
+    const sourceIds = [
+      'way/1450932220', 'way/1450932221',
+      'way/1450932222', 'way/6671177',
+    ];
+    const parts = data.topologySource?.roadParts ?? [];
+    assert.deepEqual(
+      [...new Set(parts.map((part) => part.sourceFeatureId))].sort(),
+      sourceIds.slice().sort(),
+      'All four complete original OSM ways must survive parsing'
+    );
+    assert.ok(parts.every((part) =>
+      part.rawOsmNodeIds.length === part.points.length &&
+      part.rawOsmNodeIds.includes('45922214')
+    ), 'Every incident way must retain the same authoritative OSM junction node');
+
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph', railways: 'legacy',
+    });
+    assert.ok(preview.graph);
+    const junction = [...preview.graph.roads.nodes.values()].find(
+      (node) => node.rawOsmNodeId === '45922214'
+    );
+    assert.ok(junction, 'The exact real OSM junction must survive graph simplification');
+    assert.equal(junction.degree, 4, 'The residential side arm must not be dropped');
+    const widths = junction.incidentEdgeIds.map((id) =>
+      preview.graph!.roads.edges.get(id)?.width
+    ).filter((v): v is number => typeof v === 'number').sort((a, b) => a - b);
+    assert.equal(widths.length, 4);
+    for (const [actual, expected] of widths.map((v, i) => [v, [4.464, 4.464, 5.4, 7.2][i]])) {
+      assert.ok(Math.abs(actual - expected) < 1e-3,
+        'A real split must preserve measured branch widths: ' + actual + ' vs ' + expected);
+    }
+
+    const sourceRings = parts.map((part) =>
+      buildRoadRibbonOutlineRing(part.points as [number, number][], part.width)
+    );
+    assert.equal(sourceRings.length, 4);
+    assert.ok(sourceRings.every((ring) => ring && ring.length > 0));
+    const originalUnion = polygonClipping.union(
+      sourceRings[0] as unknown as polygonClipping.Geom,
+      ...(sourceRings.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords;
+
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      assert.ok(junctionRanges.some((range) =>
+        range.info.id.includes('osm_45922214')
+      ), 'A provenance-traceable four-arm junction patch must be emitted');
+      const triangles: MultiPolygonCoords = [];
+      for (const obj of scene.roadsGroup.children) {
+        if (obj.name !== 'Roads_secondary' && obj.name !== 'Roads_residential') continue;
+        const mesh = obj as THREE.Mesh;
+        const pos = mesh.geometry.getAttribute('position');
+        const idx = mesh.geometry.getIndex();
+        for (let f = 0; f < (idx ? idx.count / 3 : pos.count / 3); f++) {
+          const ids = [0, 1, 2].map((n) => idx ? idx.getX(f * 3 + n) : f * 3 + n);
+          if (ids.some((id) =>
+            Math.abs(pos.getY(id) - ELEVATION_POLICY.ROAD_SURFACE) > 0.001
+          )) continue;
+          const p = ids.map((id) =>
+            [pos.getX(id), pos.getZ(id)] as [number, number]
+          );
+          const signedArea = Math.abs(
+            (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) -
+            (p[1][1] - p[0][1]) * (p[2][0] - p[0][0])
+          );
+          if (signedArea > 1e-8) {
+            triangles.push([[p[0], p[1], p[2], p[0]]]);
+          }
+        }
+      }
+      assert.ok(triangles.length > 0);
+      const emittedUnion = polygonClipping.union(
+        triangles[0] as unknown as polygonClipping.Geom,
+        ...(triangles.slice(1) as unknown as polygonClipping.Geom[])
+      ) as unknown as MultiPolygonCoords;
+
+      // Compare ACTUAL emitted triangles to original-width source footprints
+      // in a small square around the reported shoulder, not just solver stats.
+      const x = junction.x, z = junction.z;
+      const localBounds: MultiPolygonCoords = [[[
+        [x - 9, z - 9], [x + 9, z - 9], [x + 9, z + 9],
+        [x - 9, z + 9], [x - 9, z - 9],
+      ]]];
+      const sourceLocal = polygonClipping.intersection(
+        originalUnion as unknown as polygonClipping.Geom,
+        localBounds as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      const emittedLocal = polygonClipping.intersection(
+        emittedUnion as unknown as polygonClipping.Geom,
+        localBounds as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      const addedArea = computeMultiPolygonArea(polygonClipping.difference(
+        emittedLocal as unknown as polygonClipping.Geom,
+        sourceLocal as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords);
+      const missingArea = computeMultiPolygonArea(polygonClipping.difference(
+        sourceLocal as unknown as polygonClipping.Geom,
+        emittedLocal as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords);
+      assert.ok(addedArea > 2.0 && addedArea < 35,
+        'Both external shoulders must be blended, not a square source union: ' + addedArea + 'm²');
+      assert.ok(missingArea < 0.50,
+        'Every original full-width road must remain covered near the junction: ' + missingArea + 'm²');
+
+      // 35m southwest along the split, the lane centerlines are ~5.2m
+      // apart. Their 2.232m half-widths leave a genuine open gap.
+      const gx = x - 30.0, gz = z - 17.85;
+      const gapBounds: MultiPolygonCoords = [[[
+        [gx - 0.10, gz - 0.10], [gx + 0.10, gz - 0.10],
+        [gx + 0.10, gz + 0.10], [gx - 0.10, gz + 0.10],
+        [gx - 0.10, gz - 0.10],
+      ]]];
+      const gap = polygonClipping.intersection(
+        emittedUnion as unknown as polygonClipping.Geom,
+        gapBounds as unknown as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      assert.ok(computeMultiPolygonArea(gap) < 0.001,
+        'The legitimate gap between the two one-way branches must stay open');
     } finally {
       scene.dispose();
     }

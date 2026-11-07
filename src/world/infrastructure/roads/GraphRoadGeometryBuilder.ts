@@ -1482,50 +1482,55 @@ function solveBoundaryDerivedJunctionNode(
       );
     }
 
-    // Split/merge outer-curb transition. Preserve the original full-width
-    // stub, then add a small smooth-sided fin from the wide trunk's outer
-    // shoulder to THIS narrow branch's outer portal. Each side is independent:
-    // there is no bridge across the legitimate gap between the two branches.
+    // Split/merge outer-curb transition. Add a smooth one-sided width taper
+    // along each narrower branch's existing outside curb, leaving its inside
+    // curb and the real gap between the diverging branches unchanged. Use the
+    // SAME mitered offset vectors as the source ribbon at every vertex, then
+    // interpolate between vertices so even short multi-bend arms stay valid.
+    // Smoothstep gives zero change in width derivative at both ends.
     const splitOuter = splitMergeTransition?.outerBranches.find((b) => b.index === i);
     if (splitOuter && trimDist >= 2.0) {
       const trunk = sortedBranches[splitMergeTransition!.trunkIndex];
-      const forward: [number, number] = [-trunk.dir[0], -trunk.dir[1]];
-      const side = splitOuter.side;
-      const originOuter: [number, number] = [
-        snapCoord(nodeCenter[0] - forward[1] * side * trunk.width * 0.5),
-        snapCoord(nodeCenter[1] + forward[0] * side * trunk.width * 0.5),
-      ];
-      const branchOuter = side === 1 ? leftChain : rightChain;
-      const endOuter = branchOuter[branchOuter.length - 1];
-      const handleLength = Math.min(trimDist * 0.40, 3.5);
-      const p1: [number, number] = [
-        originOuter[0] + forward[0] * handleLength,
-        originOuter[1] + forward[1] * handleLength,
-      ];
-      const p2: [number, number] = [
-        endOuter[0] - tCutX * handleLength,
-        endOuter[1] - tCutZ * handleLength,
-      ];
-      const finRing: [number, number][] = [originOuter];
-      for (let step = 1; step <= 12; step++) {
-        const t = step / 12;
-        const u = 1 - t;
-        finRing.push([
-          snapCoord(u * u * u * originOuter[0] + 3 * u * u * t * p1[0] +
-            3 * u * t * t * p2[0] + t * t * t * endOuter[0]),
-          snapCoord(u * u * u * originOuter[1] + 3 * u * u * t * p1[1] +
-            3 * u * t * t * p2[1] + t * t * t * endOuter[1]),
-        ]);
-      }
-      // Follow the unchanged original outside curb backward from the portal.
-      // Do not insert the portal twice or introduce a new interior shortcut.
-      for (let c = branchOuter.length - 2; c >= 0; c--) {
-        finRing.push(branchOuter[c]);
-      }
-      finRing.push(originOuter);
-      if (!hasRingSelfIntersection(finRing) &&
-          computeMultiPolygonArea([[finRing]]) >= 0.05) {
-        splitMergeFins.push([finRing]);
+      const deltaHalfWidth = (trunk.width - bBranch.width) * 0.5;
+      const baseHalfWidth = bBranch.width * 0.5;
+      const branchOuter = splitOuter.side === 1 ? leftChain : rightChain;
+      const localLength = computePolylineLength(localPts);
+      if (deltaHalfWidth >= 0.25 && baseHalfWidth > 0.1 &&
+          localLength > 1.9 && localPts.length === branchOuter.length) {
+        const outerChain: [number, number][] = [];
+        const originalChain: [number, number][] = [];
+        let walked = 0;
+        for (let seg = 0; seg < localPts.length - 1; seg++) {
+          const p0 = localPts[seg], p1 = localPts[seg + 1];
+          const c0 = branchOuter[seg], c1 = branchOuter[seg + 1];
+          const segLength = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+          for (let step = 0; step < 4; step++) {
+            const t = step / 4;
+            const cx = p0[0] + (p1[0] - p0[0]) * t;
+            const cz = p0[1] + (p1[1] - p0[1]) * t;
+            const bx = c0[0] + (c1[0] - c0[0]) * t;
+            const bz = c0[1] + (c1[1] - c0[1]) * t;
+            const u = Math.min(1, (walked + segLength * t) / localLength);
+            const ease = (1 - u) * (1 - u) * (1 + 2 * u);
+            const grow = (deltaHalfWidth / baseHalfWidth) * ease;
+            originalChain.push([snapCoord(bx), snapCoord(bz)]);
+            outerChain.push([
+              snapCoord(bx + (bx - cx) * grow),
+              snapCoord(bz + (bz - cz) * grow),
+            ]);
+          }
+          walked += segLength;
+        }
+        const endOuter = branchOuter[branchOuter.length - 1];
+        outerChain.push(endOuter);
+        originalChain.push(endOuter);
+        const finRing: [number, number][] = [
+          ...outerChain, ...originalChain.slice(0, -1).reverse(), outerChain[0],
+        ];
+        if (!hasRingSelfIntersection(finRing) &&
+            computeMultiPolygonArea([[finRing]]) >= 0.05) {
+          splitMergeFins.push([finRing]);
+        }
       }
     }
 

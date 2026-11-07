@@ -1134,10 +1134,32 @@ function solveBoundaryDerivedJunctionNode(
   ]);
   const maxBranchWidth = Math.max(...sortedBranches.map((b) => b.width));
 
+  // Nearly parallel branches that diverge from the same OSM node can have
+  // overlapping full-width footprints well beyond the usual width-based trim.
+  // For example, two 2.4m cycleways at 17 degrees still overlap at ~8m.
+  // Keep their shared overlap in ONE local junction patch instead of ending
+  // that patch early and leaving square-ended ribbon clipping artifacts.
+  const acuteOverlapClearance = sortedBranches.map((branch, i) => {
+    let clearance = 0;
+    for (let j = 0; j < sortedBranches.length; j++) {
+      if (i === j) continue;
+      const other = sortedBranches[j];
+      if (branch.edge.id === other.edge.id) continue;
+      const dot = branch.dir[0] * other.dir[0] + branch.dir[1] * other.dir[1];
+      if (dot <= 0) continue; // opposite through-arms do not overlap downstream
+      const sine = Math.abs(branch.dir[0] * other.dir[1] -
+                            branch.dir[1] * other.dir[0]);
+      if (sine < 0.08) continue; // near-coincident rays are handled as ambiguous
+      const clearAt = (branch.width + other.width) * 0.5 / sine + 0.15;
+      clearance = Math.max(clearance, Math.min(clearAt, maxBranchWidth * 6));
+    }
+    return clearance;
+  });
+
   // Local trim budget per branch: bounded by a tight local radius multiple of road width and
   // total edge length budget (never clamped by firstSegmentLength so curved roads with dense vertices
   // retain their full curvature through the junction).
-  const maxTrimDists: number[] = sortedBranches.map((bBranch) => {
+  const maxTrimDists: number[] = sortedBranches.map((bBranch, i) => {
     const tRec = trimmedEndpoints.get(bBranch.edge.id);
     const existingOtherTrim = tRec
       ? bBranch.endpoint === 'start'
@@ -1145,7 +1167,10 @@ function solveBoundaryDerivedJunctionNode(
         : tRec.startTrimDist
       : 0;
     const isSelfLoop = bBranch.edge.fromNodeId === bBranch.edge.toNodeId;
-    const localRadiusCap = Math.max(bBranch.width, maxBranchWidth) * 1.65;
+    const localRadiusCap = Math.max(
+      Math.max(bBranch.width, maxBranchWidth) * 1.65,
+      acuteOverlapClearance[i]
+    );
     const maxByTotalRatio = Math.max(
       0.12,
       bBranch.totalEdgeLength * (isSelfLoop ? 0.32 : 0.42)
@@ -1274,7 +1299,8 @@ function solveBoundaryDerivedJunctionNode(
     const taperTrimDist = isTransitionArm
       ? Math.max(rawTrimDist, maxBranchWidth * 0.5, transitionDelta * 0.65)
       : rawTrimDist;
-    const trimDist = Math.min(taperTrimDist, maxTrimDists[i]);
+    const requestedTrimDist = Math.max(taperTrimDist, acuteOverlapClearance[i]);
+    const trimDist = Math.min(requestedTrimDist, maxTrimDists[i]);
     trimDists.push(trimDist);
   }
 

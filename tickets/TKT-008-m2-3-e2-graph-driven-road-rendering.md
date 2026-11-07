@@ -107,6 +107,13 @@ Prior to Stage E2:
 - Build emitted existing configuration and bundle-size warnings. API generation succeeded; generated reference churn was excluded because exported interfaces did not change.
 - Browser visual review is pending. This is a bounded footprint repair. TKT-008 remains `in_progress` awaiting owner acceptance.
 
+### 2026-11-07 — Source-derived Amsterdam fork and short-connector investigation (pending verification)
+- The owner supplied the full 8,437-feature Amsterdam GeoJSON and identified `way/682105414` (Prins Hendrikkade cycleway) and `way/326971927` (Martelaarsgracht tertiary road). These are real OSM source features, not synthetic feature guesses.
+- At `node/6387677253`, `way/682105412` and `way/1068343582` leave a 2.4m cycleway fork only ~17 degrees apart. Their full-width strips overlap roughly 8m downstream; the old junction width-based `1.65 * width` cap was ~4m. The graph road junction solver now extends its local patch according to the overlap clearance of confirmed acute incident arms, subject to the existing edge-length budget. It does not alter original centerlines or widths.
+- Added source-derived E2 test 22 for this exact OSM fork: verifies its generated path patch fills the overlap 6m from the node, remains inspectable and keeps all three way identities.
+- `way/326971927` is a 2.13m-long tertiary segment between OSM nodes `2316882945` and `543807770`, with two connected 3.5m Prins Hendrikkade cycleways at the latter node. Added source-derived test 23 covering its full-width short-connector provenance and overlapping road/path geometry. No unverified special-case renderer change was made for this feature.
+- **Verification pending:** This GitHub-only editing environment cannot run the repository npm commands. Last verified 166/166 baseline predates these two additions. TKT-008 remains in_progress; no E3-E5 work.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

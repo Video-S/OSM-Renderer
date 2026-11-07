@@ -1,0 +1,232 @@
+{
+  "type": "FeatureCollection",
+  "name": "Parallelweg LS four-arm split-merge at OSM node/45922214",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "way/1450932220",
+      "properties": {
+        "bicycle": "no",
+        "highway": "secondary",
+        "lanes": "2",
+        "lit": "yes",
+        "maxspeed": "50",
+        "name": "Parallelweg LS",
+        "oneway": "no",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/1450932220",
+        "_nodeIds": [
+          "45922214",
+          "10879687825",
+          "45921663"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7960455,
+            52.259573
+          ],
+          [
+            6.7963086,
+            52.2594857
+          ],
+          [
+            6.7965247,
+            52.2594142
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/1450932221",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "2",
+        "lit": "yes",
+        "maxspeed": "50",
+        "name": "Parallelweg LS",
+        "oneway": "yes",
+        "placement": "middle_of:2",
+        "surface": "asphalt",
+        "turn:lanes": "left|",
+        "id": "way/1450932221",
+        "_nodeIds": [
+          "45922214",
+          "13306898065",
+          "13306898066",
+          "45922875"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7960455,
+            52.259573
+          ],
+          [
+            6.7957931,
+            52.2596854
+          ],
+          [
+            6.7956,
+            52.2597635
+          ],
+          [
+            6.7954673,
+            52.2598117
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/1450932222",
+      "properties": {
+        "bicycle": "use_sidepath",
+        "highway": "secondary",
+        "lanes": "1",
+        "lit": "yes",
+        "maxspeed": "50",
+        "name": "Parallelweg LS",
+        "oneway": "yes",
+        "source:maxspeed": "NL:urban",
+        "surface": "asphalt",
+        "id": "way/1450932222",
+        "_nodeIds": [
+          "2386918113",
+          "2386918109",
+          "13252099448",
+          "13306898064",
+          "13252099463",
+          "6927089924",
+          "6841703661",
+          "13306898070",
+          "13931666523",
+          "45922214"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7938571,
+            52.2603493
+          ],
+          [
+            6.794026,
+            52.2602614
+          ],
+          [
+            6.7940937,
+            52.2602349
+          ],
+          [
+            6.7942184,
+            52.26019
+          ],
+          [
+            6.7945657,
+            52.2600691
+          ],
+          [
+            6.7947381,
+            52.2600063
+          ],
+          [
+            6.7949469,
+            52.2599322
+          ],
+          [
+            6.7954276,
+            52.2597665
+          ],
+          [
+            6.795807,
+            52.2596392
+          ],
+          [
+            6.7960455,
+            52.259573
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/6671177",
+      "properties": {
+        "highway": "residential",
+        "lit": "yes",
+        "maxspeed": "30",
+        "name": "Trijpstraat",
+        "smoothness": "good",
+        "source:maxspeed": "NL:zone30",
+        "surface": "paving_stones",
+        "id": "way/6671177",
+        "_nodeIds": [
+          "45922214",
+          "605034676",
+          "5869860531",
+          "5070278847",
+          "5869860533",
+          "45924227",
+          "5869860532",
+          "5070278844",
+          "13252099553",
+          "45926784"
+        ]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            6.7960455,
+            52.259573
+          ],
+          [
+            6.7961096,
+            52.2596369
+          ],
+          [
+            6.7961267,
+            52.259654
+          ],
+          [
+            6.7963968,
+            52.259931
+          ],
+          [
+            6.7964327,
+            52.2599728
+          ],
+          [
+            6.7964686,
+            52.2600195
+          ],
+          [
+            6.7964914,
+            52.2600594
+          ],
+          [
+            6.7965352,
+            52.2601773
+          ],
+          [
+            6.7966984,
+            52.2606465
+          ],
+          [
+            6.7967103,
+            52.2606806
+          ]
+        ]
+      }
+    }
+  ]
+}

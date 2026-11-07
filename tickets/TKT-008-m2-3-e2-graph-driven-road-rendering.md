@@ -122,6 +122,13 @@ Prior to Stage E2:
 - Real source follow-up: `way/682105414` also participates in a separate 2.4m-to-3.5m three-cycleway junction at `node/3192273979`, and `way/326971927` is a 2.13m tertiary connector near `node/2316882945` and `node/543807770`. A different local source configuration may still need investigation if the updated rendering does not improve.
 - **Verification pending:** npm tests, lint, build, API docs and browser comparison have not been run in this GitHub editing session. TKT-008 remains `in_progress`.
 
+### 2026-11-07 — Isolated real-OSM junction visual lab (pending verification)
+- Created `src/world/prototype/PrinsHendrikkadeForkFixture.json` from the project owner's original Amsterdam GeoJSON: exactly the three cycleways meeting at explicit OSM node `3192273979` (ways `682105414`, `730316728`, `741023803`), with their original coordinates, node IDs, road tags, and 3.5m tagged branch width.
+- Added `?fixture=prins-fork` to application initialization: parses the local file using `LocalGeoJsonProvider` around the shared node (60m clip), focuses the existing camera (zoom 8, azimuth 45 by default), and defaults to `topologyRoads=graph`. An explicit `topologyRoads=legacy` permits direct A/B comparison using the same data.
+- Added `GraphRoadRendering.test.ts` test 24 for fixture ingestion, shared-node degree 3, 2.4m/2.4m/3.5m preserved widths, scene geometry validity, and path junction generation.
+- **No production geometry algorithm was changed.** Visual reporting is intentionally delegated to project-owner screenshots; no screenshot automation or debug overlay is introduced. TKT-008 stays `in_progress`.
+- **Verification pending:** GitHub-only editing access cannot run npm commands; run `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` before acceptance. No new passing test count is claimed.
+
 ## Related files and documentation
 - Source: `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`

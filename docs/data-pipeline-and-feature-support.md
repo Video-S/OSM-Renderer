@@ -71,6 +71,15 @@ The pipeline classifies OSM tags into strongly typed categories defined in `src/
 | **Barriers & Fences** | `barrier=wall`, `fence`, `hedge` | **Full** | **Partial** | Linear ribbons or extrusions at ground level. |
 | **Point Landmarks** | `amenity=fountain`, `historic=monument`, `natural=tree` | **Partial** | **Partial** | Instanced geometric markers (trees, benches, monuments). |
 
+### Road Width Inference & Propagation (`LocalGeoJsonProvider.getRoadWidth`)
+`LocalGeoJsonProvider.parseGeoJson()` resolves physical road width once per feature via `getRoadWidth(roadClass, props, classification.defaultWidth)` and assigns the identical width to both `topologySource.roadParts` (`UnchainedRoadPart.width`) and `mapData.roads` (`RoadFeature.width`), which then propagates unchanged through `RoadEdge.width`, `RoadEdgeRenderDescriptor.width`, and `GraphRoadGeometryBuilder` (`edge.width * roadWidthMultiplier`):
+1. **Explicit Physical Width (`width=*`)**: Valid finite positive `props.width` (`Number.isFinite(parsed) && parsed > 0`) takes top precedence across all road-category features, including `highway=*_link` sliproads, `service=parking_aisle|driveway`, and subtypes with a catalogue `defaultWidth` (`railway=platform`, `aeroway=runway|taxiway`, `route=ferry`, `man_made=pier`, `leisure=track`, `man_made=goods_conveyor|cutline`).
+2. **Catalogue Subtype Default Width (`classification.defaultWidth`)**: When no valid `width=*` is present, subtypes with an explicit catalogue default width retain that width (`runway: 28.0 m`, `taxiway: 14.0 m`, `railway=platform: 4.2 m`, `leisure=track: 4.0 m`, `man_made=pier: 3.8 m`, `route=ferry: 3.0 m`, `man_made=cutline: 3.0 m`, `man_made=goods_conveyor: 2.2 m`).
+3. **Sliproad / Link Ways (`highway=*_link`)**: Computed as `Math.min(Math.max(base * 0.55, 3.6), 5.0)` from `base = ROAD_CLASS_WIDTHS[roadClass]`.
+4. **Subordinated Service Ways (`service=parking_aisle|driveway`)**: `roadClass === 'service'` with case-insensitive `service=parking_aisle` or `service=driveway` yields `3.0 m`.
+5. **Non-Vehicular Ways (`isNonVehicularRoadClass(roadClass)`)**: Non-vehicular paths and spaces (`path: 1.8 m`, `footway: 2.2 m`, `steps: 2.2 m`, `cycleway: 2.4 m`, `bridleway: 2.6 m`, `track: 3.2 m`, `pier: 3.8 m`, `pedestrian: 4.2 m`, `platform: 4.2 m`) always return their class base width `ROAD_CLASS_WIDTHS[roadClass]` regardless of `oneway=*` or `junction=roundabout`, preventing the `3.6 m` motor-vehicle single-lane floor from inflating or distorting non-vehicular widths.
+6. **Motor-Vehicle Carriageways**: Motor-vehicle ways with `oneway=yes|1|true|-1|reverse` or `junction=roundabout` yield `Math.max(base * 0.62, 3.6)`; bidirectional motor-vehicle ways yield `base = ROAD_CLASS_WIDTHS[roadClass]`. Per-segment `lanes=*` and `est_width=*` tags are intentionally not used for width calculation so erratic lane counts near intersections do not introduce abrupt width steps.
+
 ---
 
 ## 5. Topology, Node Indexing & Road/Railway/Cross-Modal Graphs (`ADR-0009`)

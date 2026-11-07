@@ -8,7 +8,7 @@
 
 > **clipPolylineToBox**(`points`, `minX`, `minZ`, `maxX`, `maxZ`, `rawOsmNodes?`): `object`
 
-Defined in: world/LocalGeoJsonProvider.ts:122
+Defined in: world/LocalGeoJsonProvider.ts:123
 
 Clips a 2D polyline to an axis-aligned bounding box [minX, minZ, maxX, maxZ] using Liang-Barsky.
 Preserves per-vertex OSM node IDs for unclipped original vertices and sets `undefined` on

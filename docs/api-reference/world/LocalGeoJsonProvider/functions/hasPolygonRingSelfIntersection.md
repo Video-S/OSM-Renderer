@@ -8,7 +8,7 @@
 
 > **hasPolygonRingSelfIntersection**(`ring`): `boolean`
 
-Defined in: world/LocalGeoJsonProvider.ts:336
+Defined in: world/LocalGeoJsonProvider.ts:337
 
 ## Parameters
 

@@ -29,6 +29,7 @@ import {
 } from './GeometryBuilder';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
+import { ROAD_CLASS_WIDTHS } from './FeatureCatalogue';
 import { MAP_THEMES } from '../styles/mapThemes';
 import { UnchainedRoadPart } from './infrastructure/topology/types';
 import realOsmExtracts from './prototype/realOsmRailwayExtracts.json';
@@ -3488,4 +3489,684 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('26. infers consistent physical widths for one-way versus bidirectional non-vehicular ways and comparable motor-vehicle segments without explicit width tags', () => {
+    const provider = new LocalGeoJsonProvider();
+
+    // 1. Verify Prins Hendrikkade southern cycleway fork (two oneway=yes ways + one bidirectional way)
+    const prinsData = provider.parseGeoJson(
+      prinsHendrikkadeForkFixture,
+      'Prins Hendrikkade Width Consistency',
+      [4.8979247, 52.3773823],
+      60
+    );
+    assert.equal(prinsData.roads.length, 3);
+    for (const r of prinsData.roads) {
+      assert.equal(r.width, 2.4, `Expected mapData.roads[${r.id}] width 2.4m, got ${r.width}`);
+    }
+    for (const part of prinsData.topologySource?.roadParts ?? []) {
+      assert.equal(part.width, 2.4, `Expected roadPart[${part.id}] width 2.4m, got ${part.width}`);
+    }
+
+    // 2. Verify all non-vehicular classes, service ways, and *_link classes receive identical widths
+    // regardless of oneway=yes, oneway=-1, oneway=1, oneway=true, oneway=reverse, oneway=no, omitted oneway, or junction=roundabout.
+    const directionInvariantCases: Array<{
+      highway: string;
+      expectedClass: RoadClass;
+      expectedWidth: number;
+      extraProps?: Record<string, string>;
+    }> = [
+      { highway: 'cycleway', expectedClass: 'cycleway', expectedWidth: ROAD_CLASS_WIDTHS.cycleway },
+      { highway: 'footway', expectedClass: 'footway', expectedWidth: ROAD_CLASS_WIDTHS.footway },
+      { highway: 'path', expectedClass: 'path', expectedWidth: ROAD_CLASS_WIDTHS.path },
+      {
+        highway: 'path',
+        expectedClass: 'path',
+        expectedWidth: ROAD_CLASS_WIDTHS.path,
+        extraProps: { bicycle: 'yes' },
+      },
+      {
+        highway: 'path',
+        expectedClass: 'cycleway',
+        expectedWidth: ROAD_CLASS_WIDTHS.cycleway,
+        extraProps: { bicycle: 'designated' },
+      },
+      {
+        highway: 'path',
+        expectedClass: 'bridleway',
+        expectedWidth: ROAD_CLASS_WIDTHS.bridleway,
+        extraProps: { horse: 'designated' },
+      },
+      { highway: 'steps', expectedClass: 'steps', expectedWidth: ROAD_CLASS_WIDTHS.steps },
+      { highway: 'bridleway', expectedClass: 'bridleway', expectedWidth: ROAD_CLASS_WIDTHS.bridleway },
+      { highway: 'track', expectedClass: 'track', expectedWidth: ROAD_CLASS_WIDTHS.track },
+      { highway: 'pedestrian', expectedClass: 'pedestrian', expectedWidth: ROAD_CLASS_WIDTHS.pedestrian },
+      { highway: 'platform', expectedClass: 'platform', expectedWidth: ROAD_CLASS_WIDTHS.platform },
+      { highway: 'service', expectedClass: 'service', expectedWidth: ROAD_CLASS_WIDTHS.service },
+      {
+        highway: 'service',
+        expectedClass: 'service',
+        expectedWidth: 3.0,
+        extraProps: { service: 'parking_aisle' },
+      },
+      {
+        highway: 'service',
+        expectedClass: 'service',
+        expectedWidth: 3.0,
+        extraProps: { service: 'driveway' },
+      },
+      { highway: 'motorway_link', expectedClass: 'motorway', expectedWidth: 5.0 },
+      { highway: 'primary_link', expectedClass: 'primary', expectedWidth: 4.675 },
+      { highway: 'secondary_link', expectedClass: 'secondary', expectedWidth: 3.96 },
+      { highway: 'tertiary_link', expectedClass: 'tertiary', expectedWidth: 3.6 },
+    ];
+
+    const directionVariants: Array<Record<string, string>> = [
+      {},
+      { oneway: 'no' },
+      { oneway: 'yes' },
+      { oneway: '1' },
+      { oneway: 'true' },
+      { oneway: '-1' },
+      { oneway: 'reverse' },
+      { junction: 'roundabout' },
+    ];
+
+    const motorVehicleClasses: Array<{
+      highway: string;
+      expectedClass: RoadClass;
+      twoWayWidth: number;
+      oneWayWidth: number;
+    }> = [
+      {
+        highway: 'living_street',
+        expectedClass: 'living_street',
+        twoWayWidth: ROAD_CLASS_WIDTHS.living_street,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.living_street * 0.62, 3.6),
+      },
+      {
+        highway: 'unclassified',
+        expectedClass: 'unclassified',
+        twoWayWidth: ROAD_CLASS_WIDTHS.unclassified,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.unclassified * 0.62, 3.6),
+      },
+      {
+        highway: 'residential',
+        expectedClass: 'residential',
+        twoWayWidth: ROAD_CLASS_WIDTHS.residential,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.residential * 0.62, 3.6),
+      },
+      {
+        highway: 'tertiary',
+        expectedClass: 'tertiary',
+        twoWayWidth: ROAD_CLASS_WIDTHS.tertiary,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.tertiary * 0.62, 3.6),
+      },
+      {
+        highway: 'secondary',
+        expectedClass: 'secondary',
+        twoWayWidth: ROAD_CLASS_WIDTHS.secondary,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.secondary * 0.62, 3.6),
+      },
+      {
+        highway: 'primary',
+        expectedClass: 'primary',
+        twoWayWidth: ROAD_CLASS_WIDTHS.primary,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.primary * 0.62, 3.6),
+      },
+      {
+        highway: 'trunk',
+        expectedClass: 'trunk',
+        twoWayWidth: ROAD_CLASS_WIDTHS.trunk,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.trunk * 0.62, 3.6),
+      },
+      {
+        highway: 'motorway',
+        expectedClass: 'motorway',
+        twoWayWidth: ROAD_CLASS_WIDTHS.motorway,
+        oneWayWidth: Math.max(ROAD_CLASS_WIDTHS.motorway * 0.62, 3.6),
+      },
+    ];
+
+    const features: any[] = [];
+    let idx = 0;
+    for (const c of directionInvariantCases) {
+      for (const dirProps of directionVariants) {
+        idx++;
+        const latOffset = idx * 0.0001;
+        features.push({
+          type: 'Feature',
+          id: `way/dir-test-${idx}`,
+          properties: {
+            id: `way/dir-test-${idx}`,
+            highway: c.highway,
+            ...(c.extraProps ?? {}),
+            ...dirProps,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.9000, 52.3700 + latOffset],
+              [4.9005, 52.3700 + latOffset],
+            ],
+          },
+        });
+      }
+    }
+
+    for (const m of motorVehicleClasses) {
+      for (const dirProps of directionVariants) {
+        idx++;
+        const latOffset = idx * 0.0001;
+        features.push({
+          type: 'Feature',
+          id: `way/dir-test-${idx}`,
+          properties: {
+            id: `way/dir-test-${idx}`,
+            highway: m.highway,
+            ...dirProps,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.9000, 52.3700 + latOffset],
+              [4.9005, 52.3700 + latOffset],
+            ],
+          },
+        });
+      }
+    }
+
+    const parsed = provider.parseGeoJson(
+      { type: 'FeatureCollection', features },
+      'Directionality Invariance Suite'
+    );
+    const partsById = new Map(
+      (parsed.topologySource?.roadParts ?? []).map((p) => [p.sourceFeatureId, p])
+    );
+    const roadsById = new Map(parsed.roads.map((r) => [r.sourceFeatureId, r]));
+
+    let checkIdx = 0;
+    for (const c of directionInvariantCases) {
+      for (const dirProps of directionVariants) {
+        checkIdx++;
+        const fid = `way/dir-test-${checkIdx}`;
+        const part = partsById.get(fid);
+        const road = roadsById.get(fid);
+        assert.ok(part, `Expected topology roadPart for ${fid}`);
+        assert.ok(road, `Expected legacy road for ${fid}`);
+        assert.equal(part.roadClass, c.expectedClass, `${fid} roadClass mismatch`);
+        assert.ok(
+          Math.abs(part.width - c.expectedWidth) < 1e-6,
+          `Expected ${fid} (${c.highway} ${JSON.stringify(dirProps)}) width ${c.expectedWidth}m, got ${part.width}m`
+        );
+        assert.equal(road.width, part.width, `${fid} mapData.roads.width must match roadPart.width`);
+      }
+    }
+
+    for (const m of motorVehicleClasses) {
+      for (const dirProps of directionVariants) {
+        checkIdx++;
+        const fid = `way/dir-test-${checkIdx}`;
+        const part = partsById.get(fid);
+        const road = roadsById.get(fid);
+        assert.ok(part, `Expected topology roadPart for ${fid}`);
+        assert.ok(road, `Expected legacy road for ${fid}`);
+        assert.equal(part.roadClass, m.expectedClass, `${fid} roadClass mismatch`);
+        const isOneWayVariant =
+          dirProps.oneway === 'yes' ||
+          dirProps.oneway === '1' ||
+          dirProps.oneway === 'true' ||
+          dirProps.oneway === '-1' ||
+          dirProps.oneway === 'reverse' ||
+          dirProps.junction === 'roundabout';
+        const expectedW = isOneWayVariant ? m.oneWayWidth : m.twoWayWidth;
+        assert.ok(
+          Math.abs(part.width - expectedW) < 1e-6,
+          `Expected ${fid} (${m.highway} ${JSON.stringify(dirProps)}) width ${expectedW}m, got ${part.width}m`
+        );
+        assert.equal(road.width, part.width, `${fid} mapData.roads.width must match roadPart.width`);
+      }
+    }
+
+    // 3. Verify that non-vehicular paths/footways transitioning from oneway=yes to bidirectional at a shared
+    // degree-2 node maintain equal width (2.2m for footway, 1.8m for path) and use continuous shared portals
+    // rather than an artificial 3.6m width discontinuity.
+    const continuityGeoJson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'way/path-oneway',
+          properties: {
+            id: 'way/path-oneway',
+            highway: 'path',
+            bicycle: 'yes',
+            oneway: 'yes',
+            nodes: ['n1', 'n2'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.8995, 52.3780],
+              [4.9000, 52.3780],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          id: 'way/path-twoway',
+          properties: {
+            id: 'way/path-twoway',
+            highway: 'path',
+            bicycle: 'yes',
+            nodes: ['n2', 'n3'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.9000, 52.3780],
+              [4.9005, 52.3780],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          id: 'way/foot-oneway',
+          properties: {
+            id: 'way/foot-oneway',
+            highway: 'footway',
+            oneway: 'yes',
+            nodes: ['f1', 'f2'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.8995, 52.3783],
+              [4.9000, 52.3783],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          id: 'way/foot-twoway',
+          properties: {
+            id: 'way/foot-twoway',
+            highway: 'footway',
+            nodes: ['f2', 'f3'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.9000, 52.3783],
+              [4.9005, 52.3783],
+            ],
+          },
+        },
+      ],
+    };
+
+    const contData = provider.parseGeoJson(
+      continuityGeoJson,
+      'One-Way To Two-Way Continuity',
+      [4.9000, 52.37815]
+    );
+    const contScene = buildGraphRoadScene(contData);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(contScene);
+      const stats = contScene.roadsGroup.userData.graphRoadStats as GraphRoadRenderStats;
+      assert.equal(
+        junctionRanges.length,
+        0,
+        'Equal-width one-way to two-way path/footway transitions must not emit artificial unequal-width junction patches'
+      );
+      assert.equal(
+        stats.degree2ContinuityJoinCount,
+        2,
+        'Both path (1.8m) and footway (2.2m) degree-2 nodes must use shared continuity portals'
+      );
+    } finally {
+      contScene.dispose();
+    }
+  });
+
+  it('27. enforces explicit width=* tag precedence over inferred defaults across standard roads, sliproad links, parking aisles/driveways, and catalogue defaultWidth subtypes', () => {
+    const provider = new LocalGeoJsonProvider();
+
+    const explicitCases: Array<{
+      id: string;
+      props: Record<string, any>;
+      expectedClass: RoadClass;
+      expectedWidth: number;
+    }> = [
+      // Standard road & cycleway explicit overrides
+      {
+        id: 'way/exp-cycleway',
+        props: { highway: 'cycleway', oneway: 'yes', width: '3.5' },
+        expectedClass: 'cycleway',
+        expectedWidth: 3.5,
+      },
+      {
+        id: 'way/exp-residential-unit',
+        props: { highway: 'residential', width: '7.2 m' },
+        expectedClass: 'residential',
+        expectedWidth: 7.2,
+      },
+      // Sliproad *_link explicit overrides (previously bypassed by early return)
+      {
+        id: 'way/exp-motorway-link',
+        props: { highway: 'motorway_link', oneway: 'yes', width: '7.5' },
+        expectedClass: 'motorway',
+        expectedWidth: 7.5,
+      },
+      {
+        id: 'way/exp-primary-link',
+        props: { highway: 'primary_link', width: '6.4' },
+        expectedClass: 'primary',
+        expectedWidth: 6.4,
+      },
+      // Subordinated service way explicit overrides (previously bypassed by early return)
+      {
+        id: 'way/exp-parking-aisle',
+        props: { highway: 'service', service: 'parking_aisle', width: '4.4' },
+        expectedClass: 'service',
+        expectedWidth: 4.4,
+      },
+      {
+        id: 'way/exp-driveway',
+        props: { highway: 'service', service: 'Driveway', width: '2.6' },
+        expectedClass: 'service',
+        expectedWidth: 2.6,
+      },
+      // Catalogue defaultWidth road-category subtypes (previously bypassed getRoadWidth via classification.defaultWidth || ...)
+      {
+        id: 'way/exp-runway',
+        props: { aeroway: 'runway', width: '45' },
+        expectedClass: 'runway',
+        expectedWidth: 45.0,
+      },
+      {
+        id: 'way/exp-taxiway',
+        props: { aeroway: 'taxiway', width: '18.5' },
+        expectedClass: 'taxiway',
+        expectedWidth: 18.5,
+      },
+      {
+        id: 'way/exp-pier',
+        props: { man_made: 'pier', width: '6.0' },
+        expectedClass: 'pier',
+        expectedWidth: 6.0,
+      },
+      {
+        id: 'way/exp-railway-platform',
+        props: { railway: 'platform', width: '3.1' },
+        expectedClass: 'platform',
+        expectedWidth: 3.1,
+      },
+      {
+        id: 'way/exp-leisure-track',
+        props: { leisure: 'track', width: '6.2' },
+        expectedClass: 'track',
+        expectedWidth: 6.2,
+      },
+      {
+        id: 'way/exp-ferry',
+        props: { route: 'ferry', width: '5.5' },
+        expectedClass: 'path',
+        expectedWidth: 5.5,
+      },
+      {
+        id: 'way/exp-cutline',
+        props: { man_made: 'cutline', width: '4.8' },
+        expectedClass: 'path',
+        expectedWidth: 4.8,
+      },
+      // Invalid width strings must fall back cleanly to their respective subtype/class defaults
+      {
+        id: 'way/fallback-zero',
+        props: { highway: 'residential', width: '0' },
+        expectedClass: 'residential',
+        expectedWidth: 5.4,
+      },
+      {
+        id: 'way/fallback-negative',
+        props: { highway: 'service', service: 'driveway', width: '-3.5' },
+        expectedClass: 'service',
+        expectedWidth: 3.0,
+      },
+      {
+        id: 'way/fallback-nan',
+        props: { highway: 'motorway_link', width: 'unknown' },
+        expectedClass: 'motorway',
+        expectedWidth: 5.0,
+      },
+      {
+        id: 'way/fallback-infinity',
+        props: { leisure: 'track', width: 'Infinity' },
+        expectedClass: 'track',
+        expectedWidth: 4.0,
+      },
+    ];
+
+    const features = explicitCases.map((c, i) => ({
+      type: 'Feature',
+      id: c.id,
+      properties: {
+        id: c.id,
+        ...c.props,
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [4.9000, 52.3700 + i * 0.0002],
+          [4.9006, 52.3700 + i * 0.0002],
+        ],
+      },
+    }));
+
+    const data = provider.parseGeoJson(
+      { type: 'FeatureCollection', features },
+      'Explicit Width Precedence Suite'
+    );
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph',
+      railways: 'legacy',
+    });
+    assert.ok(preview.graph);
+    assert.ok(preview.descriptors);
+    assert.equal(preview.validation?.isValid, true);
+
+    const roadById = new Map(data.roads.map((r) => [r.sourceFeatureId, r]));
+    const partById = new Map(
+      (data.topologySource?.roadParts ?? []).map((p) => [p.sourceFeatureId, p])
+    );
+    const graphEdgeBySourceId = new Map(
+      [...preview.graph.roads.edges.values()].map((e) => [e.provenance.sourceFeatureIds[0], e])
+    );
+    const descEdgeBySourceId = new Map(
+      preview.descriptors.roadEdges.map((d) => [d.sourceFeatureId, d])
+    );
+
+    for (const c of explicitCases) {
+      const road = roadById.get(c.id);
+      const part = partById.get(c.id);
+      const gEdge = graphEdgeBySourceId.get(c.id);
+      const dEdge = descEdgeBySourceId.get(c.id);
+      assert.ok(road && part && gEdge && dEdge, `Missing pipeline record for ${c.id}`);
+      assert.equal(road.roadClass, c.expectedClass, `${c.id} roadClass`);
+      assert.ok(
+        Math.abs(road.width - c.expectedWidth) < 1e-6,
+        `${c.id} mapData.roads width expected ${c.expectedWidth}, got ${road.width}`
+      );
+      assert.equal(part.width, road.width, `${c.id} topologySource.roadParts width mismatch`);
+      assert.equal(gEdge.width, road.width, `${c.id} RoadEdge.width mismatch`);
+      assert.equal(dEdge.width, road.width, `${c.id} RoadEdgeRenderDescriptor.width mismatch`);
+    }
+
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+    try {
+      const { faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+      for (const c of explicitCases) {
+        const range = [...faceRangesById.values()].find(
+          (r) => r.info.sourceFeatureId === c.id
+        );
+        assert.ok(range, `Expected rendered faceRange for ${c.id}`);
+        assert.equal(
+          range.info.width,
+          Number(c.expectedWidth.toFixed(1)),
+          `Expected inspectable width ${Number(c.expectedWidth.toFixed(1))} for ${c.id}`
+        );
+      }
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('28. preserves legitimate width differences and propagates exact scaled widths through graph edges, descriptors, and rendered 3D ribbons', () => {
+    const provider = new LocalGeoJsonProvider();
+
+    // Two connected cycleways along Z=0 (west -> center at 4.0m explicit width, center -> east at 2.4m default width)
+    // plus an isolated primary_link (4.675m) vs primary (8.5m) vs parking_aisle (3.0m)
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'way/cyc-wide-explicit',
+          properties: {
+            id: 'way/cyc-wide-explicit',
+            highway: 'cycleway',
+            width: '4.0',
+            nodes: ['c1', 'c2'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.8995, 52.3780],
+              [4.9000, 52.3780],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          id: 'way/cyc-narrow-default',
+          properties: {
+            id: 'way/cyc-narrow-default',
+            highway: 'cycleway',
+            nodes: ['c2', 'c3'],
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [4.9000, 52.3780],
+              [4.9005, 52.3780],
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = provider.parseGeoJson(geojson, 'Legitimate Width Difference Suite', [4.9000, 52.3780]);
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph',
+      railways: 'legacy',
+    });
+    assert.ok(preview.graph);
+    assert.ok(preview.descriptors);
+
+    // 1. Degree-2 simplification must be blocked at node c2 because 4.0m !== 2.4m
+    assert.equal(
+      preview.graph.roads.edges.size,
+      2,
+      'Genuine width difference (4.0m vs 2.4m) must block degree-2 edge contraction'
+    );
+    const sharedNode = [...preview.graph.roads.nodes.values()].find(
+      (n) => n.rawOsmNodeId === 'c2'
+    );
+    assert.ok(sharedNode, 'Shared node c2 must be retained');
+    assert.ok(
+      sharedNode.roles.includes('attribute_break'),
+      'Shared node c2 must be marked as an attribute_break'
+    );
+
+    const wideDesc = preview.descriptors.roadEdges.find(
+      (e) => e.sourceFeatureId === 'way/cyc-wide-explicit'
+    );
+    const narrowDesc = preview.descriptors.roadEdges.find(
+      (e) => e.sourceFeatureId === 'way/cyc-narrow-default'
+    );
+    assert.ok(wideDesc && narrowDesc);
+    assert.equal(wideDesc.width, 4.0);
+    assert.equal(narrowDesc.width, 2.4);
+
+    // 2. Render with roadWidthMultiplier = 1.5 -> wide ribbon must span 6.0m (±3.0m in Z),
+    // narrow ribbon must span 3.6m (±1.8m in Z), with a local transition patch at c2.
+    const multiplier = 1.5;
+    const scene = new GeometryBuilder({
+      roadWidthMultiplier: multiplier,
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+
+    try {
+      const { faceRangesById, junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      assert.equal(
+        junctionRanges.length,
+        1,
+        'Genuine unequal-width through-node must emit 1 local transition patch'
+      );
+
+      const wideRange = [...faceRangesById.values()].find(
+        (r) =>
+          r.info.sourceFeatureId === 'way/cyc-wide-explicit' &&
+          !r.info.id.startsWith('path-junction-')
+      );
+      const narrowRange = [...faceRangesById.values()].find(
+        (r) =>
+          r.info.sourceFeatureId === 'way/cyc-narrow-default' &&
+          !r.info.id.startsWith('path-junction-')
+      );
+      assert.ok(wideRange && narrowRange);
+      assert.equal(wideRange.info.width, 6.0, 'Scaled wide cycleway inspectable width must be 6.0m');
+      assert.equal(narrowRange.info.width, 3.6, 'Scaled narrow cycleway inspectable width must be 3.6m');
+
+      const cycMesh = scene.roadsGroup.children.find(
+        (c) => c.name === 'Roads_cycleway'
+      ) as THREE.Mesh;
+      assert.ok(cycMesh);
+      const pos = cycMesh.geometry.attributes.position;
+      const idx = cycMesh.geometry.index!;
+
+      const spanZForRange = (range: FaceFeatureRange): number => {
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        for (let f = range.startFace; f < range.endFace; f++) {
+          for (let k = 0; k < 3; k++) {
+            const vi = idx.getX(f * 3 + k);
+            const z = pos.getZ(vi);
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+          }
+        }
+        return maxZ - minZ;
+      };
+
+      const wideSpanZ = spanZForRange(wideRange);
+      const narrowSpanZ = spanZForRange(narrowRange);
+      assert.ok(
+        Math.abs(wideSpanZ - 6.0) < 0.05,
+        `Expected rendered wide ribbon Z-span ~6.0m, got ${wideSpanZ.toFixed(3)}m`
+      );
+      assert.ok(
+        Math.abs(narrowSpanZ - 3.6) < 0.05,
+        `Expected rendered narrow ribbon Z-span ~3.6m, got ${narrowSpanZ.toFixed(3)}m`
+      );
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });
+

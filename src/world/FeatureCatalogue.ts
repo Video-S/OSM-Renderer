@@ -510,12 +510,13 @@ export function classifyGeoJsonFeature(
 
     // Linear railway platform
     if (isLine && rType === 'platform') {
+      const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
       return {
         category: 'road',
         primaryTag: 'railway=platform',
         cartoLabel: 'Railway Boarding Platform',
         subtype: 'platform',
-        defaultWidth: 4.2,
+        defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : 4.2,
         isBridge,
         isTunnel,
         layer,
@@ -567,7 +568,10 @@ export function classifyGeoJsonFeature(
         primaryTag: service ? `railway=${rType} + service=${service}` : `railway=${rType}`,
         cartoLabel: label,
         subtype: matched.type,
-        defaultWidth: customWidth && !isNaN(customWidth) ? customWidth : matched.defaultWidth,
+        defaultWidth:
+          customWidth !== undefined && Number.isFinite(customWidth) && customWidth > 0
+            ? customWidth
+            : matched.defaultWidth,
         isBridge,
         isTunnel,
         layer,
@@ -716,7 +720,10 @@ export function classifyGeoJsonFeature(
         primaryTag: `waterway=${waterwayTag}${isIntermittent ? ' + intermittent=yes' : ''}${isTunnel ? ' + tunnel=yes' : ''}`,
         cartoLabel: `${prefix}${matched.label}`,
         subtype: matched.type,
-        defaultWidth: customWidth && !isNaN(customWidth) ? customWidth : matched.defaultWidth,
+        defaultWidth:
+          customWidth !== undefined && Number.isFinite(customWidth) && customWidth > 0
+            ? customWidth
+            : matched.defaultWidth,
         isBridge,
         isTunnel,
         layer,
@@ -956,12 +963,14 @@ export function classifyGeoJsonFeature(
   if (props.aeroway) {
     const aero = String(props.aeroway).toLowerCase();
     if (isLine && (aero === 'runway' || aero === 'taxiway')) {
+      const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
+      const fallbackWidth = aero === 'runway' ? 28.0 : 14.0;
       return {
         category: 'road',
         primaryTag: `aeroway=${aero}`,
         cartoLabel: aero === 'runway' ? 'Airport Runway' : 'Airport Taxiway',
         subtype: aero === 'runway' ? 'runway' : 'taxiway',
-        defaultWidth: aero === 'runway' ? 28.0 : 14.0,
+        defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : fallbackWidth,
         isBridge,
         isTunnel,
         layer,
@@ -1001,12 +1010,13 @@ export function classifyGeoJsonFeature(
 
   // Ferry Routes & Linear Piers / Leisure Tracks
   if (isLine && props.route === 'ferry') {
+    const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
     return {
       category: 'road',
       primaryTag: 'route=ferry',
       cartoLabel: 'Ferry Route',
       subtype: 'path',
-      defaultWidth: 3.0,
+      defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : 3.0,
       isBridge,
       isTunnel,
       layer,
@@ -1014,12 +1024,13 @@ export function classifyGeoJsonFeature(
   }
 
   if (isLine && props.man_made === 'pier') {
+    const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
     return {
       category: 'road',
       primaryTag: 'man_made=pier',
       cartoLabel: 'Pier / Landing Stage',
       subtype: 'pier',
-      defaultWidth: 3.8,
+      defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : 3.8,
       isBridge: true,
       isTunnel: false,
       layer,
@@ -1027,12 +1038,13 @@ export function classifyGeoJsonFeature(
   }
 
   if (isLine && props.leisure === 'track') {
+    const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
     return {
       category: 'road',
       primaryTag: 'leisure=track',
       cartoLabel: 'Non-Motorized Sports Running / Cycling Track',
       subtype: 'track',
-      defaultWidth: 4.0,
+      defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : 4.0,
       isBridge,
       isTunnel,
       layer,
@@ -1124,12 +1136,13 @@ export function classifyGeoJsonFeature(
     }
 
     if (manMadeTag === 'goods_conveyor' || manMadeTag === 'cutline') {
+      const customWidth = props.width !== undefined ? parseFloat(String(props.width).trim()) : NaN;
       return {
         category: 'road',
         primaryTag: `man_made=${manMadeTag}`,
         cartoLabel: manMadeTag === 'goods_conveyor' ? 'Materials Conveyor System' : 'Forest Cutline',
         subtype: 'path',
-        defaultWidth: 2.4,
+        defaultWidth: Number.isFinite(customWidth) && customWidth > 0 ? customWidth : 2.4,
         isBridge,
         isTunnel,
         layer,

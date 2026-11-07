@@ -29,6 +29,7 @@ import {
 import { WorldCoordinates } from './WorldCoordinates';
 import { MapDataProvider, MapRegionQuery } from './MapDataProvider';
 import { classifyGeoJsonFeature, ROAD_CLASS_WIDTHS } from './FeatureCatalogue';
+import { isNonVehicularRoadClass } from './ElevationPolicy';
 import {
   TopologicalNodeIndex,
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
@@ -1780,7 +1781,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         }
 
         const roadClass = (classification.subtype as RoadClass) || 'residential';
-        const width = classification.defaultWidth || this.getRoadWidth(roadClass, props);
+        const width = this.getRoadWidth(roadClass, props, classification.defaultWidth);
 
         const candidateLines: Array<{
           points: [number, number][];
@@ -2485,15 +2486,28 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     return undefined;
   }
 
-  private getRoadWidth(roadClass: RoadClass, props: RawGeoJsonProperties): number {
-    const hw = String(props.highway || '').toLowerCase();
-    const isLink = hw.endsWith('_link');
-    const isOneWay =
-      props.oneway === 'yes' ||
-      props.oneway === '1' ||
-      props.oneway === '-1' ||
-      props.junction === 'roundabout';
+  private getRoadWidth(
+    roadClass: RoadClass,
+    props: RawGeoJsonProperties,
+    catalogueDefaultWidth?: number
+  ): number {
+    if (props.width !== undefined && props.width !== null && String(props.width).trim() !== '') {
+      const parsed = parseFloat(String(props.width).trim());
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
 
+    if (
+      typeof catalogueDefaultWidth === 'number' &&
+      Number.isFinite(catalogueDefaultWidth) &&
+      catalogueDefaultWidth > 0
+    ) {
+      return catalogueDefaultWidth;
+    }
+
+    const hw = String(props.highway || '').trim().toLowerCase();
+    const isLink = hw.endsWith('_link');
     const base = ROAD_CLASS_WIDTHS[roadClass] || 5.4;
 
     if (isLink) {
@@ -2501,25 +2515,28 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     }
 
     // Subordinated service ways (driveways, parking aisles) are narrower
-    if (roadClass === 'service' && (props.service === 'parking_aisle' || props.service === 'driveway')) {
+    const serviceType = String(props.service || '').trim().toLowerCase();
+    if (roadClass === 'service' && (serviceType === 'parking_aisle' || serviceType === 'driveway')) {
       return 3.0;
     }
 
-    // OSM oneway= specifies traversal direction, not a minimum motor-vehicle
-    // lane width. Applying the 3.6m motor-road floor to cycleways incorrectly
-    // widens one-way bicycle paths (e.g. the Prins Hendrikkade southern fork).
-    const nominal = roadClass === 'cycleway'
-      ? base
-      : isOneWay ? Math.max(base * 0.62, 3.6) : base;
-
-    if (props.width) {
-      const parsed = parseFloat(String(props.width));
-      if (!isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
+    // Non-vehicular paths, cycleways, footways, steps, bridleways, tracks, pedestrian zones,
+    // platforms, and piers do not represent split dual-carriageway motor highways; applying the
+    // 3.6m motor-vehicle single-lane floor would invert widths for classes with base < 3.6m.
+    if (isNonVehicularRoadClass(roadClass)) {
+      return base;
     }
 
-    return nominal;
+    const onewayVal = String(props.oneway ?? '').trim().toLowerCase();
+    const isOneWay =
+      onewayVal === 'yes' ||
+      onewayVal === '1' ||
+      onewayVal === 'true' ||
+      onewayVal === '-1' ||
+      onewayVal === 'reverse' ||
+      String(props.junction ?? '').trim().toLowerCase() === 'roundabout';
+
+    return isOneWay ? Math.max(base * 0.62, 3.6) : base;
   }
 
   /**

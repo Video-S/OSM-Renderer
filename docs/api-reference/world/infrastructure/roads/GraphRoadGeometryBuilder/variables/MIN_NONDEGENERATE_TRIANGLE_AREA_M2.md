@@ -8,6 +8,6 @@
 
 > `const` **MIN\_NONDEGENERATE\_TRIANGLE\_AREA\_M2**: `0.000001` = `1e-6`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:95
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:92
 
 Minimum triangle area (`m²`) below which an indexed face is classified as degenerate.

@@ -8,7 +8,7 @@
 
 > **computeRingArea2D**(`ring`): `number`
 
-Defined in: world/LocalGeoJsonProvider.ts:325
+Defined in: world/LocalGeoJsonProvider.ts:326
 
 ## Parameters
 

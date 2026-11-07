@@ -165,6 +165,8 @@ export default function App() {
   const [hoveredFeature, setHoveredFeature] = useState<InspectableFeatureInfo | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedFeature, setSelectedFeature] = useState<InspectableFeatureInfo | null>(null);
+  const [selectedFeatures, setSelectedFeatures] = useState<InspectableFeatureInfo[]>([]);
+  const [focusedFeatureId, setFocusedFeatureId] = useState<string | null>(null);
 
   // Developer Tools Interface State
   const [isDevToolsOpen, setIsDevToolsOpen] = useState<boolean>(() => {
@@ -341,6 +343,72 @@ export default function App() {
         }));
       }
 
+      // Restore spatial area bounding box
+      if (pkg.selectedArea?.spatialBoxMeters) {
+        setSelectedBoxMeters(pkg.selectedArea.spatialBoxMeters);
+      } else if ((pkg as any).selectedBoxMeters) {
+        setSelectedBoxMeters((pkg as any).selectedBoxMeters);
+      } else {
+        setSelectedBoxMeters(null);
+      }
+
+      // Restore selected objects
+      if (Array.isArray(pkg.selectedObjects) && pkg.selectedObjects.length > 0) {
+        const restored: InspectableFeatureInfo[] = pkg.selectedObjects.map((obj) => ({
+          id: obj.id,
+          sourceFeatureId: obj.osmId || obj.id,
+          sourceFeatureIds: [obj.osmId || obj.id],
+          category: obj.category || 'Road & Way',
+          cartoLabel: obj.cartoLabel || obj.category || 'Feature',
+          primaryTag: obj.primaryTag || '',
+          subtype: obj.subtype || '',
+          width: obj.inferredWidth,
+          elevation: obj.elevation,
+          layer: obj.layer,
+          isBridge: obj.isBridge,
+          isTunnel: obj.isTunnel,
+          osmTags: obj.osmTags || {},
+          portalConnections: obj.incidentOsmIds?.map((osmId) => ({
+            roadFeatureId: osmId,
+            sourceFeatureId: osmId,
+            endpoint: 'start' as const,
+            left: [0, 0] as [number, number],
+            right: [0, 0] as [number, number],
+          })),
+        }));
+        setSelectedFeatures(restored);
+        const focusId = pkg.focusedFeatureId || restored[0].id;
+        setFocusedFeatureId(focusId);
+        const focusFeat = restored.find((f) => f.id === focusId) || restored[0];
+        setSelectedFeature(focusFeat);
+      } else if (pkg.inspection) {
+        const insp = pkg.inspection;
+        const single: InspectableFeatureInfo = {
+          id: insp.selectedFeatureId,
+          sourceFeatureId: insp.sourceFeatureIds?.[0] || insp.selectedFeatureId,
+          sourceFeatureIds: insp.sourceFeatureIds,
+          category: insp.category,
+          cartoLabel: insp.cartoLabel,
+          primaryTag: insp.primaryTag,
+          subtype: insp.subtype,
+          width: insp.inferredWidth,
+          elevation: insp.elevation,
+          layer: insp.layer,
+          isBridge: insp.isBridge,
+          isTunnel: insp.isTunnel,
+          osmTags: insp.osmTags,
+          portalConnections: insp.graphConnectivity?.portalConnections,
+        };
+        setSelectedFeatures([single]);
+        setFocusedFeatureId(single.id);
+        setSelectedFeature(single);
+      } else {
+        setSelectedFeatures([]);
+        setFocusedFeatureId(null);
+        setSelectedFeature(null);
+      }
+
+      setIsDevToolsOpen(true);
       setStatusMessage(`Loaded reproduction: ${pkg.report?.title || 'Imported Scenario'}`);
     } catch (err: any) {
       console.error('Failed to import reproduction package:', err);
@@ -1002,10 +1070,48 @@ export default function App() {
   };
 
   const handleSelectFeature = (info: InspectableFeatureInfo | null) => {
+    if (!info) {
+      setSelectedFeature(null);
+      return;
+    }
     setSelectedFeature(info);
-    if (info) {
-      setActiveTab('inspector');
-      setIsDockCollapsed(false);
+    setFocusedFeatureId(info.id);
+    setSelectedFeatures((prev) => {
+      const existing = prev.find(
+        (f) => f.id === info.id || (f.sourceFeatureId && f.sourceFeatureId === info.sourceFeatureId)
+      );
+      if (existing) {
+        return prev;
+      }
+      return [...prev, info];
+    });
+    setActiveTab('inspector');
+    setIsDockCollapsed(false);
+  };
+
+  const handleRemoveSelectedFeature = (id: string) => {
+    setSelectedFeatures((prev) => {
+      const next = prev.filter((f) => f.id !== id && f.sourceFeatureId !== id);
+      if (focusedFeatureId === id) {
+        const remaining = next[next.length - 1] || null;
+        setFocusedFeatureId(remaining ? remaining.id : null);
+        setSelectedFeature(remaining);
+      }
+      return next;
+    });
+  };
+
+  const handleClearAllSelectedFeatures = () => {
+    setSelectedFeatures([]);
+    setFocusedFeatureId(null);
+    setSelectedFeature(null);
+  };
+
+  const handleFocusFeature = (id: string) => {
+    setFocusedFeatureId(id);
+    const found = selectedFeatures.find((f) => f.id === id);
+    if (found) {
+      setSelectedFeature(found);
     }
   };
 
@@ -1156,9 +1262,12 @@ export default function App() {
                   onHoverFeature={handleHoverFeature}
                   onSelectFeature={handleSelectFeature}
                   selectedFeature={selectedFeature}
+                  selectedFeatures={selectedFeatures}
+                  focusedFeatureId={focusedFeatureId}
                   selectedBoxMeters={selectedBoxMeters}
                   isSpatialSelectActive={isSpatialSelectActive}
                   onSpatialBoxChange={setSelectedBoxMeters}
+                  onDeactivateSpatialSelect={() => setIsSpatialSelectActive(false)}
                   showGraphOverlay={showGraphOverlay}
                 />
               </Canvas>
@@ -2249,7 +2358,12 @@ export default function App() {
         showGraphOverlay={showGraphOverlay}
         onToggleGraphOverlay={() => setShowGraphOverlay((v) => !v)}
         selectedFeature={selectedFeature}
-        onSelectFeature={(feat) => setSelectedFeature(feat)}
+        selectedFeatures={selectedFeatures}
+        focusedFeatureId={focusedFeatureId}
+        onSelectFeature={handleSelectFeature}
+        onFocusFeature={handleFocusFeature}
+        onRemoveSelectedFeature={handleRemoveSelectedFeature}
+        onClearAllSelectedFeatures={handleClearAllSelectedFeatures}
         isSpatialSelectActive={isSpatialSelectActive}
         onToggleSpatialSelect={() => setIsSpatialSelectActive((v) => !v)}
         selectedBoxMeters={selectedBoxMeters}

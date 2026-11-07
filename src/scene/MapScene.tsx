@@ -30,9 +30,12 @@ export interface MapSceneProps {
   ) => void;
   onSelectFeature?: (feature: InspectableFeatureInfo | null) => void;
   selectedFeature?: InspectableFeatureInfo | null;
+  selectedFeatures?: InspectableFeatureInfo[];
+  focusedFeatureId?: string | null;
   selectedBoxMeters?: { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   isSpatialSelectActive?: boolean;
   onSpatialBoxChange?: (box: { minX: number; maxX: number; minZ: number; maxZ: number } | null) => void;
+  onDeactivateSpatialSelect?: () => void;
   showGraphOverlay?: boolean;
 }
 
@@ -41,6 +44,35 @@ function computePercentile(sorted: number[], p: number): number {
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * sorted.length)));
   return Number(sorted[idx].toFixed(2));
 }
+
+const PolylineHighlight: React.FC<{
+  points: readonly [number, number][];
+  elev: number;
+  color: string;
+  isFocused: boolean;
+}> = ({ points, elev, color, isFocused }) => {
+  const line = React.useMemo(() => {
+    const pts = points.map((p) => new THREE.Vector3(p[0], elev, p[1]));
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({
+      color,
+      linewidth: isFocused ? 4 : 2,
+      depthTest: false,
+    });
+    const l = new THREE.Line(geo, mat);
+    l.raycast = () => {};
+    return l;
+  }, [points, elev, color, isFocused]);
+
+  React.useEffect(() => {
+    return () => {
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    };
+  }, [line]);
+
+  return <primitive object={line} raycast={() => null} />;
+};
 
 export const MapScene: React.FC<MapSceneProps> = ({
   builtGeometry,
@@ -64,9 +96,12 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onHoverFeature,
   onSelectFeature,
   selectedFeature,
+  selectedFeatures,
+  focusedFeatureId,
   selectedBoxMeters,
   isSpatialSelectActive = false,
   onSpatialBoxChange,
+  onDeactivateSpatialSelect,
   showGraphOverlay = false,
 }) => {
   const { gl, events, camera } = useThree();
@@ -173,6 +208,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
       // Only commit if the box has a discernible dimension (> 0.5m)
       if (maxX - minX >= 0.5 || maxZ - minZ >= 0.5) {
         onSpatialBoxChange?.({ minX, maxX, minZ, maxZ });
+        onDeactivateSpatialSelect?.();
       }
       ev.preventDefault();
       ev.stopPropagation();
@@ -190,7 +226,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [gl, camera, isSpatialSelectActive, onSpatialBoxChange]);
+  }, [gl, camera, isSpatialSelectActive, onSpatialBoxChange, onDeactivateSpatialSelect]);
 
   // Suppress R3F CPU raycasting across MapRoot while user is actively dragging to pan/orbit the camera
   useEffect(() => {
@@ -499,7 +535,16 @@ export const MapScene: React.FC<MapSceneProps> = ({
     lastHoverTimeRef.current = now;
 
     const t0 = performance.now();
-    const info = resolveInspectedFeature(e);
+    let info = resolveInspectedFeature(e);
+    if (!info && Array.isArray(e.intersections)) {
+      for (const hit of e.intersections) {
+        const candidate = resolveInspectedFeature(hit);
+        if (candidate) {
+          info = candidate;
+          break;
+        }
+      }
+    }
     lastHoverRaycastMsRef.current = Number((performance.now() - t0).toFixed(3));
     if (onHoverFeature) {
       const clientX = e.nativeEvent?.clientX ?? e.clientX ?? 0;
@@ -526,12 +571,21 @@ export const MapScene: React.FC<MapSceneProps> = ({
   };
 
   const handleClick = (e: any) => {
-    // Suppress mesh click-selection while in spatial area selection mode
+    // Suppress mesh click-selection while actively dragging an area box
     if (isSpatialSelectActive) return;
     // Ignore drag-releases when panning/orbiting camera
     if (typeof e.delta === 'number' && e.delta > 6) return;
     e.stopPropagation();
-    const info = resolveInspectedFeature(e);
+    let info = resolveInspectedFeature(e);
+    if (!info && Array.isArray(e.intersections)) {
+      for (const hit of e.intersections) {
+        const candidate = resolveInspectedFeature(hit);
+        if (candidate) {
+          info = candidate;
+          break;
+        }
+      }
+    }
     if (onSelectFeature) {
       onSelectFeature(info);
     }
@@ -611,18 +665,99 @@ export const MapScene: React.FC<MapSceneProps> = ({
       {/* Buildings layer */}
       {showBuildings && <primitive object={builtGeometry.buildingsGroup} />}
 
-      {/* 3D Visual Selection Highlight Overlay */}
-      {selectedFeature && (
-        <group name="DevTools_SelectionHighlight">
-          {/* Highlight bounding ring / footprint indicator */}
-          <mesh position={[0, (selectedFeature.elevation ?? 0.05) + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[1.5, 2.2, 32]} />
-            <meshBasicMaterial color="#06b6d4" side={THREE.DoubleSide} transparent opacity={0.85} depthTest={false} />
-          </mesh>
-        </group>
-      )}
+      {/* 3D Visual Selection Highlight Overlay for Multi-Selection */}
+      {(() => {
+        const activeList =
+          Array.isArray(selectedFeatures) && selectedFeatures.length > 0
+            ? selectedFeatures
+            : selectedFeature
+            ? [selectedFeature]
+            : [];
+        if (activeList.length === 0) return null;
 
-      {/* Spatial Area Selection Box Overlay */}
+        const roadEdges = builtGeometry.infrastructureRenderPreview?.descriptors?.roadEdges || [];
+        const roadNodes = builtGeometry.infrastructureRenderPreview?.descriptors?.roadNodes || [];
+
+        return (
+          <group name="DevTools_SelectionHighlight">
+            {activeList.map((feat) => {
+              const isFocused =
+                feat.id === focusedFeatureId || (!focusedFeatureId && feat === activeList[0]);
+              const color = isFocused ? '#f59e0b' : '#06b6d4';
+              const elev = (feat.elevation ?? 0.05) + (isFocused ? 0.09 : 0.06);
+
+              // 1. Matched junction node
+              const matchedNode = roadNodes.find(
+                (n) =>
+                  n.id === feat.id ||
+                  n.rawOsmNodeId === feat.id ||
+                  `node/${n.rawOsmNodeId}` === feat.sourceFeatureId
+              );
+              if (matchedNode || feat.category === 'Junction') {
+                const pos = matchedNode ? matchedNode.position : (feat as any).position || [0, 0];
+                return (
+                  <group key={`hl_${feat.id}`} position={[pos[0], 0.12, pos[1]]} raycast={() => null}>
+                    <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+                      <ringGeometry args={[0.9, 1.5, 32]} />
+                      <meshBasicMaterial
+                        color={color}
+                        side={THREE.DoubleSide}
+                        transparent
+                        opacity={0.9}
+                        depthTest={false}
+                      />
+                    </mesh>
+                    <mesh position={[0, 0.15, 0]} raycast={() => null}>
+                      <sphereGeometry args={[isFocused ? 0.7 : 0.45, 16, 16]} />
+                      <meshBasicMaterial color={color} depthTest={false} />
+                    </mesh>
+                  </group>
+                );
+              }
+
+              // 2. Matched road edge: polyline highlight along centerline
+              const matchedEdge = roadEdges.find(
+                (e) =>
+                  e.sourceFeatureId === feat.sourceFeatureId ||
+                  e.sourceFeatureId === feat.id ||
+                  e.id === feat.id
+              );
+              if (matchedEdge && matchedEdge.points.length >= 2) {
+                return (
+                  <PolylineHighlight
+                    key={`hl_${feat.id}`}
+                    points={matchedEdge.points}
+                    elev={elev}
+                    color={color}
+                    isFocused={isFocused}
+                  />
+                );
+              }
+
+              // 3. Fallback position ring
+              return (
+                <mesh
+                  key={`hl_${feat.id}`}
+                  position={[0, elev, 0]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  raycast={() => null}
+                >
+                  <ringGeometry args={[1.5, 2.2, 32]} />
+                  <meshBasicMaterial
+                    color={color}
+                    side={THREE.DoubleSide}
+                    transparent
+                    opacity={0.85}
+                    depthTest={false}
+                  />
+                </mesh>
+              );
+            })}
+          </group>
+        );
+      })()}
+
+      {/* Spatial Area Selection Box Overlay - raycast disabled so underlying objects can be selected */}
       {(liveDragBox || selectedBoxMeters) && (
         <group name="DevTools_SpatialSelectionBox">
           {(() => {
@@ -633,7 +768,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
             const cz = (b.minZ + b.maxZ) / 2;
             return (
               <group position={[cx, 0.08, cz]}>
-                <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
                   <planeGeometry args={[w, d]} />
                   <meshBasicMaterial
                     color={liveDragBox ? '#f59e0b' : '#06b6d4'}
@@ -643,7 +778,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
                     side={THREE.DoubleSide}
                   />
                 </mesh>
-                <lineSegments rotation={[-Math.PI / 2, 0, 0]}>
+                <lineSegments rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
                   <edgesGeometry args={[new THREE.PlaneGeometry(w, d)]} />
                   <lineBasicMaterial
                     color={liveDragBox ? '#fbbf24' : '#22d3ee'}
@@ -656,11 +791,31 @@ export const MapScene: React.FC<MapSceneProps> = ({
         </group>
       )}
 
-      {/* Topology Graph Nodes Visual Overlay */}
+      {/* Topology Graph Nodes Visual Overlay with interactive userData */}
       {showGraphOverlay && builtGeometry.infrastructureRenderPreview?.descriptors?.roadNodes && (
         <group name="DevTools_GraphNodesOverlay">
           {builtGeometry.infrastructureRenderPreview.descriptors.roadNodes.map((n) => (
-            <mesh key={n.id} position={[n.position[0], 0.09, n.position[1]]}>
+            <mesh
+              key={n.id}
+              position={[n.position[0], 0.09, n.position[1]]}
+              userData={{
+                id: n.id,
+                sourceFeatureId: n.rawOsmNodeId ? `node/${n.rawOsmNodeId}` : n.id,
+                category: 'Junction',
+                cartoLabel: `Junction (${n.primaryRole})`,
+                primaryTag: 'highway=junction',
+                subtype: n.primaryRole,
+                elevation: 0.09,
+                layer: n.layer,
+                degree: n.degree,
+                role: n.primaryRole,
+                position: n.position,
+                osmTags: n.rawOsmNodeId
+                  ? { 'osm:id': n.rawOsmNodeId, role: n.primaryRole, degree: n.degree }
+                  : { role: n.primaryRole, degree: n.degree },
+                incidentEdgeIds: n.incidentEdgeIds,
+              }}
+            >
               <sphereGeometry args={[n.degree >= 3 ? 0.9 : 0.5, 12, 12]} />
               <meshBasicMaterial
                 color={

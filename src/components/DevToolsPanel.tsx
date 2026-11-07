@@ -57,9 +57,14 @@ export interface DevToolsPanelProps {
   onToggleSpatialSelect: () => void;
   selectedBoxMeters: { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   onClearSpatialBox: () => void;
-  // Selected feature inspection
+  // Selected feature inspection & multi-selection
   selectedFeature: InspectableFeatureInfo | null;
   onSelectFeature: (feature: InspectableFeatureInfo | null) => void;
+  selectedFeatures?: InspectableFeatureInfo[];
+  focusedFeatureId?: string | null;
+  onFocusFeature?: (id: string) => void;
+  onRemoveSelectedFeature?: (id: string) => void;
+  onClearAllSelectedFeatures?: () => void;
   // Fixture loaders
   onLoadSwitchyard: (zone: RailwayPrototypeZoneId) => void;
   onLoadPrinsFork: () => void;
@@ -93,6 +98,11 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   onClearSpatialBox,
   selectedFeature,
   onSelectFeature,
+  selectedFeatures = [],
+  focusedFeatureId = null,
+  onFocusFeature,
+  onRemoveSelectedFeature,
+  onClearAllSelectedFeatures,
   onLoadSwitchyard,
   onLoadPrinsFork,
   onLoadHengelo,
@@ -123,6 +133,13 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
 
   const handleExportReproduction = () => {
     try {
+      const selectedList =
+        selectedFeatures && selectedFeatures.length > 0
+          ? selectedFeatures
+          : selectedFeature
+          ? [selectedFeature]
+          : [];
+
       const pkg = buildReproductionPackage({
         report: {
           title: reportTitle || 'OSM Renderer Defect Repro',
@@ -133,6 +150,8 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
           createdAt: new Date().toISOString(),
         },
         selectedFeature,
+        selectedFeatures: selectedList,
+        focusedFeatureId,
         mapData,
         fullRawGeoJson: currentRawGeoJson,
         infrastructureRenderOptions,
@@ -142,6 +161,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
         roadWidthMultiplier,
         heightMultiplier,
         themeId,
+        wireframe,
       });
 
       const jsonStr = JSON.stringify(pkg, null, 2);
@@ -159,7 +179,9 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setExportSuccessMsg(`Exported reproduction package (${pkg.geoJson.features.length} connected OSM features)`);
+      setExportSuccessMsg(
+        `Exported reproduction package (${pkg.geoJson.features.length} connected OSM features, ${selectedList.length} selected objects)`
+      );
       setTimeout(() => setExportSuccessMsg(null), 4000);
     } catch (err: any) {
       console.error('Failed to export reproduction package:', err);
@@ -456,139 +478,279 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
         )}
 
         {/* TAB 2: GEOMETRY INSPECTION & SPATIAL SELECTION */}
-        {activeDevTab === 'inspection' && (
-          <div className="space-y-4">
-            {/* Spatial Selection Tool */}
-            <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-                  <Crosshair className="w-4 h-4 text-cyan-400" />
-                  <span>Geographic Area Selection</span>
+        {activeDevTab === 'inspection' && (() => {
+          const selectedList =
+            selectedFeatures && selectedFeatures.length > 0
+              ? selectedFeatures
+              : selectedFeature
+              ? [selectedFeature]
+              : [];
+          const activeFocusedId = focusedFeatureId || selectedList[0]?.id;
+          const focusedFeature = selectedList.find((f) => f.id === activeFocusedId) || selectedFeature;
+
+          return (
+            <div className="space-y-4">
+              {/* Spatial Selection Tool */}
+              <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                    <Crosshair className="w-4 h-4 text-cyan-400" />
+                    <span>Geographic Area Selection</span>
+                  </div>
+                  {selectedBoxMeters && (
+                    <button
+                      type="button"
+                      onClick={onClearSpatialBox}
+                      className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                    >
+                      Clear Box
+                    </button>
+                  )}
                 </div>
+                <p className="text-[11px] text-slate-400">
+                  Activate area tool, then drag on the ground. The area frames the defect; underlying roads and junctions remain fully clickable.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={onToggleSpatialSelect}
+                  className={`w-full py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                    isSpatialSelectActive
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-200 animate-pulse'
+                      : 'bg-cyan-500/20 border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30'
+                  }`}
+                >
+                  <MousePointer className="w-3.5 h-3.5" />
+                  <span>
+                    {isSpatialSelectActive
+                      ? 'Area Drag Active (Click & Drag in Scene)'
+                      : 'Activate Area Selection Tool'}
+                  </span>
+                </button>
+
                 {selectedBoxMeters && (
-                  <button
-                    type="button"
-                    onClick={onClearSpatialBox}
-                    className="text-[10px] text-rose-400 hover:underline cursor-pointer"
-                  >
-                    Clear Box
-                  </button>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Activate area selection mode, then drag on the ground in the 3D scene to highlight features inside an area.
-              </p>
-
-              <button
-                type="button"
-                onClick={onToggleSpatialSelect}
-                className={`w-full py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                  isSpatialSelectActive
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 animate-pulse'
-                    : 'bg-cyan-500/20 border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/30'
-                }`}
-              >
-                <MousePointer className="w-3.5 h-3.5" />
-                <span>
-                  {isSpatialSelectActive
-                    ? 'Area Drag Active (Click & Drag in Scene)'
-                    : 'Activate Area Selection Tool'}
-                </span>
-              </button>
-
-              {selectedBoxMeters && (
-                <div className="bg-slate-950 border border-slate-800 rounded p-2 text-[11px] font-mono text-slate-300 space-y-1">
-                  <div>X: [{selectedBoxMeters.minX.toFixed(1)}m, {selectedBoxMeters.maxX.toFixed(1)}m] ({(selectedBoxMeters.maxX - selectedBoxMeters.minX).toFixed(1)}m)</div>
-                  <div>Z: [{selectedBoxMeters.minZ.toFixed(1)}m, {selectedBoxMeters.maxZ.toFixed(1)}m] ({(selectedBoxMeters.maxZ - selectedBoxMeters.minZ).toFixed(1)}m)</div>
-                </div>
-              )}
-            </section>
-
-            {/* Clicked Feature Details */}
-            <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200">Selected Geometry Details</span>
-                {selectedFeature && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectFeature(null)}
-                    className="text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer"
-                  >
-                    Deselect
-                  </button>
-                )}
-              </div>
-
-              {!selectedFeature ? (
-                <div className="p-4 text-center text-slate-500 text-xs">
-                  Click any road ribbon, junction, or railway in the 3D map to inspect.
-                </div>
-              ) : (
-                <div className="space-y-2 text-xs">
-                  <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                    <div className="text-[11px] font-mono text-cyan-400 font-bold truncate">
-                      {selectedFeature.cartoLabel} · {selectedFeature.id}
+                  <div className="bg-slate-950 border border-slate-800 rounded p-2 text-[11px] font-mono text-slate-300 space-y-1">
+                    <div>
+                      X: [{selectedBoxMeters.minX.toFixed(1)}m, {selectedBoxMeters.maxX.toFixed(1)}m] (
+                      {(selectedBoxMeters.maxX - selectedBoxMeters.minX).toFixed(1)}m)
                     </div>
-                    {selectedFeature.name && (
-                      <div className="text-sm font-bold text-slate-100">{selectedFeature.name}</div>
-                    )}
-                    <div className="grid grid-cols-2 gap-1 text-[11px] font-mono text-slate-400">
-                      <div>Primary Tag: <strong className="text-slate-200">{selectedFeature.primaryTag}</strong></div>
-                      <div>Subtype: <strong className="text-slate-200">{selectedFeature.subtype}</strong></div>
-                      <div>Source Feature: <strong className="text-slate-200">{selectedFeature.sourceFeatureId}</strong></div>
-                      {typeof selectedFeature.width === 'number' && (
-                        <div>Inferred Width: <strong className="text-cyan-300">{selectedFeature.width.toFixed(2)}m</strong></div>
-                      )}
-                      {typeof selectedFeature.elevation === 'number' && (
-                        <div>Elevation: <strong className="text-slate-200">{selectedFeature.elevation.toFixed(3)}m</strong></div>
-                      )}
-                      {selectedFeature.isBridge && <div className="text-amber-300 font-bold">Bridge deck</div>}
-                      {selectedFeature.isTunnel && <div className="text-indigo-300 font-bold">Tunnel / Subterranean</div>}
+                    <div>
+                      Z: [{selectedBoxMeters.minZ.toFixed(1)}m, {selectedBoxMeters.maxZ.toFixed(1)}m] (
+                      {(selectedBoxMeters.maxZ - selectedBoxMeters.minZ).toFixed(1)}m)
                     </div>
+                  </div>
+                )}
+              </section>
 
-                    {/* Constituent Source Provenance */}
-                    {selectedFeature.sourceFeatureIds && selectedFeature.sourceFeatureIds.length > 1 && (
-                      <div className="pt-1 border-t border-slate-800/80">
-                        <span className="text-[10px] font-semibold text-slate-400">Constituent Source Ways ({selectedFeature.sourceFeatureIds.length}):</span>
-                        <div className="text-[10px] font-mono text-cyan-300/90 truncate">
-                          {selectedFeature.sourceFeatureIds.join(', ')}
-                        </div>
-                      </div>
-                    )}
+              {/* Explicitly Selected Objects List */}
+              <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    <span>Explicitly Selected Objects ({selectedList.length})</span>
+                  </div>
+                  {selectedList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onClearAllSelectedFeatures) {
+                          onClearAllSelectedFeatures();
+                        } else {
+                          onSelectFeature(null);
+                        }
+                      }}
+                      className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
 
-                    {/* Junction Portal Connections */}
-                    {selectedFeature.portalConnections && selectedFeature.portalConnections.length > 0 && (
-                      <div className="pt-1 border-t border-slate-800/80 space-y-1">
-                        <span className="text-[10px] font-semibold text-slate-400">Junction Portals ({selectedFeature.portalConnections.length} incident arms):</span>
-                        <div className="space-y-0.5 text-[10px] font-mono text-slate-300">
-                          {selectedFeature.portalConnections.map((pc, idx) => (
-                            <div key={idx} className="flex items-center justify-between gap-1 text-slate-400">
-                              <span className="text-cyan-300 truncate">{pc.sourceFeatureId} ({pc.endpoint})</span>
-                              <span className="text-slate-500">L:[{pc.left[0].toFixed(1)},{pc.left[1].toFixed(1)}] R:[{pc.right[0].toFixed(1)},{pc.right[1].toFixed(1)}]</span>
+                {selectedList.length === 0 ? (
+                  <div className="p-3 text-center text-slate-500 text-xs bg-slate-950/60 rounded-lg border border-slate-900">
+                    Click any road, railway, junction, or building to select. Multiple objects can be selected together.
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                    {selectedList.map((feat) => {
+                      const isFocused = feat.id === activeFocusedId;
+                      const osmId = feat.sourceFeatureId || feat.id;
+                      return (
+                        <div
+                          key={feat.id}
+                          onClick={() => {
+                            if (onFocusFeature) onFocusFeature(feat.id);
+                            else onSelectFeature(feat);
+                          }}
+                          className={`p-2 rounded-lg border text-xs cursor-pointer transition flex items-center justify-between gap-2 ${
+                            isFocused
+                              ? 'border-l-4 border-l-cyan-400 border-slate-700 bg-cyan-950/40 text-slate-100 shadow-sm'
+                              : 'border-l-2 border-l-slate-700 border-slate-800/90 bg-slate-950/70 text-slate-300 hover:bg-slate-900/80'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-cyan-300 truncate">
+                                {osmId}
+                              </span>
+                              <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
+                                {feat.category}
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                              {feat.subtype || feat.primaryTag || feat.cartoLabel}
+                              {typeof feat.width === 'number' ? ` · ${feat.width.toFixed(1)}m` : ''}
+                              {feat.name ? ` · ${feat.name}` : ''}
+                            </div>
+                          </div>
 
-                  {/* OSM Tags Table */}
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-bold text-slate-300">Raw OSM Tags ({Object.keys(selectedFeature.osmTags || {}).length}):</div>
-                    <div className="max-h-36 overflow-y-auto bg-slate-950 p-2 rounded border border-slate-800/80 text-[10px] font-mono space-y-0.5">
-                      {Object.entries(selectedFeature.osmTags || {}).map(([k, v]) => (
-                        <div key={k} className="flex items-baseline justify-between gap-2 border-b border-slate-900 py-0.5">
-                          <span className="text-slate-400 shrink-0">{k}</span>
-                          <span className="text-cyan-300 truncate" title={String(v)}>{String(v)}</span>
+                          <button
+                            type="button"
+                            title="Remove object from selection"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              if (onRemoveSelectedFeature) {
+                                onRemoveSelectedFeature(feat.id);
+                              } else {
+                                onSelectFeature(null);
+                              }
+                            }}
+                            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                      ))}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Context distinction notice */}
+                <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 text-[10px] text-slate-400 flex items-start gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Connected Context:</strong> Reproduction export automatically includes the full source ways of incident roads sharing junction nodes within the area, without pulling in unrelated bus routes.
+                  </span>
+                </div>
+              </section>
+
+              {/* Focused Feature Inspector */}
+              <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">
+                    Inspected Object Details {focusedFeature ? `(${focusedFeature.sourceFeatureId || focusedFeature.id})` : ''}
+                  </span>
+                  {focusedFeature && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onRemoveSelectedFeature) onRemoveSelectedFeature(focusedFeature.id);
+                        else onSelectFeature(null);
+                      }}
+                      className="text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      Deselect
+                    </button>
+                  )}
+                </div>
+
+                {!focusedFeature ? (
+                  <div className="p-4 text-center text-slate-500 text-xs">
+                    Select an object above or click in the 3D map to view detailed OSM tags and graph provenance.
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-xs">
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                      <div className="text-[11px] font-mono text-cyan-400 font-bold truncate">
+                        {focusedFeature.cartoLabel} · {focusedFeature.id}
+                      </div>
+                      {focusedFeature.name && (
+                        <div className="text-sm font-bold text-slate-100">{focusedFeature.name}</div>
+                      )}
+                      <div className="grid grid-cols-2 gap-1 text-[11px] font-mono text-slate-400">
+                        <div>
+                          Primary Tag: <strong className="text-slate-200">{focusedFeature.primaryTag}</strong>
+                        </div>
+                        <div>
+                          Subtype: <strong className="text-slate-200">{focusedFeature.subtype}</strong>
+                        </div>
+                        <div>
+                          Source Feature: <strong className="text-slate-200">{focusedFeature.sourceFeatureId}</strong>
+                        </div>
+                        {typeof focusedFeature.width === 'number' && (
+                          <div>
+                            Inferred Width: <strong className="text-cyan-300">{focusedFeature.width.toFixed(2)}m</strong>
+                          </div>
+                        )}
+                        {typeof focusedFeature.elevation === 'number' && (
+                          <div>
+                            Elevation: <strong className="text-slate-200">{focusedFeature.elevation.toFixed(3)}m</strong>
+                          </div>
+                        )}
+                        {focusedFeature.isBridge && <div className="text-amber-300 font-bold">Bridge deck</div>}
+                        {focusedFeature.isTunnel && <div className="text-indigo-300 font-bold">Tunnel / Subterranean</div>}
+                      </div>
+
+                      {/* Constituent Source Provenance */}
+                      {focusedFeature.sourceFeatureIds && focusedFeature.sourceFeatureIds.length > 1 && (
+                        <div className="pt-1 border-t border-slate-800/80">
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            Constituent Source Ways ({focusedFeature.sourceFeatureIds.length}):
+                          </span>
+                          <div className="text-[10px] font-mono text-cyan-300/90 truncate">
+                            {focusedFeature.sourceFeatureIds.join(', ')}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Junction Portal Connections */}
+                      {focusedFeature.portalConnections && focusedFeature.portalConnections.length > 0 && (
+                        <div className="pt-1 border-t border-slate-800/80 space-y-1">
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            Junction Portals ({focusedFeature.portalConnections.length} incident arms):
+                          </span>
+                          <div className="space-y-0.5 text-[10px] font-mono text-slate-300">
+                            {focusedFeature.portalConnections.map((pc, idx) => (
+                              <div key={idx} className="flex items-center justify-between gap-1 text-slate-400">
+                                <span className="text-cyan-300 truncate">
+                                  {pc.sourceFeatureId} ({pc.endpoint})
+                                </span>
+                                <span className="text-slate-500">
+                                  L:[{pc.left[0].toFixed(1)},{pc.left[1].toFixed(1)}] R:[
+                                  {pc.right[0].toFixed(1)},{pc.right[1].toFixed(1)}]
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* OSM Tags Table */}
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-bold text-slate-300">
+                        Raw OSM Tags ({Object.keys(focusedFeature.osmTags || {}).length}):
+                      </div>
+                      <div className="max-h-36 overflow-y-auto bg-slate-950 p-2 rounded border border-slate-800/80 text-[10px] font-mono space-y-0.5">
+                        {Object.entries(focusedFeature.osmTags || {}).map(([k, v]) => (
+                          <div
+                            key={k}
+                            className="flex items-baseline justify-between gap-2 border-b border-slate-900 py-0.5"
+                          >
+                            <span className="text-slate-400 shrink-0">{k}</span>
+                            <span className="text-cyan-300 truncate" title={String(v)}>
+                              {String(v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </section>
-          </div>
-        )}
+                )}
+              </section>
+            </div>
+          );
+        })()}
 
         {/* TAB 3: ISSUE REPRODUCTION EXPORT / IMPORT */}
         {activeDevTab === 'reporting' && (

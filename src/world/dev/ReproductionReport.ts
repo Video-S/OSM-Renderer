@@ -72,6 +72,63 @@ export interface InspectedGeometryDiagnostics {
 }
 
 /**
+ * Explicitly selected object metadata captured in the reproduction package.
+ */
+export interface SelectedObjectRecord {
+  id: string;
+  osmId?: string;
+  category: string;
+  subtype?: string;
+  cartoLabel?: string;
+  primaryTag?: string;
+  osmTags: Record<string, string | number | boolean>;
+  explicitWidthTag?: string | number | boolean;
+  inferredWidth?: number;
+  elevation?: number;
+  layer?: number;
+  isBridge?: boolean;
+  isTunnel?: boolean;
+  coordinatesMeters?: [number, number][];
+  coordinatesGeo?: [number, number][];
+  graphNodeId?: string;
+  graphRole?: string;
+  degree?: number;
+  incidentEdgeIds?: string[];
+  incidentOsmIds?: string[];
+}
+
+/**
+ * Geometric bounds for the selected geographic region in both local meters and WGS84.
+ */
+export interface SelectedAreaRecord {
+  spatialBoxMeters: { minX: number; maxX: number; minZ: number; maxZ: number };
+  boundsGeo: { minLon: number; maxLon: number; minLat: number; maxLat: number };
+}
+
+/**
+ * Concise topological graph context around the reproduction site.
+ */
+export interface GraphContextSummary {
+  nodes: Array<{
+    id: string;
+    osmNodeId?: string;
+    role: string;
+    degree: number;
+    position: [number, number];
+    incidentEdgeIds: string[];
+  }>;
+  edges: Array<{
+    id: string;
+    sourceFeatureId?: string;
+    roadClass: string;
+    inferredWidth: number;
+    osmWidthTag?: string;
+    fromNodeId: string;
+    toNodeId: string;
+  }>;
+}
+
+/**
  * Complete self-contained developer reproduction package.
  */
 export interface DeveloperReproductionPackage {
@@ -88,6 +145,14 @@ export interface DeveloperReproductionPackage {
     wireframe?: boolean;
   };
   camera: SerializedCameraPose;
+  selectedArea?: SelectedAreaRecord;
+  selectedObjects?: SelectedObjectRecord[];
+  focusedFeatureId?: string | null;
+  graphContext?: GraphContextSummary;
+  connectedContextFeatureCount?: number;
+  /**
+   * Backwards-compatible single-inspection field.
+   */
   inspection?: InspectedGeometryDiagnostics;
   /**
    * The minimal, self-contained GeoJSON FeatureCollection containing
@@ -103,8 +168,37 @@ export interface DeveloperReproductionPackage {
 }
 
 /**
+ * Checks whether an OSM GeoJSON feature represents physical ground infrastructure
+ * rather than a distant transit route, regional network, or administrative boundary.
+ */
+function isRelevantPhysicalInfrastructure(f: any): boolean {
+  if (!f || typeof f !== 'object') return false;
+  const p = f.properties || {};
+
+  // Exclude non-physical transit routes (e.g. municipal bus routes, train route relations)
+  if (
+    p.route === 'bus' ||
+    p.route === 'tram' ||
+    p.route === 'train' ||
+    p.route === 'bicycle' ||
+    p.type === 'route' ||
+    p.type === 'network'
+  ) {
+    return false;
+  }
+
+  // Exclude administrative, political, or municipal boundary polygons
+  if (p.boundary === 'administrative' || p.boundary === 'political') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Helper to extract original OSM features corresponding to selected feature IDs
  * plus immediate connected context (features sharing an OSM node ID or nearby endpoint).
+ * Prevents pulling in municipal transit networks or distant long-distance routes.
  */
 export function extractConnectedOsmFeatures(
   sourceFeatureIds?: readonly string[] | null,
@@ -122,26 +216,26 @@ export function extractConnectedOsmFeatures(
 
   const allFeatures: any[] = fullRawGeoJson.features;
   const targetIdSet = new Set<string>();
+  const explicitOsmNodeIds = new Set<string>();
 
   if (sourceFeatureIds && Array.isArray(sourceFeatureIds)) {
     for (const rawId of sourceFeatureIds) {
       if (!rawId) continue;
       targetIdSet.add(rawId);
-      if (rawId.startsWith('way/')) targetIdSet.add(rawId.slice(4));
-      else targetIdSet.add(`way/${rawId}`);
-      if (rawId.startsWith('node/')) targetIdSet.add(rawId.slice(5));
-      else targetIdSet.add(`node/${rawId}`);
+      const shortId = rawId.replace(/^(way|node|relation)\//, '');
+      targetIdSet.add(shortId);
+      targetIdSet.add(`way/${shortId}`);
+      targetIdSet.add(`node/${shortId}`);
+      if (rawId.startsWith('node/') || rawId.startsWith('osmNode/')) {
+        explicitOsmNodeIds.add(shortId);
+      }
     }
   }
 
   // If no specific feature and no spatial box requested, export all features
   if (targetIdSet.size === 0 && !options?.spatialBoxMeters) {
-    return [...allFeatures];
+    return allFeatures.filter(isRelevantPhysicalInfrastructure);
   }
-
-  // 1. Identify primary features matching targetIdSet
-  const primaryFeatures: any[] = [];
-  const targetNodeIds = new Set<string>();
 
   const getFeatureId = (f: any): string => {
     return String(f.id ?? f.properties?.id ?? f.properties?.['@id'] ?? '');
@@ -155,19 +249,29 @@ export function extractConnectedOsmFeatures(
     return [];
   };
 
+  // 1. Identify primary features matching targetIdSet
+  const primaryFeatures: any[] = [];
+  const primaryFeatureIds = new Set<string>();
+  const junctionNodeIdsForExpansion = new Set<string>(explicitOsmNodeIds);
+
   for (const f of allFeatures) {
     const fid = getFeatureId(f);
     const shortId = fid.replace(/^(way|node|relation)\//, '');
-    const longId = fid.includes('/') ? fid : `way/${fid}`;
-    if (targetIdSet.has(fid) || targetIdSet.has(shortId) || targetIdSet.has(longId)) {
+    if (
+      targetIdSet.has(fid) ||
+      targetIdSet.has(shortId) ||
+      targetIdSet.has(`way/${shortId}`) ||
+      targetIdSet.has(`node/${shortId}`)
+    ) {
       primaryFeatures.push(f);
+      primaryFeatureIds.add(fid);
       for (const nid of getNodeIds(f)) {
-        targetNodeIds.add(nid);
+        junctionNodeIdsForExpansion.add(nid);
       }
     }
   }
 
-  // If spatial box is specified, include features intersecting that box
+  // If spatial box is specified, include physical infrastructure features intersecting that box
   if (options?.spatialBoxMeters && options.centerLonLat) {
     const [cLon, cLat] = options.centerLonLat;
     const box = options.spatialBoxMeters;
@@ -178,38 +282,77 @@ export function extractConnectedOsmFeatures(
     const geoMinLat = Math.min(minLat, maxLat);
     const geoMaxLat = Math.max(minLat, maxLat);
 
+    // Margin bounds (~40m) for node expansion
+    const [mMinLon, mMaxLat] = unprojectToGeo(box.minX - 40, box.minZ - 40, cLon, cLat);
+    const [mMaxLon, mMinLat] = unprojectToGeo(box.maxX + 40, box.maxZ + 40, cLon, cLat);
+    const marginMinLon = Math.min(mMinLon, mMaxLon);
+    const marginMaxLon = Math.max(mMinLon, mMaxLon);
+    const marginMinLat = Math.min(mMinLat, mMaxLat);
+    const marginMaxLat = Math.max(mMinLat, mMaxLat);
+
     for (const f of allFeatures) {
-      if (primaryFeatures.includes(f)) continue;
+      if (!isRelevantPhysicalInfrastructure(f)) continue;
+      const fid = getFeatureId(f);
+      if (primaryFeatureIds.has(fid)) continue;
+
       const coords = f.geometry?.coordinates;
       if (!coords) continue;
-      // Check if any point falls within bounding box
       const pts: number[][] = Array.isArray(coords[0])
         ? Array.isArray(coords[0][0])
           ? coords.flat(2)
           : coords
         : [coords];
-      const hits = pts.some((p: number[]) =>
-        p[0] >= geoMinLon && p[0] <= geoMaxLon && p[1] >= geoMinLat && p[1] <= geoMaxLat
+
+      // Check if feature intersects the spatial box
+      const intersectsBox = pts.some(
+        (p: number[]) =>
+          p[0] >= geoMinLon && p[0] <= geoMaxLon && p[1] >= geoMinLat && p[1] <= geoMaxLat
       );
-      if (hits) {
+
+      if (intersectsBox) {
         primaryFeatures.push(f);
-        for (const nid of getNodeIds(f)) {
-          targetNodeIds.add(nid);
+        primaryFeatureIds.add(fid);
+
+        // Crucial: Only add node IDs for vertices located within or near the spatial box.
+        // Prevents adding hundreds of distant nodes from a trunk road that spans kilometers.
+        const nodeIds = getNodeIds(f);
+        if (nodeIds.length === pts.length) {
+          for (let i = 0; i < pts.length; i++) {
+            const p = pts[i];
+            if (
+              p[0] >= marginMinLon &&
+              p[0] <= marginMaxLon &&
+              p[1] >= marginMinLat &&
+              p[1] <= marginMaxLat
+            ) {
+              junctionNodeIdsForExpansion.add(nodeIds[i]);
+            }
+          }
+        } else {
+          for (const nid of nodeIds) {
+            junctionNodeIdsForExpansion.add(nid);
+          }
         }
       }
     }
   }
 
-  // 2. Context expansion: include connected features sharing verified node IDs
+  // 2. Context expansion: include connected physical roads & railways sharing junction node IDs
   const resultFeatures = [...primaryFeatures];
-  const includedIds = new Set(resultFeatures.map(getFeatureId));
+  const includedIds = new Set(primaryFeatureIds);
 
-  if (options?.includeConnectedRoads !== false && targetNodeIds.size > 0) {
+  if (options?.includeConnectedRoads !== false && junctionNodeIdsForExpansion.size > 0) {
     for (const f of allFeatures) {
+      if (!isRelevantPhysicalInfrastructure(f)) continue;
       const fid = getFeatureId(f);
       if (includedIds.has(fid)) continue;
+
+      // Connected context for junction geometry must be physical road or railway infrastructure
+      const p = f.properties || {};
+      if (!p.highway && !p.railway) continue;
+
       const fNodeIds = getNodeIds(f);
-      const sharesNode = fNodeIds.some((nid) => targetNodeIds.has(nid));
+      const sharesNode = fNodeIds.some((nid) => junctionNodeIdsForExpansion.has(nid));
       if (sharesNode) {
         resultFeatures.push(f);
         includedIds.add(fid);
@@ -228,6 +371,8 @@ export function buildReproductionPackage(
     | {
         report: Omit<DefectIssueReportMeta, 'createdAt'> & { createdAt?: string };
         selectedFeature?: InspectableFeatureInfo | null;
+        selectedFeatures?: InspectableFeatureInfo[];
+        focusedFeatureId?: string | null;
         mapData: ProcessedMapData | null;
         fullRawGeoJson: any;
         infrastructureRenderOptions: InfrastructureRenderOptions;
@@ -237,6 +382,7 @@ export function buildReproductionPackage(
         roadWidthMultiplier?: number;
         heightMultiplier?: number;
         themeId?: string;
+        wireframe?: boolean;
       }
     | (Omit<DefectIssueReportMeta, 'createdAt'> & { createdAt?: string }),
   maybeMapData?: ProcessedMapData | null,
@@ -255,6 +401,8 @@ export function buildReproductionPackage(
 ): DeveloperReproductionPackage {
   let report: Omit<DefectIssueReportMeta, 'createdAt'> & { createdAt?: string };
   let selectedFeature: InspectableFeatureInfo | null | undefined;
+  let selectedFeatures: InspectableFeatureInfo[] | undefined;
+  let focusedFeatureId: string | null | undefined;
   let mapData: ProcessedMapData | null;
   let fullRawGeoJson: any;
   let infrastructureRenderOptions: InfrastructureRenderOptions;
@@ -264,42 +412,57 @@ export function buildReproductionPackage(
   let roadWidthMultiplier: number = 1.0;
   let heightMultiplier: number = 1.0;
   let themeId: string = 'tactical';
+  let wireframe: boolean = false;
 
   if (paramsOrReport && 'report' in paramsOrReport && typeof paramsOrReport.report === 'object') {
     const p = paramsOrReport as any;
     report = p.report;
     selectedFeature = p.selectedFeature;
+    selectedFeatures = p.selectedFeatures;
+    focusedFeatureId = p.focusedFeatureId;
     mapData = p.mapData;
     fullRawGeoJson = p.fullRawGeoJson;
-    infrastructureRenderOptions = p.infrastructureRenderOptions ?? DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS;
+    infrastructureRenderOptions =
+      p.infrastructureRenderOptions ?? DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS;
     railwayPrototypeMode = p.railwayPrototypeMode ?? 'production';
     cameraPose = p.cameraPose ?? { target: [0, 0, 0], zoom: 1.0 };
     spatialBoxMeters = p.spatialBoxMeters;
     roadWidthMultiplier = p.roadWidthMultiplier ?? 1.0;
     heightMultiplier = p.heightMultiplier ?? 1.0;
     themeId = p.themeId ?? 'tactical';
+    wireframe = p.wireframe ?? false;
   } else {
     report = paramsOrReport as any;
     mapData = maybeMapData ?? null;
     fullRawGeoJson = maybeRawGeoJson;
     selectedFeature = maybeSelectedFeature;
     spatialBoxMeters = maybeSpatialBox ?? undefined;
-    infrastructureRenderOptions = maybeConfig?.infrastructureRenderOptions ?? DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS;
+    infrastructureRenderOptions =
+      maybeConfig?.infrastructureRenderOptions ?? DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS;
     railwayPrototypeMode = maybeConfig?.railwayPrototypeMode ?? 'production';
     cameraPose = maybeCamera ?? { target: [0, 0, 0], zoom: 1.0 };
     roadWidthMultiplier = maybeConfig?.roadWidthMultiplier ?? 1.0;
     heightMultiplier = maybeConfig?.heightMultiplier ?? 1.0;
     themeId = maybeConfig?.themeId ?? 'tactical';
+    wireframe = maybeConfig?.wireframe ?? false;
+  }
+
+  // Consolidate target selection IDs from both selectedFeatures and single selectedFeature
+  const effectiveSelectedList: InspectableFeatureInfo[] = [];
+  if (Array.isArray(selectedFeatures) && selectedFeatures.length > 0) {
+    effectiveSelectedList.push(...selectedFeatures);
+  } else if (selectedFeature) {
+    effectiveSelectedList.push(selectedFeature);
   }
 
   const targetIds: string[] = [];
-  if (selectedFeature) {
-    if (selectedFeature.sourceFeatureIds && selectedFeature.sourceFeatureIds.length > 0) {
-      targetIds.push(...selectedFeature.sourceFeatureIds);
-    } else if (selectedFeature.sourceFeatureId) {
-      targetIds.push(selectedFeature.sourceFeatureId);
-    } else if (selectedFeature.id) {
-      targetIds.push(selectedFeature.id);
+  for (const feat of effectiveSelectedList) {
+    if (feat.sourceFeatureIds && feat.sourceFeatureIds.length > 0) {
+      targetIds.push(...feat.sourceFeatureIds);
+    } else if (feat.sourceFeatureId) {
+      targetIds.push(feat.sourceFeatureId);
+    } else if (feat.id) {
+      targetIds.push(feat.id);
     }
   }
 
@@ -312,7 +475,6 @@ export function buildReproductionPackage(
   });
 
   // Fallback: if raw GeoJSON wasn't available or had no features, synthesize valid OSM GeoJSON
-  // features from mapData.roads/railways/buildings so reproduction is never empty
   if (extractedFeatures.length === 0 && mapData) {
     const synthFeatures: any[] = [];
     const sourceIdsSet = new Set(targetIds);
@@ -356,20 +518,160 @@ export function buildReproductionPackage(
     if (synthFeatures.length > 0) {
       extractedFeatures = synthFeatures;
     } else if (fullRawGeoJson && Array.isArray(fullRawGeoJson.features)) {
-      // If no spatial/selected match, export the first 25 features around origin
-      extractedFeatures = fullRawGeoJson.features.slice(0, 30);
+      extractedFeatures = fullRawGeoJson.features.filter(isRelevantPhysicalInfrastructure).slice(0, 30);
     }
   }
 
-  // Diagnostics metadata for the selected feature
+  // Construct selectedObjects record list
+  const selectedObjects: SelectedObjectRecord[] = effectiveSelectedList.map((feat) => {
+    let explicitWidthTag: string | number | boolean | undefined;
+    if (feat.osmTags) {
+      explicitWidthTag = feat.osmTags.width ?? feat.osmTags.est_width;
+    }
+    const osmId = feat.sourceFeatureId || feat.id;
+
+    let coordsMeters: [number, number][] | undefined;
+    let coordsGeo: [number, number][] | undefined;
+
+    if (mapData) {
+      const road = mapData.roads.find(
+        (r) => r.sourceFeatureId === feat.sourceFeatureId || r.id === feat.id
+      );
+      if (road) {
+        coordsMeters = road.points;
+        coordsGeo = road.points.map((pt) =>
+          unprojectToGeo(pt[0], pt[1], centerLonLat[0], centerLonLat[1])
+        );
+        if (!explicitWidthTag && road.osmTags) {
+          explicitWidthTag = (road.osmTags as any).width ?? (road.osmTags as any).est_width;
+        }
+      }
+    }
+
+    return {
+      id: feat.id,
+      osmId,
+      category: feat.category,
+      subtype: feat.subtype,
+      cartoLabel: feat.cartoLabel,
+      primaryTag: feat.primaryTag,
+      osmTags: feat.osmTags ?? {},
+      explicitWidthTag,
+      inferredWidth: feat.width,
+      elevation: feat.elevation,
+      layer: feat.layer,
+      isBridge: feat.isBridge,
+      isTunnel: feat.isTunnel,
+      coordinatesMeters: coordsMeters,
+      coordinatesGeo: coordsGeo,
+      graphNodeId: (feat as any).osmNodeId ? String((feat as any).osmNodeId) : undefined,
+      graphRole: (feat as any).role || (feat as any).subtype,
+      degree: (feat as any).degree,
+      incidentEdgeIds: (feat as any).incidentEdgeIds,
+      incidentOsmIds: feat.sourceFeatureIds,
+    };
+  });
+
+  // Construct selectedArea record if spatial box is active
+  let selectedArea: SelectedAreaRecord | undefined;
+  if (spatialBoxMeters) {
+    const [minLon, maxLat] = unprojectToGeo(
+      spatialBoxMeters.minX,
+      spatialBoxMeters.minZ,
+      centerLonLat[0],
+      centerLonLat[1]
+    );
+    const [maxLon, minLat] = unprojectToGeo(
+      spatialBoxMeters.maxX,
+      spatialBoxMeters.maxZ,
+      centerLonLat[0],
+      centerLonLat[1]
+    );
+    selectedArea = {
+      spatialBoxMeters: { ...spatialBoxMeters },
+      boundsGeo: {
+        minLon: Math.min(minLon, maxLon),
+        maxLon: Math.max(minLon, maxLon),
+        minLat: Math.min(minLat, maxLat),
+        maxLat: Math.max(minLat, maxLat),
+      },
+    };
+  }
+
+  // Construct concise graphContext summary around the defect site
+  let graphContext: GraphContextSummary | undefined;
+  const descriptors = (mapData as any)?.infrastructureRenderPreview?.descriptors;
+  if (descriptors?.roadNodes && descriptors?.roadEdges) {
+    const relevantEdgeIds = new Set<string>();
+    const relEdges: GraphContextSummary['edges'] = [];
+
+    for (const edge of descriptors.roadEdges) {
+      const matchesSelected = targetIds.includes(edge.sourceFeatureId) || targetIds.includes(edge.id);
+      const inBox =
+        spatialBoxMeters &&
+        edge.points.some(
+          (p: [number, number]) =>
+            p[0] >= spatialBoxMeters.minX &&
+            p[0] <= spatialBoxMeters.maxX &&
+            p[1] >= spatialBoxMeters.minZ &&
+            p[1] <= spatialBoxMeters.maxZ
+        );
+      if (matchesSelected || inBox) {
+        relEdges.push({
+          id: edge.id,
+          sourceFeatureId: edge.sourceFeatureId,
+          roadClass: edge.roadClass,
+          inferredWidth: edge.width,
+          osmWidthTag: edge.osmTags?.width,
+          fromNodeId: edge.fromNodeId,
+          toNodeId: edge.toNodeId,
+        });
+        relevantEdgeIds.add(edge.id);
+      }
+    }
+
+    const relNodes: GraphContextSummary['nodes'] = descriptors.roadNodes
+      .filter((n: any) => {
+        const touchesRelEdge = n.incidentEdgeIds?.some((eid: string) => relevantEdgeIds.has(eid));
+        const inBox =
+          spatialBoxMeters &&
+          n.position[0] >= spatialBoxMeters.minX &&
+          n.position[0] <= spatialBoxMeters.maxX &&
+          n.position[1] >= spatialBoxMeters.minZ &&
+          n.position[1] <= spatialBoxMeters.maxZ;
+        return touchesRelEdge || inBox;
+      })
+      .map((n: any) => ({
+        id: n.id,
+        osmNodeId: n.osmNodeId,
+        role: n.primaryRole,
+        degree: n.degree,
+        position: n.position,
+        incidentEdgeIds: n.incidentEdgeIds || [],
+      }));
+
+    if (relNodes.length > 0 || relEdges.length > 0) {
+      graphContext = {
+        nodes: relNodes,
+        edges: relEdges,
+      };
+    }
+  }
+
+  // Backwards-compatible single inspection field (focused or first selected feature)
+  const primarySelected =
+    effectiveSelectedList.find((f) => f.id === focusedFeatureId) ||
+    effectiveSelectedList[0] ||
+    selectedFeature;
+
   let inspection: InspectedGeometryDiagnostics | undefined;
-  if (selectedFeature) {
+  if (primarySelected) {
     const rawCoordsMeters: [number, number][] = [];
     if (mapData) {
       const road = mapData.roads.find(
         (r) =>
-          r.sourceFeatureId === selectedFeature.sourceFeatureId ||
-          r.id === selectedFeature.id
+          r.sourceFeatureId === primarySelected.sourceFeatureId ||
+          r.id === primarySelected.id
       );
       if (road) {
         rawCoordsMeters.push(...road.points);
@@ -381,24 +683,24 @@ export function buildReproductionPackage(
     );
 
     inspection = {
-      selectedFeatureId: selectedFeature.id,
-      sourceFeatureIds: selectedFeature.sourceFeatureIds ?? [selectedFeature.sourceFeatureId],
-      category: selectedFeature.category,
-      cartoLabel: selectedFeature.cartoLabel,
-      primaryTag: selectedFeature.primaryTag,
-      subtype: selectedFeature.subtype,
-      inferredWidth: selectedFeature.width,
-      elevation: selectedFeature.elevation,
-      layer: selectedFeature.layer,
-      isBridge: selectedFeature.isBridge,
-      isTunnel: selectedFeature.isTunnel,
-      osmTags: selectedFeature.osmTags ?? {},
+      selectedFeatureId: primarySelected.id,
+      sourceFeatureIds: primarySelected.sourceFeatureIds ?? [primarySelected.sourceFeatureId],
+      category: primarySelected.category,
+      cartoLabel: primarySelected.cartoLabel,
+      primaryTag: primarySelected.primaryTag,
+      subtype: primarySelected.subtype,
+      inferredWidth: primarySelected.width,
+      elevation: primarySelected.elevation,
+      layer: primarySelected.layer,
+      isBridge: primarySelected.isBridge,
+      isTunnel: primarySelected.isTunnel,
+      osmTags: primarySelected.osmTags ?? {},
       coordinatesMeters: rawCoordsMeters.length > 0 ? rawCoordsMeters : undefined,
       coordinatesGeo: coordsGeo.length > 0 ? coordsGeo : undefined,
-      graphConnectivity: selectedFeature.portalConnections
+      graphConnectivity: primarySelected.portalConnections
         ? {
-            portalConnections: selectedFeature.portalConnections,
-            incidentSourceFeatureIds: selectedFeature.sourceFeatureIds,
+            portalConnections: primarySelected.portalConnections,
+            incidentSourceFeatureIds: primarySelected.sourceFeatureIds,
           }
         : undefined,
     };
@@ -423,8 +725,14 @@ export function buildReproductionPackage(
       roadWidthMultiplier,
       heightMultiplier,
       themeId,
+      wireframe,
     },
     camera: { ...cameraPose },
+    selectedArea,
+    selectedObjects: selectedObjects.length > 0 ? selectedObjects : undefined,
+    focusedFeatureId: focusedFeatureId ?? primarySelected?.id ?? null,
+    graphContext,
+    connectedContextFeatureCount: extractedFeatures.length,
     inspection,
     geoJson: {
       type: 'FeatureCollection',
@@ -436,6 +744,7 @@ export function buildReproductionPackage(
 
 /**
  * Validates whether an imported JSON object conforms to DeveloperReproductionPackage.
+ * Provides backwards compatibility for single-feature inspection reports.
  */
 export function validateReproductionPackage(data: any): {
   valid: boolean;
@@ -461,6 +770,41 @@ export function validateReproductionPackage(data: any): {
     return { valid: false, error: errors[0], errors };
   }
 
+  // Restore selectedObjects with fallback to legacy inspection
+  let restoredObjects: SelectedObjectRecord[] = [];
+  if (Array.isArray(data.selectedObjects) && data.selectedObjects.length > 0) {
+    restoredObjects = data.selectedObjects;
+  } else if (data.inspection) {
+    const insp = data.inspection;
+    restoredObjects = [
+      {
+        id: insp.selectedFeatureId || 'selected_feature',
+        osmId: insp.sourceFeatureIds?.[0] || insp.selectedFeatureId,
+        category: insp.category || 'Feature',
+        subtype: insp.subtype,
+        cartoLabel: insp.cartoLabel,
+        primaryTag: insp.primaryTag,
+        osmTags: insp.osmTags || {},
+        inferredWidth: insp.inferredWidth,
+        elevation: insp.elevation,
+        layer: insp.layer,
+        isBridge: insp.isBridge,
+        isTunnel: insp.isTunnel,
+        coordinatesMeters: insp.coordinatesMeters,
+        coordinatesGeo: insp.coordinatesGeo,
+      },
+    ];
+  }
+
+  // Restore selectedArea with fallback to legacy selectedBoxMeters
+  let restoredArea: SelectedAreaRecord | undefined = data.selectedArea;
+  if (!restoredArea && data.selectedBoxMeters) {
+    restoredArea = {
+      spatialBoxMeters: data.selectedBoxMeters,
+      boundsGeo: data.boundsGeo || { minLon: 0, maxLon: 0, minLat: 0, maxLat: 0 },
+    };
+  }
+
   const pkg: DeveloperReproductionPackage = {
     formatVersion: '1.0',
     generator: 'OSM-Renderer-DevTools',
@@ -480,15 +824,34 @@ export function validateReproductionPackage(data: any): {
         railways: data.configuration?.infrastructureRenderOptions?.railways ?? 'legacy',
       },
       railwayPrototypeMode: data.configuration?.railwayPrototypeMode ?? 'production',
-      roadWidthMultiplier: typeof data.configuration?.roadWidthMultiplier === 'number' ? data.configuration.roadWidthMultiplier : 1.0,
-      heightMultiplier: typeof data.configuration?.heightMultiplier === 'number' ? data.configuration.heightMultiplier : 1.0,
+      roadWidthMultiplier:
+        typeof data.configuration?.roadWidthMultiplier === 'number'
+          ? data.configuration.roadWidthMultiplier
+          : 1.0,
+      heightMultiplier:
+        typeof data.configuration?.heightMultiplier === 'number'
+          ? data.configuration.heightMultiplier
+          : 1.0,
       themeId: data.configuration?.themeId ?? 'tactical',
+      wireframe: Boolean(data.configuration?.wireframe),
     },
     camera: {
-      target: Array.isArray(data.camera?.target) && data.camera.target.length === 3 ? data.camera.target : [0, 0, 0],
+      target:
+        Array.isArray(data.camera?.target) && data.camera.target.length === 3
+          ? data.camera.target
+          : [0, 0, 0],
       zoom: typeof data.camera?.zoom === 'number' ? data.camera.zoom : 8.0,
-      azimuthDeg: typeof data.camera?.azimuthDeg === 'number' ? data.camera.azimuthDeg : 45,
+      azimuthDeg:
+        typeof data.camera?.azimuthDeg === 'number' ? data.camera.azimuthDeg : 45,
     },
+    selectedArea: restoredArea,
+    selectedObjects: restoredObjects.length > 0 ? restoredObjects : undefined,
+    focusedFeatureId: data.focusedFeatureId || restoredObjects[0]?.id || null,
+    graphContext: data.graphContext,
+    connectedContextFeatureCount:
+      typeof data.connectedContextFeatureCount === 'number'
+        ? data.connectedContextFeatureCount
+        : data.geoJson.features.length,
     inspection: data.inspection,
     geoJson: data.geoJson,
   };

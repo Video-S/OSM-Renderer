@@ -3357,9 +3357,9 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     });
     assert.ok(sourceRings.every((ring) => ring && ring.length > 0));
     const expected = polygonClipping.union(
-      sourceRings[0] as polygonClipping.Geom,
-      ...sourceRings.slice(1) as polygonClipping.Geom[]
-    ) as MultiPolygonCoords;
+      sourceRings[0] as unknown as polygonClipping.Geom,
+      ...(sourceRings.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords;
 
     const scene = new GeometryBuilder({
       infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },

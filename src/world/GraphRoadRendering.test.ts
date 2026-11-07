@@ -9,6 +9,7 @@ import {
 } from '../types/MapFeature';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { MultiPolygonCoords, computeMultiPolygonArea } from './PlanarLayerValidator';
+import { blendAcuteJunctionShoulders } from './infrastructure/roads/GraphRoadGeometryBuilder';
 import {
   auditGraphRoadMeshIntegrity,
   BuiltSceneGeometry,
@@ -3355,6 +3356,46 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     } finally {
       scene.dispose();
     }
+  });
+
+  it('25. rounds only the concave external shoulders of an acute equal-width fork while retaining all source pavement and portals', () => {
+    // Local metre-space outline of the three 2.4m full-width stubs at
+    // Prins Hendrikkade node/6387677253. The two southern branches remain
+    // distinct; only the two concave shoulders around the northern stem are filleted.
+    const ring: [number, number][] = [
+      [-1.34, 0.39], [-0.91, 0.8], [3.89, 7.54],
+      [5.85, 6.15], [5.55, 5.74], [5.95, 6.04],
+      [7.41, 4.14], [0.77, -0.92], [0.29, -1.37], [-1.34, 0.39],
+    ];
+    const source: MultiPolygonCoords = [[ring]];
+    const portals = [
+      { left: [-1.34, 0.39] as [number, number], right: [0.29, -1.37] as [number, number] },
+      { left: [3.89, 7.54] as [number, number], right: [5.85, 6.15] as [number, number] },
+      { left: [5.95, 6.04] as [number, number], right: [7.41, 4.14] as [number, number] },
+    ];
+
+    const smoothed = blendAcuteJunctionShoulders(source, [0, 0], 2.4, portals);
+    assert.ok(smoothed[0][0].length > ring.length,
+      'Fillets should introduce curved boundary vertices near the junction');
+    const output = smoothed[0][0];
+    for (const portal of portals) {
+      assert.ok(output.some((p) => p[0] === portal.left[0] && p[1] === portal.left[1]),
+        'Fillet must not move any left cut portal');
+      assert.ok(output.some((p) => p[0] === portal.right[0] && p[1] === portal.right[1]),
+        'Fillet must not move any right cut portal');
+    }
+    assert.ok(output.some((p) => p[0] === 5.55 && p[1] === 5.74),
+      'The tip of the valid open area between diverging branches must not move');
+
+    const removed = polygonClipping.difference(
+      source as unknown as polygonClipping.Geom,
+      smoothed as unknown as polygonClipping.Geom
+    ) as unknown as MultiPolygonCoords;
+    assert.ok(computeMultiPolygonArea(removed) <= 0.002,
+      'Fillets must not remove any meaningful source-width road surface');
+    const addedArea = computeMultiPolygonArea(smoothed) - computeMultiPolygonArea(source);
+    assert.ok(addedArea > 0 && addedArea < 0.15,
+      'Junction shoulder blend should add only a very small local surface area');
   });
 
 });

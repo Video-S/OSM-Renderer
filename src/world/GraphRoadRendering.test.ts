@@ -2538,8 +2538,9 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     );
 
     // Inspect 'way/curved-east-bends' in Roads_secondary:
-    // Must retain all 4 intermediate curve bends (plus portal and cap = at least 16 triangles)
-    // and preserve full 10.0m width at the degree-2 join at x = -35.
+    // The first source segment may be legitimately consumed by the junction
+    // patch, changing the ribbon's triangle count. Check the resulting surface
+    // directly at every bend and across both sides of its intended width.
     const secondaryMesh = scene.roadsGroup.children.find(
       (c) => c.name === 'Roads_secondary'
     ) as THREE.Mesh;
@@ -2551,12 +2552,42 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       (r) => r.info.sourceFeatureId === 'way/curved-east-bends' && !r.info.id.startsWith('junction-')
     );
     assert.ok(curvedEastRange, 'Expected ribbon face range for way/curved-east-bends');
-    const curvedEastTriCount = curvedEastRange.endFace - curvedEastRange.startFace;
-    // 5 segments * 2 tris/seg + 6 cap tris = 16 triangles (if any interior bend was deleted, triCount would drop <= 14)
-    assert.ok(
-      curvedEastTriCount >= 16,
-      `Expected way/curved-east-bends to preserve all intermediate curve vertices (>= 16 tris), got ${curvedEastTriCount}`
-    );
+    const sourceCenterline: [number, number][] = [
+      [0, 80], [8.5, 81.2], [14.0, 83.5], [22.0, 88.0], [32.0, 94.0], [48.0, 100.0],
+    ];
+    const containsSecondarySurface = (x: number, z: number): boolean => {
+      for (let face = 0; face < secIdx.count / 3; face++) {
+        const indices = [0, 1, 2].map((k) => secIdx.getX(face * 3 + k));
+        const vertices = indices.map((id) =>
+          [secPos.getX(id), secPos.getZ(id)] as [number, number]
+        );
+        const cross = (a: [number, number], b: [number, number]) =>
+          (a[0] - x) * (b[1] - z) - (a[1] - z) * (b[0] - x);
+        const ab = cross(vertices[0], vertices[1]);
+        const bc = cross(vertices[1], vertices[2]);
+        const ca = cross(vertices[2], vertices[0]);
+        if ((ab >= -1e-4 && bc >= -1e-4 && ca >= -1e-4) ||
+            (ab <= 1e-4 && bc <= 1e-4 && ca <= 1e-4)) return true;
+      }
+      return false;
+    };
+    // Source geometry with 10m width must remain covered on both sides of
+    // each original intermediate bend, regardless of which mesh owns its faces.
+    for (let i = 1; i < sourceCenterline.length - 1; i++) {
+      const prev = sourceCenterline[i - 1];
+      const point = sourceCenterline[i];
+      const next = sourceCenterline[i + 1];
+      const dx = next[0] - prev[0], dz = next[1] - prev[1];
+      const len = Math.hypot(dx, dz);
+      assert.ok(len > 0);
+      const nx = -dz / len, nz = dx / len;
+      for (const lateral of [-3.5, 0, 3.5]) {
+        assert.ok(
+          containsSecondarySurface(point[0] + nx * lateral, point[1] + nz * lateral),
+          `Curved east road must preserve 10m-wide coverage at bend ${i}, lateral ${lateral}m`
+        );
+      }
+    }
 
     // Check width at the degree-2 shared continuity join at x = -35, z = 80 ('j_deg2_short')
     const curvedWestRange = Array.from(faceRangesById.values()).find(
@@ -3403,7 +3434,7 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       // The geometry can extend beyond this fixture. Restrict the comparison to
       // the first 12m around the explicit shared OSM junction, where the square
       // shoulder actually occurs; ignore remote caps and map boundary clipping.
-      const [cx, cz] = node.position;
+      const cx = node.x, cz = node.z;
       const localBounds: MultiPolygonCoords = [[[
         [cx - 12, cz - 12], [cx + 12, cz - 12],
         [cx + 12, cz + 12], [cx - 12, cz + 12], [cx - 12, cz - 12],

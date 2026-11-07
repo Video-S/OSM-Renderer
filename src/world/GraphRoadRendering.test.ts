@@ -1403,6 +1403,39 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     assert.equal(resolvedBySourceId.get('way/chain-seg-2')?.osmTags?.section_code, 'MID_102');
     assert.equal(resolvedBySourceId.get('way/chain-seg-3-rev')?.osmTags?.section_code, 'EAST_103');
 
+    // The graph edge is 180m long, but each original way contributes exactly
+    // 60m. The older trimPolylineByArcLength helper capped 120m endpoint trims
+    // at 45% of the graph edge, incorrectly expanding the west/east source
+    // ribbons by 39m. Inspection IDs remained correct while their geometry
+    // extended far beyond the underlying OSM ways.
+    const maxAllowedX: Record<string, [number, number]> = {
+      'way/chain-seg-1': [-94, -29.5], // free endpoint includes a 3.5m round cap
+      'way/chain-seg-2': [-30.5, 30.5],
+      'way/chain-seg-3-rev': [29.5, 94],
+    };
+    const vertexPositions = resMesh.geometry.getAttribute('position');
+    const vertexIndex = resMesh.geometry.getIndex();
+    for (const range of ranges) {
+      const sourceId = range.info.sourceFeatureId;
+      const expected = maxAllowedX[sourceId];
+      assert.ok(expected, `Unexpected source range ${sourceId}`);
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (let face = range.startFace; face < range.endFace; face++) {
+        for (let k = 0; k < 3; k++) {
+          const index = vertexIndex ? vertexIndex.getX(face * 3 + k) : face * 3 + k;
+          const x = vertexPositions.getX(index);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+        }
+      }
+      assert.ok(
+        minX >= expected[0] && maxX <= expected[1],
+        `OSM way ${sourceId} escaped its original provenance span: [${minX}, ${maxX}] instead of [${expected[0]}, ${expected[1]}]`
+      );
+    }
+
+
     // 2. Verify footpath completely inside carriageway was fully subtracted and NOT marked as rendered
     assert.equal(stats.fullySubtractedCount, 1);
     assert.ok(

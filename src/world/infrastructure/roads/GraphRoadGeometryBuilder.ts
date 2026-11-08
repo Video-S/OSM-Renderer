@@ -2540,7 +2540,34 @@ export function buildGraphAtGradeRoadGeometries(
             a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1] > 0.90 &&
             a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1] < 0.9998
           ));
-        if (directRibbonFork) continue;
+        // The original source-width ribbons already form a continuous,
+        // connected path surface at these small homogeneous junctions. A
+        // localized cut/patch creates artificial portal boundaries and
+        // separate material-owned wedges ("pizza slices") that aren't in OSM.
+        //
+        // Extend the existing directRibbonFork strategy conservatively:
+        //  - all-path, grade-0 nodes; no steps / motor-carriageway interaction
+        //  - 3-arm pedestrian-only T junctions of equal width (Nieuwstraat)
+        //  - 4-arm footway/cycleway/pedestrian nodes with almost equal widths
+        //    (Hengelo's closely spaced path crossings, 2.2m vs 2.4m).
+        //
+        // Each whole ribbon still undergoes the normal deterministic 2D
+        // clipping against existing higher-priority surfaces. The graph node
+        // and every original OSM source ID remain available for inspection.
+        const continuousPathClasses = pathBranches.every((b) =>
+          b.roadClass === 'footway' ||
+          b.roadClass === 'cycleway' ||
+          b.roadClass === 'pedestrian'
+        );
+        const widthRange = Math.max(...pathBranches.map((b) => b.width)) -
+          Math.min(...pathBranches.map((b) => b.width));
+        const useContinuousRibbons = node.vehicularHalfEdgeCount === 0 &&
+          continuousPathClasses &&
+          widthRange <= 0.250001 &&
+          (pathBranches.length === 4 ||
+            (pathBranches.length === 3 &&
+              pathBranches.every((b) => b.roadClass === 'pedestrian')));
+        if (directRibbonFork || useContinuousRibbons) continue;
         const solved = solveBoundaryDerivedJunctionNode(
           node.id,
           nodeCenter,

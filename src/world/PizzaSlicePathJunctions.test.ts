@@ -162,8 +162,60 @@ describe('E2 adjacent path-junction pizza-slice overlap regression', () => {
         const patches = pathJunctionSurfacePolygons(scene.roadsGroup);
         const id55 = 'path-junction-road_node:0|0|0:osm_13273618255';
         const id57 = 'path-junction-road_node:0|0|0:osm_13273618257';
-        assert.ok(patches.has(id55), 'Mixed cycleway/footway node must remain a patch');
-        assert.ok(patches.has(id57), 'Adjacent footway-only node must remain a patch');
+        // A cut/patch pair is exactly what caused these closely spaced
+        // connected ribbons to split into sharp triangular surfaces.
+        // The entire source-width ribbons must now form their union directly.
+        assert.equal(patches.has(id55), false,
+          'Mixed cycleway/footway node must not create artificial cut portals');
+        assert.equal(patches.has(id57), false,
+          'Adjacent footway-only node must not create artificial cut portals');
+        // The underlying OSM paths must remain both inspectable and rendered.
+        const sourceIds = new Set<string>();
+        for (const obj of scene.roadsGroup.children) {
+          if (!obj.name.startsWith('Roads_')) continue;
+          const ranges = obj.userData.faceRanges as FaceFeatureRange[] | undefined;
+          for (const range of ranges ?? []) {
+            for (const sourceId of range.info.sourceFeatureIds ?? []) {
+              sourceIds.add(sourceId);
+            }
+          }
+        }
+        for (const id of [
+          'way/108044818', 'way/1446673721',
+          'way/241043233', 'way/1459207201',
+        ]) {
+          assert.ok(sourceIds.has(id), 'Untrimmed source path must be inspectable: ' + id);
+        }
+        const allPathMeshes = scene.roadsGroup.children.filter((obj) =>
+          obj.name === 'Roads_cycleway' || obj.name === 'Roads_footway'
+        ) as THREE.Mesh[];
+        const covers = (x: number, z: number): boolean => allPathMeshes.some((mesh) => {
+          const pos = mesh.geometry.getAttribute('position');
+          const index = mesh.geometry.getIndex();
+          const faceCount = index ? index.count / 3 : pos.count / 3;
+          for (let face = 0; face < faceCount; face++) {
+            const [a, b, c] = [0, 1, 2].map((j) =>
+              index ? index.getX(face * 3 + j) : face * 3 + j
+            );
+            const ax = pos.getX(a), az = pos.getZ(a);
+            const bx = pos.getX(b), bz = pos.getZ(b);
+            const cx = pos.getX(c), cz = pos.getZ(c);
+            const denom = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+            if (Math.abs(denom) < 1e-8) continue;
+            const u = ((bx - x) * (cz - z) - (bz - z) * (cx - x)) / denom;
+            const v = ((cx - x) * (az - z) - (cz - z) * (ax - x)) / denom;
+            if (u >= -1e-5 && v >= -1e-5 && u + v <= 1.00001) return true;
+          }
+          return false;
+        });
+        for (const osmNodeId of ['13273618255', '13273618257']) {
+          const node = [...preview.graph!.roads.nodes.values()].find((n) =>
+            n.rawOsmNodeId === osmNodeId
+          );
+          assert.ok(node);
+          assert.ok(covers(node.x, node.z),
+            'Source ribbon union must cover the full connected path at ' + osmNodeId);
+        }
         const all = [...patches.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
         for (let i = 0; i < all.length; i++) {
           for (let j = i + 1; j < all.length; j++) {

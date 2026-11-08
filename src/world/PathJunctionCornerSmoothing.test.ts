@@ -93,14 +93,39 @@ describe('E2 bounded path junction outline fillets', () => {
         startFace: number; endFace: number;
         info: { id: string; sourceFeatureIds: string[]; width: number };
       }>;
+      // Source-width through-road and branch are continuous here. An
+      // artificial local junction patch produced the wedge visible in the
+      // owner's repro even though the raw three-ribbon union has no gap.
       const patch = ranges.find((r) =>
         r.info.id === 'path-junction-road_node:0|0|0:osm_2487253245'
       );
-      assert.ok(patch, 'Path junction must remain a separate inspectable surface');
-      assert.ok(patch.endFace > patch.startFace);
-      assert.equal(patch.info.width, 4.2);
-      assert.deepEqual([...patch.info.sourceFeatureIds].sort(),
-        ['way/241043218', 'way/6670784']);
+      assert.equal(patch, undefined,
+        'Equal-width pedestrian T junction should use continuous ribbons');
+      for (const id of ['way/241043218', 'way/6670784']) {
+        assert.ok(ranges.some((r) => r.info.sourceFeatureIds.includes(id)),
+          'Source way must remain separately inspectable: ' + id);
+      }
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex();
+      const covers = (x: number, z: number): boolean => {
+        const faceCount = idx ? idx.count / 3 : pos.count / 3;
+        for (let face = 0; face < faceCount; face++) {
+          const [a, b, c] = [0, 1, 2].map((j) =>
+            idx ? idx.getX(face * 3 + j) : face * 3 + j
+          );
+          const ax = pos.getX(a), az = pos.getZ(a);
+          const bx = pos.getX(b), bz = pos.getZ(b);
+          const cx = pos.getX(c), cz = pos.getZ(c);
+          const denom = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+          if (Math.abs(denom) < 1e-8) continue;
+          const u = ((bx - x) * (cz - z) - (bz - z) * (cx - x)) / denom;
+          const v = ((cx - x) * (az - z) - (cz - z) * (ax - x)) / denom;
+          if (u >= -1e-5 && v >= -1e-5 && u + v <= 1.00001) return true;
+        }
+        return false;
+      };
+      assert.ok(covers(actualNode.x, actualNode.z),
+        'Original full-width pedestrian ribbons must cover the junction center');
       const audit = auditGraphRoadMeshIntegrity(scene.roadsGroup);
       assert.ok(audit.auditedTriangleCount > 0);
       assert.equal(audit.negativelyWoundCount, 0);

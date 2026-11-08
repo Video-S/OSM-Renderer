@@ -8,7 +8,7 @@
 
 > **buildRoadNetwork**(`input`, `optionsOrPoints?`): [`RoadNetworkBuildResult`](../../types/interfaces/RoadNetworkBuildResult.md)
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:812
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:759
 
 Pure, deterministic Stage B Road Network Graph builder (`ADR-0009`).
 Constructs `RoadNetwork` and `RoadNetworkDiagnostics` without mutating inputs

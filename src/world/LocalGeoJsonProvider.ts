@@ -34,11 +34,6 @@ import {
   TopologicalNodeIndex,
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
 } from './TopologicalNodeIndex';
-import {
-  parseExplicitMetricWidth,
-  resolveOnewayOrientation,
-  resolveOsmRoadWidth,
-} from './OsmRoadCrossSection';
 
 export { TopologicalNodeIndex, DEFAULT_NODE_SNAP_TOLERANCE_METERS };
 
@@ -1787,9 +1782,6 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
         const roadClass = (classification.subtype as RoadClass) || 'residential';
         const width = this.getRoadWidth(roadClass, props, classification.defaultWidth);
-        const legacyWidth = resolveOsmRoadWidth(roadClass, props, classification.defaultWidth, {
-          suppressInferredLaneWidening: true,
-        });
 
         const candidateLines: Array<{
           points: [number, number][];
@@ -1964,7 +1956,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               nodeIds,
               roadClass,
               subtype: classification.subtype,
-              width: legacyWidth,
+              width,
               isBridge: effectiveIsBridge,
               isTunnel: effectiveIsTunnel,
               layer: effectiveLayer,
@@ -2177,11 +2169,6 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         rw.nodeIds = rw.nodeIds.map((nid) => topoNodeIndex.resolveCanonicalNodeId(String(nid)));
       }
     }
-
-    // Clamp inferred multi-lane expansion on acute dual-carriageway V-split branches where a
-    // two-way trunk splits into two opposing one-way carriageways at an acute angle (cos > 0.85)
-    // without explicit metric width tags, preventing overlap across the narrow splitter island.
-    this.clampAcuteDualCarriagewaySplitWidths(topologyRoadParts, roads);
 
     // Chain contiguous road segments that belong to the same roadway before generating geometries.
     const chainedRoads = this.chainContiguousRoads(roads, diagnostics);
@@ -2504,100 +2491,52 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     props: RawGeoJsonProperties,
     catalogueDefaultWidth?: number
   ): number {
-    return resolveOsmRoadWidth(roadClass, props, catalogueDefaultWidth);
-  }
-
-  private clampAcuteDualCarriagewaySplitWidths(
-    topologyRoadParts: UnchainedRoadPart[],
-    roads: RoadFeature[]
-  ): void {
-    interface SplitEndpointIncident {
-      partIndex: number;
-      atStart: boolean;
-      outwardDir: [number, number];
-      isOneWay: boolean;
-      flowsOutFromNode: boolean;
-    }
-
-    const endpointGroups = new Map<string, SplitEndpointIncident[]>();
-    const addIncident = (partIdx: number, atStart: boolean) => {
-      const part = topologyRoadParts[partIdx];
-      if (!part || part.points.length < 2) return;
-      const pNode = atStart ? part.points[0] : part.points[part.points.length - 1];
-      const pNext = atStart ? part.points[1] : part.points[part.points.length - 2];
-      const dx = pNext[0] - pNode[0];
-      const dz = pNext[1] - pNode[1];
-      const len = Math.hypot(dx, dz);
-      if (len < 1e-6) return;
-      const key = `${part.layer}|${part.isBridge}|${part.isTunnel}|${part.roadClass}|${Math.round(pNode[0] * 10)},${Math.round(pNode[1] * 10)}`;
-      const oneway = resolveOnewayOrientation(part.osmTags);
-      const flowsOutFromNode = oneway.isOneWay
-        ? oneway.isReverseOneWay
-          ? !atStart
-          : atStart
-        : false;
-      let list = endpointGroups.get(key);
-      if (!list) {
-        list = [];
-        endpointGroups.set(key, list);
-      }
-      list.push({
-        partIndex: partIdx,
-        atStart,
-        outwardDir: [dx / len, dz / len],
-        isOneWay: oneway.isOneWay,
-        flowsOutFromNode,
-      });
-    };
-
-    for (let i = 0; i < topologyRoadParts.length; i++) {
-      addIncident(i, true);
-      addIncident(i, false);
-    }
-
-    const clampedPartIds = new Map<string, number>();
-    for (const incidents of endpointGroups.values()) {
-      if (incidents.length < 3) continue;
-      const hasTwoWayTrunk = incidents.some((inc) => !inc.isOneWay);
-      if (!hasTwoWayTrunk) continue;
-      const oneWayIncidents = incidents.filter((inc) => inc.isOneWay);
-      if (oneWayIncidents.length < 2) continue;
-
-      for (let i = 0; i < oneWayIncidents.length; i++) {
-        for (let j = i + 1; j < oneWayIncidents.length; j++) {
-          const a = oneWayIncidents[i];
-          const b = oneWayIncidents[j];
-          if (a.flowsOutFromNode === b.flowsOutFromNode) continue;
-          const dot = a.outwardDir[0] * b.outwardDir[0] + a.outwardDir[1] * b.outwardDir[1];
-          if (dot > 0.85) {
-            for (const inc of [a, b]) {
-              const part = topologyRoadParts[inc.partIndex];
-              const tags = part.osmTags || {};
-              const explicitWidth =
-                parseExplicitMetricWidth(tags['width:carriageway']) ??
-                parseExplicitMetricWidth(tags.width);
-              if (explicitWidth !== undefined) continue;
-              const clampedWidth = resolveOsmRoadWidth(part.roadClass, tags, undefined, {
-                suppressInferredLaneWidening: true,
-              });
-              if (clampedWidth < part.width) {
-                part.width = clampedWidth;
-                clampedPartIds.set(part.id, clampedWidth);
-              }
-            }
-          }
-        }
+    if (props.width !== undefined && props.width !== null && String(props.width).trim() !== '') {
+      const parsed = parseFloat(String(props.width).trim());
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
       }
     }
 
-    if (clampedPartIds.size > 0) {
-      for (const road of roads) {
-        const clamped = clampedPartIds.get(road.id);
-        if (clamped !== undefined) {
-          road.width = clamped;
-        }
-      }
+    if (
+      typeof catalogueDefaultWidth === 'number' &&
+      Number.isFinite(catalogueDefaultWidth) &&
+      catalogueDefaultWidth > 0
+    ) {
+      return catalogueDefaultWidth;
     }
+
+    const hw = String(props.highway || '').trim().toLowerCase();
+    const isLink = hw.endsWith('_link');
+    const base = ROAD_CLASS_WIDTHS[roadClass] || 5.4;
+
+    if (isLink) {
+      return Math.min(Math.max(base * 0.55, 3.6), 5.0);
+    }
+
+    // Subordinated service ways (driveways, parking aisles) are narrower
+    const serviceType = String(props.service || '').trim().toLowerCase();
+    if (roadClass === 'service' && (serviceType === 'parking_aisle' || serviceType === 'driveway')) {
+      return 3.0;
+    }
+
+    // Non-vehicular paths, cycleways, footways, steps, bridleways, tracks, pedestrian zones,
+    // platforms, and piers do not represent split dual-carriageway motor highways; applying the
+    // 3.6m motor-vehicle single-lane floor would invert widths for classes with base < 3.6m.
+    if (isNonVehicularRoadClass(roadClass)) {
+      return base;
+    }
+
+    const onewayVal = String(props.oneway ?? '').trim().toLowerCase();
+    const isOneWay =
+      onewayVal === 'yes' ||
+      onewayVal === '1' ||
+      onewayVal === 'true' ||
+      onewayVal === '-1' ||
+      onewayVal === 'reverse' ||
+      String(props.junction ?? '').trim().toLowerCase() === 'roundabout';
+
+    return isOneWay ? Math.max(base * 0.62, 3.6) : base;
   }
 
   /**

@@ -8,7 +8,7 @@
 
 > **computeEndInwardTangent**(`points`): \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:124
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:112
 
 ## Parameters
 

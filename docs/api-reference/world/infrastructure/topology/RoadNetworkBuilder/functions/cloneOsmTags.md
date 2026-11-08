@@ -8,7 +8,7 @@
 
 > **cloneOsmTags**(`tags?`): [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:147
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:135
 
 ## Parameters
 

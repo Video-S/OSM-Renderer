@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadRenderStats
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:420
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:415
 
 Diagnostic and benchmark counters emitted by the Stage E2 graph-driven road geometry builder.
 
@@ -16,7 +16,7 @@ Diagnostic and benchmark counters emitted by the Stage E2 graph-driven road geom
 
 > **atGradeRoadEdgeCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:426
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:421
 
 Number of road edge descriptors eligible for at-grade ribbon construction (`isAtGradeBuildable`).
 
@@ -26,7 +26,7 @@ Number of road edge descriptors eligible for at-grade ribbon construction (`isAt
 
 > **branchingJunctionCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:432
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:427
 
 Number of vehicular branching junctions (`requiresVehicularJunctionTrimming === true`) meshed.
 
@@ -36,7 +36,7 @@ Number of vehicular branching junctions (`requiresVehicularJunctionTrimming === 
 
 > **crossTierOnlyNodeCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:438
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:433
 
 Number of cross-tier-only interaction nodes (`isCrossTierOnlyInteraction === true`) encountered.
 
@@ -46,7 +46,7 @@ Number of cross-tier-only interaction nodes (`isCrossTierOnlyInteraction === tru
 
 > **degree2ContinuityJoinCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:434
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:429
 
 Number of degree-2 continuity joins (`requiresVehicularContinuityMiter === true` or path degree-2) resolved.
 
@@ -56,7 +56,7 @@ Number of degree-2 continuity joins (`requiresVehicularContinuityMiter === true`
 
 > **fullySubtractedCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:442
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:437
 
 Number of road/path edges or sub-segments completely removed by 2D Boolean carriageway subtraction.
 
@@ -66,7 +66,7 @@ Number of road/path edges or sub-segments completely removed by 2D Boolean carri
 
 > **inputRoadEdgeCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:424
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:419
 
 Total road edge descriptors in the input adapter bundle.
 
@@ -76,7 +76,7 @@ Total road edge descriptors in the input adapter bundle.
 
 > **inputRoadNodeCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:422
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:417
 
 Total road node descriptors in the input adapter bundle.
 
@@ -86,7 +86,7 @@ Total road node descriptors in the input adapter bundle.
 
 > **pathJunctionCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:436
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:431
 
 Number of pure path-tier branching junctions (`requiresPathJunctionTrimming === true`, `>= 3` arms) meshed.
 
@@ -96,7 +96,7 @@ Number of pure path-tier branching junctions (`requiresPathJunctionTrimming === 
 
 > **provenanceSplitSegmentCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:444
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:439
 
 Number of additional sub-segments produced by splitting simplified edges at provenance boundaries.
 
@@ -106,7 +106,7 @@ Number of additional sub-segments produced by splitting simplified edges at prov
 
 > **rejectedOrDegenerateCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:440
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:435
 
 Number of degenerate or micro road edges/sub-segments or invalid junction solutions rejected.
 
@@ -116,7 +116,7 @@ Number of degenerate or micro road edges/sub-segments or invalid junction soluti
 
 > **renderedJunctionCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:430
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:425
 
 Total rendered junction polygon geometry items emitted (vehicular + path junctions).
 
@@ -126,6 +126,6 @@ Total rendered junction polygon geometry items emitted (vehicular + path junctio
 
 > **renderedRoadRibbonCount**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:428
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:423
 
 Total rendered at-grade road/path ribbon geometry items emitted (including provenance sub-segments).

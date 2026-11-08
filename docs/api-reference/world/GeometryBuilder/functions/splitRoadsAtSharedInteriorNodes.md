@@ -8,7 +8,7 @@
 
 > **splitRoadsAtSharedInteriorNodes**(`roads`, `topoIndex`): [`RoadFeature`](../../../types/MapFeature/interfaces/RoadFeature.md)[]
 
-Defined in: world/GeometryBuilder.ts:1011
+Defined in: world/GeometryBuilder.ts:973
 
 Splits road polylines wherever an interior vertex is shared with another road in the same tier
 so that all T-junctions and mid-polyline cross-streets are exposed as true endpoints for junction meshing.

@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadWindingDefect
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:103
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:98
 
 Detailed attribution for a winding or normal-orientation defect detected on an at-grade road,
 path, step-tread, or junction triangle (`M2.3-E2`).
@@ -17,7 +17,7 @@ path, step-tread, or junction triangle (`M2.3-E2`).
 
 > **area**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:135
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:130
 
 Geometric area of the triangle in square meters (`0.5 * |cross(v1 - v0, v2 - v0)|`).
 
@@ -27,7 +27,7 @@ Geometric area of the triangle in square meters (`0.5 * |cross(v1 - v0, v2 - v0)
 
 > **faceIndex**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:107
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:102
 
 Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry.
 
@@ -37,7 +37,7 @@ Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry.
 
 > `optional` **featureId?**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:109
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:104
 
 Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRanges`.
 
@@ -47,7 +47,7 @@ Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRang
 
 > **geometricNormal**: \[`number`, `number`, `number`\]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:125
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:120
 
 Unit geometric face normal computed via `normalize(cross(v1 - v0, v2 - v0))`.
 
@@ -57,7 +57,7 @@ Unit geometric face normal computed via `normalize(cross(v1 - v0, v2 - v0))`.
 
 > **meshName**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:105
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:100
 
 Name of the Three.js `Mesh` containing the defective triangle (e.g. `Roads_residential`).
 
@@ -67,7 +67,7 @@ Name of the Three.js `Mesh` containing the defective triangle (e.g. `Roads_resid
 
 > **minStoredNormalDot**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:133
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:128
 
 Minimum dot product between `geometricNormal` and the 3 stored vertex normals.
 
@@ -77,7 +77,7 @@ Minimum dot product between `geometricNormal` and the 3 stored vertex normals.
 
 > **reason**: `"inverted_winding"` \| `"non_upward_horizontal_face"` \| `"stored_normal_mismatch"` \| `"non_finite_vertex"`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:113
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:108
 
 Failure classification.
 
@@ -87,7 +87,7 @@ Failure classification.
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:111
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:106
 
 Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`.
 
@@ -97,7 +97,7 @@ Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`.
 
 > **storedNormals**: \[\[`number`, `number`, `number`\], \[`number`, `number`, `number`\], \[`number`, `number`, `number`\]\]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:127
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:122
 
 Stored vertex normals `[n0, n1, n2]` from the geometry's `normal` buffer attribute.
 
@@ -107,6 +107,6 @@ Stored vertex normals `[n0, n1, n2]` from the geometry's `normal` buffer attribu
 
 > **vertices**: \[\[`number`, `number`, `number`\], \[`number`, `number`, `number`\], \[`number`, `number`, `number`\]\]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:119
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:114
 
 World-space triangle vertex coordinates `[v0, v1, v2]`.

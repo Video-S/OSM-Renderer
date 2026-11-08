@@ -18,14 +18,6 @@ Defined in: world/GeometryBuilder.ts:163
 
 ***
 
-### endLeftOffset?
-
-> `optional` **endLeftOffset?**: `number`
-
-Defined in: world/GeometryBuilder.ts:168
-
-***
-
 ### endPortal?
 
 > `optional` **endPortal?**: `object`
@@ -39,14 +31,6 @@ Defined in: world/GeometryBuilder.ts:165
 #### right
 
 > **right**: \[`number`, `number`\]
-
-***
-
-### endRightOffset?
-
-> `optional` **endRightOffset?**: `number`
-
-Defined in: world/GeometryBuilder.ts:169
 
 ***
 
@@ -74,14 +58,6 @@ Defined in: world/GeometryBuilder.ts:160
 
 ***
 
-### startLeftOffset?
-
-> `optional` **startLeftOffset?**: `number`
-
-Defined in: world/GeometryBuilder.ts:166
-
-***
-
 ### startPortal?
 
 > `optional` **startPortal?**: `object`
@@ -95,11 +71,3 @@ Defined in: world/GeometryBuilder.ts:164
 #### right
 
 > **right**: \[`number`, `number`\]
-
-***
-
-### startRightOffset?
-
-> `optional` **startRightOffset?**: `number`
-
-Defined in: world/GeometryBuilder.ts:167

@@ -8,11 +8,6 @@ import {
   TopologicalNodeIndex,
 } from '../../TopologicalNodeIndex';
 import {
-  resolveOnewayOrientation,
-  resolveOsmLaneCounts,
-  resolveSegmentCrossSectionProfile,
-} from '../../OsmRoadCrossSection';
-import {
   EdgeProvenance,
   EdgeSegmentProvenance,
   IncidentHalfEdge,
@@ -87,18 +82,11 @@ export function normalizeOnewayTag(rawOnewayTag?: string): NormalizedOneWay {
 }
 
 function parseLanesTag(osmTags?: RawGeoJsonProperties): number | undefined {
-  if (!osmTags) {
+  if (!osmTags || osmTags.lanes === undefined || osmTags.lanes === null) {
     return undefined;
   }
-  if (osmTags.lanes !== undefined && osmTags.lanes !== null) {
-    const num = Number(osmTags.lanes);
-    if (Number.isFinite(num) && num > 0) {
-      return num;
-    }
-  }
-  const oneway = resolveOnewayOrientation(osmTags);
-  const resolved = resolveOsmLaneCounts(osmTags, oneway.isOneWay, oneway.isReverseOneWay);
-  return resolved.totalLanes;
+  const num = Number(osmTags.lanes);
+  return Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
 function parseSurfaceTag(osmTags?: RawGeoJsonProperties): string | undefined {
@@ -697,10 +685,7 @@ function haveCompatibleRoadAttributesAndFlow(
 
   // Bidirectional vs directed one-way cannot merge
   if (e1.normalizedOneway === 'bidirectional' || e2.normalizedOneway === 'bidirectional') {
-    if (e1.normalizedOneway !== 'bidirectional' || e2.normalizedOneway !== 'bidirectional') {
-      return false;
-    }
-    return haveCompatibleCrossSectionAtNode(node.id, e1, e2);
+    return e1.normalizedOneway === 'bidirectional' && e2.normalizedOneway === 'bidirectional';
   }
 
   // Both e1 and e2 are directed one-way ('forward' | 'reverse') with identical rawOnewayTag:
@@ -708,45 +693,7 @@ function haveCompatibleRoadAttributesAndFlow(
   // without reversing either edge.
   const e1InE2Out = edgeFlowsIntoNode(e1, node.id) && edgeFlowsOutOfNode(e2, node.id);
   const e2InE1Out = edgeFlowsIntoNode(e2, node.id) && edgeFlowsOutOfNode(e1, node.id);
-  if (!e1InE2Out && !e2InE1Out) {
-    return false;
-  }
-  return haveCompatibleCrossSectionAtNode(node.id, e1, e2);
-}
-
-function haveCompatibleCrossSectionAtNode(
-  nodeId: string,
-  e1: DraftRoadEdge,
-  e2: DraftRoadEdge
-): boolean {
-  if (e1.segments.length === 0 || e2.segments.length === 0) {
-    return true;
-  }
-  const e1EntersAtEnd = e1.toNodeId === nodeId;
-  const seg1 = e1EntersAtEnd ? e1.segments[e1.segments.length - 1] : e1.segments[0];
-  const rev1 = e1EntersAtEnd ? seg1.reversedRelativeToSource : !seg1.reversedRelativeToSource;
-
-  const e2LeavesFromStart = e2.fromNodeId === nodeId;
-  const seg2 = e2LeavesFromStart ? e2.segments[0] : e2.segments[e2.segments.length - 1];
-  const rev2 = e2LeavesFromStart ? seg2.reversedRelativeToSource : !seg2.reversedRelativeToSource;
-
-  const p1 = String(seg1.osmTags?.placement ?? '').trim().toLowerCase();
-  const p2 = String(seg2.osmTags?.placement ?? '').trim().toLowerCase();
-  if (p1 === 'transition' || p2 === 'transition') {
-    return true;
-  }
-
-  const prof1 = resolveSegmentCrossSectionProfile(e1.width, e1.roadClass, seg1.osmTags, {
-    reversedRelativeToSource: rev1,
-  });
-  const prof2 = resolveSegmentCrossSectionProfile(e2.width, e2.roadClass, seg2.osmTags, {
-    reversedRelativeToSource: rev2,
-  });
-
-  return (
-    Math.abs(prof1.endLeftOffset - prof2.startLeftOffset) <= 1e-3 &&
-    Math.abs(prof1.endRightOffset - prof2.startRightOffset) <= 1e-3
-  );
+  return e1InE2Out || e2InE1Out;
 }
 
 function canContractDegree2RoadNode(

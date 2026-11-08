@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadGeometryBuildResult
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:466
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:461
 
 Output of `buildGraphAtGradeRoadGeometries` consumed by `GeometryBuilder.buildScene()` when `roads === 'graph'`.
 
@@ -16,7 +16,7 @@ Output of `buildGraphAtGradeRoadGeometries` consumed by `GeometryBuilder.buildSc
 
 > **atGradeRoadEndpoints**: \[`number`, `number`\][]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:470
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:465
 
 At-grade road polyline points for Stage 6D bridge ramp connection detection.
 
@@ -26,7 +26,7 @@ At-grade road polyline points for Stage 6D bridge ramp connection detection.
 
 > **fullySubtractedRoadIds**: `Set`\<`string`\>
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:474
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:469
 
 Set of edge/source feature IDs completely subtracted by 2D Boolean clipping.
 
@@ -36,7 +36,7 @@ Set of edge/source feature IDs completely subtracted by 2D Boolean clipping.
 
 > **renderedSourceIds**: `Set`\<`string`\>
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:472
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:467
 
 Set of source feature IDs whose geometry was actually emitted.
 
@@ -46,7 +46,7 @@ Set of source feature IDs whose geometry was actually emitted.
 
 > **roadsByClass**: `Map`\<[`RoadClass`](../../../../../types/MapFeature/type-aliases/RoadClass.md), `object`[]\>
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:468
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:463
 
 Per-class arrays of registered `BufferGeometry` + `InspectableFeatureInfo` items (ribbons, treads, junctions).
 
@@ -56,6 +56,6 @@ Per-class arrays of registered `BufferGeometry` + `InspectableFeatureInfo` items
 
 > **stats**: [`GraphRoadRenderStats`](GraphRoadRenderStats.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:476
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:471
 
 Detailed Stage E2 graph-road rendering statistics.

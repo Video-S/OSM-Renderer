@@ -2681,7 +2681,7 @@ export class GeometryBuilder {
       );
       if ((r.layer === 0 && !r.isBridge && !r.isTunnel) || isExplicitCulvert) {
         rawAtGradeRoads.push(r);
-        if (infrastructureRenderOptions.roads !== 'graph') {
+        if (infrastructureRenderOptions.roads !== 'graph' && infrastructureRenderOptions.roads !== 'graph-surface') {
           for (const pt of r.points) {
             atGradeRoadEndpoints.push(pt);
           }
@@ -2702,10 +2702,11 @@ export class GeometryBuilder {
       Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
     >();
 
-    if (infrastructureRenderOptions.roads === 'graph' && infrastructureRenderPreview?.descriptors) {
+    if ((infrastructureRenderOptions.roads === 'graph' || infrastructureRenderOptions.roads === 'graph-surface') && infrastructureRenderPreview?.descriptors) {
       const graphRoadResult = buildGraphAtGradeRoadGeometries({
         descriptors: infrastructureRenderPreview.descriptors,
         roadWidthMultiplier: this.options.roadWidthMultiplier,
+        surfaceFirst: infrastructureRenderOptions.roads === 'graph-surface',
         gradeTransitionCoords,
         resourceManager,
         diagnostics: data.diagnostics,
@@ -2738,6 +2739,7 @@ export class GeometryBuilder {
         graphRoadResult.fullySubtractedRoadIds
       );
       roadsGroup.userData.graphRoadStats = graphRoadResult.stats;
+      roadsGroup.userData.graphRoadMode = infrastructureRenderOptions.roads;
       const deduplicatedCount = Object.values(roadLineage.deduplicatedMap).reduce(
         (sum, arr) => sum + arr.length,
         0

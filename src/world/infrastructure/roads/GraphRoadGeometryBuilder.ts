@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import polygonClipping from 'polygon-clipping';
 import { proposeRoundedPathJunctionOutline } from './PathJunctionCornerSmoothing';
+import { bufferSurfaceFirstRoadCenterline } from './SurfaceFirstRoadFootprints';
 import {
   InspectableFeatureInfo,
   ProcessedMapData,
@@ -449,6 +450,8 @@ export interface GraphRoadGeometryBuildOptions {
   descriptors: InfrastructureRenderDescriptorBundle;
   /** User/scene multiplier applied to canonical road widths. */
   roadWidthMultiplier: number;
+  /** E2+ independent rounded-stroke footprint construction; false preserves E2 exactly. */
+  surfaceFirst?: boolean;
   /** Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints (retained for interface compatibility). */
   gradeTransitionCoords?: ReadonlyArray<readonly [number, number]>;
   /** Scene resource manager for deterministic GPU buffer registration and disposal. */
@@ -2254,6 +2257,7 @@ export function buildGraphAtGradeRoadGeometries(
     resourceManager,
     diagnostics,
   } = options;
+  const surfaceFirst = options.surfaceFirst === true;
 
   const stats: GraphRoadRenderStats = {
     inputRoadNodeCount: descriptors.roadNodes.length,
@@ -2414,6 +2418,8 @@ export function buildGraphAtGradeRoadGeometries(
   const pendingJunctions: PendingJunctionPolygon[] = [];
 
   for (const node of descriptors.roadNodes) {
+    // E2+ deliberately skips junction cuts, patch creation, and continuity miters.
+    if (surfaceFirst) continue;
     if (node.isCrossTierOnlyInteraction) {
       stats.crossTierOnlyNodeCount++;
     }
@@ -3035,6 +3041,124 @@ export function buildGraphAtGradeRoadGeometries(
           pts.length >= 4 &&
           Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) <
             0.05;
+
+        if (surfaceFirst) {
+          // Experimental continuous-stroke path: no trimmed junction portals.
+          // The same graph, widths, provenance and surface-ownership priorities
+          // as E2 are retained; only the footprint generator changes.
+          const startNode = descriptors.roadNodesById.get(edge.fromNodeId);
+          const endNode = descriptors.roadNodesById.get(edge.toNodeId);
+          const hasGradeStart = Boolean(edge.startGradeTransitionId ||
+            startNode?.gradeTransitionIds.length ||
+            startNode?.incidentEdgeIds.some((id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable));
+          const hasGradeEnd = Boolean(edge.endGradeTransitionId ||
+            endNode?.gradeTransitionIds.length ||
+            endNode?.incidentEdgeIds.some((id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable));
+          const capStart = sub === subSegments[0] && !edge.isClosedLoop &&
+            !edge.clippedAtStart && !startNode?.isBoundaryClipped && !hasGradeStart;
+          const capEnd = sub === subSegments[subSegments.length - 1] && !edge.isClosedLoop &&
+            !edge.clippedAtEnd && !endNode?.isBoundaryClipped && !hasGradeEnd;
+
+          let stroke: MultiPolygonCoords = [];
+          try {
+            stroke = bufferSurfaceFirstRoadCenterline(pts, width, { capStart, capEnd });
+          } catch {
+            recordGraphRoadDiagnostic(diagnostics, 'e2plus_rounded_buffer_failed', sub.subId);
+          }
+          if (stroke.length === 0) {
+            const fallback = buildRoadRibbonOutlineRing(cleanPolylineForClipping(pts), width);
+            if (fallback && fallback[0] && !hasRingSelfIntersection(fallback[0])) {
+              stroke = [fallback];
+              recordGraphRoadDiagnostic(diagnostics, 'e2plus_flat_ribbon_fallback', sub.subId);
+            } else {
+              stats.rejectedOrDegenerateCount++;
+              continue;
+            }
+          }
+
+          const ptsOnSurface = stroke.flatMap((polygon) => polygon.flat());
+          const minX = Math.min(...ptsOnSurface.map((p) => p[0]));
+          const maxX = Math.max(...ptsOnSurface.map((p) => p[0]));
+          const minZ = Math.min(...ptsOnSurface.map((p) => p[1]));
+          const maxZ = Math.max(...ptsOnSurface.map((p) => p[1]));
+          const blockers = placedRoadFootprints.filter((fp) =>
+            (isPath || !fp.isPath) && fp.maxX > minX && fp.minX < maxX &&
+            fp.maxZ > minZ && fp.minZ < maxZ
+          );
+          try {
+            const visible = blockers.length > 0
+              ? filterDegenerateBooleanArtifacts(polygonClipping.difference(
+                  stroke as unknown as polygonClipping.Geom,
+                  ...(blockers.map((fp) => fp.poly) as unknown as polygonClipping.Geom[])
+                ) as unknown as MultiPolygonCoords)
+              : stroke;
+            if (visible.length === 0) {
+              stats.fullySubtractedCount++;
+              fullySubtractedRoadIds.add(sub.subId);
+              fullySubtractedRoadIds.add(edge.id);
+              for (const sid of sids) fullySubtractedRoadIds.add(sid);
+              continue;
+            }
+            const shapes = createShapesFromMultiPolygon(visible);
+            if (shapes.length === 0) {
+              stats.rejectedOrDegenerateCount++;
+              recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
+              continue;
+            }
+            const geo = new THREE.ShapeGeometry(shapes);
+            geo.rotateX(-Math.PI / 2);
+            geo.translate(0, roadElevation, 0);
+            if (geo.hasAttribute('uv')) geo.deleteAttribute('uv');
+            if (!validateAndPruneHorizontalGeometry(geo)) {
+              geo.dispose();
+              stats.rejectedOrDegenerateCount++;
+              recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
+              continue;
+            }
+            resourceManager.registerGeometry(geo);
+            registerRoadFootprint(sub.subId, isPath, visible);
+            const name = typeof sub.seg.osmTags?.name === 'string'
+              ? sub.seg.osmTags.name.trim() : edge.name;
+            const cartoLabel = formatRoadCartoLabel(edge.roadClass);
+            const roadInfo: InspectableFeatureInfo = {
+              id: sub.subId,
+              sourceFeatureId: sub.sourceFeatureId,
+              sourceFeatureIds: sub.sourceFeatureIds,
+              name: name || cartoLabel,
+              category: 'Road & Way',
+              cartoLabel,
+              primaryTag: `highway=${edge.roadClass}`,
+              subtype: edge.roadClass,
+              width: Number(width.toFixed(1)),
+              elevation: roadElevation,
+              layer: edge.layer,
+              isBridge: edge.isBridge,
+              isTunnel: edge.isTunnel,
+              osmTags: sub.osmTags,
+            };
+            if (!roadsByClass.has(edge.roadClass)) roadsByClass.set(edge.roadClass, []);
+            roadsByClass.get(edge.roadClass)!.push({ geom: geo, info: roadInfo });
+            stats.renderedRoadRibbonCount++;
+            for (const sid of sids) renderedSourceIds.add(sid);
+            if (edge.roadClass === 'steps') {
+              const treadGeo = generateGraphStepTreads(
+                pts, width, roadElevation + ELEVATION_POLICY.STEP_TREAD_OFFSET
+              );
+              if (treadGeo) {
+                if (validateAndPruneHorizontalGeometry(treadGeo)) {
+                  resourceManager.registerGeometry(treadGeo);
+                  roadsByClass.get(edge.roadClass)!.push({ geom: treadGeo, info: roadInfo });
+                } else {
+                  treadGeo.dispose();
+                }
+              }
+            }
+          } catch {
+            stats.rejectedOrDegenerateCount++;
+            recordGraphRoadDiagnostic(diagnostics, 'e2plus_surface_clip_failed', sub.subId);
+          }
+          continue;
+        }
 
         let outlinePoly = isClosedSubLoop
           ? null

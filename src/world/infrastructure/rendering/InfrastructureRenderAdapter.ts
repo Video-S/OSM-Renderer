@@ -45,8 +45,9 @@ import {
  * - `'graph'`: Stage E2 graph-driven road rendering mode. Builds and validates `InfrastructureGraph`
  *   and `InfrastructureRenderDescriptorBundle`, then constructs at-grade road ribbons, degree-2
  *   continuity joins, and boundary-derived junction polygons directly from the road render descriptors.
+ * - `'graph-surface'`: E2+ experiment: rounded centerline buffers with planar ownership, no junction cuts.
  */
-export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph';
+export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph' | 'graph-surface';
 
 /**
  * Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E2.
@@ -89,7 +90,7 @@ export function parseRoadInfrastructureRenderSource(
 ): RoadInfrastructureRenderSource {
   if (typeof raw !== 'string') return 'legacy';
   const normalized = raw.trim();
-  if (normalized === 'graph-preview' || normalized === 'graph') {
+  if (normalized === 'graph-preview' || normalized === 'graph' || normalized === 'graph-surface') {
     return normalized;
   }
   return 'legacy';

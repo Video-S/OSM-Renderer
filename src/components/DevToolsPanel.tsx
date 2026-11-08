@@ -323,7 +323,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 Switch road technology in-memory without reloading the page.
               </p>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => onChangeInfrastructureRenderOptions({ roads: 'legacy' })}
@@ -351,6 +351,22 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                     <span className="text-[9px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 rounded">New</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">Boundary-derived junctions & miters</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onChangeInfrastructureRenderOptions({ roads: 'graph-surface' })}
+                  className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
+                    infrastructureRenderOptions.roads === 'graph-surface'
+                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-xs flex items-center gap-2">
+                    <span>Graph (E2+)</span>
+                    <span className="text-[9px] text-amber-300">Experimental</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Rounded footprints · no junction patches</div>
                 </button>
 
                 <button

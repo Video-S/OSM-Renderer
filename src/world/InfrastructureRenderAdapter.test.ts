@@ -924,6 +924,9 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     assert.equal(parseInfrastructureRenderSource('invalid-mode'), 'legacy');
     assert.equal(parseInfrastructureRenderSource('legacy'), 'legacy');
     assert.equal(parseInfrastructureRenderSource('graph-preview'), 'graph-preview');
+    assert.equal(parseInfrastructureRenderSource('graph-surface'), 'graph-surface');
+    assert.deepEqual(parseInfrastructureRenderOptionsFromSearch('?topologyRoads=graph-surface&topologyRailways=legacy'), { roads: 'graph-surface', railways: 'legacy' });
+    assert.equal(requiresInfrastructureGraphPreview({ roads: 'graph-surface', railways: 'legacy' }), true);
 
     assert.deepEqual(parseInfrastructureRenderOptionsFromSearch(''), {
       roads: 'legacy',

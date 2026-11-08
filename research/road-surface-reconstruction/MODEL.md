@@ -1,5 +1,10 @@
 # Mathematical Model: Independent Road-Surface & Junction Reconstruction
 
+> **Archive Notice (2026-11-08)**: **INACTIVE RESEARCH ARCHIVE — NOT ADOPTED**  
+> This specification documents an experimental, completed research prototype that was evaluated against Dutch BGT reference geometry and **not adopted** for production use.  
+> The production viewer continues to use the graph-driven TypeScript road geometry engine (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`).  
+> This mathematical model and its tolerances are retained as a permanent, reproducible research record. See [REPORT.md](./REPORT.md) for the final evaluation report and owner decision.
+
 ## 1. Design Philosophy & Scope Isolation
 
 This model reconstructs plausible physical motor-vehicle carriageway surfaces and junction polygons purely from OpenStreetMap (OSM) linear ways and tags in a metric projected coordinate system (`EPSG:28992`, Amersfoort / RD New meters).

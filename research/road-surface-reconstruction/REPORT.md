@@ -124,3 +124,27 @@ Specifically:
    - Do **not** aggressively shrink untagged class priors below standard `3.2 m` per lane on urban collectors (`tertiary`/`unclassified`): as shown by `A01`, `H01`, `H03`, and `H05`, untagged urban streets have high physical width variance (`3.5 m` to `6.5 m`), and shrinking untagged priors trades recall for precision with near-zero net IoU gain on untagged ways.
 3. **Do Not Expect Centerline Geometry to Solve Semantic/Area Gaps**:
    - The BGT width-oracle diagnostic proves that ~`15%–25%` of discrepancy against municipal road polygons stems from missing OSM width tags, `OV-baan` / `service` classification differences, and unmapped polygonal aprons. Where exact physical curb accuracy is required, explicit OSM `width` / `lanes` / `placement` tagging or `area:highway` ingestion is necessary.
+
+---
+
+## 6. Owner Decision & Experiment Closure (2026-11-08)
+
+### Final Status: CLOSED — NOT ADOPTED
+
+The project owner has reviewed the full quantitative evaluation, ablation diagnostics, and visual comparisons across both the development (`A01`–`A06`) and unseen holdout (`H01`–`H06`) splits.
+
+### Owner Rationale
+
+1. **Modest Generalization on Unseen Sites**: The experimental model yielded modest overall improvements on unseen holdout locations: mean IoU increased from `0.6398` to `0.6585` (`+0.0187` / `+1.87` percentage points).
+2. **Inconsistent Holdout Site Performance**: Improvements were inconsistent across locations, with only 2 of 6 unseen holdout sites showing higher IoU (`H02` and `H04`), while 4 sites saw minor regressions (`H01`, `H03`, `H05`, and `H06`).
+3. **Primary Error Source is Width & Placement Evidence, Not Junction Geometry**: The ablation analysis demonstrates that the vast majority of gains arose from better interpretation of available OSM tags (`placement=*`, `turn:lanes`, `cycleway*=lane`, merge tapers, and one-way class distinctions) rather than the complex geometric junction fillet and flare reconstruction.
+4. **Benchmark Evaluated Against Null Baseline, Not Production E2 Renderer**: The experimental model was benchmarked against a simplified independent constant-width corridor baseline, not against the repository's existing graph-driven Stage E2 renderer (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`). It therefore does not establish superiority over our current production implementation.
+5. **Strategic Road Direction**: The owner has decided to continue advancing the existing OSM infrastructure graph renderer within the main TypeScript/Three.js codebase—focusing particularly on utilizing more of the rich OSM tags, lane metadata, and graph topology directly—rather than adopting or porting this standalone Python/Shapely reconstruction algorithm.
+
+This is an explicit project decision **not to adopt** the experimental algorithm. It does not imply that the research was unhelpful or mathematically unsound; the experiment successfully clarified the empirical limits of centerline reconstruction against ground truth, proved the critical importance of asymmetric placement and lane metadata, and demonstrated the effectiveness of non-invasive traffic island preservation.
+
+### Disposition
+
+- **Production Integration**: **None**. Production road rendering remains on the active TypeScript graph architecture (`M2.3-E2` / `TKT-008`).
+- **Archive Status**: The complete Python implementation (`reconstruct.py`), test suite (`tests/`), validation scripts (`evaluate.py`, `fetch_holdout_data.py`), visual comparison figures (`figures/`), mathematical formulation (`MODEL.md`), and raw GeoJSON outputs (`outputs/`) are preserved as-is under `research/road-surface-reconstruction/` for historical, benchmarking, and reference purposes. No further development or maintenance of this experimental branch is planned.
+

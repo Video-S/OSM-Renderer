@@ -1,5 +1,9 @@
 # Independent road-surface model: preregistered pilot results
 
+> **Historical Document Notice (2026-11-08)**:  
+> This preliminary document recorded the unvalidated pilot baseline before live BGT data download and full model implementation.  
+> It has been **superseded** by the full evaluation report in `../REPORT.md` (which evaluated the new model against BGT on 6 Amsterdam and 6 multi-city holdout sites) and the owner's final closure decision (**Closed — Not Adopted**).
+
 **Date:** 2026-11-07
 
 ## Status

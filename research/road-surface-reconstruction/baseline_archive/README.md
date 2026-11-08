@@ -1,5 +1,10 @@
 # Independent road-reconstruction validation pilot
 
+> **Historical Pilot Archive Note (2026-11-08)**:  
+> This sub-archive contains the initial frozen null-baseline pilot assets (2026-11-07).  
+> The tentative preliminary notes below have been **superseded** by the completed end-to-end BGT evaluation across the 6 Amsterdam development sites (`A01`–`A06`) and 6 multi-city holdout sites (`H01`–`H06`).  
+> See `../REPORT.md` and `../README.md` for the final benchmark results, ablation analysis, and the owner's decision (**Closed — Not Adopted**).
+
 **Research freeze:** 2026-11-07. **No OSM-Renderer E2 implementation used.**
 
 ## Purpose

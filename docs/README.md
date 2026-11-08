@@ -38,6 +38,9 @@ This documentation is organized into two distinct categories:
 - **[Ticket Workflow & Lifecycle (ticket-workflow.md)](./ticket-workflow.md)**  
   Authoritative guide for tracking, developing, verifying, and closing issues in the repository-local [Ticket Tracker](../tickets/).
 
+- **[Exploratory Research & Experiments](../research/road-surface-reconstruction/README.md)**  
+  Archived exploratory research evaluating independent road-surface and junction reconstruction algorithms against external ground truth (BGT). Closed and not adopted for production.
+
 ---
 
 

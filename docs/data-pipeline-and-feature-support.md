@@ -59,6 +59,7 @@ The pipeline classifies OSM tags into strongly typed categories defined in `src/
 | Feature Category | Significant OSM Tags | Parsing Support | 3D Rendering Support | Details |
 | :--- | :--- | :--- | :--- | :--- |
 | **Highways & Roads** | `highway=*` (`motorway`, `primary`, `secondary`, `residential`, `service`, `footway`, `cycleway`, `path`, etc.) | **Full** | **Full** | Rendered as 3D ribbons with boundary-derived junction meshing and miter limits at uniform `ROAD_SURFACE = 0.050 m`. |
+| **Dedicated busways** | `highway=busway` (distinct from `highway=bus_guideway`) | **Full** | **Full** | Separate bus-only carriageways use ordinary road geometry and a conservative `busway` width default; explicit `width=*` overrides. Bus lanes inside existing highways are not separately meshed or colored. |
 | **Railways** | `railway=rail`, `light_rail`, `subway`, `tram` | **Full** | **Full** | Multi-tier procedural tracks: ballast at `+0.060 m`, sleepers at `+0.072 m`, rails at `+0.085 m`. |
 | **Buildings** | `building=*`, `building:levels=*`, `height=*` | **Full** | **Full** | 2D footprint polygon with interior courtyard holes, extruded vertically into 3D prisms. Defaults to 12.0m or 3.2m per level. |
 | **Bridges** | `bridge=yes`, `bridge:movable=*`, `layer > 0` | **Full** | **Full** | Elevated road decks at `+2.850 m` with sloped approach ramps (`min(12m, 30%)`), concrete parapets, and pier pillars. |
@@ -79,6 +80,7 @@ The pipeline classifies OSM tags into strongly typed categories defined in `src/
 4. **Subordinated Service Ways (`service=parking_aisle|driveway`)**: `roadClass === 'service'` with case-insensitive `service=parking_aisle` or `service=driveway` yields `3.0 m`.
 5. **Non-Vehicular Ways (`isNonVehicularRoadClass(roadClass)`)**: Non-vehicular paths and spaces (`path: 1.8 m`, `footway: 2.2 m`, `steps: 2.2 m`, `cycleway: 2.4 m`, `bridleway: 2.6 m`, `track: 3.2 m`, `pier: 3.8 m`, `pedestrian: 4.2 m`, `platform: 4.2 m`) always return their class base width `ROAD_CLASS_WIDTHS[roadClass]` regardless of `oneway=*` or `junction=roundabout`, preventing the `3.6 m` motor-vehicle single-lane floor from inflating or distorting non-vehicular widths.
 6. **Motor-Vehicle Carriageways**: Motor-vehicle ways with `oneway=yes|1|true|-1|reverse` or `junction=roundabout` yield `Math.max(base * 0.62, 3.6)`; bidirectional motor-vehicle ways yield `base = ROAD_CLASS_WIDTHS[roadClass]`. Per-segment `lanes=*` and `est_width=*` tags are intentionally not used for width calculation so erratic lane counts near intersections do not introduce abrupt width steps.
+7. **Separately Mapped Busways**: `highway=busway` is a vehicular-tier road with `ROAD_CLASS_WIDTHS.busway = 6.0 m` for untagged two-way geometry, and ordinary one-way narrowing (`3.72 m`) where `oneway=yes`. An explicit `width=*` overrides both. `highway=bus_guideway` remains a distinct physical guided-bus class (`4.5 m` default). `bus:lanes=*`, `psv:lanes=*`, `lanes:bus=*`, and legacy `busway=lane` attributes remain source metadata only; they never create additional road surfaces or alter width.
 
 ---
 

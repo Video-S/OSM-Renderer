@@ -55,6 +55,7 @@ const ROAD_CLASS_PRIORITY: Record<RoadClass, number> = {
   secondary: 11,
   tertiary: 10,
   raceway: 9,
+  busway: 9,
   bus_guideway: 9,
   residential: 8,
   living_street: 7,

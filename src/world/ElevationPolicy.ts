@@ -81,6 +81,7 @@ export const ELEVATION_POLICY = {
     runway: 0.050,
     taxiway: 0.050,
     raceway: 0.050,
+    busway: 0.050,
     bus_guideway: 0.050,
     construction: 0.050,
     bridge: 0.050,

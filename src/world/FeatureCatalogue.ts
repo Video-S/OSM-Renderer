@@ -217,6 +217,7 @@ export const ROAD_CLASS_WIDTHS: Record<RoadClass, number> = {
   platform: 4.2,
   pier: 3.8,
   raceway: 9.0,
+  busway: 6.0, // Unsegregated, independently mapped bus-only carriageway; oneway uses standard narrowing
   bus_guideway: 4.5,
   construction: 5.0,
   bridge: 7.5,
@@ -245,6 +246,7 @@ export const ROAD_CLASS_MAP: Record<string, { roadClass: RoadClass; label: strin
   path: { roadClass: 'path', label: 'Multi-Use Path' },
   track: { roadClass: 'track', label: 'Agricultural / Forestry Track' },
   corridor: { roadClass: 'pedestrian', label: 'Indoor / Covered Corridor' },
+  busway: { roadClass: 'busway', label: 'Dedicated Busway' },
   bus_guideway: { roadClass: 'bus_guideway', label: 'Guided Busway' },
   raceway: { roadClass: 'raceway', label: 'Motorsport Raceway' },
   road: { roadClass: 'unclassified', label: 'Road (Unclassified Survey)' },

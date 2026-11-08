@@ -48,6 +48,7 @@ export type RoadClass =
   | 'platform'
   | 'pier'
   | 'raceway'
+  | 'busway'
   | 'bus_guideway'
   | 'construction'
   | 'bridge'

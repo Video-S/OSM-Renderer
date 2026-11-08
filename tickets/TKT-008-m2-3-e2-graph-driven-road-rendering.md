@@ -5,7 +5,7 @@ type: feature
 status: in_progress
 priority: high
 created: 2026-11-06
-updated: 2026-11-07
+updated: 2026-11-08
 ---
 
 # TKT-008: M2.3-E2 Graph-Driven Road Rendering and Junction Geometry
@@ -55,6 +55,13 @@ Prior to Stage E2:
 - [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to reflect `M2.3-E2`.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
 - [ ] Project owner reviews Stage E2 implementation to close `TKT-008`.
+
+## 2026-11-08 — Dedicated busway classification (isolated E2 scope addition)
+
+- Accept separately mapped `highway=busway` as an independent vehicular road geometry class in both legacy and graph modes. Keep physically guided `highway=bus_guideway` a distinct class.
+- Use the existing conservative class-default / explicit-`width=*` width policy. Preserve `bus:lanes`, `psv:lanes`, and `lanes:bus` as OSM metadata; do **not** infer additional physical road width, split lanes into separate meshes, or add routing/simulation.
+- Extend class widths, classification, elevation, existing junction-class priority and draw-order tables, and all map themes without modifying the junction solver.
+- Add `src/world/BuswayRendering.test.ts` to cover classification, raw metadata retention, road widths, legacy/preview/graph rendering, provenance, and geometry audit. Owner visual acceptance remains pending; ticket stays `in_progress`.
 
 ## Implementation notes
 - Stage E2 strictly excludes E3 (graph-driven railway rendering and switches), E4 (level crossings, bridge/tunnel transitions), and E5 (legacy cleanup).

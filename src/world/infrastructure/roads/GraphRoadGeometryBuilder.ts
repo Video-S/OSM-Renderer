@@ -1080,14 +1080,6 @@ function extractPolylineSpan(
 }
 
 /**
- * Constructs a localized road-footprint union junction patch and full-width orthogonal branch
- * portals around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
- *
- * Preserves each incident road's full intended width (`bBranch.width`) and curved centerline
- * geometry right up to the local junction cut line `s = trimDist`, and takes the 2D Boolean union
- * of the overlapping local road footprints so road boundaries never pinch or stretch into wedges.
- */
-/**
  * Repairs only a numerically thin near-reversal hairpin introduced by unioning
  * nearly collinear, full-width road stubs. A short junction approach can be
  * narrower in *length* than its carriageway width: two consecutive stubs then
@@ -1096,7 +1088,7 @@ function extractPolylineSpan(
  *
  * Delete such an apex only when its neighboring vertices almost coincide,
  * both arms are shorter than the road width, and the total affected footprint
- * area is sub-decimetre. Never use this for broad concavities, actual islands,
+ * area is under 0.15 m². Never use this for broad concavities, actual islands,
  * holes, or meaningful curb transitions.
  */
 function repairNearReversalJunctionPolygon(
@@ -1158,6 +1150,14 @@ function repairNearReversalJunctionPolygon(
     ? repaired : null;
 }
 
+/**
+ * Constructs a localized road-footprint union junction patch and full-width orthogonal branch
+ * portals around `nodeCenter` for a set of `>= 2` incident branches (`ADR-0002`, `ADR-0009`).
+ *
+ * Preserves each incident road's full intended width (`bBranch.width`) and curved centerline
+ * geometry right up to the local junction cut line `s = trimDist`, and takes the 2D Boolean union
+ * of the overlapping local road footprints so road boundaries never pinch or stretch into wedges.
+ */
 function solveBoundaryDerivedJunctionNode(
   nodeId: string,
   nodeCenter: [number, number],

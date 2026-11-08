@@ -10,6 +10,7 @@
     "src/world/LocalGeoJsonProvider.ts",
     "src/world/OsmApiProvider.ts",
     "src/world/FeatureCatalogue.ts",
+    "src/world/OsmRoadCrossSection.ts",
     "src/world/GeometryBuilder.ts",
     "src/world/BridgeAndTunnelBuilder.ts",
     "src/world/TopologicalNodeIndex.ts",

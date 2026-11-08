@@ -8,7 +8,7 @@
 
 > **buildRoadRibbonOutlineRing**(`points`, `width`, `options?`): \[`number`, `number`\][][]
 
-Defined in: world/GeometryBuilder.ts:737
+Defined in: world/GeometryBuilder.ts:763
 
 Extracts a closed 2D outer polygon ring `[x, z][]` around a centerline polyline of width `width`
 so at-grade road ribbons and footpaths can participate in exact 2D Boolean clipping.
@@ -25,7 +25,7 @@ so at-grade road ribbons and footpaths can participate in exact 2D Boolean clipp
 
 ### options?
 
-`Pick`\<[`RoadRibbonOptions`](../interfaces/RoadRibbonOptions.md), `"startPortal"` \| `"endPortal"`\>
+`Pick`\<[`RoadRibbonOptions`](../interfaces/RoadRibbonOptions.md), `"startPortal"` \| `"endPortal"` \| `"startLeftOffset"` \| `"startRightOffset"` \| `"endLeftOffset"` \| `"endRightOffset"`\>
 
 ## Returns
 

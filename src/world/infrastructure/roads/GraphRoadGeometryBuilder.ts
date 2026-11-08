@@ -41,6 +41,11 @@ import {
   RoadEdgeRenderDescriptor,
   RoadNodeRenderDescriptor,
 } from '../rendering/InfrastructureRenderAdapter';
+import {
+  interpolateCrossSectionSpan,
+  resolveSegmentCrossSectionProfile,
+  type RoadCrossSectionProfile,
+} from '../../OsmRoadCrossSection';
 
 /**
  * Priority ranking of `RoadClass` values for selecting the dominant road class and surface metadata
@@ -495,6 +500,9 @@ interface GraphBranchSpec {
   dir: [number, number];
   nodePos: [number, number];
   width: number;
+  outwardLeft0: number;
+  outwardRight0: number;
+  sampleOutwardOffsets: (distFromNode: number) => { left: number; right: number };
   roadClass: RoadClass;
   firstSegmentLength: number;
   totalEdgeLength: number;
@@ -517,6 +525,10 @@ interface ResolvedEdgeSubSegment {
   seg: EdgeSegmentProvenance;
   points: [number, number][];
   width: number;
+  startLeftOffset: number;
+  startRightOffset: number;
+  endLeftOffset: number;
+  endRightOffset: number;
   roadElevation: number;
   isPath: boolean;
   hasCapStart: boolean;
@@ -745,10 +757,14 @@ function applyDegree2SharedContinuityPortal(
     return false;
   }
 
-  // A single shared miter portal cannot preserve two different approach widths.
-  // Let the existing local full-width footprint union form the two-arm transition
-  // instead of averaging widths and pinching/widening the source ribbons.
-  if (Math.abs(b0.width - b1.width) > 1e-3) {
+  // A single shared miter portal cannot preserve two different approach widths
+  // or discontinuous lateral placement offsets. Let the local footprint union
+  // form the two-arm transition instead of pinching or shifting the ribbons.
+  if (
+    Math.abs(b0.width - b1.width) > 1e-3 ||
+    Math.abs(b0.outwardLeft0 - b1.outwardRight0) > 1e-3 ||
+    Math.abs(b0.outwardRight0 - b1.outwardLeft0) > 1e-3
+  ) {
     return false;
   }
 
@@ -773,17 +789,17 @@ function applyDegree2SharedContinuityPortal(
 
   const cosHalf = Math.sqrt(Math.max(0.1, (1 - dot) * 0.5));
   const miterScale = Math.min(1.35, 1.0 / Math.max(0.75, cosHalf));
-  // Both widths are equal here, so the shared portal preserves their original
-  // cross-sections instead of inventing a third, averaged road width.
-  const halfW = b0.width * 0.5 * miterScale;
+  const rightOutB1 = b1.outwardRight0 * miterScale;
+  const leftOutB1 = b1.outwardLeft0 * miterScale;
+  const maxHalfExtent = Math.max(rightOutB1, leftOutB1);
 
   const t0 = trimmedEndpoints.get(b0.edge.id);
   const t1 = trimmedEndpoints.get(b1.edge.id);
   if (!t0 || !t1) return false;
 
   // Check longitudinal overhang of the tilted miter portal into b0 and b1
-  const overhang0 = Math.abs(nx * b0.dir[0] + nz * b0.dir[1]) * halfW;
-  const overhang1 = Math.abs(nx * b1.dir[0] + nz * b1.dir[1]) * halfW;
+  const overhang0 = Math.abs(nx * b0.dir[0] + nz * b0.dir[1]) * maxHalfExtent;
+  const overhang1 = Math.abs(nx * b1.dir[0] + nz * b1.dir[1]) * maxHalfExtent;
 
   const otherTrim0 = b0.endpoint === 'start' ? t0.endTrimDist : t0.startTrimDist;
   const otherTrim1 = b1.endpoint === 'start' ? t1.endTrimDist : t1.startTrimDist;
@@ -798,12 +814,12 @@ function applyDegree2SharedContinuityPortal(
   }
 
   const sharedLeftOutB1: [number, number] = [
-    nodeCenter[0] + nx * halfW,
-    nodeCenter[1] + nz * halfW,
+    nodeCenter[0] + nx * rightOutB1,
+    nodeCenter[1] + nz * rightOutB1,
   ];
   const sharedRightOutB1: [number, number] = [
-    nodeCenter[0] - nx * halfW,
-    nodeCenter[1] - nz * halfW,
+    nodeCenter[0] - nx * leftOutB1,
+    nodeCenter[1] - nz * leftOutB1,
   ];
 
   // Verify positive lateral width along both b0 and b1 inward normals
@@ -1200,14 +1216,14 @@ function solveBoundaryDerivedJunctionNode(
     const nB = branchNormals[next];
 
     const pA: [number, number] = [
-      nodeCenter[0] + nA[0] * (bA.width / 2),
-      nodeCenter[1] + nA[1] * (bA.width / 2),
+      nodeCenter[0] + nA[0] * bA.outwardRight0,
+      nodeCenter[1] + nA[1] * bA.outwardRight0,
     ];
     const dA = bA.dir;
 
     const pB: [number, number] = [
-      nodeCenter[0] - nB[0] * (bB.width / 2),
-      nodeCenter[1] - nB[1] * (bB.width / 2),
+      nodeCenter[0] - nB[0] * bB.outwardLeft0,
+      nodeCenter[1] - nB[1] * bB.outwardLeft0,
     ];
     const dB = bB.dir;
 
@@ -1225,7 +1241,7 @@ function solveBoundaryDerivedJunctionNode(
   }
 
   const trimDists: number[] = [];
-  // Two connected through-arms with different widths need a local taper,
+  // Two connected through-arms with different widths or lateral offsets need a local taper,
   // otherwise the full-width footprint union leaves square shoulders at the node.
   // A gentle centerline bend is still continuity: 35° for two arms, 23° for
   // three-arm forks. Do not invent a mainline at ambiguous branching nodes.
@@ -1242,7 +1258,12 @@ function solveBoundaryDerivedJunctionNode(
         // same-class pair. Cycleways use the same path-tier rule.
         if (k === 3 && !isPathJunction && a.roadClass !== b.roadClass) continue;
         const dot = a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
-        const delta = Math.abs(a.width - b.width);
+        const widthDelta = Math.abs(a.width - b.width);
+        const offsetDelta = Math.max(
+          Math.abs(a.outwardLeft0 - b.outwardRight0),
+          Math.abs(a.outwardRight0 - b.outwardLeft0)
+        );
+        const delta = Math.max(widthDelta, offsetDelta);
         if (a.edge.id === b.edge.id || dot > maxThroughArmDot || delta <= 1e-3) continue;
         const minTaperLength = delta * 0.65;
         if (maxTrimDists[i] < minTaperLength || maxTrimDists[j] < minTaperLength) continue;
@@ -1356,8 +1377,20 @@ function solveBoundaryDerivedJunctionNode(
     const rawTrimDist = Math.max(0.15, minStub, reqLeft, reqRight, maxPairReq);
     const isTransitionArm = widthTransitionPair?.includes(i) ?? false;
     const transitionDelta = widthTransitionPair
-      ? Math.abs(sortedBranches[widthTransitionPair[0]].width -
-          sortedBranches[widthTransitionPair[1]].width)
+      ? Math.max(
+          Math.abs(
+            sortedBranches[widthTransitionPair[0]].width -
+              sortedBranches[widthTransitionPair[1]].width
+          ),
+          Math.abs(
+            sortedBranches[widthTransitionPair[0]].outwardLeft0 -
+              sortedBranches[widthTransitionPair[1]].outwardRight0
+          ),
+          Math.abs(
+            sortedBranches[widthTransitionPair[0]].outwardRight0 -
+              sortedBranches[widthTransitionPair[1]].outwardLeft0
+          )
+        )
       : 0;
     const taperTrimDist = isTransitionArm
       ? Math.max(rawTrimDist, maxBranchWidth * 0.5, transitionDelta * 0.65)
@@ -1438,17 +1471,18 @@ function solveBoundaryDerivedJunctionNode(
     const tCutZ = segDz / segLen;
     const nCutX = -tCutZ;
     const nCutZ = tCutX;
-    const halfW = bBranch.width * 0.5;
+    const { left: outwardLeftCut, right: outwardRightCut } =
+      bBranch.sampleOutwardOffsets(trimDist);
 
     // Strictly orthogonal, 100% full-width portal at pCut
     const centerPortal: [number, number] = [snapCoord(pCut[0]), snapCoord(pCut[1])];
     const leftPortal: [number, number] = [
-      snapCoord(pCut[0] + nCutX * halfW),
-      snapCoord(pCut[1] + nCutZ * halfW),
+      snapCoord(pCut[0] + nCutX * outwardRightCut),
+      snapCoord(pCut[1] + nCutZ * outwardRightCut),
     ];
     const rightPortal: [number, number] = [
-      snapCoord(pCut[0] - nCutX * halfW),
-      snapCoord(pCut[1] - nCutZ * halfW),
+      snapCoord(pCut[0] - nCutX * outwardLeftCut),
+      snapCoord(pCut[1] - nCutZ * outwardLeftCut),
     ];
     portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
 
@@ -1456,6 +1490,10 @@ function solveBoundaryDerivedJunctionNode(
     const stubRibbon = generateRoadRibbon(localPts, bBranch.width, 0, {
       roundCaps: false,
       endPortal: { left: leftPortal, right: rightPortal },
+      startLeftOffset: bBranch.outwardLeft0,
+      startRightOffset: bBranch.outwardRight0,
+      endLeftOffset: outwardLeftCut,
+      endRightOffset: outwardRightCut,
     });
 
     const leftChain: [number, number][] = [];
@@ -1474,15 +1512,15 @@ function solveBoundaryDerivedJunctionNode(
       const n0 = branchNormals[i];
       leftChain.push(
         [
-          snapCoord(nodeCenter[0] + n0[0] * halfW),
-          snapCoord(nodeCenter[1] + n0[1] * halfW),
+          snapCoord(nodeCenter[0] + n0[0] * bBranch.outwardRight0),
+          snapCoord(nodeCenter[1] + n0[1] * bBranch.outwardRight0),
         ],
         leftPortal
       );
       rightChain.push(
         [
-          snapCoord(nodeCenter[0] - n0[0] * halfW),
-          snapCoord(nodeCenter[1] - n0[1] * halfW),
+          snapCoord(nodeCenter[0] - n0[0] * bBranch.outwardLeft0),
+          snapCoord(nodeCenter[1] - n0[1] * bBranch.outwardLeft0),
         ],
         rightPortal
       );
@@ -1959,12 +1997,20 @@ function buildGraphRibbonPolygonRing(
     hasEndCap?: boolean;
     startPortal?: { left: [number, number]; right: [number, number] };
     endPortal?: { left: [number, number]; right: [number, number] };
+    startLeftOffset?: number;
+    startRightOffset?: number;
+    endLeftOffset?: number;
+    endRightOffset?: number;
   }
 ): [number, number][][] | null {
   if (!options?.hasStartCap && !options?.hasEndCap) {
     return buildRoadRibbonOutlineRing(points, width, {
       startPortal: options?.startPortal,
       endPortal: options?.endPortal,
+      startLeftOffset: options?.startLeftOffset,
+      startRightOffset: options?.startRightOffset,
+      endLeftOffset: options?.endLeftOffset,
+      endRightOffset: options?.endRightOffset,
     });
   }
 
@@ -1972,6 +2018,10 @@ function buildGraphRibbonPolygonRing(
     roundCaps: false,
     startPortal: options?.startPortal,
     endPortal: options?.endPortal,
+    startLeftOffset: options?.startLeftOffset,
+    startRightOffset: options?.startRightOffset,
+    endLeftOffset: options?.endLeftOffset,
+    endRightOffset: options?.endRightOffset,
   });
   if (!ribbon) return null;
   const pos = ribbon.positions;
@@ -1979,6 +2029,10 @@ function buildGraphRibbonPolygonRing(
   if (n < 2) return null;
 
   const halfW = width * 0.5;
+  const sLeft = options?.startLeftOffset ?? halfW;
+  const sRight = options?.startRightOffset ?? halfW;
+  const eLeft = options?.endLeftOffset ?? sLeft;
+  const eRight = options?.endRightOffset ?? sRight;
   const capSegments = 6;
   const ring: [number, number][] = [];
 
@@ -2001,13 +2055,17 @@ function buildGraphRibbonPolygonRing(
     const tnz = dz / len;
     const nnx = -tnz;
     const nnz = tnx;
+    const midShiftEnd = (eRight - eLeft) * 0.5;
+    const capRadiusEnd = (eRight + eLeft) * 0.5;
+    const cnx = pn[0] + nnx * midShiftEnd;
+    const cnz = pn[1] + nnz * midShiftEnd;
     for (let k = capSegments - 1; k >= 1; k--) {
       const angle = -Math.PI / 2 + (k / capSegments) * Math.PI;
       const cosA = Math.cos(angle);
       const sinA = Math.sin(angle);
       const vx = cosA * tnx + sinA * nnx;
       const vz = cosA * tnz + sinA * nnz;
-      ring.push([snapCoord(pn[0] + vx * halfW), snapCoord(pn[1] + vz * halfW)]);
+      ring.push([snapCoord(cnx + vx * capRadiusEnd), snapCoord(cnz + vz * capRadiusEnd)]);
     }
   }
 
@@ -2030,13 +2088,17 @@ function buildGraphRibbonPolygonRing(
     const t0z = dz / len;
     const n0x = -t0z;
     const n0z = t0x;
+    const midShift0 = (sRight - sLeft) * 0.5;
+    const capRadius0 = (sRight + sLeft) * 0.5;
+    const c0x = p0[0] + n0x * midShift0;
+    const c0z = p0[1] + n0z * midShift0;
     for (let k = capSegments - 1; k >= 1; k--) {
       const angle = Math.PI / 2 + (k / capSegments) * Math.PI;
       const cosA = Math.cos(angle);
       const sinA = Math.sin(angle);
       const vx = cosA * t0x + sinA * n0x;
       const vz = cosA * t0z + sinA * n0z;
-      ring.push([snapCoord(p0[0] + vx * halfW), snapCoord(p0[1] + vz * halfW)]);
+      ring.push([snapCoord(c0x + vx * capRadius0), snapCoord(c0z + vz * capRadius0)]);
     }
   }
 
@@ -2153,6 +2215,10 @@ export function buildGraphAtGradeRoadGeometries(
   // 1. Filter at-grade buildable road edges and initialize endpoint trim states
   const buildableEdges: RoadEdgeRenderDescriptor[] = [];
   const trimmedEndpoints = new Map<string, EdgeTrimState>();
+  const edgeSegmentProfilesByEdgeId = new Map<
+    string,
+    Array<{ seg: EdgeSegmentProvenance; profile: RoadCrossSectionProfile }>
+  >();
 
   for (const edge of descriptors.roadEdges) {
     if (!edge.isAtGradeBuildable) continue;
@@ -2172,6 +2238,68 @@ export function buildGraphAtGradeRoadGeometries(
     for (const pt of edge.points) {
       atGradeRoadEndpoints.push([pt[0], pt[1]]);
     }
+
+    const rawSegments: readonly EdgeSegmentProvenance[] =
+      edge.provenance.segments.length > 0
+        ? edge.provenance.segments
+        : [
+            {
+              sourceFeatureId: edge.sourceFeatureId,
+              partId: `${edge.sourceFeatureId}-0`,
+              deduplicatedFeatureIds: edge.deduplicatedFeatureIds,
+              startVertexIndex: 0,
+              endVertexIndex: edge.points.length - 1,
+              sourceStartVertexIndex: 0,
+              sourceEndVertexIndex: edge.points.length - 1,
+              startArcLength: 0,
+              endArcLength: len,
+              reversedRelativeToSource: false,
+              osmTags: edge.primaryOsmTags,
+            },
+          ];
+
+    const rawProfiles: Array<{ seg: EdgeSegmentProvenance; profile: RoadCrossSectionProfile }> =
+      rawSegments.map((seg) => ({
+        seg,
+        profile: resolveSegmentCrossSectionProfile(edge.width, edge.roadClass, seg.osmTags, {
+          reversedRelativeToSource: seg.reversedRelativeToSource,
+          roadWidthMultiplier,
+        }),
+      }));
+
+    for (let k = 0; k < rawProfiles.length; k++) {
+      const { seg, profile } = rawProfiles[k];
+      const pTag = String(seg.osmTags?.placement ?? '').trim().toLowerCase();
+      if (pTag === 'transition') {
+        let sLeft = profile.startLeftOffset;
+        let sRight = profile.startRightOffset;
+        let eLeft = profile.endLeftOffset;
+        let eRight = profile.endRightOffset;
+        if (k > 0 && !seg.osmTags?.['placement:start']) {
+          sLeft = rawProfiles[k - 1].profile.endLeftOffset;
+          sRight = rawProfiles[k - 1].profile.endRightOffset;
+        }
+        if (k < rawProfiles.length - 1 && !seg.osmTags?.['placement:end']) {
+          eLeft = rawProfiles[k + 1].profile.startLeftOffset;
+          eRight = rawProfiles[k + 1].profile.startRightOffset;
+        }
+        rawProfiles[k].profile = {
+          ...profile,
+          startWidth: sLeft + sRight,
+          endWidth: eLeft + eRight,
+          startLeftOffset: sLeft,
+          startRightOffset: sRight,
+          endLeftOffset: eLeft,
+          endRightOffset: eRight,
+          isAsymmetricOrTapered:
+            Math.abs(sLeft - sRight) > 1e-4 ||
+            Math.abs(eLeft - eRight) > 1e-4 ||
+            Math.abs(sLeft - eLeft) > 1e-4 ||
+            Math.abs(sRight - eRight) > 1e-4,
+        };
+      }
+    }
+    edgeSegmentProfilesByEdgeId.set(edge.id, rawProfiles);
 
     const startNode = descriptors.roadNodesById.get(edge.fromNodeId);
     const endNode = descriptors.roadNodesById.get(edge.toNodeId);
@@ -2240,6 +2368,33 @@ export function buildGraphAtGradeRoadGeometries(
     });
   }
 
+  const sampleEdgeForwardOffsets = (
+    edge: RoadEdgeRenderDescriptor,
+    totalPolyLen: number,
+    arcPos: number
+  ): { left: number; right: number } => {
+    const segProfiles = edgeSegmentProfilesByEdgeId.get(edge.id);
+    const halfW = edge.width * roadWidthMultiplier * 0.5;
+    if (!segProfiles || segProfiles.length === 0) {
+      return { left: halfW, right: halfW };
+    }
+    const s = Math.max(0, Math.min(totalPolyLen, arcPos));
+    for (let i = 0; i < segProfiles.length; i++) {
+      const { seg, profile } = segProfiles[i];
+      if (s <= seg.endArcLength + 1e-6 || i === segProfiles.length - 1) {
+        const segLen = Math.max(1e-6, seg.endArcLength - seg.startArcLength);
+        const t = Math.max(0, Math.min(1, (s - seg.startArcLength) / segLen));
+        return {
+          left: profile.startLeftOffset + (profile.endLeftOffset - profile.startLeftOffset) * t,
+          right:
+            profile.startRightOffset + (profile.endRightOffset - profile.startRightOffset) * t,
+        };
+      }
+    }
+    const last = segProfiles[segProfiles.length - 1].profile;
+    return { left: last.endLeftOffset, right: last.endRightOffset };
+  };
+
   // Helper to build deduplicated GraphBranchSpec objects from a node's incident half-edges
   const collectBuildableBranches = (
     node: RoadNodeRenderDescriptor,
@@ -2267,12 +2422,24 @@ export function buildGraphAtGradeRoadGeometries(
         0.05,
         Math.hypot(adjacentPt[0] - endpointPt[0], adjacentPt[1] - endpointPt[1])
       );
+      const sampleOutwardOffsets = (distFromNode: number): { left: number; right: number } => {
+        const d = Math.max(0, Math.min(totalPolyLen, distFromNode));
+        if (he.endpoint === 'start') {
+          return sampleEdgeForwardOffsets(edge, totalPolyLen, d);
+        }
+        const fwd = sampleEdgeForwardOffsets(edge, totalPolyLen, totalPolyLen - d);
+        return { left: fwd.right, right: fwd.left };
+      };
+      const offsets0 = sampleOutwardOffsets(0);
       out.push({
         edge,
         endpoint: he.endpoint,
         dir,
         nodePos: [node.position[0], node.position[1]],
         width: edge.width * roadWidthMultiplier,
+        outwardLeft0: offsets0.left,
+        outwardRight0: offsets0.right,
+        sampleOutwardOffsets,
         roadClass: edge.roadClass,
         firstSegmentLength: firstSegLen,
         totalEdgeLength: totalPolyLen,
@@ -2466,49 +2633,35 @@ export function buildGraphAtGradeRoadGeometries(
           edge.sourceFeatureId || edge.id
         );
 
-    const rawSegments: readonly EdgeSegmentProvenance[] =
-      edge.provenance.segments.length > 0
-        ? edge.provenance.segments
-        : [
-            {
-              sourceFeatureId: edge.sourceFeatureId,
-              partId: `${edge.sourceFeatureId}-0`,
-              deduplicatedFeatureIds: edge.deduplicatedFeatureIds,
-              startVertexIndex: 0,
-              endVertexIndex: edge.points.length - 1,
-              sourceStartVertexIndex: 0,
-              sourceEndVertexIndex: edge.points.length - 1,
-              startArcLength: 0,
-              endArcLength: totalLen,
-              reversedRelativeToSource: false,
-              osmTags: edge.primaryOsmTags,
-            },
-          ];
+    const rawSegProfiles = edgeSegmentProfilesByEdgeId.get(edge.id)!;
 
     // Filter constituent segments active inside [sStart, sEnd]
     const activeSpans: Array<{
       seg: EdgeSegmentProvenance;
+      profile: RoadCrossSectionProfile;
       spanStart: number;
       spanEnd: number;
     }> = [];
 
-    if (rawSegments.length === 1) {
+    if (rawSegProfiles.length === 1) {
       activeSpans.push({
-        seg: rawSegments[0],
+        seg: rawSegProfiles[0].seg,
+        profile: rawSegProfiles[0].profile,
         spanStart: sStart,
         spanEnd: sEnd,
       });
     } else {
-      for (const seg of rawSegments) {
+      for (const { seg, profile } of rawSegProfiles) {
         const spanStart = Math.max(sStart, seg.startArcLength);
         const spanEnd = Math.min(sEnd, seg.endArcLength);
         if (spanEnd - spanStart >= 0.05) {
-          activeSpans.push({ seg, spanStart, spanEnd });
+          activeSpans.push({ seg, profile, spanStart, spanEnd });
         }
       }
       if (activeSpans.length === 0) {
         activeSpans.push({
-          seg: rawSegments[0],
+          seg: rawSegProfiles[0].seg,
+          profile: rawSegProfiles[0].profile,
           spanStart: sStart,
           spanEnd: sEnd,
         });
@@ -2524,8 +2677,15 @@ export function buildGraphAtGradeRoadGeometries(
     }
 
     const subPolylines: [number, number][][] = [];
+    const activeSpanOffsets: Array<{
+      startLeftOffset: number;
+      startRightOffset: number;
+      endLeftOffset: number;
+      endRightOffset: number;
+    }> = [];
+
     for (let j = 0; j < m; j++) {
-      const { spanStart, spanEnd } = activeSpans[j];
+      const { seg, profile, spanStart, spanEnd } = activeSpans[j];
       // Source-provenance spans may occupy only the first or last few metres of
       // a much longer simplified edge. trimPolylineByArcLength caps each trim
       // at 45% of the entire edge and therefore expands those spans, creating
@@ -2538,6 +2698,15 @@ export function buildGraphAtGradeRoadGeometries(
         subPts[subPts.length - 1] = [tInfo.end[0], tInfo.end[1]];
       }
       subPolylines.push(subPts);
+      activeSpanOffsets.push(
+        interpolateCrossSectionSpan(
+          profile,
+          seg.startArcLength,
+          seg.endArcLength,
+          spanStart,
+          spanEnd
+        )
+      );
     }
 
     // Compute shared internal portals between adjacent active provenance segments
@@ -2573,17 +2742,25 @@ export function buildGraphAtGradeRoadGeometries(
       const dot = tInX * tOutX + tInZ * tOutZ;
       const cosHalf = Math.sqrt(Math.max(0.1, (1 + dot) * 0.5));
       const miterScale = Math.min(1.25, 1.0 / Math.max(0.76, cosHalf));
-      const halfW = (width / 2) * miterScale;
+      const rightDist =
+        (activeSpanOffsets[j].endRightOffset + activeSpanOffsets[j + 1].startRightOffset) *
+        0.5 *
+        miterScale;
+      const leftDist =
+        (activeSpanOffsets[j].endLeftOffset + activeSpanOffsets[j + 1].startLeftOffset) *
+        0.5 *
+        miterScale;
 
       internalPortals.push({
-        left: [pJoin[0] + nx * halfW, pJoin[1] + nz * halfW],
-        right: [pJoin[0] - nx * halfW, pJoin[1] - nz * halfW],
+        left: [pJoin[0] + nx * rightDist, pJoin[1] + nz * rightDist],
+        right: [pJoin[0] - nx * leftDist, pJoin[1] - nz * leftDist],
       });
     }
 
     const subSegments: ResolvedEdgeSubSegment[] = [];
     for (let j = 0; j < m; j++) {
       const { seg } = activeSpans[j];
+      const spanOffset = activeSpanOffsets[j];
       const subId = m === 1 ? edge.id : `${edge.id}#seg${j}`;
       const sids = [seg.sourceFeatureId, ...seg.deduplicatedFeatureIds];
       const uniqueSids = [...new Set(sids)];
@@ -2619,6 +2796,10 @@ export function buildGraphAtGradeRoadGeometries(
         seg,
         points: sanitized.points,
         width,
+        startLeftOffset: spanOffset.startLeftOffset,
+        startRightOffset: spanOffset.startRightOffset,
+        endLeftOffset: spanOffset.endLeftOffset,
+        endRightOffset: spanOffset.endRightOffset,
         roadElevation,
         isPath,
         hasCapStart: j === 0 ? tInfo.hasCapStart : false,
@@ -2848,6 +3029,12 @@ export function buildGraphAtGradeRoadGeometries(
           continue;
         }
         const { width, roadElevation, isPath, sourceFeatureIds: sids } = sub;
+        const offsetOpts = {
+          startLeftOffset: sub.startLeftOffset,
+          startRightOffset: sub.startRightOffset,
+          endLeftOffset: sub.endLeftOffset,
+          endRightOffset: sub.endRightOffset,
+        };
         let activeStartPortal = sub.startPortal;
         let activeEndPortal = sub.endPortal;
 
@@ -2863,6 +3050,7 @@ export function buildGraphAtGradeRoadGeometries(
               hasEndCap: sub.hasCapEnd,
               startPortal: activeStartPortal,
               endPortal: activeEndPortal,
+              ...offsetOpts,
             });
 
         // If skewed portals caused the outline ring to self-intersect, relax back to orthogonal portals
@@ -2874,6 +3062,7 @@ export function buildGraphAtGradeRoadGeometries(
           const orthoOutline = buildGraphRibbonPolygonRing(pts, width, {
             hasStartCap: sub.hasCapStart,
             hasEndCap: sub.hasCapEnd,
+            ...offsetOpts,
           });
           if (orthoOutline && orthoOutline[0] && !hasRingSelfIntersection(orthoOutline[0])) {
             activeStartPortal = undefined;
@@ -3001,7 +3190,7 @@ export function buildGraphAtGradeRoadGeometries(
               if (!clippedSuccess) {
                 try {
                   const cleanedPts = cleanPolylineForClipping(pts);
-                  const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width);
+                  const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width, offsetOpts);
                   if (
                     cleanedOutline &&
                     cleanedOutline[0] &&
@@ -3146,7 +3335,7 @@ export function buildGraphAtGradeRoadGeometries(
             (!outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]))
           ) {
             const cleanedPts = cleanPolylineForClipping(pts);
-            const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width);
+            const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width, offsetOpts);
             if (
               !cleanedOutline ||
               !cleanedOutline[0] ||
@@ -3174,7 +3363,10 @@ export function buildGraphAtGradeRoadGeometries(
             rPts: [number, number][],
             opts: RoadRibbonOptions
           ): THREE.BufferGeometry | null => {
-            const ribbon = generateRoadRibbon(rPts, width, roadElevation, opts);
+            const ribbon = generateRoadRibbon(rPts, width, roadElevation, {
+              ...offsetOpts,
+              ...opts,
+            });
             if (!ribbon) return null;
             const candidateGeo = new THREE.BufferGeometry();
             candidateGeo.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
@@ -3213,6 +3405,7 @@ export function buildGraphAtGradeRoadGeometries(
               outlinePoly = buildGraphRibbonPolygonRing(pts, width, {
                 hasStartCap: sub.hasCapStart,
                 hasEndCap: sub.hasCapEnd,
+                ...offsetOpts,
               });
             }
           }
@@ -3238,6 +3431,7 @@ export function buildGraphAtGradeRoadGeometries(
                 outlinePoly = buildGraphRibbonPolygonRing(pts, width, {
                   hasStartCap: sub.hasCapStart,
                   hasEndCap: sub.hasCapEnd,
+                  ...offsetOpts,
                 });
               }
             }

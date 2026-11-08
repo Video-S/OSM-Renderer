@@ -8,7 +8,7 @@
 
 > **extractRawOnewayTag**(`osmTags?`): `string`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:55
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:60
 
 Extracts the verbatim raw `oneway` tag if present and non-empty.
 

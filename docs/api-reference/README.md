@@ -24,6 +24,7 @@
 - [world/LocalGeoJsonProvider](world/LocalGeoJsonProvider/README.md)
 - [world/MapDataProvider](world/MapDataProvider/README.md)
 - [world/OsmApiProvider](world/OsmApiProvider/README.md)
+- [world/OsmRoadCrossSection](world/OsmRoadCrossSection/README.md)
 - [world/PlanarLayerValidator](world/PlanarLayerValidator/README.md)
 - [world/SceneResourceManager](world/SceneResourceManager/README.md)
 - [world/TopologicalNodeIndex](world/TopologicalNodeIndex/README.md)

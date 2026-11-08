@@ -8,7 +8,7 @@
 
 > **generateRoadRibbon**(`points`, `width`, `yElevation?`, `options?`): `object`
 
-Defined in: world/GeometryBuilder.ts:233
+Defined in: world/GeometryBuilder.ts:237
 
 Pure math helper to compute 2D ribbon strip vertices from a centerline polyline.
 Exported for unit testing and reusable for roads, railways, and linear waterways.

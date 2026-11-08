@@ -8,7 +8,7 @@
 
 > **compareStringsCodeUnit**(`a`, `b`): `number`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:219
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:231
 
 ## Parameters
 

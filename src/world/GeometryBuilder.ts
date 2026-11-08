@@ -163,6 +163,10 @@ export interface RoadRibbonOptions {
   capSegments?: number;
   startPortal?: { left: [number, number]; right: [number, number] };
   endPortal?: { left: [number, number]; right: [number, number] };
+  startLeftOffset?: number;
+  startRightOffset?: number;
+  endLeftOffset?: number;
+  endRightOffset?: number;
 }
 
 /**
@@ -264,15 +268,27 @@ export function generateRoadRibbon(
   const stripTriangleCount = quadCount * 2;
 
   const halfW = width / 2;
+  const sLeft = options?.startLeftOffset ?? halfW;
+  const sRight = options?.startRightOffset ?? halfW;
+  const eLeft = options?.endLeftOffset ?? sLeft;
+  const eRight = options?.endRightOffset ?? sRight;
+  const hasCustomOffsets =
+    Math.abs(sLeft - halfW) > 1e-6 ||
+    Math.abs(sRight - halfW) > 1e-6 ||
+    Math.abs(eLeft - halfW) > 1e-6 ||
+    Math.abs(eRight - halfW) > 1e-6;
 
-  // Tangents along segments
+  // Tangents and cumulative arc lengths along segments
   const tangents: [number, number][] = [];
+  const cumLengths: number[] = [0];
   for (let i = 0; i < n - 1; i++) {
     const dx = cleanPoints[i + 1][0] - cleanPoints[i][0];
     const dz = cleanPoints[i + 1][1] - cleanPoints[i][1];
     const len = Math.hypot(dx, dz) || 1e-6;
     tangents.push([dx / len, dz / len]);
+    cumLengths.push(cumLengths[i] + len);
   }
+  const totalRibbonLength = cumLengths[n - 1] || 1e-6;
 
   // Calculate whether start and end meet (closed loop, e.g. roundabout)
   const isClosed =
@@ -314,7 +330,7 @@ export function generateRoadRibbon(
       tz /= len;
     }
 
-    // Perpendicular vector in XZ plane: (-tz, tx)
+    // Perpendicular vector in XZ plane: (-tz, tx) points to physical right of forward tangent
     const nx = -tz;
     const nz = tx;
 
@@ -326,13 +342,19 @@ export function generateRoadRibbon(
       miterScale = Math.min(1.30, 1.0 / Math.max(0.76, cosHalf));
     }
 
-    const offsetX = nx * halfW * miterScale;
-    const offsetZ = nz * halfW * miterScale;
+    const u = hasCustomOffsets ? Math.max(0, Math.min(1, cumLengths[i] / totalRibbonLength)) : 0;
+    const dRight = hasCustomOffsets ? sRight + (eRight - sRight) * u : halfW;
+    const dLeft = hasCustomOffsets ? sLeft + (eLeft - sLeft) * u : halfW;
+
+    const rightOffsetX = nx * dRight * miterScale;
+    const rightOffsetZ = nz * dRight * miterScale;
+    const leftOffsetX = nx * dLeft * miterScale;
+    const leftOffsetZ = nz * dLeft * miterScale;
 
     const px = cleanPoints[i][0];
     const pz = cleanPoints[i][1];
 
-    // Left vertex
+    // Vertex 2*i (`leftIdx` in buffer, displaced along +n = physical right curb)
     const leftIdx = i * 2;
     if (i === 0 && options?.startPortal) {
       positions[leftIdx * 3] = options.startPortal.left[0];
@@ -343,16 +365,16 @@ export function generateRoadRibbon(
       positions[leftIdx * 3 + 1] = yElevation;
       positions[leftIdx * 3 + 2] = options.endPortal.left[1];
     } else {
-      positions[leftIdx * 3] = px + offsetX;
+      positions[leftIdx * 3] = px + rightOffsetX;
       positions[leftIdx * 3 + 1] = yElevation;
-      positions[leftIdx * 3 + 2] = pz + offsetZ;
+      positions[leftIdx * 3 + 2] = pz + rightOffsetZ;
     }
 
     normals[leftIdx * 3] = 0;
     normals[leftIdx * 3 + 1] = 1;
     normals[leftIdx * 3 + 2] = 0;
 
-    // Right vertex
+    // Vertex 2*i+1 (`rightIdx` in buffer, displaced along -n = physical left curb)
     const rightIdx = i * 2 + 1;
     if (i === 0 && options?.startPortal) {
       positions[rightIdx * 3] = options.startPortal.right[0];
@@ -363,9 +385,9 @@ export function generateRoadRibbon(
       positions[rightIdx * 3 + 1] = yElevation;
       positions[rightIdx * 3 + 2] = options.endPortal.right[1];
     } else {
-      positions[rightIdx * 3] = px - offsetX;
+      positions[rightIdx * 3] = px - leftOffsetX;
       positions[rightIdx * 3 + 1] = yElevation;
-      positions[rightIdx * 3 + 2] = pz - offsetZ;
+      positions[rightIdx * 3 + 2] = pz - leftOffsetZ;
     }
 
     normals[rightIdx * 3] = 0;
@@ -396,12 +418,14 @@ export function generateRoadRibbon(
 
   // 1. Start Cap (at cleanPoints[0], opposite tangent[0])
   if (addStartCap) {
-    const p0x = cleanPoints[0][0];
-    const p0z = cleanPoints[0][1];
     const t0x = tangents[0][0];
     const t0z = tangents[0][1];
     const n0x = -t0z;
     const n0z = t0x;
+    const midShift0 = hasCustomOffsets ? (sRight - sLeft) * 0.5 : 0;
+    const capRadius0 = hasCustomOffsets ? (sRight + sLeft) * 0.5 : halfW;
+    const p0x = cleanPoints[0][0] + n0x * midShift0;
+    const p0z = cleanPoints[0][1] + n0z * midShift0;
 
     const centerStartIdx = nextVertex++;
     positions[centerStartIdx * 3] = p0x;
@@ -420,9 +444,9 @@ export function generateRoadRibbon(
       const vz = cosA * t0z + sinA * n0z;
 
       const vIdx = nextVertex++;
-      positions[vIdx * 3] = p0x + vx * halfW;
+      positions[vIdx * 3] = p0x + vx * capRadius0;
       positions[vIdx * 3 + 1] = yElevation;
-      positions[vIdx * 3 + 2] = p0z + vz * halfW;
+      positions[vIdx * 3 + 2] = p0z + vz * capRadius0;
       normals[vIdx * 3] = 0;
       normals[vIdx * 3 + 1] = 1;
       normals[vIdx * 3 + 2] = 0;
@@ -439,12 +463,14 @@ export function generateRoadRibbon(
 
   // 2. End Cap (at cleanPoints[n-1], along tangent[n-2])
   if (addEndCap) {
-    const pnx = cleanPoints[n - 1][0];
-    const pnz = cleanPoints[n - 1][1];
     const tnx = tangents[n - 2][0];
     const tnz = tangents[n - 2][1];
     const nnx = -tnz;
     const nnz = tnx;
+    const midShiftEnd = hasCustomOffsets ? (eRight - eLeft) * 0.5 : 0;
+    const capRadiusEnd = hasCustomOffsets ? (eRight + eLeft) * 0.5 : halfW;
+    const pnx = cleanPoints[n - 1][0] + nnx * midShiftEnd;
+    const pnz = cleanPoints[n - 1][1] + nnz * midShiftEnd;
 
     const centerEndIdx = nextVertex++;
     positions[centerEndIdx * 3] = pnx;
@@ -466,9 +492,9 @@ export function generateRoadRibbon(
       const vz = cosA * tnz + sinA * nnz;
 
       const vIdx = nextVertex++;
-      positions[vIdx * 3] = pnx + vx * halfW;
+      positions[vIdx * 3] = pnx + vx * capRadiusEnd;
       positions[vIdx * 3 + 1] = yElevation;
-      positions[vIdx * 3 + 2] = pnz + vz * halfW;
+      positions[vIdx * 3 + 2] = pnz + vz * capRadiusEnd;
       normals[vIdx * 3] = 0;
       normals[vIdx * 3 + 1] = 1;
       normals[vIdx * 3 + 2] = 0;
@@ -737,12 +763,24 @@ function mergeWithFaceRanges(
 export function buildRoadRibbonOutlineRing(
   points: [number, number][],
   width: number,
-  options?: Pick<RoadRibbonOptions, 'startPortal' | 'endPortal'>
+  options?: Pick<
+    RoadRibbonOptions,
+    | 'startPortal'
+    | 'endPortal'
+    | 'startLeftOffset'
+    | 'startRightOffset'
+    | 'endLeftOffset'
+    | 'endRightOffset'
+  >
 ): [number, number][][] | null {
   const ribbon = generateRoadRibbon(points, width, 0, {
     roundCaps: false,
     startPortal: options?.startPortal,
     endPortal: options?.endPortal,
+    startLeftOffset: options?.startLeftOffset,
+    startRightOffset: options?.startRightOffset,
+    endLeftOffset: options?.endLeftOffset,
+    endRightOffset: options?.endRightOffset,
   });
   if (!ribbon) return null;
   const pos = ribbon.positions;

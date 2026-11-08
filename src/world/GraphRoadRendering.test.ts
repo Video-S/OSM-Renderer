@@ -4568,5 +4568,597 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     }
   });
 
+  it('32. resolves OSM road widths from width:carriageway, width, lanes, directional lanes, turn:lanes, and on-road cycle lanes while excluding separate cycle tracks', () => {
+    const originLat = 52.37;
+    const originLon = 4.89;
+    const dLon = 0.0006;
+
+    const makeFeature = (id: string, rowIdx: number, props: Record<string, any>) => {
+      const lat = originLat + rowIdx * 0.0003;
+      return {
+        type: 'Feature',
+        id,
+        properties: { id, ...props },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [originLon, lat],
+            [originLon + dLon, lat],
+          ],
+        },
+      };
+    };
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        makeFeature('way/sym-default', 0, { highway: 'residential' }),
+        makeFeature('way/carriageway-override', 1, {
+          highway: 'primary',
+          'width:carriageway': '6.4',
+          width: '11.0',
+          lanes: '3',
+        }),
+        makeFeature('way/explicit-width-unit', 2, {
+          highway: 'secondary',
+          width: '8.2 m',
+          lanes: '2',
+        }),
+        makeFeature('way/lanes-3-primary', 3, {
+          highway: 'primary',
+          lanes: '3',
+        }),
+        makeFeature('way/dir-lanes-secondary', 4, {
+          highway: 'secondary',
+          'lanes:forward': '2',
+          'lanes:backward': '1',
+        }),
+        makeFeature('way/turn-lanes-oneway', 5, {
+          highway: 'primary',
+          oneway: 'yes',
+          'turn:lanes': 'left|through|right',
+        }),
+        makeFeature('way/cycle-lane-included', 6, {
+          highway: 'secondary',
+          lanes: '2',
+          'cycleway:both': 'lane',
+          'cycleway:both:width': '1.5',
+        }),
+        makeFeature('way/cycle-track-excluded', 7, {
+          highway: 'secondary',
+          lanes: '2',
+          cycleway: 'track',
+          'cycleway:right': 'track',
+          'cycleway:width': '2.5',
+        }),
+      ],
+    };
+
+    const data = new LocalGeoJsonProvider().parseGeoJson(
+      geojson,
+      'OSM road width precedence and cycleway semantics test',
+      [originLon, originLat],
+      500
+    );
+    const partById = new Map(
+      (data.topologySource?.roadParts ?? []).map((p) => [p.sourceFeatureId, p])
+    );
+
+    assert.equal(
+      partById.get('way/sym-default')?.width,
+      ROAD_CLASS_WIDTHS.residential,
+      'Untagged residential road must preserve exact default class width'
+    );
+    assert.equal(
+      partById.get('way/carriageway-override')?.width,
+      6.4,
+      'Explicit width:carriageway must take precedence over width and lanes'
+    );
+    assert.equal(
+      partById.get('way/explicit-width-unit')?.width,
+      8.2,
+      'Explicit metric width tag must take precedence over inferred lane width'
+    );
+    assert.equal(
+      partById.get('way/lanes-3-primary')?.width,
+      10.5,
+      'Explicit lanes=3 on primary road must resolve to 3 * 3.5m = 10.5m'
+    );
+    assert.equal(
+      partById.get('way/dir-lanes-secondary')?.width,
+      10.8,
+      'Directional lanes:forward=2 + lanes:backward=1 on secondary road must resolve to 3 * 3.6m = 10.8m'
+    );
+    assert.equal(
+      partById.get('way/turn-lanes-oneway')?.width,
+      10.5,
+      'One-way road with 3 turn:lanes compartments must resolve to 3 * 3.5m = 10.5m'
+    );
+    assert.equal(
+      partById.get('way/cycle-lane-included')?.width,
+      10.2,
+      'On-carriageway cycleway:both=lane (2 * 1.5m) must widen 7.2m carriageway to 10.2m'
+    );
+    assert.equal(
+      partById.get('way/cycle-track-excluded')?.width,
+      ROAD_CLASS_WIDTHS.secondary,
+      'Physically separated cycleway=track must never be added to the motor-vehicle carriageway width'
+    );
+
+    const scene = buildGraphRoadScene(data);
+    try {
+      assertRoadGroupGeometryInvariants(scene);
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('33. renders asymmetric placement offsets and respects oneway=-1 and graph-reversed segments', () => {
+    const extractZBoundsForSourceId = (
+      scene: BuiltSceneGeometry,
+      meshName: string,
+      sourceFeatureId: string
+    ): { minZ: number; maxZ: number } => {
+      const mesh = scene.roadsGroup.children.find((c) => c.name === meshName) as THREE.Mesh;
+      assert.ok(mesh, `Expected mesh ${meshName}`);
+      const pos = mesh.geometry.getAttribute('position');
+      const idx = mesh.geometry.getIndex()!;
+      const ranges: FaceFeatureRange[] = mesh.userData.faceRanges;
+      const range = ranges.find((r) => r.info.sourceFeatureId === sourceFeatureId);
+      assert.ok(range, `Expected faceRange for ${sourceFeatureId}`);
+
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (let f = range.startFace; f < range.endFace; f++) {
+        for (let k = 0; k < 3; k++) {
+          const vi = idx.getX(f * 3 + k);
+          const z = pos.getZ(vi);
+          minZ = Math.min(minZ, z);
+          maxZ = Math.max(maxZ, z);
+        }
+      }
+      return { minZ, maxZ };
+    };
+
+    const specs: SyntheticRoadSpec[] = [
+      // 1. Forward oneway=yes (+X direction: left is -Z, right is +Z), width=7.0m, lanes=2, placement=middle_of:1
+      // Lane 1 center is at centerline (z=0): left curb = -1.75m, right curb = +5.25m
+      {
+        id: 'way/asym-forward',
+        roadClass: 'primary',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [-40, 0],
+          [40, 0],
+        ],
+        nodeIds: ['af_0', 'af_1'],
+        osmTags: {
+          lanes: '2',
+          oneway: 'yes',
+          placement: 'middle_of:1',
+        },
+      },
+      // 2. Reversed oneway=-1 digitized West-to-East ([-40, 30] -> [40, 30]), traffic flows East-to-West (-X).
+      // In traffic flow direction (-X), driver's left is +Z (South) and driver's right is -Z (North).
+      // So placement=middle_of:1 places 0.5 lanes (+1.75m) on +Z and 1.5 lanes (-5.25m) on -Z:
+      // minZ = 30 - 5.25 = 24.75, maxZ = 30 + 1.75 = 31.75.
+      {
+        id: 'way/asym-oneway-reverse',
+        roadClass: 'primary',
+        width: 7.0,
+        lanes: 2,
+        points: [
+          [-40, 30],
+          [40, 30],
+        ],
+        nodeIds: ['ar_0', 'ar_1'],
+        osmTags: {
+          lanes: '2',
+          oneway: '-1',
+          placement: 'middle_of:1',
+        },
+      },
+      // 3. Two-segment bidirectional chain where the second way is digitized in reverse ([40, 60] -> [0, 60])
+      // so RoadNetworkBuilder sets reversedRelativeToSource=true on way/chain-rev-b.
+      // Way A ([0, 60] -> [20, 60], +X) has placement=middle_of:1 (left=-1.75, right=+5.25 -> z in [58.25, 65.25]).
+      // Way B ([40, 60] -> [20, 60], -X) has placement=middle_of:2 in its digitized -X direction
+      // (which in -X has left=5.25 on +Z and right=1.75 on -Z -> z in [58.25, 65.25] in world space!).
+      {
+        id: 'way/chain-fwd-a',
+        roadClass: 'secondary',
+        width: 7.0,
+        lanes: 2,
+        name: 'Asym Chain',
+        points: [
+          [0, 60],
+          [20, 60],
+        ],
+        nodeIds: ['ch_0', 'ch_1'],
+        osmTags: {
+          lanes: '2',
+          placement: 'middle_of:1',
+        },
+      },
+      {
+        id: 'way/chain-rev-b',
+        roadClass: 'secondary',
+        width: 7.0,
+        lanes: 2,
+        name: 'Asym Chain',
+        points: [
+          [40, 60],
+          [20, 60],
+        ],
+        nodeIds: ['ch_2', 'ch_1'],
+        osmTags: {
+          lanes: '2',
+          placement: 'middle_of:2',
+        },
+      },
+    ];
+
+    const data = createDatasetFromSpecs(specs);
+    const scene = buildGraphRoadScene(data);
+    try {
+      assertRoadGroupGeometryInvariants(scene);
+
+      const fwdBounds = extractZBoundsForSourceId(scene, 'Roads_primary', 'way/asym-forward');
+      assert.ok(
+        Math.abs(fwdBounds.minZ - -1.75) < 0.02 && Math.abs(fwdBounds.maxZ - 5.25) < 0.02,
+        `Expected forward placement=middle_of:1 Z bounds [-1.75, 5.25], got [${fwdBounds.minZ.toFixed(3)}, ${fwdBounds.maxZ.toFixed(3)}]`
+      );
+
+      const revOnewayBounds = extractZBoundsForSourceId(
+        scene,
+        'Roads_primary',
+        'way/asym-oneway-reverse'
+      );
+      assert.ok(
+        Math.abs(revOnewayBounds.minZ - 24.75) < 0.02 &&
+          Math.abs(revOnewayBounds.maxZ - 31.75) < 0.02,
+        `Expected oneway=-1 placement=middle_of:1 Z bounds [24.75, 31.75], got [${revOnewayBounds.minZ.toFixed(3)}, ${revOnewayBounds.maxZ.toFixed(3)}]`
+      );
+
+      const chainABounds = extractZBoundsForSourceId(scene, 'Roads_secondary', 'way/chain-fwd-a');
+      const chainBBounds = extractZBoundsForSourceId(scene, 'Roads_secondary', 'way/chain-rev-b');
+      assert.ok(
+        Math.abs(chainABounds.minZ - 58.25) < 0.02 && Math.abs(chainABounds.maxZ - 65.25) < 0.02,
+        `Expected way/chain-fwd-a Z bounds [58.25, 65.25], got [${chainABounds.minZ.toFixed(3)}, ${chainABounds.maxZ.toFixed(3)}]`
+      );
+      assert.ok(
+        Math.abs(chainBBounds.minZ - 58.25) < 0.02 && Math.abs(chainBBounds.maxZ - 65.25) < 0.02,
+        `Expected graph-reversed way/chain-rev-b Z bounds [58.25, 65.25], got [${chainBBounds.minZ.toFixed(3)}, ${chainBBounds.maxZ.toFixed(3)}]`
+      );
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('34. supports placement:start / placement:end transitions and smooth degree-2 joins between segments with different offsets or widths', () => {
+    const specs: SyntheticRoadSpec[] = [
+      // 1. Single way with placement:start=middle_of:1 -> placement:end=middle_of:2 along x in [0, 40], z=0
+      {
+        id: 'way/placement-transition',
+        roadClass: 'primary',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [0, 0],
+          [20, 0],
+          [40, 0],
+        ],
+        nodeIds: ['pt_0', undefined, 'pt_1'],
+        osmTags: {
+          lanes: '2',
+          oneway: 'yes',
+          'placement:start': 'middle_of:1',
+          'placement:end': 'middle_of:2',
+          'turn:lanes': 'left|right',
+        },
+      },
+      // Crossing footway at x=20 to verify 2D clipping footprint matches the transitioning 3D ribbon
+      {
+        id: 'way/crossing-footway',
+        roadClass: 'footway',
+        width: 2.0,
+        points: [
+          [20, -15],
+          [20, 15],
+        ],
+        nodeIds: ['fw_s', 'fw_n'],
+      },
+      // 2. Two adjacent ways with a step change in lateral placement (left_of:1 meeting right_of:2) at [0, 40]
+      {
+        id: 'way/step-offset-west',
+        roadClass: 'secondary',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [-35, 40],
+          [0, 40],
+        ],
+        nodeIds: ['so_w', 'so_mid'],
+        osmTags: {
+          lanes: '2',
+          oneway: 'yes',
+          placement: 'left_of:1',
+        },
+      },
+      {
+        id: 'way/step-offset-east',
+        roadClass: 'secondary',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [0, 40],
+          [35, 40],
+        ],
+        nodeIds: ['so_mid', 'so_e'],
+        osmTags: {
+          lanes: '2',
+          oneway: 'yes',
+          placement: 'right_of:2',
+        },
+      },
+    ];
+
+    const data = createDatasetFromSpecs(specs);
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { junctionRanges } = assertRoadGroupGeometryInvariants(scene);
+      const zReport = validateRoadNetworkGeometry(scene);
+      assert.equal(
+        zReport.overlapConflicts.length,
+        0,
+        'Expected 0 same-layer overlaps on transitioning and step-offset roads'
+      );
+
+      // Verify that at x=0 (start of way/placement-transition), z spans [-1.75, +5.25],
+      // at x=20 (midpoint), z spans [-3.5, +3.5], and at x=40 (end), z spans [-5.25, +1.75].
+      const primMesh = scene.roadsGroup.children.find((c) => c.name === 'Roads_primary') as THREE.Mesh;
+      assert.ok(primMesh, 'Expected Roads_primary mesh');
+      const pos = primMesh.geometry.getAttribute('position');
+      const startZs: number[] = [];
+      const midZs: number[] = [];
+      const endZs: number[] = [];
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        if (Math.abs(x - 0) < 0.05) startZs.push(z);
+        if (Math.abs(x - 20) < 0.05) midZs.push(z);
+        if (Math.abs(x - 40) < 0.05) endZs.push(z);
+      }
+      assert.ok(
+        Math.abs(Math.min(...startZs) - -1.75) < 0.05 &&
+          Math.abs(Math.max(...startZs) - 5.25) < 0.05,
+        `Expected start cross-section [-1.75, 5.25] at x=0, got [${Math.min(...startZs)}, ${Math.max(...startZs)}]`
+      );
+      assert.ok(
+        Math.abs(Math.min(...midZs) - -3.5) < 0.05 && Math.abs(Math.max(...midZs) - 3.5) < 0.05,
+        `Expected midpoint cross-section [-3.5, 3.5] at x=20, got [${Math.min(...midZs)}, ${Math.max(...midZs)}]`
+      );
+      assert.ok(
+        Math.abs(Math.min(...endZs) - -5.25) < 0.05 && Math.abs(Math.max(...endZs) - 1.75) < 0.05,
+        `Expected end cross-section [-5.25, 1.75] at x=40, got [${Math.min(...endZs)}, ${Math.max(...endZs)}]`
+      );
+
+      // Verify the degree-2 lateral offset jump at node 'so_mid' emitted a local transition patch
+      assert.ok(
+        junctionRanges.some((r) => r.info.sourceFeatureIds?.includes('way/step-offset-west')),
+        'Expected degree-2 lateral placement jump to emit a smooth local transition polygon'
+      );
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('35. handles missing, malformed, and conflicting OSM width, lane, and placement tags safely without NaN or self-intersection', () => {
+    const originLat = 52.37;
+    const originLon = 4.89;
+    const dLon = 0.0005;
+
+    const makeFeature = (id: string, rowIdx: number, props: Record<string, any>) => {
+      const lat = originLat + rowIdx * 0.0003;
+      return {
+        type: 'Feature',
+        id,
+        properties: { id, ...props },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [originLon, lat],
+            [originLon + dLon, lat],
+          ],
+        },
+      };
+    };
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        makeFeature('way/malformed-width', 0, {
+          highway: 'residential',
+          width: 'narrow',
+          'width:carriageway': '-5',
+          lanes: 'many',
+        }),
+        makeFeature('way/out-of-range-width', 1, {
+          highway: 'tertiary',
+          width: '999',
+          lanes: '99',
+          placement: 'middle_of:99',
+        }),
+        makeFeature('way/conflicting-placement', 2, {
+          highway: 'secondary',
+          lanes: '2',
+          placement: 'middle_of:5',
+          'placement:start': 'diagonal:2',
+          'placement:end': 'left_of:0',
+        }),
+      ],
+    };
+
+    const data = new LocalGeoJsonProvider().parseGeoJson(
+      geojson,
+      'Malformed and conflicting OSM tag safety test',
+      [originLon, originLat],
+      500
+    );
+    const partById = new Map(
+      (data.topologySource?.roadParts ?? []).map((p) => [p.sourceFeatureId, p])
+    );
+
+    assert.equal(
+      partById.get('way/malformed-width')?.width,
+      ROAD_CLASS_WIDTHS.residential,
+      'Malformed negative/non-numeric width and lanes must fall back to class default'
+    );
+    assert.equal(
+      partById.get('way/out-of-range-width')?.width,
+      ROAD_CLASS_WIDTHS.tertiary,
+      'Out-of-bounds width=999 and lanes=99 must fall back to class default'
+    );
+    assert.equal(
+      partById.get('way/conflicting-placement')?.width,
+      ROAD_CLASS_WIDTHS.secondary,
+      'Secondary road with lanes=2 and conflicting placement must retain valid 7.2m width'
+    );
+
+    const scene = buildGraphRoadScene(data);
+    try {
+      const { faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+      assert.equal(
+        faceRangesById.size,
+        3,
+        'All 3 roads with malformed/conflicting tags must render valid symmetric fallback ribbons'
+      );
+    } finally {
+      scene.dispose();
+    }
+  });
+
+  it('36. preserves per-segment source-feature provenance and inspection metadata across simplified multi-segment asymmetric and transitioning roads', () => {
+    const specs: SyntheticRoadSpec[] = [
+      {
+        id: 'way/prov-seg-0',
+        roadClass: 'primary',
+        name: 'Provenance Corridor',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [0, 0],
+          [30, 0],
+        ],
+        nodeIds: ['p0', 'p1'],
+        osmTags: {
+          name: 'Provenance Corridor West',
+          lanes: '2',
+          oneway: 'yes',
+          placement: 'middle_of:1',
+        },
+      },
+      {
+        id: 'way/prov-seg-1',
+        roadClass: 'primary',
+        name: 'Provenance Corridor',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [30, 0],
+          [60, 0],
+        ],
+        nodeIds: ['p1', 'p2'],
+        osmTags: {
+          name: 'Provenance Corridor Transition',
+          lanes: '2',
+          oneway: 'yes',
+          'placement:start': 'middle_of:1',
+          'placement:end': 'middle_of:2',
+        },
+      },
+      {
+        id: 'way/prov-seg-2',
+        roadClass: 'primary',
+        name: 'Provenance Corridor',
+        width: 7.0,
+        lanes: 2,
+        oneway: true,
+        points: [
+          [60, 0],
+          [90, 0],
+        ],
+        nodeIds: ['p2', 'p3'],
+        osmTags: {
+          name: 'Provenance Corridor East',
+          lanes: '2',
+          oneway: 'yes',
+          placement: 'middle_of:2',
+        },
+      },
+    ];
+
+    const data = createDatasetFromSpecs(specs);
+    const preview = prepareInfrastructureRenderPreview(data, {
+      roads: 'graph',
+      railways: 'legacy',
+    });
+    assert.equal(
+      preview.graph?.roads.edges.size,
+      1,
+      'Continuous-offset degree-2 chain must contract into 1 simplified graph edge'
+    );
+    const contractedEdge = Array.from(preview.graph!.roads.edges.values())[0];
+    assert.equal(
+      contractedEdge.provenance.segments.length,
+      3,
+      'Contracted graph edge must retain all 3 constituent provenance segments'
+    );
+
+    const scene = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderPreview: preview,
+    }).buildScene(data, MAP_THEMES.tactical);
+
+    try {
+      const { faceRangesById } = assertRoadGroupGeometryInvariants(scene);
+      assert.equal(
+        faceRangesById.size,
+        3,
+        'Simplified edge must emit 3 distinct provenance sub-segment faceRanges (#seg0, #seg1, #seg2)'
+      );
+
+      const primMesh = scene.roadsGroup.children.find(
+        (c) => c.name === 'Roads_primary'
+      ) as THREE.Mesh;
+      assert.ok(primMesh, 'Expected Roads_primary mesh');
+
+      const ranges: FaceFeatureRange[] = primMesh.userData.faceRanges;
+      const sourceIds = ranges.map((r) => r.info.sourceFeatureId);
+      assert.deepEqual(
+        sourceIds,
+        ['way/prov-seg-0', 'way/prov-seg-1', 'way/prov-seg-2'],
+        'Each sub-segment faceRange must resolve back to its exact upstream OSM way ID'
+      );
+
+      for (let i = 0; i < ranges.length; i++) {
+        const hitInfo = resolveInspectedFeature({
+          object: primMesh,
+          faceIndex: ranges[i].startFace,
+        });
+        assert.equal(hitInfo?.sourceFeatureId, `way/prov-seg-${i}`);
+      }
+    } finally {
+      scene.dispose();
+    }
+  });
+
 });
+
 

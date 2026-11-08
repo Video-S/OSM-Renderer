@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import polygonClipping from 'polygon-clipping';
+import { proposeRoundedPathJunctionOutline } from './PathJunctionCornerSmoothing';
 import {
   InspectableFeatureInfo,
   ProcessedMapData,
@@ -1763,6 +1764,47 @@ function solveBoundaryDerivedJunctionNode(
   if (solidMultiPoly.length === 0 || computeMultiPolygonArea(solidMultiPoly) < 0.05) {
     recordGraphRoadDiagnostic(diagnostics, 'junction_polygon_validation_failed', nodeId);
     return null;
+  }
+
+  // Only path-tier junctions with at least three arms need this subtle rounding.
+  // Fillet the *post-union* outer outline rather than individual input strips:
+  // the earlier additive-fillets attempt was absorbed by their Boolean union.
+  // Portals remain exact, all existing geometric validation remains mandatory.
+  if (isPathJunction && k >= 3) {
+    const portalAnchors = portals.flatMap((portal) => [portal.left, portal.right]);
+    const proposed = proposeRoundedPathJunctionOutline(
+      solidMultiPoly, nodeCenter, portalAnchors, maxBranchWidth
+    );
+    if (proposed && proposed.every((poly) =>
+      poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
+    )) {
+      try {
+        const difference = polygonClipping.xor(
+          solidMultiPoly as unknown as polygonClipping.Geom,
+          proposed as unknown as polygonClipping.Geom
+        ) as unknown as MultiPolygonCoords;
+        const changedArea = computeMultiPolygonArea(
+          filterDegenerateBooleanArtifacts(difference)
+        );
+        const changeBudget = Math.min(
+          maxBranchWidth * maxBranchWidth * 0.20,
+          computeMultiPolygonArea(solidMultiPoly) * 0.12
+        );
+        if (changedArea > 0.001 && changedArea <= changeBudget) {
+          const proposedShapes = createShapesFromMultiPolygon(proposed);
+          if (proposedShapes.length > 0) {
+            const proposedGeo = new THREE.ShapeGeometry(proposedShapes);
+            proposedGeo.rotateX(-Math.PI / 2);
+            const valid = validateAndPruneHorizontalGeometry(proposedGeo);
+            proposedGeo.dispose();
+            if (valid) solidMultiPoly = proposed;
+          }
+        }
+      } catch {
+        // Never compromise connectivity because a rounding proposal failed.
+        // Existing exact-width polygon remains the authoritative fallback.
+      }
+    }
   }
 
   // Validate 3D triangulation and upward face normals before committing trimmedEndpoints

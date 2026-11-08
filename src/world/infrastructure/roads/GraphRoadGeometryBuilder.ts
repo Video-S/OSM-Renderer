@@ -2825,10 +2825,19 @@ export function buildGraphAtGradeRoadGeometries(
 
   // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)
   const clippedPolysBySubId = new Map<string, MultiPolygonCoords>();
+  // Earlier emitted ribbons claim 2D surface footprints and later ribbons are
+  // Boolean-clipped against them. Sorting only by OSM edge ID unintentionally gives
+  // lower-priority service/parking aisles ownership over the main carriageway when
+  // their IDs happen to sort first. Use the SAME road-class priority as the
+  // junction's dominant-surface selection, then IDs for deterministic ties.
   const sortedBuildableEdges = [...buildableEdges].sort((a, b) => {
     const aPath = a.tier === 'path' || isNonVehicularRoadClass(a.roadClass) ? 1 : 0;
     const bPath = b.tier === 'path' || isNonVehicularRoadClass(b.roadClass) ? 1 : 0;
     if (aPath !== bPath) return aPath - bPath;
+    const classPriorityDiff =
+      (ROAD_CLASS_PRIORITY[b.roadClass] ?? 0) -
+      (ROAD_CLASS_PRIORITY[a.roadClass] ?? 0);
+    if (classPriorityDiff !== 0) return classPriorityDiff;
     return compareStringsCodeUnit(a.id, b.id);
   });
 

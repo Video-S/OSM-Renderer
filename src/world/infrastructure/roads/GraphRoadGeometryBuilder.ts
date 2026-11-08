@@ -1087,6 +1087,77 @@ function extractPolylineSpan(
  * geometry right up to the local junction cut line `s = trimDist`, and takes the 2D Boolean union
  * of the overlapping local road footprints so road boundaries never pinch or stretch into wedges.
  */
+/**
+ * Repairs only a numerically thin near-reversal hairpin introduced by unioning
+ * nearly collinear, full-width road stubs. A short junction approach can be
+ * narrower in *length* than its carriageway width: two consecutive stubs then
+ * overlap around the center and polygon-clipping may retain a thin (~centimetre)
+ * backtracking spur. hasRingSelfIntersection correctly rejects that ring.
+ *
+ * Delete such an apex only when its neighboring vertices almost coincide,
+ * both arms are shorter than the road width, and the total affected footprint
+ * area is sub-decimetre. Never use this for broad concavities, actual islands,
+ * holes, or meaningful curb transitions.
+ */
+function repairNearReversalJunctionPolygon(
+  polygon: [number, number][][],
+  maxBranchWidth: number
+): [number, number][][] | null {
+  if (polygon.length !== 1 || polygon[0].length < 5) return null;
+  const ring = polygon[0];
+  const closed =
+    ring[0][0] === ring[ring.length - 1][0] &&
+    ring[0][1] === ring[ring.length - 1][1];
+  const points = (closed ? ring.slice(0, -1) : ring).map(
+    ([x, z]) => [x, z] as [number, number]
+  );
+  if (points.length < 4) return null;
+
+  const originalArea = computeMultiPolygonArea([polygon]);
+  let removals = 0;
+  for (; removals < 3; removals++) {
+    const candidateRing: [number, number][] = [...points, points[0]];
+    if (!hasRingSelfIntersection(candidateRing)) {
+      if (removals === 0) return null;
+      const repaired: [number, number][][] = [candidateRing];
+      const areaChange = Math.abs(computeMultiPolygonArea([repaired]) - originalArea);
+      return areaChange <= Math.min(0.15, maxBranchWidth * 0.04)
+        ? repaired : null;
+    }
+
+    let removeIndex = -1;
+    for (let i = 0; i < points.length; i++) {
+      const prev = points[(i - 1 + points.length) % points.length];
+      const curr = points[i];
+      const next = points[(i + 1) % points.length];
+      const ux = curr[0] - prev[0], uz = curr[1] - prev[1];
+      const vx = next[0] - curr[0], vz = next[1] - curr[1];
+      const lenU = Math.hypot(ux, uz), lenV = Math.hypot(vx, vz);
+      if (lenU < 1e-3 || lenV < 1e-3 ||
+          Math.max(lenU, lenV) > maxBranchWidth * 0.65) continue;
+
+      const cosine = (ux * vx + uz * vz) / (lenU * lenV);
+      const neighborDistance = Math.hypot(next[0] - prev[0], next[1] - prev[1]);
+      const affectedArea = Math.abs(
+        ux * (next[1] - prev[1]) - uz * (next[0] - prev[0])
+      ) * 0.5;
+      if (cosine < -0.992 && neighborDistance <= 0.08 && affectedArea <= 0.12) {
+        removeIndex = i;
+        break;
+      }
+    }
+    if (removeIndex < 0 || points.length <= 3) return null;
+    points.splice(removeIndex, 1);
+  }
+
+  const finalRing: [number, number][] = [...points, points[0]];
+  if (hasRingSelfIntersection(finalRing)) return null;
+  const repaired: [number, number][][] = [finalRing];
+  return Math.abs(computeMultiPolygonArea([repaired]) - originalArea) <=
+      Math.min(0.15, maxBranchWidth * 0.04)
+    ? repaired : null;
+}
+
 function solveBoundaryDerivedJunctionNode(
   nodeId: string,
   nodeCenter: [number, number],
@@ -1666,9 +1737,23 @@ function solveBoundaryDerivedJunctionNode(
         unionInputs[0] as unknown as polygonClipping.Geom,
         ...(unionInputs.slice(1) as unknown as polygonClipping.Geom[])
       ) as unknown as MultiPolygonCoords;
-      solidMultiPoly = filterDegenerateBooleanArtifacts(rawUnion).filter(
-        (poly) => poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
-      );
+      solidMultiPoly = filterDegenerateBooleanArtifacts(rawUnion)
+        .map((poly) => {
+          if (!poly[0] || !hasRingSelfIntersection(poly[0])) return poly;
+          // Keep the strict validator; repair only a tiny folded-back spur
+          // caused by near-collinear road stubs at a short adjacent junction.
+          const repaired = repairNearReversalJunctionPolygon(poly, maxBranchWidth);
+          if (repaired) {
+            recordGraphRoadDiagnostic(
+              diagnostics, 'junction_near_reversal_spur_repaired', nodeId
+            );
+            return repaired;
+          }
+          return poly;
+        })
+        .filter((poly) =>
+          poly[0] && poly[0].length >= 4 && !hasRingSelfIntersection(poly[0])
+        );
     } catch {
       recordGraphRoadDiagnostic(diagnostics, 'junction_footprint_union_failed', nodeId);
       return null;

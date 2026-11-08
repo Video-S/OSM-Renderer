@@ -201,7 +201,8 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
         assert.ok(patch,
           `No main-road junction patch for ${node.rawOsmNodeId} (${node.id}). ` +
           `Observed junction patches: ${JSON.stringify(mainRanges.filter((r) => r.info.id.startsWith('junction-')).map((r) => r.info.id))}. ` +
-          `E2 geometry stats: ${JSON.stringify(scene.roadsGroup.userData.graphRoadStats)}`);
+          `E2 geometry stats: ${JSON.stringify(scene.roadsGroup.userData.graphRoadStats)}. ` +
+          `Geometry rejection reasons: ${JSON.stringify(data.diagnostics.rejectedInvalid.byReason)}`);
         assert.ok(patch.info.sourceFeatureIds.includes('way/1507428766'));
         assert.ok(patch.info.sourceFeatureIds.some((id) =>
           id === 'way/1444115768' || id === 'way/1444115769'));

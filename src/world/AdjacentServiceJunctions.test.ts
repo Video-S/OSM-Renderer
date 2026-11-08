@@ -32,7 +32,9 @@ function meshCoversPointXZ(mesh: THREE.Mesh | undefined, x: number, z: number): 
     const u = ((bx - x) * (cz - z) - (bz - z) * (cx - x)) / orient;
     const v = ((cx - x) * (az - z) - (cz - z) * (ax - x)) / orient;
     const w = 1 - u - v;
-    if (Math.min(u, v, w) >= 1e-5) return true;
+    // A valid point may lie on the shared diagonal of two road triangles.
+    // Excluding triangle boundaries falsely reports such pavement as absent.
+    if (Math.min(u, v, w) >= -1e-6) return true;
   }
   return false;
 }
@@ -88,9 +90,14 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
       // The source geometries overlap in a 3m x 4.8m area. Main-road
       // triangles must own its center; the lower-class service ribbon is
       // Boolean-clipped instead of relying on renderOrder / z-index.
-      assert.ok(meshCoversPointXZ(main, 0, 0), 'Main road must own shared pavement');
-      assert.equal(meshCoversPointXZ(aisle, 0, 0), false,
-        'Parking aisle must not render overlapping coplanar triangles on main road');
+      // Probe an interior offset as well as the intersection center: the latter
+      // can fall precisely on a triangle diagonal, which must count as covered.
+      for (const [x, z] of [[0, 0], [0.35, 0.28]] as [number, number][]) {
+        assert.ok(meshCoversPointXZ(main, x, z),
+          `Main road must own shared pavement at (${x}, ${z})`);
+        assert.equal(meshCoversPointXZ(aisle, x, z), false,
+          `Parking aisle must not overlap main-road pavement at (${x}, ${z})`);
+      }
       const report = auditGraphRoadMeshIntegrity(scene.roadsGroup);
       assert.equal(report.negativelyWoundCount, 0);
       assert.equal(report.storedNormalMismatchCount, 0);
@@ -191,7 +198,10 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
       }>;
       for (const node of junctionNodes) {
         const patch = mainRanges.find((r) => r.info.id === 'junction-' + node.id);
-        assert.ok(patch, 'Both real T-junctions must be resolved as main-road patches');
+        assert.ok(patch,
+          `No main-road junction patch for ${node.rawOsmNodeId} (${node.id}). ` +
+          `Observed junction patches: ${JSON.stringify(mainRanges.filter((r) => r.info.id.startsWith('junction-')).map((r) => r.info.id))}. ` +
+          `E2 geometry stats: ${JSON.stringify(scene.roadsGroup.userData.graphRoadStats)}`);
         assert.ok(patch.info.sourceFeatureIds.includes('way/1507428766'));
         assert.ok(patch.info.sourceFeatureIds.some((id) =>
           id === 'way/1444115768' || id === 'way/1444115769'));

@@ -1,0 +1,7 @@
+site,label,junction_osm_node,contributing_ways,assumed_footprint_area_m2,explicit_width,lane_derived,class_prior,BGT_VALIDATED
+A01,Droogbak / Singel,46423905,25,1624.82,1,5,19,NO
+A02,Nieuwe Westerdokstraat,46426685,16,1740.28,0,3,13,NO
+A03,Geldersekade,11762209393,13,1087.61,0,13,0,NO
+A04,Oosterdoksstraat,1565648183,10,592.95,0,7,3,NO
+A05,De Ruijterkade,46416772,15,1555.82,0,14,1,NO
+A06,Buiksloterweg,46438541,8,828.95,7,0,1,NO

@@ -1,0 +1,355 @@
+{
+  "method": "OSM null corridor model, without any production renderer use",
+  "bgt_retrieved": true,
+  "sites": [
+    {
+      "site": "A01",
+      "label": "Droogbak / Singel",
+      "node": "46423905",
+      "source_way_count": 25,
+      "width_evidence": {
+        "explicit_width": 1,
+        "unobserved_class_prior": 19,
+        "unknown_lanes_and_width": 19,
+        "lane_count_times_3.2m": 5
+      },
+      "modeled_area_m2": 1624.82,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 73,
+        "function:parkeervlak": 3,
+        "function:voetpad": 26,
+        "function:fietspad": 9,
+        "function:voetpad op trap": 7,
+        "function:rijbaan lokale weg": 20,
+        "accepted_polygons": 16,
+        "not_ground_level": 7,
+        "function:OV-baan": 1
+      },
+      "bgt_ids": [
+        "G0363.202244979e124e6d850bcba260560a1e",
+        "G0363.edd0d47d574149b5972dc43f6031b653",
+        "G0363.313ce1926ddd44729be0733889f08aa4",
+        "G0363.e0a43382c2d0487881a796c01d5118e6",
+        "G0363.2a2606c4afe64be8b647003e1699b281",
+        "G0363.ddc9c511a8b143e0924b0631ec64eb8f",
+        "G0363.de4f96787cfc45ed8730d1b02a9d33b2",
+        "G0363.e1a861415b7948b99863f712490745cd",
+        "G0363.04d7b1f6a44246f58a5a28635ce9f54c",
+        "G0363.47578595fe074a23a52bff4a04c95245",
+        "G0363.6f028a13d22d4e4e9fb72e934bd2b9d2",
+        "G0363.3d2b1590c0564eeb9212236fa9b50891",
+        "G0363.a352bb293cd74328b1c808b71b42e847",
+        "G0363.c0dfdc0e72944f98bb72360d0a163dc6",
+        "G0363.d2536b873542465a983e6d0ca037920c",
+        "G0363.84b56d88d3f14c6d9cfdadbda51978ee"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.729,
+        "carriageway_precision": 0.8836,
+        "carriageway_recall": 0.8065,
+        "modeled_m2": 1624.82,
+        "BGT_carriageway_m2": 1780.21,
+        "false_road_m2": 189.17,
+        "missed_road_m2": 344.55,
+        "prediction_to_BGT_boundary": {
+          "median_m": 0.772,
+          "p90_m": 4.825,
+          "sample_count": 500
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 0.621,
+          "p90_m": 2.457,
+          "sample_count": 417
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.6693,
+        "1.0": 0.729,
+        "1.2": 0.7192
+      }
+    },
+    {
+      "site": "A02",
+      "label": "Nieuwe Westerdokstraat",
+      "node": "46426685",
+      "source_way_count": 16,
+      "width_evidence": {
+        "unobserved_class_prior": 13,
+        "unknown_lanes_and_width": 13,
+        "lane_count_times_3.2m": 3
+      },
+      "modeled_area_m2": 1740.28,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 42,
+        "function:rijbaan lokale weg": 17,
+        "function:voetpad": 12,
+        "function:parkeervlak": 2,
+        "accepted_polygons": 11,
+        "function:OV-baan": 3,
+        "function:overweg": 1,
+        "not_ground_level": 3,
+        "function:voetpad op trap": 3,
+        "function:spoorbaan": 1
+      },
+      "bgt_ids": [
+        "G0363.171206b63e4349e9a3e54aeb30aa1bc6",
+        "G0363.e0a43382c2d0487881a796c01d5118e6",
+        "G0363.2a2606c4afe64be8b647003e1699b281",
+        "G0363.e16f900fdc8b4f1cbd83fdbcabd4ac88",
+        "G0363.04d7b1f6a44246f58a5a28635ce9f54c",
+        "G0363.47578595fe074a23a52bff4a04c95245",
+        "G0363.6f028a13d22d4e4e9fb72e934bd2b9d2",
+        "G0363.3d2b1590c0564eeb9212236fa9b50891",
+        "G0363.a352bb293cd74328b1c808b71b42e847",
+        "G0363.c0dfdc0e72944f98bb72360d0a163dc6",
+        "G0363.d2536b873542465a983e6d0ca037920c"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.6091,
+        "carriageway_precision": 0.7573,
+        "carriageway_recall": 0.7569,
+        "modeled_m2": 1740.28,
+        "BGT_carriageway_m2": 1741.07,
+        "false_road_m2": 422.43,
+        "missed_road_m2": 423.22,
+        "prediction_to_BGT_boundary": {
+          "median_m": 1.5,
+          "p90_m": 3.386,
+          "sample_count": 570
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 1.315,
+          "p90_m": 2.549,
+          "sample_count": 497
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.5711,
+        "1.0": 0.6091,
+        "1.2": 0.6169
+      }
+    },
+    {
+      "site": "A03",
+      "label": "Geldersekade",
+      "node": "11762209393",
+      "source_way_count": 13,
+      "width_evidence": {
+        "lane_count_times_3.2m": 13,
+        "placement_tag_present": 5
+      },
+      "modeled_area_m2": 1087.61,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 56,
+        "function:voetpad": 18,
+        "function:parkeervlak": 3,
+        "not_ground_level": 18,
+        "function:rijbaan lokale weg": 10,
+        "accepted_polygons": 5,
+        "function:fietspad": 5,
+        "function:OV-baan": 2
+      },
+      "bgt_ids": [
+        "G0363.8abfa8ef87724e0da7ae271a51e39ae1",
+        "G0363.82ea54fff85b41b5929b04a7e5d2a851",
+        "G0363.b5fa0fb302bb43c9ac4809e2a9c694af",
+        "G0363.9b5059ca85e1464fad3e2ad6201ab23a",
+        "G0363.736a8f272df84ddb8e6b80423f8deb18"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.6052,
+        "carriageway_precision": 0.8592,
+        "carriageway_recall": 0.6718,
+        "modeled_m2": 1087.61,
+        "BGT_carriageway_m2": 1390.9,
+        "false_road_m2": 153.15,
+        "missed_road_m2": 456.45,
+        "prediction_to_BGT_boundary": {
+          "median_m": 1.104,
+          "p90_m": 2.562,
+          "sample_count": 496
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 1.006,
+          "p90_m": 2.944,
+          "sample_count": 472
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.541,
+        "1.0": 0.6052,
+        "1.2": 0.6416
+      }
+    },
+    {
+      "site": "A04",
+      "label": "Oosterdoksstraat",
+      "node": "1565648183",
+      "source_way_count": 10,
+      "width_evidence": {
+        "unobserved_class_prior": 3,
+        "unknown_lanes_and_width": 3,
+        "lane_count_times_3.2m": 7,
+        "placement_tag_present": 3
+      },
+      "modeled_area_m2": 592.95,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 56,
+        "function:voetpad": 17,
+        "not_ground_level": 12,
+        "function:spoorbaan": 8,
+        "function:OV-baan": 8,
+        "function:fietspad": 5,
+        "function:rijbaan lokale weg": 4,
+        "accepted_polygons": 4,
+        "function:parkeervlak": 1,
+        "function:voetpad op trap": 1
+      },
+      "bgt_ids": [
+        "G0363.16986f4e2c57464ea1e9a1854da6d0aa",
+        "G0363.78ae212e3a634928a4c2a3385ada9d94",
+        "G0363.a09bb8857172498b95b92bf168d2d8a3",
+        "G0363.9d2d301571514417b7709a3c1734f9d1"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.6411,
+        "carriageway_precision": 0.9486,
+        "carriageway_recall": 0.6642,
+        "modeled_m2": 592.95,
+        "BGT_carriageway_m2": 846.86,
+        "false_road_m2": 30.47,
+        "missed_road_m2": 284.37,
+        "prediction_to_BGT_boundary": {
+          "median_m": 0.834,
+          "p90_m": 3.24,
+          "sample_count": 298
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 0.51,
+          "p90_m": 2.871,
+          "sample_count": 245
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.5194,
+        "1.0": 0.6411,
+        "1.2": 0.6967
+      }
+    },
+    {
+      "site": "A05",
+      "label": "De Ruijterkade",
+      "node": "46416772",
+      "source_way_count": 15,
+      "width_evidence": {
+        "lane_count_times_3.2m": 14,
+        "placement_tag_present": 3,
+        "unobserved_class_prior": 1,
+        "unknown_lanes_and_width": 1
+      },
+      "modeled_area_m2": 1555.82,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 31,
+        "function:rijbaan regionale weg": 4,
+        "accepted_polygons": 9,
+        "function:voetpad": 7,
+        "function:fietspad": 5,
+        "function:rijbaan lokale weg": 5,
+        "function:parkeervlak": 3,
+        "not_ground_level": 5,
+        "function:voetpad op trap": 1,
+        "function:OV-baan": 1
+      },
+      "bgt_ids": [
+        "G0363.c22f03c75fed49618dab7e3c4a510240",
+        "G0363.00b7d46d67fb42fe90f87f75f44d4a28",
+        "G0363.9a4626b285db47e29999f6a0618732a6",
+        "G0363.e58dd9b7d2de4b458fe0cc72c7b9b1c1",
+        "G0363.520da4868fcb4c60a450c0c29e49b91f",
+        "G0363.7799954e2ca14272b7df1091d1057005",
+        "G0363.c186392c024843d8bcb9d08459f66bf0",
+        "G0363.98f579a387c5486a94515165e57254b0",
+        "G0363.5ec115ebccaf45879459a8fe13822010"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.6902,
+        "carriageway_precision": 0.9304,
+        "carriageway_recall": 0.7278,
+        "modeled_m2": 1555.82,
+        "BGT_carriageway_m2": 1988.94,
+        "false_road_m2": 108.35,
+        "missed_road_m2": 541.47,
+        "prediction_to_BGT_boundary": {
+          "median_m": 0.415,
+          "p90_m": 2.569,
+          "sample_count": 519
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 0.422,
+          "p90_m": 3.987,
+          "sample_count": 518
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.5998,
+        "1.0": 0.6902,
+        "1.2": 0.6873
+      }
+    },
+    {
+      "site": "A06",
+      "label": "Buiksloterweg",
+      "node": "46438541",
+      "source_way_count": 8,
+      "width_evidence": {
+        "unobserved_class_prior": 1,
+        "unknown_lanes_and_width": 1,
+        "explicit_width": 7
+      },
+      "modeled_area_m2": 828.95,
+      "status": "BGT_COMPARED",
+      "bgt_filter_audit": {
+        "all_features": 25,
+        "function:voetpad": 15,
+        "function:fietspad": 3,
+        "function:parkeervlak": 2,
+        "function:inrit": 2,
+        "function:rijbaan lokale weg": 3,
+        "accepted_polygons": 2
+      },
+      "bgt_ids": [
+        "G0363.da9cc7f3761f4b08bae47b749ce276e1",
+        "G0363.e81f1027da9b43819bca25816c9c69ae"
+      ],
+      "metrics": {
+        "intersection_over_union": 0.6602,
+        "carriageway_precision": 0.9204,
+        "carriageway_recall": 0.7001,
+        "modeled_m2": 828.95,
+        "BGT_carriageway_m2": 1089.79,
+        "false_road_m2": 65.95,
+        "missed_road_m2": 326.79,
+        "prediction_to_BGT_boundary": {
+          "median_m": 1.175,
+          "p90_m": 4.036,
+          "sample_count": 320
+        },
+        "BGT_to_prediction_boundary": {
+          "median_m": 1.102,
+          "p90_m": 1.798,
+          "sample_count": 259
+        }
+      },
+      "width_sensitivity": {
+        "0.8": 0.5381,
+        "1.0": 0.6602,
+        "1.2": 0.7774
+      }
+    }
+  ]
+}

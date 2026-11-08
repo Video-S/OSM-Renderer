@@ -1,0 +1,2129 @@
+{
+  "development": {
+    "split": "development_amsterdam",
+    "summary_by_mode": {
+      "baseline_null": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6558,
+        "min_iou": 0.6052,
+        "max_iou": 0.729,
+        "mean_precision": 0.8832,
+        "mean_recall": 0.7212,
+        "total_false_road_m2": 969.52,
+        "total_missed_road_m2": 2376.85,
+        "mean_boundary_pred_to_bgt_median_m": 0.967,
+        "mean_junction_zone_iou": 0.6622,
+        "mean_corridor_zone_iou": 0.6488
+      },
+      "width_asymmetric_only": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.689,
+        "min_iou": 0.6143,
+        "max_iou": 0.7535,
+        "mean_precision": 0.8957,
+        "mean_recall": 0.7501,
+        "total_false_road_m2": 859.61,
+        "total_missed_road_m2": 2151.39,
+        "mean_boundary_pred_to_bgt_median_m": 0.821,
+        "mean_junction_zone_iou": 0.6962,
+        "mean_corridor_zone_iou": 0.6834
+      },
+      "junction_only": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6609,
+        "min_iou": 0.6102,
+        "max_iou": 0.7338,
+        "mean_precision": 0.8822,
+        "mean_recall": 0.7279,
+        "total_false_road_m2": 986.39,
+        "total_missed_road_m2": 2319.04,
+        "mean_boundary_pred_to_bgt_median_m": 0.905,
+        "mean_junction_zone_iou": 0.6711,
+        "mean_corridor_zone_iou": 0.65
+      },
+      "full_reconstruction": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6906,
+        "min_iou": 0.6143,
+        "max_iou": 0.7548,
+        "mean_precision": 0.8958,
+        "mean_recall": 0.7519,
+        "total_false_road_m2": 860.74,
+        "total_missed_road_m2": 2134.79,
+        "mean_boundary_pred_to_bgt_median_m": 0.81,
+        "mean_junction_zone_iou": 0.6997,
+        "mean_corridor_zone_iou": 0.6834
+      },
+      "bgt_oracle_width_diagnostic": {
+        "is_predictive_osm_only": false,
+        "site_count": 6,
+        "mean_iou": 0.8461,
+        "min_iou": 0.7908,
+        "max_iou": 0.8906,
+        "mean_precision": 0.9086,
+        "mean_recall": 0.9246,
+        "total_false_road_m2": 873.45,
+        "total_missed_road_m2": 721.34,
+        "mean_boundary_pred_to_bgt_median_m": 0.168,
+        "mean_junction_zone_iou": 0.8393,
+        "mean_corridor_zone_iou": 0.8622
+      }
+    },
+    "sites": {
+      "A01": {
+        "id": "A01",
+        "label": "Droogbak / Singel",
+        "archetype": "3-way urban street",
+        "split": "development_amsterdam",
+        "center_rd": [
+          121459.622,
+          488083.289
+        ],
+        "bgt_filter_audit": {
+          "all_features": 73,
+          "function:parkeervlak": 3,
+          "function:voetpad": 26,
+          "function:fietspad": 9,
+          "function:voetpad op trap": 7,
+          "function:rijbaan lokale weg": 20,
+          "accepted_polygons": 16,
+          "not_ground_level": 7,
+          "function:OV-baan": 1
+        },
+        "delta_iou_full_vs_baseline": -0.0051,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.729,
+            "precision": 0.8836,
+            "recall": 0.8065,
+            "pred_area_m2": 1624.82,
+            "bgt_area_m2": 1780.21,
+            "false_road_m2": 189.17,
+            "missed_road_m2": 344.55,
+            "boundary_pred_to_bgt_median_m": 0.777,
+            "boundary_pred_to_bgt_p90_m": 4.825,
+            "boundary_bgt_to_pred_median_m": 0.621,
+            "boundary_bgt_to_pred_p90_m": 2.457,
+            "junction_zone_iou": 0.7139,
+            "corridor_zone_iou": 0.7737,
+            "diagnostics": {
+              "site_id": "A01",
+              "mode": "baseline_null",
+              "edge_count": 32,
+              "junction_count": 0,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 6,
+                "unobserved_class_prior": 25,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.7217,
+            "precision": 0.8969,
+            "recall": 0.7869,
+            "pred_area_m2": 1561.92,
+            "bgt_area_m2": 1780.21,
+            "false_road_m2": 161.02,
+            "missed_road_m2": 379.31,
+            "boundary_pred_to_bgt_median_m": 0.749,
+            "boundary_pred_to_bgt_p90_m": 4.877,
+            "boundary_bgt_to_pred_median_m": 0.576,
+            "boundary_bgt_to_pred_p90_m": 2.457,
+            "junction_zone_iou": 0.7052,
+            "corridor_zone_iou": 0.7732,
+            "diagnostics": {
+              "site_id": "A01",
+              "mode": "width_asymmetric_only",
+              "edge_count": 32,
+              "junction_count": 16,
+              "width_source_counts": {
+                "explicit_lanes_tag": 6,
+                "class_fallback": 21,
+                "topological_continuation": 4,
+                "explicit_width_tag": 1
+              },
+              "asymmetric_edge_count": 1,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.7338,
+            "precision": 0.8834,
+            "recall": 0.8126,
+            "pred_area_m2": 1637.53,
+            "bgt_area_m2": 1780.21,
+            "false_road_m2": 191.0,
+            "missed_road_m2": 333.67,
+            "boundary_pred_to_bgt_median_m": 0.712,
+            "boundary_pred_to_bgt_p90_m": 4.973,
+            "boundary_bgt_to_pred_median_m": 0.63,
+            "boundary_bgt_to_pred_p90_m": 2.407,
+            "junction_zone_iou": 0.7204,
+            "corridor_zone_iou": 0.7737,
+            "diagnostics": {
+              "site_id": "A01",
+              "mode": "junction_only",
+              "edge_count": 32,
+              "junction_count": 16,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 6,
+                "unobserved_class_prior": 25,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 14,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.7239,
+            "precision": 0.8968,
+            "recall": 0.7897,
+            "pred_area_m2": 1567.74,
+            "bgt_area_m2": 1780.21,
+            "false_road_m2": 161.85,
+            "missed_road_m2": 374.32,
+            "boundary_pred_to_bgt_median_m": 0.725,
+            "boundary_pred_to_bgt_p90_m": 4.787,
+            "boundary_bgt_to_pred_median_m": 0.595,
+            "boundary_bgt_to_pred_p90_m": 2.457,
+            "junction_zone_iou": 0.7082,
+            "corridor_zone_iou": 0.7732,
+            "diagnostics": {
+              "site_id": "A01",
+              "mode": "full_reconstruction",
+              "edge_count": 32,
+              "junction_count": 16,
+              "width_source_counts": {
+                "explicit_lanes_tag": 6,
+                "class_fallback": 21,
+                "topological_continuation": 4,
+                "explicit_width_tag": 1
+              },
+              "asymmetric_edge_count": 1,
+              "fillet_count": 14,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8105,
+            "precision": 0.8794,
+            "recall": 0.9119,
+            "pred_area_m2": 1846.1,
+            "bgt_area_m2": 1780.21,
+            "false_road_m2": 222.68,
+            "missed_road_m2": 156.79,
+            "boundary_pred_to_bgt_median_m": 0.314,
+            "boundary_pred_to_bgt_p90_m": 2.405,
+            "boundary_bgt_to_pred_median_m": 0.26,
+            "boundary_bgt_to_pred_p90_m": 2.879,
+            "junction_zone_iou": 0.7946,
+            "corridor_zone_iou": 0.8646,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "A02": {
+        "id": "A02",
+        "label": "Nieuwe Westerdokstraat",
+        "archetype": "3-way divided approach",
+        "split": "development_amsterdam",
+        "center_rd": [
+          121467.304,
+          488146.615
+        ],
+        "bgt_filter_audit": {
+          "all_features": 42,
+          "function:rijbaan lokale weg": 17,
+          "function:voetpad": 12,
+          "function:parkeervlak": 2,
+          "accepted_polygons": 11,
+          "function:OV-baan": 3,
+          "function:overweg": 1,
+          "not_ground_level": 3,
+          "function:voetpad op trap": 3,
+          "function:spoorbaan": 1
+        },
+        "delta_iou_full_vs_baseline": 0.0052,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6091,
+            "precision": 0.7573,
+            "recall": 0.7569,
+            "pred_area_m2": 1740.28,
+            "bgt_area_m2": 1741.07,
+            "false_road_m2": 422.43,
+            "missed_road_m2": 423.22,
+            "boundary_pred_to_bgt_median_m": 1.5,
+            "boundary_pred_to_bgt_p90_m": 3.337,
+            "boundary_bgt_to_pred_median_m": 1.315,
+            "boundary_bgt_to_pred_p90_m": 2.548,
+            "junction_zone_iou": 0.6606,
+            "corridor_zone_iou": 0.5301,
+            "diagnostics": {
+              "site_id": "A02",
+              "mode": "baseline_null",
+              "edge_count": 28,
+              "junction_count": 0,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 7,
+                "unobserved_class_prior": 21
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.6143,
+            "precision": 0.7643,
+            "recall": 0.7579,
+            "pred_area_m2": 1726.52,
+            "bgt_area_m2": 1741.07,
+            "false_road_m2": 406.97,
+            "missed_road_m2": 421.52,
+            "boundary_pred_to_bgt_median_m": 1.499,
+            "boundary_pred_to_bgt_p90_m": 3.158,
+            "boundary_bgt_to_pred_median_m": 1.288,
+            "boundary_bgt_to_pred_p90_m": 2.529,
+            "junction_zone_iou": 0.6721,
+            "corridor_zone_iou": 0.5249,
+            "diagnostics": {
+              "site_id": "A02",
+              "mode": "width_asymmetric_only",
+              "edge_count": 28,
+              "junction_count": 16,
+              "width_source_counts": {
+                "explicit_lanes_tag": 7,
+                "class_fallback": 14,
+                "topological_continuation": 7
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.6123,
+            "precision": 0.7581,
+            "recall": 0.761,
+            "pred_area_m2": 1747.61,
+            "bgt_area_m2": 1741.07,
+            "false_road_m2": 422.71,
+            "missed_road_m2": 416.17,
+            "boundary_pred_to_bgt_median_m": 1.483,
+            "boundary_pred_to_bgt_p90_m": 3.226,
+            "boundary_bgt_to_pred_median_m": 1.317,
+            "boundary_bgt_to_pred_p90_m": 2.548,
+            "junction_zone_iou": 0.6658,
+            "corridor_zone_iou": 0.5302,
+            "diagnostics": {
+              "site_id": "A02",
+              "mode": "junction_only",
+              "edge_count": 28,
+              "junction_count": 16,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 7,
+                "unobserved_class_prior": 21
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 10,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.6143,
+            "precision": 0.7643,
+            "recall": 0.7579,
+            "pred_area_m2": 1726.52,
+            "bgt_area_m2": 1741.07,
+            "false_road_m2": 406.97,
+            "missed_road_m2": 421.52,
+            "boundary_pred_to_bgt_median_m": 1.499,
+            "boundary_pred_to_bgt_p90_m": 3.162,
+            "boundary_bgt_to_pred_median_m": 1.288,
+            "boundary_bgt_to_pred_p90_m": 2.529,
+            "junction_zone_iou": 0.6721,
+            "corridor_zone_iou": 0.5249,
+            "diagnostics": {
+              "site_id": "A02",
+              "mode": "full_reconstruction",
+              "edge_count": 28,
+              "junction_count": 16,
+              "width_source_counts": {
+                "explicit_lanes_tag": 7,
+                "class_fallback": 14,
+                "topological_continuation": 7
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 9,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8316,
+            "precision": 0.8731,
+            "recall": 0.9459,
+            "pred_area_m2": 1886.12,
+            "bgt_area_m2": 1741.07,
+            "false_road_m2": 239.28,
+            "missed_road_m2": 94.23,
+            "boundary_pred_to_bgt_median_m": 0.326,
+            "boundary_pred_to_bgt_p90_m": 1.986,
+            "boundary_bgt_to_pred_median_m": 0.252,
+            "boundary_bgt_to_pred_p90_m": 1.583,
+            "junction_zone_iou": 0.8527,
+            "corridor_zone_iou": 0.7944,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "A03": {
+        "id": "A03",
+        "label": "Geldersekade",
+        "archetype": "3-way residential / waterfront",
+        "split": "development_amsterdam",
+        "center_rd": [
+          122028.669,
+          487690.416
+        ],
+        "bgt_filter_audit": {
+          "all_features": 56,
+          "function:voetpad": 18,
+          "function:parkeervlak": 3,
+          "not_ground_level": 18,
+          "function:rijbaan lokale weg": 10,
+          "accepted_polygons": 5,
+          "function:fietspad": 5,
+          "function:OV-baan": 2
+        },
+        "delta_iou_full_vs_baseline": 0.1496,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6052,
+            "precision": 0.8592,
+            "recall": 0.6718,
+            "pred_area_m2": 1087.61,
+            "bgt_area_m2": 1390.9,
+            "false_road_m2": 153.15,
+            "missed_road_m2": 456.45,
+            "boundary_pred_to_bgt_median_m": 1.082,
+            "boundary_pred_to_bgt_p90_m": 2.602,
+            "boundary_bgt_to_pred_median_m": 1.001,
+            "boundary_bgt_to_pred_p90_m": 2.95,
+            "junction_zone_iou": 0.6311,
+            "corridor_zone_iou": 0.5744,
+            "diagnostics": {
+              "site_id": "A03",
+              "mode": "baseline_null",
+              "edge_count": 27,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 7,
+                "lane_count_times_3.2m": 20
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.7535,
+            "precision": 0.9431,
+            "recall": 0.7893,
+            "pred_area_m2": 1164.14,
+            "bgt_area_m2": 1390.9,
+            "false_road_m2": 66.25,
+            "missed_road_m2": 293.01,
+            "boundary_pred_to_bgt_median_m": 0.368,
+            "boundary_pred_to_bgt_p90_m": 1.578,
+            "boundary_bgt_to_pred_median_m": 0.357,
+            "boundary_bgt_to_pred_p90_m": 1.58,
+            "junction_zone_iou": 0.7457,
+            "corridor_zone_iou": 0.7625,
+            "diagnostics": {
+              "site_id": "A03",
+              "mode": "width_asymmetric_only",
+              "edge_count": 27,
+              "junction_count": 18,
+              "width_source_counts": {
+                "class_fallback": 7,
+                "explicit_lanes_tag": 20
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.6102,
+            "precision": 0.8557,
+            "recall": 0.6802,
+            "pred_area_m2": 1105.69,
+            "bgt_area_m2": 1390.9,
+            "false_road_m2": 159.56,
+            "missed_road_m2": 444.78,
+            "boundary_pred_to_bgt_median_m": 1.07,
+            "boundary_pred_to_bgt_p90_m": 2.479,
+            "boundary_bgt_to_pred_median_m": 1.016,
+            "boundary_bgt_to_pred_p90_m": 2.95,
+            "junction_zone_iou": 0.6383,
+            "corridor_zone_iou": 0.577,
+            "diagnostics": {
+              "site_id": "A03",
+              "mode": "junction_only",
+              "edge_count": 27,
+              "junction_count": 18,
+              "width_source_counts": {
+                "unobserved_class_prior": 7,
+                "lane_count_times_3.2m": 20
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 13,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.7548,
+            "precision": 0.9432,
+            "recall": 0.7907,
+            "pred_area_m2": 1166.06,
+            "bgt_area_m2": 1390.9,
+            "false_road_m2": 66.25,
+            "missed_road_m2": 291.09,
+            "boundary_pred_to_bgt_median_m": 0.37,
+            "boundary_pred_to_bgt_p90_m": 1.58,
+            "boundary_bgt_to_pred_median_m": 0.357,
+            "boundary_bgt_to_pred_p90_m": 1.58,
+            "junction_zone_iou": 0.7481,
+            "corridor_zone_iou": 0.7625,
+            "diagnostics": {
+              "site_id": "A03",
+              "mode": "full_reconstruction",
+              "edge_count": 27,
+              "junction_count": 18,
+              "width_source_counts": {
+                "class_fallback": 7,
+                "explicit_lanes_tag": 20
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 13,
+              "transition_flare_count": 2,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8759,
+            "precision": 0.948,
+            "recall": 0.92,
+            "pred_area_m2": 1349.79,
+            "bgt_area_m2": 1390.9,
+            "false_road_m2": 70.13,
+            "missed_road_m2": 111.24,
+            "boundary_pred_to_bgt_median_m": 0.142,
+            "boundary_pred_to_bgt_p90_m": 1.013,
+            "boundary_bgt_to_pred_median_m": 0.124,
+            "boundary_bgt_to_pred_p90_m": 0.962,
+            "junction_zone_iou": 0.8782,
+            "corridor_zone_iou": 0.8731,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "A04": {
+        "id": "A04",
+        "label": "Oosterdoksstraat",
+        "archetype": "3-way urban service",
+        "split": "development_amsterdam",
+        "center_rd": [
+          122096.151,
+          487803.548
+        ],
+        "bgt_filter_audit": {
+          "all_features": 56,
+          "function:voetpad": 17,
+          "not_ground_level": 12,
+          "function:spoorbaan": 8,
+          "function:OV-baan": 8,
+          "function:fietspad": 5,
+          "function:rijbaan lokale weg": 4,
+          "accepted_polygons": 4,
+          "function:parkeervlak": 1,
+          "function:voetpad op trap": 1
+        },
+        "delta_iou_full_vs_baseline": 0.0234,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6411,
+            "precision": 0.9486,
+            "recall": 0.6642,
+            "pred_area_m2": 592.95,
+            "bgt_area_m2": 846.86,
+            "false_road_m2": 30.47,
+            "missed_road_m2": 284.37,
+            "boundary_pred_to_bgt_median_m": 0.858,
+            "boundary_pred_to_bgt_p90_m": 3.24,
+            "boundary_bgt_to_pred_median_m": 0.515,
+            "boundary_bgt_to_pred_p90_m": 2.876,
+            "junction_zone_iou": 0.6357,
+            "corridor_zone_iou": 0.6485,
+            "diagnostics": {
+              "site_id": "A04",
+              "mode": "baseline_null",
+              "edge_count": 10,
+              "junction_count": 0,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 7,
+                "unobserved_class_prior": 3
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.663,
+            "precision": 0.9128,
+            "recall": 0.7078,
+            "pred_area_m2": 656.66,
+            "bgt_area_m2": 846.86,
+            "false_road_m2": 57.27,
+            "missed_road_m2": 247.46,
+            "boundary_pred_to_bgt_median_m": 0.826,
+            "boundary_pred_to_bgt_p90_m": 3.209,
+            "boundary_bgt_to_pred_median_m": 0.58,
+            "boundary_bgt_to_pred_p90_m": 2.851,
+            "junction_zone_iou": 0.6703,
+            "corridor_zone_iou": 0.6524,
+            "diagnostics": {
+              "site_id": "A04",
+              "mode": "width_asymmetric_only",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "explicit_turn_lanes": 2,
+                "explicit_lanes_tag": 5,
+                "class_fallback": 3
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.6491,
+            "precision": 0.9487,
+            "recall": 0.6727,
+            "pred_area_m2": 600.49,
+            "bgt_area_m2": 846.86,
+            "false_road_m2": 30.82,
+            "missed_road_m2": 277.18,
+            "boundary_pred_to_bgt_median_m": 0.621,
+            "boundary_pred_to_bgt_p90_m": 3.203,
+            "boundary_bgt_to_pred_median_m": 0.515,
+            "boundary_bgt_to_pred_p90_m": 2.876,
+            "junction_zone_iou": 0.649,
+            "corridor_zone_iou": 0.6491,
+            "diagnostics": {
+              "site_id": "A04",
+              "mode": "junction_only",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 7,
+                "unobserved_class_prior": 3
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 3,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.6645,
+            "precision": 0.913,
+            "recall": 0.7094,
+            "pred_area_m2": 658.04,
+            "bgt_area_m2": 846.86,
+            "false_road_m2": 57.27,
+            "missed_road_m2": 246.08,
+            "boundary_pred_to_bgt_median_m": 0.806,
+            "boundary_pred_to_bgt_p90_m": 3.21,
+            "boundary_bgt_to_pred_median_m": 0.594,
+            "boundary_bgt_to_pred_p90_m": 2.851,
+            "junction_zone_iou": 0.6729,
+            "corridor_zone_iou": 0.6524,
+            "diagnostics": {
+              "site_id": "A04",
+              "mode": "full_reconstruction",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "explicit_turn_lanes": 2,
+                "explicit_lanes_tag": 5,
+                "class_fallback": 3
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 3,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8906,
+            "precision": 0.9223,
+            "recall": 0.9629,
+            "pred_area_m2": 884.1,
+            "bgt_area_m2": 846.86,
+            "false_road_m2": 68.68,
+            "missed_road_m2": 31.44,
+            "boundary_pred_to_bgt_median_m": 0.106,
+            "boundary_pred_to_bgt_p90_m": 1.071,
+            "boundary_bgt_to_pred_median_m": 0.098,
+            "boundary_bgt_to_pred_p90_m": 0.941,
+            "junction_zone_iou": 0.8465,
+            "corridor_zone_iou": 0.9547,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "A05": {
+        "id": "A05",
+        "label": "De Ruijterkade",
+        "archetype": "4-way complex arterial",
+        "split": "development_amsterdam",
+        "center_rd": [
+          122257.155,
+          487914.123
+        ],
+        "bgt_filter_audit": {
+          "all_features": 31,
+          "function:rijbaan regionale weg": 4,
+          "accepted_polygons": 9,
+          "function:voetpad": 7,
+          "function:fietspad": 5,
+          "function:rijbaan lokale weg": 5,
+          "function:parkeervlak": 3,
+          "not_ground_level": 5,
+          "function:voetpad op trap": 1,
+          "function:OV-baan": 1
+        },
+        "delta_iou_full_vs_baseline": 0.0312,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6902,
+            "precision": 0.9304,
+            "recall": 0.7278,
+            "pred_area_m2": 1555.82,
+            "bgt_area_m2": 1988.94,
+            "false_road_m2": 108.35,
+            "missed_road_m2": 541.47,
+            "boundary_pred_to_bgt_median_m": 0.413,
+            "boundary_pred_to_bgt_p90_m": 2.569,
+            "boundary_bgt_to_pred_median_m": 0.422,
+            "boundary_bgt_to_pred_p90_m": 3.988,
+            "junction_zone_iou": 0.6953,
+            "corridor_zone_iou": 0.6876,
+            "diagnostics": {
+              "site_id": "A05",
+              "mode": "baseline_null",
+              "edge_count": 16,
+              "junction_count": 0,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 15,
+                "unobserved_class_prior": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.7185,
+            "precision": 0.9363,
+            "recall": 0.7554,
+            "pred_area_m2": 1604.58,
+            "bgt_area_m2": 1988.94,
+            "false_road_m2": 102.15,
+            "missed_road_m2": 486.51,
+            "boundary_pred_to_bgt_median_m": 0.325,
+            "boundary_pred_to_bgt_p90_m": 1.959,
+            "boundary_bgt_to_pred_median_m": 0.342,
+            "boundary_bgt_to_pred_p90_m": 4.05,
+            "junction_zone_iou": 0.7458,
+            "corridor_zone_iou": 0.7052,
+            "diagnostics": {
+              "site_id": "A05",
+              "mode": "width_asymmetric_only",
+              "edge_count": 16,
+              "junction_count": 9,
+              "width_source_counts": {
+                "explicit_lanes_tag": 15,
+                "class_fallback": 1
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.695,
+            "precision": 0.9265,
+            "recall": 0.7356,
+            "pred_area_m2": 1579.03,
+            "bgt_area_m2": 1988.94,
+            "false_road_m2": 116.05,
+            "missed_road_m2": 525.96,
+            "boundary_pred_to_bgt_median_m": 0.412,
+            "boundary_pred_to_bgt_p90_m": 2.392,
+            "boundary_bgt_to_pred_median_m": 0.433,
+            "boundary_bgt_to_pred_p90_m": 3.988,
+            "junction_zone_iou": 0.7107,
+            "corridor_zone_iou": 0.6873,
+            "diagnostics": {
+              "site_id": "A05",
+              "mode": "junction_only",
+              "edge_count": 16,
+              "junction_count": 9,
+              "width_source_counts": {
+                "lane_count_times_3.2m": 15,
+                "unobserved_class_prior": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 5,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.7214,
+            "precision": 0.9366,
+            "recall": 0.7584,
+            "pred_area_m2": 1610.58,
+            "bgt_area_m2": 1988.94,
+            "false_road_m2": 102.15,
+            "missed_road_m2": 480.5,
+            "boundary_pred_to_bgt_median_m": 0.331,
+            "boundary_pred_to_bgt_p90_m": 2.172,
+            "boundary_bgt_to_pred_median_m": 0.342,
+            "boundary_bgt_to_pred_p90_m": 4.05,
+            "junction_zone_iou": 0.7545,
+            "corridor_zone_iou": 0.7052,
+            "diagnostics": {
+              "site_id": "A05",
+              "mode": "full_reconstruction",
+              "edge_count": 16,
+              "junction_count": 9,
+              "width_source_counts": {
+                "explicit_lanes_tag": 15,
+                "class_fallback": 1
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 5,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.7908,
+            "precision": 0.8973,
+            "recall": 0.8695,
+            "pred_area_m2": 1927.23,
+            "bgt_area_m2": 1988.94,
+            "false_road_m2": 197.83,
+            "missed_road_m2": 259.54,
+            "boundary_pred_to_bgt_median_m": 0.037,
+            "boundary_pred_to_bgt_p90_m": 1.746,
+            "boundary_bgt_to_pred_median_m": 0.053,
+            "boundary_bgt_to_pred_p90_m": 3.926,
+            "junction_zone_iou": 0.8457,
+            "corridor_zone_iou": 0.7628,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "A06": {
+        "id": "A06",
+        "label": "Buiksloterweg",
+        "archetype": "3-way local street",
+        "split": "development_amsterdam",
+        "center_rd": [
+          122095.849,
+          488410.652
+        ],
+        "bgt_filter_audit": {
+          "all_features": 25,
+          "function:voetpad": 15,
+          "function:fietspad": 3,
+          "function:parkeervlak": 2,
+          "function:inrit": 2,
+          "function:rijbaan lokale weg": 3,
+          "accepted_polygons": 2
+        },
+        "delta_iou_full_vs_baseline": 0.0046,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6602,
+            "precision": 0.9204,
+            "recall": 0.7001,
+            "pred_area_m2": 828.95,
+            "bgt_area_m2": 1089.79,
+            "false_road_m2": 65.95,
+            "missed_road_m2": 326.79,
+            "boundary_pred_to_bgt_median_m": 1.173,
+            "boundary_pred_to_bgt_p90_m": 4.124,
+            "boundary_bgt_to_pred_median_m": 1.102,
+            "boundary_bgt_to_pred_p90_m": 1.795,
+            "junction_zone_iou": 0.6366,
+            "corridor_zone_iou": 0.6788,
+            "diagnostics": {
+              "site_id": "A06",
+              "mode": "baseline_null",
+              "edge_count": 10,
+              "junction_count": 0,
+              "width_source_counts": {
+                "explicit_width": 9,
+                "unobserved_class_prior": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.663,
+            "precision": 0.9208,
+            "recall": 0.7031,
+            "pred_area_m2": 832.17,
+            "bgt_area_m2": 1089.79,
+            "false_road_m2": 65.95,
+            "missed_road_m2": 323.58,
+            "boundary_pred_to_bgt_median_m": 1.158,
+            "boundary_pred_to_bgt_p90_m": 4.124,
+            "boundary_bgt_to_pred_median_m": 1.102,
+            "boundary_bgt_to_pred_p90_m": 1.777,
+            "junction_zone_iou": 0.6383,
+            "corridor_zone_iou": 0.6824,
+            "diagnostics": {
+              "site_id": "A06",
+              "mode": "width_asymmetric_only",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "explicit_width_tag": 9,
+                "class_fallback": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.6648,
+            "precision": 0.9206,
+            "recall": 0.7052,
+            "pred_area_m2": 834.76,
+            "bgt_area_m2": 1089.79,
+            "false_road_m2": 66.25,
+            "missed_road_m2": 321.28,
+            "boundary_pred_to_bgt_median_m": 1.13,
+            "boundary_pred_to_bgt_p90_m": 4.163,
+            "boundary_bgt_to_pred_median_m": 1.102,
+            "boundary_bgt_to_pred_p90_m": 1.777,
+            "junction_zone_iou": 0.6424,
+            "corridor_zone_iou": 0.6824,
+            "diagnostics": {
+              "site_id": "A06",
+              "mode": "junction_only",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "explicit_width": 9,
+                "unobserved_class_prior": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.6648,
+            "precision": 0.9206,
+            "recall": 0.7052,
+            "pred_area_m2": 834.76,
+            "bgt_area_m2": 1089.79,
+            "false_road_m2": 66.25,
+            "missed_road_m2": 321.28,
+            "boundary_pred_to_bgt_median_m": 1.13,
+            "boundary_pred_to_bgt_p90_m": 3.774,
+            "boundary_bgt_to_pred_median_m": 1.102,
+            "boundary_bgt_to_pred_p90_m": 1.777,
+            "junction_zone_iou": 0.6424,
+            "corridor_zone_iou": 0.6824,
+            "diagnostics": {
+              "site_id": "A06",
+              "mode": "full_reconstruction",
+              "edge_count": 10,
+              "junction_count": 7,
+              "width_source_counts": {
+                "explicit_width_tag": 9,
+                "class_fallback": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8773,
+            "precision": 0.9317,
+            "recall": 0.9375,
+            "pred_area_m2": 1096.55,
+            "bgt_area_m2": 1089.79,
+            "false_road_m2": 74.85,
+            "missed_road_m2": 68.1,
+            "boundary_pred_to_bgt_median_m": 0.083,
+            "boundary_pred_to_bgt_p90_m": 3.4,
+            "boundary_bgt_to_pred_median_m": 0.065,
+            "boundary_bgt_to_pred_p90_m": 0.865,
+            "junction_zone_iou": 0.8184,
+            "corridor_zone_iou": 0.9234,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      }
+    }
+  },
+  "holdout": {
+    "split": "holdout_unseen",
+    "summary_by_mode": {
+      "baseline_null": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6398,
+        "min_iou": 0.4747,
+        "max_iou": 0.7605,
+        "mean_precision": 0.7574,
+        "mean_recall": 0.8113,
+        "total_false_road_m2": 1569.22,
+        "total_missed_road_m2": 1197.32,
+        "mean_boundary_pred_to_bgt_median_m": 0.85,
+        "mean_junction_zone_iou": 0.6193,
+        "mean_corridor_zone_iou": 0.6543
+      },
+      "width_asymmetric_only": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6579,
+        "min_iou": 0.4733,
+        "max_iou": 0.8088,
+        "mean_precision": 0.7998,
+        "mean_recall": 0.7806,
+        "total_false_road_m2": 1155.98,
+        "total_missed_road_m2": 1361.57,
+        "mean_boundary_pred_to_bgt_median_m": 0.686,
+        "mean_junction_zone_iou": 0.624,
+        "mean_corridor_zone_iou": 0.6757
+      },
+      "junction_only": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.642,
+        "min_iou": 0.479,
+        "max_iou": 0.7661,
+        "mean_precision": 0.7567,
+        "mean_recall": 0.8152,
+        "total_false_road_m2": 1582.3,
+        "total_missed_road_m2": 1171.47,
+        "mean_boundary_pred_to_bgt_median_m": 0.849,
+        "mean_junction_zone_iou": 0.6247,
+        "mean_corridor_zone_iou": 0.6543
+      },
+      "full_reconstruction": {
+        "is_predictive_osm_only": true,
+        "site_count": 6,
+        "mean_iou": 0.6585,
+        "min_iou": 0.4739,
+        "max_iou": 0.8093,
+        "mean_precision": 0.7992,
+        "mean_recall": 0.7818,
+        "total_false_road_m2": 1162.25,
+        "total_missed_road_m2": 1354.4,
+        "mean_boundary_pred_to_bgt_median_m": 0.69,
+        "mean_junction_zone_iou": 0.6253,
+        "mean_corridor_zone_iou": 0.6757
+      },
+      "bgt_oracle_width_diagnostic": {
+        "is_predictive_osm_only": false,
+        "site_count": 6,
+        "mean_iou": 0.7549,
+        "min_iou": 0.5731,
+        "max_iou": 0.9028,
+        "mean_precision": 0.839,
+        "mean_recall": 0.8727,
+        "total_false_road_m2": 1043.19,
+        "total_missed_road_m2": 772.27,
+        "mean_boundary_pred_to_bgt_median_m": 0.177,
+        "mean_junction_zone_iou": 0.6902,
+        "mean_corridor_zone_iou": 0.7902
+      }
+    },
+    "sites": {
+      "H01": {
+        "id": "H01",
+        "label": "Utrecht - Lucasbolwerk / Wittevrouwenstraat",
+        "archetype": "3-way / 4-way urban collector with cycle & turn lanes",
+        "split": "holdout_unseen",
+        "center_rd": [
+          137116.931,
+          456161.993
+        ],
+        "bgt_filter_audit": {
+          "all_features": 65,
+          "function:rijbaan lokale weg": 17,
+          "function:voetpad": 33,
+          "function:parkeervlak": 8,
+          "function:fietspad": 6,
+          "accepted_polygons": 3,
+          "function:OV-baan": 1
+        },
+        "delta_iou_full_vs_baseline": -0.0024,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.7605,
+            "precision": 0.916,
+            "recall": 0.8175,
+            "pred_area_m2": 578.73,
+            "bgt_area_m2": 648.43,
+            "false_road_m2": 48.62,
+            "missed_road_m2": 118.32,
+            "boundary_pred_to_bgt_median_m": 0.671,
+            "boundary_pred_to_bgt_p90_m": 1.281,
+            "boundary_bgt_to_pred_median_m": 0.632,
+            "boundary_bgt_to_pred_p90_m": 1.035,
+            "junction_zone_iou": 0.7287,
+            "corridor_zone_iou": 0.7854,
+            "diagnostics": {
+              "site_id": "H01",
+              "mode": "baseline_null",
+              "edge_count": 15,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 14,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.7562,
+            "precision": 0.9155,
+            "recall": 0.8129,
+            "pred_area_m2": 575.79,
+            "bgt_area_m2": 648.43,
+            "false_road_m2": 48.67,
+            "missed_road_m2": 121.31,
+            "boundary_pred_to_bgt_median_m": 0.682,
+            "boundary_pred_to_bgt_p90_m": 1.224,
+            "boundary_bgt_to_pred_median_m": 0.658,
+            "boundary_bgt_to_pred_p90_m": 1.053,
+            "junction_zone_iou": 0.73,
+            "corridor_zone_iou": 0.7767,
+            "diagnostics": {
+              "site_id": "H01",
+              "mode": "width_asymmetric_only",
+              "edge_count": 15,
+              "junction_count": 10,
+              "width_source_counts": {
+                "class_fallback": 15
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.7661,
+            "precision": 0.9165,
+            "recall": 0.8236,
+            "pred_area_m2": 582.69,
+            "bgt_area_m2": 648.43,
+            "false_road_m2": 48.67,
+            "missed_road_m2": 114.41,
+            "boundary_pred_to_bgt_median_m": 0.66,
+            "boundary_pred_to_bgt_p90_m": 1.261,
+            "boundary_bgt_to_pred_median_m": 0.622,
+            "boundary_bgt_to_pred_p90_m": 1.033,
+            "junction_zone_iou": 0.7414,
+            "corridor_zone_iou": 0.7854,
+            "diagnostics": {
+              "site_id": "H01",
+              "mode": "junction_only",
+              "edge_count": 15,
+              "junction_count": 10,
+              "width_source_counts": {
+                "unobserved_class_prior": 14,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.7581,
+            "precision": 0.9157,
+            "recall": 0.815,
+            "pred_area_m2": 577.13,
+            "bgt_area_m2": 648.43,
+            "false_road_m2": 48.67,
+            "missed_road_m2": 119.97,
+            "boundary_pred_to_bgt_median_m": 0.683,
+            "boundary_pred_to_bgt_p90_m": 1.346,
+            "boundary_bgt_to_pred_median_m": 0.658,
+            "boundary_bgt_to_pred_p90_m": 1.053,
+            "junction_zone_iou": 0.7343,
+            "corridor_zone_iou": 0.7767,
+            "diagnostics": {
+              "site_id": "H01",
+              "mode": "full_reconstruction",
+              "edge_count": 15,
+              "junction_count": 10,
+              "width_source_counts": {
+                "class_fallback": 15
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 3,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.9028,
+            "precision": 0.9683,
+            "recall": 0.9304,
+            "pred_area_m2": 623.06,
+            "bgt_area_m2": 648.43,
+            "false_road_m2": 19.78,
+            "missed_road_m2": 45.16,
+            "boundary_pred_to_bgt_median_m": 0.137,
+            "boundary_pred_to_bgt_p90_m": 0.905,
+            "boundary_bgt_to_pred_median_m": 0.125,
+            "boundary_bgt_to_pred_p90_m": 0.533,
+            "junction_zone_iou": 0.8435,
+            "corridor_zone_iou": 0.9532,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "H02": {
+        "id": "H02",
+        "label": "Rotterdam - Meent / Rodezand",
+        "archetype": "4-way urban arterial & local street intersection",
+        "split": "holdout_unseen",
+        "center_rd": [
+          92911.892,
+          437537.763
+        ],
+        "bgt_filter_audit": {
+          "all_features": 79,
+          "function:parkeervlak": 22,
+          "function:rijbaan lokale weg": 15,
+          "function:voetpad": 35,
+          "not_ground_level": 3,
+          "accepted_polygons": 7,
+          "function:fietspad": 4
+        },
+        "delta_iou_full_vs_baseline": 0.0246,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.6071,
+            "precision": 0.6634,
+            "recall": 0.8772,
+            "pred_area_m2": 1123.28,
+            "bgt_area_m2": 849.57,
+            "false_road_m2": 378.04,
+            "missed_road_m2": 104.33,
+            "boundary_pred_to_bgt_median_m": 1.014,
+            "boundary_pred_to_bgt_p90_m": 27.783,
+            "boundary_bgt_to_pred_median_m": 0.922,
+            "boundary_bgt_to_pred_p90_m": 1.315,
+            "junction_zone_iou": 0.5991,
+            "corridor_zone_iou": 0.6085,
+            "diagnostics": {
+              "site_id": "H02",
+              "mode": "baseline_null",
+              "edge_count": 13,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 13
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.6315,
+            "precision": 0.7215,
+            "recall": 0.8352,
+            "pred_area_m2": 983.45,
+            "bgt_area_m2": 849.57,
+            "false_road_m2": 273.92,
+            "missed_road_m2": 140.05,
+            "boundary_pred_to_bgt_median_m": 0.695,
+            "boundary_pred_to_bgt_p90_m": 28.014,
+            "boundary_bgt_to_pred_median_m": 0.43,
+            "boundary_bgt_to_pred_p90_m": 1.447,
+            "junction_zone_iou": 0.6011,
+            "corridor_zone_iou": 0.637,
+            "diagnostics": {
+              "site_id": "H02",
+              "mode": "width_asymmetric_only",
+              "edge_count": 13,
+              "junction_count": 4,
+              "width_source_counts": {
+                "class_fallback": 13
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.6078,
+            "precision": 0.6634,
+            "recall": 0.8789,
+            "pred_area_m2": 1125.52,
+            "bgt_area_m2": 849.57,
+            "false_road_m2": 378.87,
+            "missed_road_m2": 102.92,
+            "boundary_pred_to_bgt_median_m": 1.023,
+            "boundary_pred_to_bgt_p90_m": 27.793,
+            "boundary_bgt_to_pred_median_m": 0.922,
+            "boundary_bgt_to_pred_p90_m": 1.328,
+            "junction_zone_iou": 0.6039,
+            "corridor_zone_iou": 0.6085,
+            "diagnostics": {
+              "site_id": "H02",
+              "mode": "junction_only",
+              "edge_count": 13,
+              "junction_count": 4,
+              "width_source_counts": {
+                "unobserved_class_prior": 13
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.6317,
+            "precision": 0.7211,
+            "recall": 0.836,
+            "pred_area_m2": 984.92,
+            "bgt_area_m2": 849.57,
+            "false_road_m2": 274.71,
+            "missed_road_m2": 139.36,
+            "boundary_pred_to_bgt_median_m": 0.703,
+            "boundary_pred_to_bgt_p90_m": 27.714,
+            "boundary_bgt_to_pred_median_m": 0.442,
+            "boundary_bgt_to_pred_p90_m": 1.447,
+            "junction_zone_iou": 0.6023,
+            "corridor_zone_iou": 0.637,
+            "diagnostics": {
+              "site_id": "H02",
+              "mode": "full_reconstruction",
+              "edge_count": 13,
+              "junction_count": 4,
+              "width_source_counts": {
+                "class_fallback": 13
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 2,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.7098,
+            "precision": 0.7486,
+            "recall": 0.9319,
+            "pred_area_m2": 1057.53,
+            "bgt_area_m2": 849.57,
+            "false_road_m2": 265.81,
+            "missed_road_m2": 57.86,
+            "boundary_pred_to_bgt_median_m": 0.193,
+            "boundary_pred_to_bgt_p90_m": 27.716,
+            "boundary_bgt_to_pred_median_m": 0.087,
+            "boundary_bgt_to_pred_p90_m": 1.763,
+            "junction_zone_iou": 0.633,
+            "corridor_zone_iou": 0.724,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "H03": {
+        "id": "H03",
+        "label": "Den Haag - Mauritskade / Alexanderstraat",
+        "archetype": "4-way divided collector & canal-side street",
+        "split": "holdout_unseen",
+        "center_rd": [
+          81240.985,
+          455960.076
+        ],
+        "bgt_filter_audit": {
+          "all_features": 75,
+          "function:fietspad": 5,
+          "function:rijbaan lokale weg": 17,
+          "not_ground_level": 4,
+          "accepted_polygons": 8,
+          "function:voetpad": 27,
+          "function:parkeervlak": 20,
+          "function:voetpad op trap": 2
+        },
+        "delta_iou_full_vs_baseline": -0.0117,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.5608,
+            "precision": 0.6578,
+            "recall": 0.7917,
+            "pred_area_m2": 1053.24,
+            "bgt_area_m2": 875.1,
+            "false_road_m2": 360.41,
+            "missed_road_m2": 182.26,
+            "boundary_pred_to_bgt_median_m": 0.918,
+            "boundary_pred_to_bgt_p90_m": 23.543,
+            "boundary_bgt_to_pred_median_m": 0.613,
+            "boundary_bgt_to_pred_p90_m": 1.758,
+            "junction_zone_iou": 0.4367,
+            "corridor_zone_iou": 0.6052,
+            "diagnostics": {
+              "site_id": "H03",
+              "mode": "baseline_null",
+              "edge_count": 14,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 12,
+                "lane_count_times_3.2m": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.5501,
+            "precision": 0.6942,
+            "recall": 0.726,
+            "pred_area_m2": 915.22,
+            "bgt_area_m2": 875.1,
+            "false_road_m2": 279.88,
+            "missed_road_m2": 239.76,
+            "boundary_pred_to_bgt_median_m": 0.684,
+            "boundary_pred_to_bgt_p90_m": 23.545,
+            "boundary_bgt_to_pred_median_m": 0.526,
+            "boundary_bgt_to_pred_p90_m": 1.702,
+            "junction_zone_iou": 0.4075,
+            "corridor_zone_iou": 0.6032,
+            "diagnostics": {
+              "site_id": "H03",
+              "mode": "width_asymmetric_only",
+              "edge_count": 14,
+              "junction_count": 5,
+              "width_source_counts": {
+                "class_fallback": 12,
+                "explicit_lanes_tag": 2
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.5588,
+            "precision": 0.655,
+            "recall": 0.7917,
+            "pred_area_m2": 1057.68,
+            "bgt_area_m2": 875.1,
+            "false_road_m2": 364.85,
+            "missed_road_m2": 182.26,
+            "boundary_pred_to_bgt_median_m": 0.914,
+            "boundary_pred_to_bgt_p90_m": 23.543,
+            "boundary_bgt_to_pred_median_m": 0.613,
+            "boundary_bgt_to_pred_p90_m": 1.934,
+            "junction_zone_iou": 0.4308,
+            "corridor_zone_iou": 0.6052,
+            "diagnostics": {
+              "site_id": "H03",
+              "mode": "junction_only",
+              "edge_count": 14,
+              "junction_count": 5,
+              "width_source_counts": {
+                "unobserved_class_prior": 12,
+                "lane_count_times_3.2m": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 6,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.5491,
+            "precision": 0.6926,
+            "recall": 0.726,
+            "pred_area_m2": 917.28,
+            "bgt_area_m2": 875.1,
+            "false_road_m2": 281.94,
+            "missed_road_m2": 239.76,
+            "boundary_pred_to_bgt_median_m": 0.69,
+            "boundary_pred_to_bgt_p90_m": 23.589,
+            "boundary_bgt_to_pred_median_m": 0.526,
+            "boundary_bgt_to_pred_p90_m": 1.702,
+            "junction_zone_iou": 0.4048,
+            "corridor_zone_iou": 0.6032,
+            "diagnostics": {
+              "site_id": "H03",
+              "mode": "full_reconstruction",
+              "edge_count": 14,
+              "junction_count": 5,
+              "width_source_counts": {
+                "class_fallback": 12,
+                "explicit_lanes_tag": 2
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 6,
+              "transition_flare_count": 0,
+              "preserved_island_count": 1,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.5731,
+            "precision": 0.6834,
+            "recall": 0.7802,
+            "pred_area_m2": 999.1,
+            "bgt_area_m2": 875.1,
+            "false_road_m2": 316.33,
+            "missed_road_m2": 192.32,
+            "boundary_pred_to_bgt_median_m": 0.346,
+            "boundary_pred_to_bgt_p90_m": 23.559,
+            "boundary_bgt_to_pred_median_m": 0.1,
+            "boundary_bgt_to_pred_p90_m": 3.986,
+            "junction_zone_iou": 0.3897,
+            "corridor_zone_iou": 0.6559,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "H04": {
+        "id": "H04",
+        "label": "Haarlem - Zijlsingel / Zijlvest",
+        "archetype": "3-way divided collector with cycleway lanes",
+        "split": "holdout_unseen",
+        "center_rd": [
+          103289.284,
+          488581.977
+        ],
+        "bgt_filter_audit": {
+          "all_features": 84,
+          "function:rijbaan lokale weg": 27,
+          "not_ground_level": 5,
+          "function:voetpad": 41,
+          "function:parkeervlak": 5,
+          "accepted_polygons": 18,
+          "function:fietspad": 6
+        },
+        "delta_iou_full_vs_baseline": 0.1059,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.7034,
+            "precision": 0.7109,
+            "recall": 0.9851,
+            "pred_area_m2": 1172.88,
+            "bgt_area_m2": 846.42,
+            "false_road_m2": 339.07,
+            "missed_road_m2": 12.61,
+            "boundary_pred_to_bgt_median_m": 0.821,
+            "boundary_pred_to_bgt_p90_m": 1.297,
+            "boundary_bgt_to_pred_median_m": 0.829,
+            "boundary_bgt_to_pred_p90_m": 1.322,
+            "junction_zone_iou": 0.7423,
+            "corridor_zone_iou": 0.693,
+            "diagnostics": {
+              "site_id": "H04",
+              "mode": "baseline_null",
+              "edge_count": 16,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 11,
+                "lane_count_times_3.2m": 4,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.8088,
+            "precision": 0.8654,
+            "recall": 0.9252,
+            "pred_area_m2": 904.85,
+            "bgt_area_m2": 846.42,
+            "false_road_m2": 121.79,
+            "missed_road_m2": 63.35,
+            "boundary_pred_to_bgt_median_m": 0.361,
+            "boundary_pred_to_bgt_p90_m": 0.762,
+            "boundary_bgt_to_pred_median_m": 0.377,
+            "boundary_bgt_to_pred_p90_m": 0.871,
+            "junction_zone_iou": 0.7947,
+            "corridor_zone_iou": 0.8127,
+            "diagnostics": {
+              "site_id": "H04",
+              "mode": "width_asymmetric_only",
+              "edge_count": 16,
+              "junction_count": 11,
+              "width_source_counts": {
+                "topological_continuation": 4,
+                "class_fallback": 7,
+                "explicit_lanes_tag": 4,
+                "explicit_width_tag": 1
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.7035,
+            "precision": 0.7106,
+            "recall": 0.986,
+            "pred_area_m2": 1174.39,
+            "bgt_area_m2": 846.42,
+            "false_road_m2": 339.82,
+            "missed_road_m2": 11.85,
+            "boundary_pred_to_bgt_median_m": 0.822,
+            "boundary_pred_to_bgt_p90_m": 1.297,
+            "boundary_bgt_to_pred_median_m": 0.841,
+            "boundary_bgt_to_pred_p90_m": 1.326,
+            "junction_zone_iou": 0.7431,
+            "corridor_zone_iou": 0.693,
+            "diagnostics": {
+              "site_id": "H04",
+              "mode": "junction_only",
+              "edge_count": 16,
+              "junction_count": 11,
+              "width_source_counts": {
+                "unobserved_class_prior": 11,
+                "lane_count_times_3.2m": 4,
+                "explicit_width": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 3,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.8093,
+            "precision": 0.8651,
+            "recall": 0.9262,
+            "pred_area_m2": 906.21,
+            "bgt_area_m2": 846.42,
+            "false_road_m2": 122.27,
+            "missed_road_m2": 62.47,
+            "boundary_pred_to_bgt_median_m": 0.364,
+            "boundary_pred_to_bgt_p90_m": 0.757,
+            "boundary_bgt_to_pred_median_m": 0.377,
+            "boundary_bgt_to_pred_p90_m": 0.871,
+            "junction_zone_iou": 0.7971,
+            "corridor_zone_iou": 0.8127,
+            "diagnostics": {
+              "site_id": "H04",
+              "mode": "full_reconstruction",
+              "edge_count": 16,
+              "junction_count": 11,
+              "width_source_counts": {
+                "topological_continuation": 4,
+                "class_fallback": 7,
+                "explicit_lanes_tag": 4,
+                "explicit_width_tag": 1
+              },
+              "asymmetric_edge_count": 2,
+              "fillet_count": 3,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8944,
+            "precision": 0.9595,
+            "recall": 0.9295,
+            "pred_area_m2": 819.94,
+            "bgt_area_m2": 846.42,
+            "false_road_m2": 33.22,
+            "missed_road_m2": 59.7,
+            "boundary_pred_to_bgt_median_m": 0.093,
+            "boundary_pred_to_bgt_p90_m": 0.477,
+            "boundary_bgt_to_pred_median_m": 0.094,
+            "boundary_bgt_to_pred_p90_m": 0.483,
+            "junction_zone_iou": 0.8449,
+            "corridor_zone_iou": 0.909,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "H05": {
+        "id": "H05",
+        "label": "Delft - Westvest / Phoenixstraat",
+        "archetype": "3-way urban street & collector junction",
+        "split": "holdout_unseen",
+        "center_rd": [
+          84120.146,
+          447376.845
+        ],
+        "bgt_filter_audit": {
+          "all_features": 147,
+          "function:voetpad": 76,
+          "function:rijbaan regionale weg": 4,
+          "function:OV-baan": 15,
+          "not_ground_level": 11,
+          "function:rijbaan lokale weg": 8,
+          "function:parkeervlak": 11,
+          "accepted_polygons": 8,
+          "function:fietspad": 17,
+          "function:inrit": 1,
+          "function:voetpad op trap": 4
+        },
+        "delta_iou_full_vs_baseline": -0.0034,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.732,
+            "precision": 0.8876,
+            "recall": 0.8067,
+            "pred_area_m2": 1349.01,
+            "bgt_area_m2": 1484.25,
+            "false_road_m2": 151.59,
+            "missed_road_m2": 286.84,
+            "boundary_pred_to_bgt_median_m": 0.467,
+            "boundary_pred_to_bgt_p90_m": 3.18,
+            "boundary_bgt_to_pred_median_m": 0.382,
+            "boundary_bgt_to_pred_p90_m": 1.175,
+            "junction_zone_iou": 0.7026,
+            "corridor_zone_iou": 0.7775,
+            "diagnostics": {
+              "site_id": "H05",
+              "mode": "baseline_null",
+              "edge_count": 24,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 5,
+                "lane_count_times_3.2m": 19
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.7277,
+            "precision": 0.8939,
+            "recall": 0.7964,
+            "pred_area_m2": 1322.4,
+            "bgt_area_m2": 1484.25,
+            "false_road_m2": 140.28,
+            "missed_road_m2": 302.13,
+            "boundary_pred_to_bgt_median_m": 0.481,
+            "boundary_pred_to_bgt_p90_m": 3.196,
+            "boundary_bgt_to_pred_median_m": 0.363,
+            "boundary_bgt_to_pred_p90_m": 1.176,
+            "junction_zone_iou": 0.6982,
+            "corridor_zone_iou": 0.7739,
+            "diagnostics": {
+              "site_id": "H05",
+              "mode": "width_asymmetric_only",
+              "edge_count": 24,
+              "junction_count": 10,
+              "width_source_counts": {
+                "class_fallback": 4,
+                "explicit_lanes_tag": 19,
+                "topological_continuation": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.7371,
+            "precision": 0.8846,
+            "recall": 0.8155,
+            "pred_area_m2": 1368.37,
+            "bgt_area_m2": 1484.25,
+            "false_road_m2": 157.92,
+            "missed_road_m2": 273.81,
+            "boundary_pred_to_bgt_median_m": 0.458,
+            "boundary_pred_to_bgt_p90_m": 3.159,
+            "boundary_bgt_to_pred_median_m": 0.383,
+            "boundary_bgt_to_pred_p90_m": 1.206,
+            "junction_zone_iou": 0.7112,
+            "corridor_zone_iou": 0.7775,
+            "diagnostics": {
+              "site_id": "H05",
+              "mode": "junction_only",
+              "edge_count": 24,
+              "junction_count": 10,
+              "width_source_counts": {
+                "unobserved_class_prior": 5,
+                "lane_count_times_3.2m": 19
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 17,
+              "transition_flare_count": 0,
+              "preserved_island_count": 4,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.7286,
+            "precision": 0.8927,
+            "recall": 0.7985,
+            "pred_area_m2": 1327.75,
+            "bgt_area_m2": 1484.25,
+            "false_road_m2": 142.53,
+            "missed_road_m2": 299.03,
+            "boundary_pred_to_bgt_median_m": 0.482,
+            "boundary_pred_to_bgt_p90_m": 3.193,
+            "boundary_bgt_to_pred_median_m": 0.367,
+            "boundary_bgt_to_pred_p90_m": 1.204,
+            "junction_zone_iou": 0.6998,
+            "corridor_zone_iou": 0.7739,
+            "diagnostics": {
+              "site_id": "H05",
+              "mode": "full_reconstruction",
+              "edge_count": 24,
+              "junction_count": 10,
+              "width_source_counts": {
+                "class_fallback": 4,
+                "explicit_lanes_tag": 19,
+                "topological_continuation": 1
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 17,
+              "transition_flare_count": 0,
+              "preserved_island_count": 4,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.8573,
+            "precision": 0.8962,
+            "recall": 0.9517,
+            "pred_area_m2": 1576.12,
+            "bgt_area_m2": 1484.25,
+            "false_road_m2": 163.53,
+            "missed_road_m2": 71.66,
+            "boundary_pred_to_bgt_median_m": 0.138,
+            "boundary_pred_to_bgt_p90_m": 0.926,
+            "boundary_bgt_to_pred_median_m": 0.132,
+            "boundary_bgt_to_pred_p90_m": 0.878,
+            "junction_zone_iou": 0.8244,
+            "corridor_zone_iou": 0.9149,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      },
+      "H06": {
+        "id": "H06",
+        "label": "Hengelo - Deldenerstraat / Langestraat",
+        "archetype": "3-way regional urban collector & local street",
+        "split": "holdout_unseen",
+        "center_rd": [
+          250802.296,
+          476103.211
+        ],
+        "bgt_filter_audit": {
+          "all_features": 41,
+          "function:rijbaan lokale weg": 11,
+          "function:inrit": 2,
+          "function:voetpad": 21,
+          "function:parkeervlak": 5,
+          "accepted_polygons": 5,
+          "function:fietspad": 2
+        },
+        "delta_iou_full_vs_baseline": -0.0008,
+        "modes": {
+          "baseline_null": {
+            "iou": 0.4747,
+            "precision": 0.7086,
+            "recall": 0.5898,
+            "pred_area_m2": 1000.27,
+            "bgt_area_m2": 1201.75,
+            "false_road_m2": 291.49,
+            "missed_road_m2": 492.96,
+            "boundary_pred_to_bgt_median_m": 1.211,
+            "boundary_pred_to_bgt_p90_m": 17.126,
+            "boundary_bgt_to_pred_median_m": 0.952,
+            "boundary_bgt_to_pred_p90_m": 7.765,
+            "junction_zone_iou": 0.5063,
+            "corridor_zone_iou": 0.4562,
+            "diagnostics": {
+              "site_id": "H06",
+              "mode": "baseline_null",
+              "edge_count": 14,
+              "junction_count": 0,
+              "width_source_counts": {
+                "unobserved_class_prior": 12,
+                "lane_count_times_3.2m": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "width_asymmetric_only": {
+            "iou": 0.4733,
+            "precision": 0.708,
+            "recall": 0.5881,
+            "pred_area_m2": 998.22,
+            "bgt_area_m2": 1201.75,
+            "false_road_m2": 291.44,
+            "missed_road_m2": 494.97,
+            "boundary_pred_to_bgt_median_m": 1.213,
+            "boundary_pred_to_bgt_p90_m": 17.126,
+            "boundary_bgt_to_pred_median_m": 0.952,
+            "boundary_bgt_to_pred_p90_m": 7.746,
+            "junction_zone_iou": 0.5123,
+            "corridor_zone_iou": 0.4506,
+            "diagnostics": {
+              "site_id": "H06",
+              "mode": "width_asymmetric_only",
+              "edge_count": 14,
+              "junction_count": 4,
+              "width_source_counts": {
+                "class_fallback": 12,
+                "explicit_lanes_tag": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 0,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "junction_only": {
+            "iou": 0.479,
+            "precision": 0.7101,
+            "recall": 0.5954,
+            "pred_area_m2": 1007.7,
+            "bgt_area_m2": 1201.75,
+            "false_road_m2": 292.17,
+            "missed_road_m2": 486.22,
+            "boundary_pred_to_bgt_median_m": 1.219,
+            "boundary_pred_to_bgt_p90_m": 17.174,
+            "boundary_bgt_to_pred_median_m": 0.966,
+            "boundary_bgt_to_pred_p90_m": 7.746,
+            "junction_zone_iou": 0.5179,
+            "corridor_zone_iou": 0.4562,
+            "diagnostics": {
+              "site_id": "H06",
+              "mode": "junction_only",
+              "edge_count": 14,
+              "junction_count": 4,
+              "width_source_counts": {
+                "unobserved_class_prior": 12,
+                "lane_count_times_3.2m": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "full_reconstruction": {
+            "iou": 0.4739,
+            "precision": 0.7079,
+            "recall": 0.5891,
+            "pred_area_m2": 1000.07,
+            "bgt_area_m2": 1201.75,
+            "false_road_m2": 292.13,
+            "missed_road_m2": 493.81,
+            "boundary_pred_to_bgt_median_m": 1.218,
+            "boundary_pred_to_bgt_p90_m": 17.171,
+            "boundary_bgt_to_pred_median_m": 0.966,
+            "boundary_bgt_to_pred_p90_m": 7.746,
+            "junction_zone_iou": 0.5138,
+            "corridor_zone_iou": 0.4506,
+            "diagnostics": {
+              "site_id": "H06",
+              "mode": "full_reconstruction",
+              "edge_count": 14,
+              "junction_count": 4,
+              "width_source_counts": {
+                "class_fallback": 12,
+                "explicit_lanes_tag": 2
+              },
+              "asymmetric_edge_count": 0,
+              "fillet_count": 4,
+              "transition_flare_count": 0,
+              "preserved_island_count": 0,
+              "fallback_count": 0,
+              "fallback_reasons": []
+            }
+          },
+          "bgt_oracle_width_diagnostic": {
+            "iou": 0.592,
+            "precision": 0.7778,
+            "recall": 0.7124,
+            "pred_area_m2": 1100.7,
+            "bgt_area_m2": 1201.75,
+            "false_road_m2": 244.52,
+            "missed_road_m2": 345.57,
+            "boundary_pred_to_bgt_median_m": 0.155,
+            "boundary_pred_to_bgt_p90_m": 16.867,
+            "boundary_bgt_to_pred_median_m": 0.108,
+            "boundary_bgt_to_pred_p90_m": 6.968,
+            "junction_zone_iou": 0.6058,
+            "corridor_zone_iou": 0.5839,
+            "DATA_LEAKAGE_WARNING": "Uses BGT cross-sectional widths; diagnostic upper bound only, NOT predictive."
+          }
+        }
+      }
+    }
+  }
+}

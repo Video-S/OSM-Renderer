@@ -1,0 +1,9 @@
+[
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_asymmetric_placement_middle_of_and_left_of",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_cycleway_lane_widens_only_tagged_side",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_degenerate_and_self_intersecting_corridor_fallback",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_junction_corner_fillet_adds_controlled_curb_transition",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_permutation_determinism_on_real_site",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_splitter_island_preserved_vs_transition_flare_bridged",
+  "research/road-surface-reconstruction/tests/test_reconstruction.py::test_topological_collinear_continuation_propagation"
+]

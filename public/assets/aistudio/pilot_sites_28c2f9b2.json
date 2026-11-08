@@ -1,0 +1,350 @@
+{
+  "version": 1,
+  "source": "Uploaded OSM GeoJSON; preset before reviewing independent road-area geometry",
+  "target": "At-grade motor-vehicle carriageway footprint only",
+  "source_data_date": "OSM per-feature timestamps where available",
+  "sites": [
+    {
+      "site": "A01",
+      "label": "Droogbak / Singel",
+      "node": "46423905",
+      "name": "Droogbak",
+      "archetype": "3-way urban street",
+      "center_lonlat": [
+        4.8946112,
+        52.3795903
+      ],
+      "center_rd": [
+        121459.622,
+        488083.289
+      ],
+      "bbox_rd_eval": [
+        121419.622,
+        488043.289,
+        121499.622,
+        488123.289
+      ],
+      "bbox_geo_query": [
+        4.89365261,
+        52.37900369,
+        4.89556978,
+        52.38017692
+      ],
+      "osm_context_feature_count": 32,
+      "osm_junction_way_count": 3,
+      "osm_junction_ways": [
+        "way/183945794",
+        "way/609962726",
+        "way/7376033"
+      ],
+      "osm_context_ids": [
+        "way/1014938182",
+        "way/1184498888",
+        "way/1358135036",
+        "way/183945794",
+        "way/321133062",
+        "way/601018458",
+        "way/601018475",
+        "way/605729048",
+        "way/609333440",
+        "way/609709337",
+        "way/609962724",
+        "way/609962725",
+        "way/609962726",
+        "way/609962727",
+        "way/609962728",
+        "way/609997799",
+        "way/609997800",
+        "way/609997802",
+        "way/609997803",
+        "way/609997805",
+        "way/609997806",
+        "way/7375979",
+        "way/7376033",
+        "way/7376082",
+        "way/7376107",
+        "way/7376108",
+        "way/7376127",
+        "way/7376128",
+        "way/7376132",
+        "way/7376135",
+        "way/7376168",
+        "way/762640611"
+      ]
+    },
+    {
+      "site": "A02",
+      "label": "Nieuwe Westerdokstraat",
+      "node": "46426685",
+      "name": "Nieuwe Westerdokstraat",
+      "archetype": "3-way divided approach",
+      "center_lonlat": [
+        4.8947177,
+        52.3801599
+      ],
+      "center_rd": [
+        121467.304,
+        488146.615
+      ],
+      "bbox_rd_eval": [
+        121427.304,
+        488106.615,
+        121507.304,
+        488186.615
+      ],
+      "bbox_geo_query": [
+        4.8937591,
+        52.37957329,
+        4.89567629,
+        52.38074652
+      ],
+      "osm_context_feature_count": 30,
+      "osm_junction_way_count": 3,
+      "osm_junction_ways": [
+        "way/609997805",
+        "way/7376107",
+        "way/7376127"
+      ],
+      "osm_context_ids": [
+        "way/1014938180",
+        "way/1014938182",
+        "way/183945794",
+        "way/321133062",
+        "way/445997917",
+        "way/526583461",
+        "way/601018458",
+        "way/601018475",
+        "way/605729047",
+        "way/605729048",
+        "way/609333440",
+        "way/609709337",
+        "way/609962724",
+        "way/609962725",
+        "way/609962726",
+        "way/609962727",
+        "way/609962728",
+        "way/609997799",
+        "way/609997800",
+        "way/609997802",
+        "way/609997803",
+        "way/609997805",
+        "way/609997806",
+        "way/7376033",
+        "way/7376107",
+        "way/7376108",
+        "way/7376122",
+        "way/7376127",
+        "way/7376128",
+        "way/7376135"
+      ]
+    },
+    {
+      "site": "A03",
+      "label": "Geldersekade",
+      "node": "11762209393",
+      "name": "Geldersekade",
+      "archetype": "3-way residential / waterfront",
+      "center_lonlat": [
+        4.9030068,
+        52.3760939
+      ],
+      "center_rd": [
+        122028.669,
+        487690.416
+      ],
+      "bbox_rd_eval": [
+        121988.669,
+        487650.416,
+        122068.669,
+        487730.416
+      ],
+      "bbox_geo_query": [
+        4.90204835,
+        52.37550733,
+        4.90396524,
+        52.37668048
+      ],
+      "osm_context_feature_count": 27,
+      "osm_junction_way_count": 3,
+      "osm_junction_ways": [
+        "way/1291784365",
+        "way/143163479",
+        "way/1513581524"
+      ],
+      "osm_context_ids": [
+        "way/1070095835",
+        "way/1266282603",
+        "way/1291784365",
+        "way/139343799",
+        "way/143163479",
+        "way/1513581523",
+        "way/1513581524",
+        "way/1513581531",
+        "way/1513581532",
+        "way/1513581536",
+        "way/1513581537",
+        "way/1513581538",
+        "way/1513581541",
+        "way/1513581557",
+        "way/1513581558",
+        "way/1513778220",
+        "way/1513778221",
+        "way/1513860895",
+        "way/167355342",
+        "way/312949325",
+        "way/34139963",
+        "way/34286058",
+        "way/7370664",
+        "way/7370946",
+        "way/7371634",
+        "way/866310236",
+        "way/886305089"
+      ]
+    },
+    {
+      "site": "A04",
+      "label": "Oosterdoksstraat",
+      "node": "1565648183",
+      "name": "Oosterdoksstraat",
+      "archetype": "3-way urban service",
+      "center_lonlat": [
+        4.9039867,
+        52.3771147
+      ],
+      "center_rd": [
+        122096.151,
+        487803.548
+      ],
+      "bbox_rd_eval": [
+        122056.151,
+        487763.548,
+        122136.151,
+        487843.548
+      ],
+      "bbox_geo_query": [
+        4.90302824,
+        52.37652813,
+        4.90494515,
+        52.37770127
+      ],
+      "osm_context_feature_count": 10,
+      "osm_junction_way_count": 3,
+      "osm_junction_ways": [
+        "way/1266282608",
+        "way/1266282609",
+        "way/1512730554"
+      ],
+      "osm_context_ids": [
+        "way/1266282607",
+        "way/1266282608",
+        "way/1266282609",
+        "way/1512730551",
+        "way/1512730553",
+        "way/1512730554",
+        "way/549584811",
+        "way/549584818",
+        "way/678935762",
+        "way/866310235"
+      ]
+    },
+    {
+      "site": "A05",
+      "label": "De Ruijterkade",
+      "node": "46416772",
+      "name": "De Ruijterkade",
+      "archetype": "4-way complex arterial",
+      "center_lonlat": [
+        4.9063403,
+        52.3781181
+      ],
+      "center_rd": [
+        122257.155,
+        487914.123
+      ],
+      "bbox_rd_eval": [
+        122217.155,
+        487874.123,
+        122297.155,
+        487954.123
+      ],
+      "bbox_geo_query": [
+        4.90538183,
+        52.37753154,
+        4.90729875,
+        52.37870466
+      ],
+      "osm_context_feature_count": 16,
+      "osm_junction_way_count": 4,
+      "osm_junction_ways": [
+        "way/1535707893",
+        "way/1535707894",
+        "way/7375286",
+        "way/757674010"
+      ],
+      "osm_context_ids": [
+        "way/1040673036",
+        "way/1510044772",
+        "way/1510044776",
+        "way/1510044777",
+        "way/1512886112",
+        "way/1513244486",
+        "way/1535707893",
+        "way/1535707894",
+        "way/1535707895",
+        "way/238316446",
+        "way/238316447",
+        "way/287963189",
+        "way/287963191",
+        "way/7375286",
+        "way/757674010",
+        "way/757674013"
+      ]
+    },
+    {
+      "site": "A06",
+      "label": "Buiksloterweg",
+      "node": "46438541",
+      "name": "Buiksloterweg",
+      "archetype": "3-way local street",
+      "center_lonlat": [
+        4.9039228,
+        52.3825709
+      ],
+      "center_rd": [
+        122095.849,
+        488410.652
+      ],
+      "bbox_rd_eval": [
+        122055.849,
+        488370.652,
+        122135.849,
+        488450.652
+      ],
+      "bbox_geo_query": [
+        4.90296422,
+        52.38198433,
+        4.90488137,
+        52.38315747
+      ],
+      "osm_context_feature_count": 10,
+      "osm_junction_way_count": 3,
+      "osm_junction_ways": [
+        "way/1208115802",
+        "way/321294518",
+        "way/799407288"
+      ],
+      "osm_context_ids": [
+        "way/1208047819",
+        "way/1208115801",
+        "way/1208115802",
+        "way/1208115804",
+        "way/1212526086",
+        "way/1320959970",
+        "way/321294514",
+        "way/321294518",
+        "way/7375419",
+        "way/799407288"
+      ]
+    }
+  ]
+}

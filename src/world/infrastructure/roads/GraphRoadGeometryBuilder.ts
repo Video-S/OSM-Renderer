@@ -2777,8 +2777,12 @@ export function buildGraphAtGradeRoadGeometries(
       typeof domSeg?.osmTags?.name === 'string' ? domSeg.osmTags.name : domEdge.name;
     const yElev = getRoadElevation(dominantClass, 0, false, false);
 
-    // Path patches must not z-fight with at-grade vehicular ribbons or junctions.
-    // The vehicular footprint is already emitted by the time path junctions run.
+    // Path patches must not z-fight with at-grade vehicular ribbons/junctions OR
+    // neighboring path-junction patches. Closely-spaced multi-arm path junctions
+    // can overlap, even when every incident graph edge is topologically sound.
+    // Path patches are emitted highest-class-first, then by canonical node ID;
+    // each later patch subtracts previously emitted same-plane ownership.
+    // This keeps one surface owner without changing the original road widths.
     let visibleJunctionPoly = junctionMultiPoly;
     if (isPathJunction && clipPathAgainstVehicular) {
       let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -2793,7 +2797,10 @@ export function buildGraphAtGradeRoadGeometries(
         }
       }
       const blockers = placedRoadFootprints.filter((fp) =>
-        !fp.isPath && fp.maxX > minX && fp.minX < maxX &&
+        // Other path ribbons have not been emitted yet. Only pre-existing
+        // path *junction* patches should block neighboring path patches.
+        (!fp.isPath || fp.id.startsWith('path-junction-')) &&
+        fp.maxX > minX && fp.minX < maxX &&
         fp.maxZ > minZ && fp.minZ < maxZ
       );
       if (blockers.length > 0) {
@@ -2805,7 +2812,7 @@ export function buildGraphAtGradeRoadGeometries(
             ) as unknown as MultiPolygonCoords
           );
         } catch {
-          recordGraphRoadDiagnostic(diagnostics, 'path_junction_vehicular_clipping_failed', junctionFeatureId);
+          recordGraphRoadDiagnostic(diagnostics, 'path_junction_surface_clipping_failed', junctionFeatureId);
           stats.rejectedOrDegenerateCount++;
           continue;
         }
@@ -2905,7 +2912,16 @@ export function buildGraphAtGradeRoadGeometries(
   // Vehicle ribbons are emitted before path patches; this allows path patches to
   // subtract only actually rendered, same-plane vehicular surfaces.
   emitJunctions(pendingJunctions.filter((j) => !j.isPathJunction), false);
-  const pathJunctions = pendingJunctions.filter((j) => j.isPathJunction);
+  const pathJunctions = pendingJunctions
+    .filter((j) => j.isPathJunction)
+    .sort((a, b) => {
+      const priorityDiff =
+        (ROAD_CLASS_PRIORITY[b.dominantBranch.roadClass] ?? 0) -
+        (ROAD_CLASS_PRIORITY[a.dominantBranch.roadClass] ?? 0);
+      return priorityDiff !== 0
+        ? priorityDiff
+        : compareStringsCodeUnit(a.nodeId, b.nodeId);
+    });
   let pathJunctionsEmitted = false;
 
   // 6. Build trimmed road ribbons (vehicular edges first, then path-tier edges so paths clip against carriageways)

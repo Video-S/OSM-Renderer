@@ -33,20 +33,31 @@ Implemented in this milestone without altering E2+'s geometry generation algorit
 
 ## 3. Phase 2: Targeted Geometry Defect Resolution (Next Step Before Default Promotion)
 
-Automated validation in Phase 1 identified two concrete, localized defects in the current E2+ implementation that should be resolved in a dedicated follow-up ticket before promoting `roads: 'graph-surface'` to the default renderer:
+Automated validation in Phase 1 identified three concrete defects in the current E2+ implementation that should be resolved in a dedicated follow-up ticket before promoting `roads: 'graph-surface'` to the default renderer:
 
 1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`)**:
    - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3080–3083), when a simplified graph edge consists of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` is only enabled on `subSegments[0]` and `capEnd` is only enabled on `subSegments[subSegments.length - 1]`. Internal boundary vertices between `#seg0` and `#seg1` receive neither a start cap nor an end cap, leaving an unrounded wedge gap on the outside of bends that occur at an internal provenance split.
    - **Planned Fix**: Enable a round disk cap (`radius = w/2`) at internal provenance-split vertices whenever the meeting angle between consecutive provenance segments is non-collinear (or unconditionally at internal provenance joints, since overlapping same-edge provenance strokes are subsequently clipped against each other in priority/lexical order).
 2. **Diagnostic Counter Synchronization on Full Subtraction**:
    - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3121–3127), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3383).
-   - **Planned Fix**: Call `recordDiagnosticSample(diagnostics.featuresFullySubtracted, sub.sourceFeatureId)` when all provenance segments of a source feature are fully subtracted in E2+.
+   - **Planned Fix**: Reconcile source-level versus provenance-segment accounting and only count a source as fully subtracted **once all of its parts are occluded**; avoid inflating the count for partially visible sources.
 
 ---
 
 ## 4. Phase 3: Promotion Criteria for Production Default
 
 `roads: 'graph-surface'` (E2+) will be promoted to the default road renderer (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.roads = 'graph-surface'`) once:
-1. The internal provenance-split bend cap fix and `featuresFullySubtracted` diagnostic sync (Phase 2) are implemented and verified with `0` `provenance_split_bend_gap` defects across all real-world urban extracts.
+1. All three documented issues (provenance split bends, full-subtraction counter, H01 pinched-ring overlap) are resolved or explicitly dispositioned with regression evidence.
 2. Automated validation confirms `0` positive-area coplanar overlaps (`> 1e-3 m²`), `0` winding/normal/degenerate triangle defects, and `100%` provenance attribution across the regression suite.
 3. Project owner signs off on the Phase 2 fix and authorizes default promotion and Stage E5 legacy cleanup.
+
+
+## 5. Third Known Defect: H01 Pinched-Ring Coplanar Overlap
+
+The H01 Utrecht Vredenburg benchmark reports **0.0312 m² positive-area overlap** after Boolean subtraction/triangulation of a short footway region. This is not a zero-overlap result. Reproduce the exact polygon in a small deterministic fixture before changing contour cleanup. A near-collinear spike cleanup must preserve legitimate narrow features and should never modify E2 or Legacy geometry unintentionally.
+
+## 6. Required Scaling Evidence — Hengelo and Twente
+
+The existing samples are small (the synthetic stress case has 197 road ways); they **do not** validate whole-city costs. Before production promotion, benchmark representative complete Hengelo data and increasingly large Twente tiles. Record **full scene** and **road-only** times separately, CPU/memory, unions/differences, candidate blocker checks, triangle counts, skipped segments, provenance coverage and tile boundary seams.
+
+Consider spatial indexing, workers, chunking and **baked/queryable geometry** only when the measured workload justifies them. A working renderer should not be refactored merely to optimize theoretical costs. Preserve E2 and Legacy until owner visual sign-off and adequate metrics. Railway ballast experiments, although potentially compatible with surface-first ideas, are separate from this road milestone.

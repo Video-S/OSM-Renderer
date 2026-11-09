@@ -33,7 +33,16 @@ Following the completion of the pure-TypeScript infrastructure topology graph (`
 To resolve the brittleness of explicit portal-chord junction solvers on irregular OSM topology, **E2+** (`roads: 'graph-surface'`, `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`) inverted the at-grade road geometry paradigm:
 - **Core Insight**: A road network's 2D surface is the **Boolean union of its buffered edge strokes**, resolved by deterministic road-class and tier ownership subtraction (`polygon-clipping`).
 - **Mechanism**:
-  1. Every at-grade road provenance segment is buffered into a rounded 2D stroke by unioning per-segment oriented rectangles (`width = w`) with 16-sided bend disks (`radius = w/2`) at interior vertices and eligible endpoint caps (`degree !== 1` or explicit cul-de-sac).
-  2. Overlapping strokes are resolved in descending priority order (`vehicular > path`, higher road class first, wider first, lexical ID tie-breaker) using 2D Boolean difference (`polygonClipping.difference`) accelerated by 2D AABB spatial pre-filtering.
+  1. Every at-grade road provenance segment is buffered into a rounded 2D stroke by unioning per-segment oriented rectangles (`width = w`) with 16-sided bend disks (`radius = w/2`) at interior vertices and eligible endpoint caps (first/last provenance boundaries, excluding boundary clips, grade transitions and closed loops).
+  2. Overlapping strokes are resolved in descending priority order (`vehicular > path`, higher road class first, then lexical edge ID tie-breaker) using 2D Boolean difference (`polygonClipping.difference`) accelerated by 2D AABB spatial pre-filtering.
   3. Remaining visible `MultiPolygon` regions (with interior holes preserved) are triangulated via `THREE.ShapeUtils.triangulateShape` (`earcut`) at `ELEVATION_POLICY.ROAD_SURFACE` (`0.050 m`) with full source-feature provenance (`sourceFeatureId`, `sourceFeatureIds`, `osmTags`, `faceRanges`).
 - **Architectural Selection (`ADR-0010`)**: Extensive visual testing by the project owner across Hengelo and Amsterdam extracts confirmed a dramatic improvement in geometric consistency and corner continuity over E2. E2+ is now the **preferred architectural direction** for at-grade road rendering, undergoing automated geometry validation and performance baseline verification prior to promotion as the production default.
+
+
+## Product goal and the lesson to preserve
+
+The near-term deliverable is a high-fidelity, navigable OSM map renderer, initially for **Hengelo** and ultimately **Twente**; gameplay and large-agent simulation are later possibilities, not the current work. Precomputed/baked geometry is acceptable if it remains queryable.
+
+The architectural lesson is **not that the E2 graph was wrong**. Its topology, width/grade policies, OSM lineage and Boolean ownership made E2+ possible. Rather, independently constructing a junction patch and reconciling trimmed road portals proved fragile. A [targeted continuous-path fix](https://github.com/Video-S/OSM-Renderer/commit/918c051b78a99dc997d59621476af1063179140b) preceded [E2+](https://github.com/Video-S/OSM-Renderer/commit/5106b14918ff81025b3ddf64a0725491066ac108).
+
+The unrelated Dutch BGT/Shapely reconstruction experiment was **not adopted** into E2+. Optional local reference datasets should not become mandatory runtime dependencies. The first [automated E2+ baseline](../research/surface-first-road-rendering/baseline-results.json) found a few residual defects, despite the project owner's strong visual findings.

@@ -2,7 +2,7 @@
 
 - **Status**: Accepted (Experimental — Preferred Architectural Direction; Pending Production Promotion)
 - **Date**: 2026-11-09
-- **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](./ADR-0002-junction-patching-and-ribbon-trimming.md), [`ADR-0009`](./ADR-0009-graph-driven-infrastructure-rendering.md) (at-grade junction trimming/patching subsections)
+- **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](./ADR-0002-boundary-derived-road-junction-meshing.md). **Related, not superseded:** [`ADR-0009`](./ADR-0009-infrastructure-graph-topology.md) (topology and source-data contracts remain authoritative)
 
 ## Context
 
@@ -23,7 +23,7 @@ We adopt **Surface-First Road Rendering (`E2+`, `roads: 'graph-surface'`)** as t
 2. **Emergent Junctions via Priority-Ordered 2D Ownership Clipping**:
    - Explicit junction trimming (`trimmedEndpoints`), degree-2 miter portals, and separate `junction-*` / `path-junction-*` meshes are eliminated in `graph-surface` mode (`renderedJunctionCount === 0`).
    - Road and path strokes are emitted in deterministic priority order: vehicular before non-vehicular (`tier === 'path'`), higher `ROAD_CLASS_PRIORITY` before lower, and lexicographical `compareStringsCodeUnit(a.id, b.id)` for ties.
-   - Each stroke subtracts already-placed higher-priority road footprints (`polygonClipping.difference`) and registers its resulting visible `MultiPolygonCoords` (`registerRoadFootprint`) before triangulating via `THREE.ShapeGeometry` and `validateAndPruneHorizontalGeometry`.
+   - Each stroke subtracts already-placed higher-priority road footprints (`polygonClipping.difference`) then triangulates the visible `MultiPolygonCoords` using `THREE.ShapeGeometry` and `validateAndPruneHorizontalGeometry`. **Only validated geometry** becomes a blocking surface through `registerRoadFootprint`.
 3. **Preserved Graph Topology, Provenance, and Elevation Contracts**:
    - E2+ consumes the exact same `InfrastructureRenderDescriptorBundle` (`M2.3-B/C/D/E1`), canonical road widths, elevation policy (`Y = +0.050 m` at-grade plane), multi-way chaining provenance splits (`#seg0`, `#seg1`), deduplication lineage, and `FaceFeatureRange` inspection metadata as E2.
 4. **Controlled Experimental Rollout**:
@@ -34,8 +34,21 @@ We adopt **Surface-First Road Rendering (`E2+`, `roads: 'graph-surface'`)** as t
 
 - **Positive**:
   - Eliminates portal-pinch, acute-fork shoulder kinks, and "pizza-slice" junction patch artifacts across tested urban extracts without per-topology special cases.
-  - Maintains zero positive-area coplanar overlaps (`> 1e-3 m²`) and 100% upward-facing (`+Y`) non-degenerate triangles across all benchmarked datasets.
-  - Simplifies the at-grade road pipeline by replacing ~1,500 lines of junction-trimming and portal-reconciliation solver logic with a 85-line local stroke buffer + priority clipper.
+  - The first 12-dataset baseline reports no winding or degenerate triangle defects, and no significant overlap in **11 of 12 E2+ datasets**. The **H01 Utrecht** dataset still has two detected overlaps totaling **0.0312 m²**.
+  - Simplifies the **active E2+ geometry path** by bypassing the E2 junction-trimming/portal solver. The older solver remains implemented and selectable, not deleted.
 - **Negative / Trade-offs**:
   - Increases `polygonClipping.union` invocations (one local union per buffered provenance segment) compared with direct quad-strip ribbon extrusion.
   - Multi-segment simplified edges that bend at an internal provenance split boundary (`#seg0` -> `#seg1`) currently suppress endpoint disks on both sides of the internal split (`capStart = false`, `capEnd = false`), which can leave a small outer-corner wedge gap at angled provenance split vertices (documented and reproduced by `validateSurfaceFirstRoadGeometry`).
+
+
+## Validation evidence and architectural boundaries
+
+The graph describes **connectivity**, while buffered 2D footprints describe **occupied surface**. The unchanged infrastructure graph, source widths, OSM provenance, grade semantics, physical elevation and road-class materials are retained. A crossing in map coordinates does not establish a traversable graph intersection. The alternative of rendering overlapping strokes risks z-fighting; a single anonymous global road union would compromise source ownership, materials and scaling. E2+ instead partitions locally buffered footprints into attributed visible pieces.
+
+The project owner repeatedly reports substantially improved real-world visuals. The automated 24-gon corridor reference is **independently implemented but still an approximation**, not a measured kerb outline or proof of complete real-world correctness.
+
+**Three unresolved issues:** (1) missing disks at some internal provenance-split bends; (2) desynchronized `diagnostics.featuresFullySubtracted` accounting for E2+ full subtraction; (3) **H01 0.0312 m² coplanar overlap** after pinched contour triangulation. The first E2+ prototype changed both junction patching and rounded buffers, so their independent contribution has **not been isolated**.
+
+Legacy remains the default. Before switching defaults: resolve or document all three cases with regression fixtures; verify geometry and source attribution; benchmark whole-Hengelo and progressively larger Twente tiles; obtain owner visual approval. The initial benchmark does not prove Twente-scale performance.
+
+Related: [technical design](../e2-plus-surface-first-road-rendering.md), [history](../project-history.md), [roadmap](../road-rendering-roadmap.md), [benchmark](../../research/surface-first-road-rendering/baseline-results.json).

@@ -1,5 +1,7 @@
 # Current Project Status
 
+> **E2+ baseline update (2026-11-09):** Gemini's reported verification on commit [8ca0bd0](https://github.com/Video-S/OSM-Renderer/commit/8ca0bd0c2fb32b91f92a9b166375afd559ca381b) is 202/202 passing tests, clean TypeScript lint, successful build and API documentation generation. This report has **not been independently rerun** during documentation reconciliation. The [12-dataset baseline](../research/surface-first-road-rendering/baseline-results.json) includes internal provenance-split bend gaps, a fully-subtracted diagnostics counter mismatch, and **0.0312 m² of H01 coplanar overlap**. The historical 161/161 test result below predates E2+ validation. **E2+ is the preferred architectural direction but Legacy remains the production default**. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) and [the roadmap](./road-rendering-roadmap.md).
+
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
@@ -135,7 +137,7 @@
 - **Independent Road-Surface & Junction Reconstruction (`research/road-surface-reconstruction/` — Closed / Not Adopted)**:
   - **Status**: Completed exploratory experiment; closed as **Not Adopted** on 2026-11-08 by project owner decision.
   - **Summary**: Investigated an independent, mathematically modeled Python/Shapely carriageway reconstruction algorithm using variable lateral offsets $(w_L(s), w_R(s))$ and quadratic Bézier corner fillets evaluated against Dutch BGT reference polygons across 6 Amsterdam development sites (`A01`–`A06`) and 6 multi-city holdout sites (`H01`–`H06`).
-  - **Decision & Production Impact**: Zero production changes. The experimental algorithm is not adopted into the TypeScript renderer. The project continues with the established graph-driven road renderer (`M2.3-E2` / `TKT-008`), prioritizing richer OSM tag/metadata utilization within the existing graph architecture. All experiment code, data, and documentation are retained for historical benchmarking. See `research/road-surface-reconstruction/REPORT.md`.
+  - **Decision & Production Impact**: Zero production changes. The experimental algorithm is not adopted into the TypeScript renderer. The separate Python/BGT reconstruction experiment remains **not adopted**. The TypeScript **E2+** renderer has instead been selected as the **preferred direction** (ADR-0010), reusing the existing infrastructure graph; E2 and Legacy remain selectable. All experiment code, data, and documentation are retained for historical benchmarking. See `research/road-surface-reconstruction/REPORT.md`.
 
 
 

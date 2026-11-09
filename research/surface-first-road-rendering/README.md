@@ -25,9 +25,9 @@
 1. **Shared Topology & Adapter**: Reuses the same `InfrastructureGraph` (`ADR-0009`) and `InfrastructureRenderDescriptorBundle` (`M2.3-E1`) as E2.
 2. **Per-Provenance-Segment Rounded 2D Stroke Buffering (`SurfaceFirstRoadFootprints.ts`)**:
    - Each at-grade road edge is split into its constituent OSM provenance segments (`#seg0`, `#seg1`, …) when simplified edges span multiple OSM ways.
-   - Each segment polyline is buffered at its physical width $w$ by unioning oriented segment rectangles with 16-sided round disks ($r = w/2$) at interior bend vertices and eligible endpoints (`degree !== 1` or explicit `turning_circle` / `turning_loop` / `mini_roundabout`).
+   - Each segment polyline is buffered at its physical width $w$ by unioning oriented segment rectangles with 16-sided round disks ($r = w/2$) at interior bend vertices and eligible first/last provenance endpoints (except closed loops, clipped boundaries and grade-transition handoffs).
 3. **Deterministic Ownership Resolution (`GraphRoadGeometryBuilder.ts`)**:
-   - Candidate strokes are sorted in descending ownership priority (`vehicular` tier before `path` tier, higher `RoadClass` priority first, wider strokes first, lexical ID tie-breaker).
+   - Candidate strokes are sorted in descending ownership priority (`vehicular` tier before `path` tier, higher `RoadClass` priority first, lexical edge-ID tie-breaker).
    - Higher-priority strokes are subtracted from lower-priority strokes via 2D Boolean difference (`polygonClipping.difference`), accelerated by 2D AABB bounding-box rejection.
 4. **Triangulation & Provenance Attribution**:
    - Remaining visible `MultiPolygon` regions (with interior holes preserved) are triangulated via `THREE.ShapeUtils.triangulateShape` (`earcut`) at `ELEVATION_POLICY.ROAD_SURFACE` (`0.050 m`) and merged by `RoadClass` with complete `FaceFeatureRange` provenance (`sourceFeatureId`, `sourceFeatureIds`, `osmTags`).
@@ -42,7 +42,7 @@
 
 - **A1. Non-Circular Surface Coverage**:
   - Builds an independent 24-gon analytical corridor (`buildIndependentAnalyticalRoadCorridor`) from source centerlines and widths.
-  - Subtracts higher-priority emitted road triangles (`occludedByHigherPriorityAreaM2`) and measures unexplained missing area (`missing_road_surface_area`, `omitted_road_feature`, `unintended_footprint_hole`, `disconnected_segment_gap`, and `provenance_split_bend_gap`).
+  - Subtracts higher-priority emitted road triangles (`occludedByHigherPriorityAreaM2`) and measures unexplained missing area (`missing_road_surface_area`, `omitted_road_feature`, `connected_node_gap`, `unintended_interior_hole`, and `provenance_split_bend_gap`).
 - **A2. Coplanar Overlap Validation**:
   - Reuses `ZFightingValidator.validateRoadNetworkGeometry(scene)` (`COPLANAR_OVERLAP_AREA_TOLERANCE_M2 = 1e-3 m²` / `10 cm²`) and categorizes overlaps into `cross_class_vehicular`, `same_class_road`, `path_or_cycleway`, `multi_provenance_segment`, and `intra_feature_self_overlap`.
 - **A3. Mesh Integrity & Physical Elevation**:
@@ -60,8 +60,8 @@ Separated from `scene.infrastructureRenderPreview.timing` (`graphBuildTimeMs`, `
 - `footprintConstructionTimeMs`: Total time inside `bufferSurfaceFirstRoadCenterline`.
   - `primitiveConstructionTimeMs`: Generating oriented segment rectangles and 16-gon bend/cap disks.
   - `polygonUnionTimeMs`: Local per-stroke `polygonClipping.union` calls.
-- `ownershipClippingTimeMs`: Priority-ordered Boolean subtraction (`clipSurfacePolygon`).
-- `triangulationAndValidationTimeMs`: `earcut` triangulation, wound normal verification, and `mergeGeometriesWithRanges`.
+- `ownershipClippingTimeMs`: Bounding-box blocker selection and priority-ordered Boolean difference.
+- `triangulationAndValidationTimeMs`: Per-piece triangulation and validation, excluding later scene merging.
 
 ### Deterministic Operation Counters (`roadsGroup.userData.graphRoadStats: GraphRoadRenderStats`)
 - **Input & Provenance**: `inputRoadNodeCount`, `inputRoadEdgeCount`, `atGradeRoadEdgeCount`, `processedProvenanceSegmentCount`, `provenanceSplitSegmentCount`.
@@ -146,3 +146,10 @@ npm run lint
 npm run build
 npm run docs:api
 ```
+
+
+## 8. Interpreting the Baseline
+
+The JSON records one Linux/Node 22 benchmark environment with 2 warm-up and 7 measured runs. Legacy's "Road Gen Med" values represent **full scene construction**; graph/E2+ values represent **graph road-generation** time. Do not treat the two as a direct road-only speed comparison. H01 has **two nonzero coplanar overlaps totaling 0.0312 m²**. Several extracts have internal provenance-split bend gaps despite high overall coverage percentages.
+
+This baseline is a reference for correctness investigation, **not proof of whole-Hengelo or Twente scalability**.

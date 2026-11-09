@@ -220,3 +220,10 @@ When `infrastructureRenderOptions.roads === 'graph'`, Stage 6A–C of `GeometryB
 ### Clipped road footprint finalization
 
 After Boolean subtraction, graph road remainders are conditioned on the coordinate grid. A polygon union resolves any folded boundaries introduced by conditioning before triangulation. The same finalized polygons supply clipping footprints and junction portal reconciliation. Winding, overlap, and continuity validation remain mandatory.
+
+
+## 12. E2+ Surface-First Addendum
+
+The boundary-derived junction/portal descriptions in sections 2 and 11 remain correct **for Legacy/E2**. With `roads: 'graph-surface'`, the engine instead buffers untrimmed provenance centerline segments via `SurfaceFirstRoadFootprints.ts`, subtracts already-owned coplanar road areas and triangulates the visible remainder. The uniform at-grade elevation and bridge/tunnel isolation remain unchanged; road connectivity still belongs to the graph.
+
+The [first validator/benchmark](../research/surface-first-road-rendering/baseline-results.json) found some missing disks at provenance splits and a small **0.0312 m² H01 triangle overlap**. E2+ is promising but not yet proven perfect or scalable to Twente. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) and [technical design](./e2-plus-surface-first-road-rendering.md).

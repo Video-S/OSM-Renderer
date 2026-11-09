@@ -35,7 +35,7 @@ While E2+ shares the complete upstream topology graph (`M2.3-B/C/D`) and render 
 
 ## 2. Automated Geometry Correctness Validation (`SurfaceFirstRoadValidator.ts`)
 
-`validateSurfaceFirstRoadGeometry(scene, data, options)` in `src/world/infrastructure/roads/SurfaceFirstRoadValidator.ts` audits E2+ (and E2) road meshes against four independent verification categories without modifying geometry generation:
+`validateSurfaceFirstRoadGeometry(scene, data, options)` in `src/world/infrastructure/roads/SurfaceFirstRoadValidator.ts` audits E2+ (and E2) road meshes against four complementary verification categories without modifying geometry generation:
 
 ### A1. Surface Coverage (`SurfaceFirstCoverageValidationReport`)
 - **Non-Circular Analytical Reference**: Independently constructs 24-gon analytical road corridors (`buildIndependentAnalyticalRoadCorridor`) directly from source/descriptor centerlines and widths rather than comparing `bufferSurfaceFirstRoadCenterline` against itself.
@@ -84,3 +84,15 @@ Lightweight instrumentation is collected on every scene build and reset per rebu
   - `ownershipClippingTimeMs`
   - `triangulationAndValidationTimeMs`
   - Stored separately from `graphRoadStats` so deterministic counter snapshots remain bit-for-bit invariant across runs.
+
+
+## Architecture and measurement cautions
+
+- **Ownership order is vehicle/path tier, descending road-class priority, then edge ID. Width is not an additional tie-breaker.** Visible geometry is registered as an ownership blocker **after** successful triangulation and validation.
+- **End caps** are conditional on the first/last provenance subsegment, boundary clipping, closed-loop and grade-transition rules; there is no explicit graph-degree test.
+- The independent 24-gon reference uses a different buffer implementation than E2+'s 16-gon generator, but is still a **polygonal approximation** with declared tolerances, not ground-truth surveyed road geometry.
+- **Timing units are not fully comparable across the table**: Legacy rows use **scene-build** medians under "Road Gen Med", whereas graph/E2+ rows use **graph-road generation** medians. Compare full-scene-to-full-scene data before making relative speed claims.
+- The H01 data explicitly contain **0.0312 m² of coplanar triangle overlap**. High aggregate coverage percentages do not rule out localized gaps or self-overlaps.
+- E2+ still shares the builder with E2; it bypasses, but does not remove, E2's junction solver. Grade-separated and railway geometry remain separately rendered, and true connectivity still comes from the graph.
+
+Full-Hengelo and Twente performance remain **unmeasured**. Spatial indexing, chunking, web workers and precomputed/baked queryable geometry are possible later strategies, not justifications for changing the currently successful geometry prematurely.

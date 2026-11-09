@@ -102,3 +102,10 @@ flowchart TD
 
 
 
+
+
+## E2+ Architecture Addendum (2026-11-09)
+
+The above junction-first pipeline describes **Legacy and E2**. The project owner selected **E2+ (`roads: 'graph-surface'`)** as the preferred *future* at-grade road rendering path, while `legacy` remains the production default. E2+ retains the unchanged OSM graph, grade metadata and provenance, but buffers full-width road centerlines into local rounded footprints and partitions overlapping at-grade areas by tier/class/ID-ordered Boolean subtraction. **No new junction polygon is constructed; only successfully validated visible geometry claims ownership.**
+
+This does not change railways, bridges, tunnels, world projection or true graph connectivity. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md), [E2+ technical design](./e2-plus-surface-first-road-rendering.md) and [Twente scaling roadmap](./road-rendering-roadmap.md).

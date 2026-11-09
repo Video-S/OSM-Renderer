@@ -31,14 +31,14 @@ Implemented in this milestone without altering E2+'s geometry generation algorit
 
 ---
 
-## 3. Phase 2: Targeted Geometry Defect Resolution (Next Step Before Default Promotion)
+## 3. Phase 2: Targeted Geometry Defect Resolution (In Progress Before Default Promotion)
 
-Automated validation in Phase 1 identified three concrete defects in the current E2+ implementation that should be resolved in a dedicated follow-up ticket before promoting `roads: 'graph-surface'` to the default renderer:
+Automated validation in Phase 1 identified three concrete defects in E2+, one of which is now resolved and two of which remain open for follow-up before promoting `roads: 'graph-surface'` to the default renderer:
 
-1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`)**:
-   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3080–3083), when a simplified graph edge consists of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` is only enabled on `subSegments[0]` and `capEnd` is only enabled on `subSegments[subSegments.length - 1]`. Internal boundary vertices between `#seg0` and `#seg1` receive neither a start cap nor an end cap, leaving an unrounded wedge gap on the outside of bends that occur at an internal provenance split.
-   - **Planned Fix**: Enable a round disk cap (`radius = w/2`) at internal provenance-split vertices whenever the meeting angle between consecutive provenance segments is non-collinear (or unconditionally at internal provenance joints, since overlapping same-edge provenance strokes are subsequently clipped against each other in priority/lexical order).
-2. **Diagnostic Counter Synchronization on Full Subtraction**:
+1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`) — Resolved**:
+   - **Root Cause**: When a simplified graph edge consisted of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` was only enabled on `subSegments[0]` and `capEnd` was only enabled on `subSegments[subSegments.length - 1]`, leaving an unrounded wedge gap on the outside of bends occurring at an internal provenance split.
+   - **Implemented Fix**: `resolveInternalProvenanceBoundaryCaps` (`SurfaceFirstRoadFootprints.ts`) inspects adjacent provenance subsegments (`#seg0 -> #seg1` and multi-segment closed-loop seams). Straight equal-width boundaries (`dot >= 0.9986` and `|wA - wB| <= 1e-3 m`) emit no additional disk, whereas angled bends (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3 m`) deterministically assign a single 16-sided rounding disk to one adjacent provenance subsegment (wider subsegment first, longer millimeter-rounded cleaned arc length second, lexical `partId`/`sourceFeatureId` tie-breaker third). Verified with `0` `provenance_split_bend_gap` defects across `H06`, `A02`, `A01`, `A05`, and `H01`.
+2. **Diagnostic Counter Synchronization on Full Subtraction — Open**:
    - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3121–3127), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3383).
    - **Planned Fix**: Reconcile source-level versus provenance-segment accounting and only count a source as fully subtracted **once all of its parts are occluded**; avoid inflating the count for partially visible sources.
 

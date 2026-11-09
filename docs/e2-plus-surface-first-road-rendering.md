@@ -19,7 +19,10 @@ While E2+ shares the complete upstream topology graph (`M2.3-B/C/D`) and render 
    - Emits 16-sided endpoint cap disks according to cap rules:
      - `capStart` is enabled on the first provenance sub-segment (`sub === subSegments[0]`) when the edge is not a closed loop (`!edge.isClosedLoop`), not clipped at the dataset boundary (`!edge.clippedAtStart && !startNode?.isBoundaryClipped`), and does not touch a grade transition (`!hasGradeStart`).
      - `capEnd` is enabled on the last provenance sub-segment (`sub === subSegments[subSegments.length - 1]`) under the symmetric conditions at `toNodeId`.
-     - Closed loops (`clean.length >= 4` and endpoint distance `< 0.05 m`) receive a closing disk at `clean[0]`.
+     - At internal provenance-split boundaries (`subA -> subB`, or the seam `subSegments[last] -> subSegments[0]` of a multi-segment closed loop), `resolveInternalProvenanceBoundaryCaps(subA, subB)` inspects both cleaned sub-segment polylines (`> 0.02 m` spacing):
+       - Straight equal-width connections (`dot >= 0.9986` and `|wA - wB| <= 1e-3 m`) emit no additional disk (`capEndOnA = false`, `capStartOnB = false`).
+       - Angled bends (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3 m`) assign a single 16-sided rounding disk to at most one adjacent sub-segment using a deterministic ownership rule (wider sub-segment first, longer millimeter-rounded cleaned arc length second, lexical `partId`/`sourceFeatureId` tie-breaker third).
+     - Single-segment closed loops (`clean.length >= 4` and endpoint distance `< 0.05 m`) receive a closing disk at `clean[0]`.
    - Unions all rectangle and disk primitives for that stroke via `filterDegenerateBooleanArtifacts(polygonClipping.union(...))`.
    - If the rounded buffer throws or yields an empty polygon, falls back to a flat ribbon outline (`buildRoadRibbonOutlineRing`) and records `e2plus_rounded_buffer_failed` / `e2plus_flat_ribbon_fallback`.
 3. **Deterministic Priority-Ordered 2D Ownership Clipping**:
@@ -89,7 +92,7 @@ Lightweight instrumentation is collected on every scene build and reset per rebu
 ## Architecture and measurement cautions
 
 - **Ownership order is vehicle/path tier, descending road-class priority, then edge ID. Width is not an additional tie-breaker.** Visible geometry is registered as an ownership blocker **after** successful triangulation and validation.
-- **End caps** are conditional on the first/last provenance subsegment, boundary clipping, closed-loop and grade-transition rules; there is no explicit graph-degree test.
+- **End caps** on outer edge endpoints are conditional on boundary clipping, closed-loop and grade-transition rules; at internal provenance-split boundaries (`#seg0 -> #seg1`), `resolveInternalProvenanceBoundaryCaps` suppresses caps on straight equal-width joins (`dot >= 0.9986`) and assigns a single rounding disk to one deterministic owner when the boundary bends or changes width.
 - The independent 24-gon reference uses a different buffer implementation than E2+'s 16-gon generator, but is still a **polygonal approximation** with declared tolerances, not ground-truth surveyed road geometry.
 - **Timing units are not fully comparable across the table**: Legacy rows use **scene-build** medians under "Road Gen Med", whereas graph/E2+ rows use **graph-road generation** medians. Compare full-scene-to-full-scene data before making relative speed claims.
 - The H01 data explicitly contain **0.0312 m² of coplanar triangle overlap**. High aggregate coverage percentages do not rule out localized gaps or self-overlaps.

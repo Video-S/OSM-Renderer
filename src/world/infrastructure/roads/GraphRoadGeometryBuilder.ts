@@ -4,6 +4,7 @@ import polygonClipping from 'polygon-clipping';
 import { proposeRoundedPathJunctionOutline } from './PathJunctionCornerSmoothing';
 import {
   bufferSurfaceFirstRoadCenterline,
+  resolveInternalProvenanceBoundaryCaps,
   type SurfaceFirstBufferInstrumentation,
 } from './SurfaceFirstRoadFootprints';
 import {
@@ -3123,7 +3124,85 @@ export function buildGraphAtGradeRoadGeometries(
     const subSegments = resolvedSubSegmentsByEdgeId.get(edge.id);
     if (!subSegments || subSegments.length === 0) continue;
 
-    for (const sub of subSegments) {
+    let surfaceFirstSubCaps: Array<{ capStart: boolean; capEnd: boolean }> | undefined;
+    if (surfaceFirst) {
+      const startNode = descriptors.roadNodesById.get(edge.fromNodeId);
+      const endNode = descriptors.roadNodesById.get(edge.toNodeId);
+      const hasGradeStart = Boolean(
+        edge.startGradeTransitionId ||
+          startNode?.gradeTransitionIds.length ||
+          startNode?.incidentEdgeIds.some(
+            (id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable
+          )
+      );
+      const hasGradeEnd = Boolean(
+        edge.endGradeTransitionId ||
+          endNode?.gradeTransitionIds.length ||
+          endNode?.incidentEdgeIds.some(
+            (id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable
+          )
+      );
+      surfaceFirstSubCaps = subSegments.map((_, idx) => ({
+        capStart:
+          idx === 0 &&
+          !edge.isClosedLoop &&
+          !edge.clippedAtStart &&
+          !startNode?.isBoundaryClipped &&
+          !hasGradeStart,
+        capEnd:
+          idx === subSegments.length - 1 &&
+          !edge.isClosedLoop &&
+          !edge.clippedAtEnd &&
+          !endNode?.isBoundaryClipped &&
+          !hasGradeEnd,
+      }));
+      if (subSegments.length > 1) {
+        for (let idx = 0; idx < subSegments.length - 1; idx++) {
+          const subA = subSegments[idx];
+          const subB = subSegments[idx + 1];
+          const { capEndOnA, capStartOnB } = resolveInternalProvenanceBoundaryCaps(
+            {
+              id: subA.subId,
+              sourceKey: subA.seg.partId || subA.sourceFeatureId,
+              points: subA.points,
+              width: subA.width,
+            },
+            {
+              id: subB.subId,
+              sourceKey: subB.seg.partId || subB.sourceFeatureId,
+              points: subB.points,
+              width: subB.width,
+            }
+          );
+          if (capEndOnA) surfaceFirstSubCaps[idx].capEnd = true;
+          if (capStartOnB) surfaceFirstSubCaps[idx + 1].capStart = true;
+        }
+        if (edge.isClosedLoop) {
+          const lastIdx = subSegments.length - 1;
+          const subA = subSegments[lastIdx];
+          const subB = subSegments[0];
+          const { capEndOnA, capStartOnB } = resolveInternalProvenanceBoundaryCaps(
+            {
+              id: subA.subId,
+              sourceKey: subA.seg.partId || subA.sourceFeatureId,
+              points: subA.points,
+              width: subA.width,
+            },
+            {
+              id: subB.subId,
+              sourceKey: subB.seg.partId || subB.sourceFeatureId,
+              points: subB.points,
+              width: subB.width,
+            }
+          );
+          if (capEndOnA) surfaceFirstSubCaps[lastIdx].capEnd = true;
+          if (capStartOnB) surfaceFirstSubCaps[0].capStart = true;
+        }
+      }
+    }
+
+    for (let subIdx = 0; subIdx < subSegments.length; subIdx++) {
+      const sub = subSegments[subIdx];
       try {
         let pts = sub.points;
         if (pts.length < 2) {
@@ -3145,18 +3224,7 @@ export function buildGraphAtGradeRoadGeometries(
           // Experimental continuous-stroke path: no trimmed junction portals.
           // The same graph, widths, provenance and surface-ownership priorities
           // as E2 are retained; only the footprint generator changes.
-          const startNode = descriptors.roadNodesById.get(edge.fromNodeId);
-          const endNode = descriptors.roadNodesById.get(edge.toNodeId);
-          const hasGradeStart = Boolean(edge.startGradeTransitionId ||
-            startNode?.gradeTransitionIds.length ||
-            startNode?.incidentEdgeIds.some((id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable));
-          const hasGradeEnd = Boolean(edge.endGradeTransitionId ||
-            endNode?.gradeTransitionIds.length ||
-            endNode?.incidentEdgeIds.some((id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable));
-          const capStart = sub === subSegments[0] && !edge.isClosedLoop &&
-            !edge.clippedAtStart && !startNode?.isBoundaryClipped && !hasGradeStart;
-          const capEnd = sub === subSegments[subSegments.length - 1] && !edge.isClosedLoop &&
-            !edge.clippedAtEnd && !endNode?.isBoundaryClipped && !hasGradeEnd;
+          const { capStart, capEnd } = surfaceFirstSubCaps![subIdx];
 
           let stroke: MultiPolygonCoords = [];
           try {

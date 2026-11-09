@@ -17,6 +17,7 @@ import {
 } from './GeometryBuilder';
 import {
   bufferSurfaceFirstRoadCenterline,
+  resolveInternalProvenanceBoundaryCaps,
   SurfaceFirstBufferInstrumentation,
 } from './infrastructure/roads/SurfaceFirstRoadFootprints';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
@@ -844,12 +845,11 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
     }
   });
 
-  it('A1 defect reproduction: detects outer-corner wedge gap when a simplified edge bends at an internal provenance split boundary', () => {
-    // Two compatible residential ways with same name and different custom tags meeting at a 60-degree bend at node (0, 0).
-    // RoadNetworkBuilder chains them into 1 simplified graph edge with 2 provenance segments (#seg0 and #seg1).
-    // In E2+, capEnd on #seg0 is false and capStart on #seg1 is false at internal provenance split boundaries,
-    // leaving an unrounded outer-corner wedge gap at (0, 0).
-    const data = createSyntheticDataset([
+  it('resolves internal provenance-split bend gaps while keeping straight splits, reversed ways, width transitions, provenance, and E2/Legacy invariant', () => {
+    // 1. Angled two-way provenance split (60-degree bend at node b2 = (0, 0)):
+    // RoadNetworkBuilder chains way/bent-chain-a and way/bent-chain-b into 1 simplified graph edge
+    // with 2 provenance subsegments (#seg0 and #seg1).
+    const bentForwardData = createSyntheticDataset([
       {
         id: 'way/bent-chain-a',
         sourceFeatureId: 'way/bent-chain-a',
@@ -878,20 +878,271 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
       },
     ]);
 
-    const scene = buildSurfaceFirstScene(data);
+    const bentForwardScene = buildSurfaceFirstScene(bentForwardData);
     try {
-      const validation = validateSurfaceFirstRoadGeometry(scene, data);
+      const stats: GraphRoadRenderStats = bentForwardScene.roadsGroup.userData.graphRoadStats;
+      assert.equal(stats.provenanceSplitSegmentCount, 1);
+      // 2 outer endpoint caps + exactly 1 internal bend rounding disk = 3 cap disks total
+      assert.equal(stats.generatedCapDiskPrimitiveCount, 3);
+
+      const validation = validateSurfaceFirstRoadGeometry(bentForwardScene, bentForwardData);
+      assert.equal(validation.valid, true, 'Angled provenance split must pass all E2+ validations');
       const bendGapDefects = validation.coverage.defects.filter(
         (d) => d.kind === 'provenance_split_bend_gap'
       );
       assert.equal(
         bendGapDefects.length,
-        1,
-        'Expected validator to detect the outer-corner wedge gap at an angled internal provenance split boundary'
+        0,
+        'Angled two-way provenance split must produce zero provenance_split_bend_gap defects'
       );
-      assert.equal(bendGapDefects[0].sourceFeatureId, 'way/bent-chain-a');
+      // 5. No positive-area coplanar overlaps
+      assert.equal(validation.overlaps.totalPositiveAreaOverlapCount, 0);
+      assert.equal(validation.overlaps.totalOverlapAreaM2, 0);
+
+      // 6. Source-feature provenance and faceRanges remain correct for both ways
+      assert.equal(validation.provenance.defects.length, 0);
+      assert.ok(validation.provenance.verifiedSourceFeatureIds.includes('way/bent-chain-a'));
+      assert.ok(validation.provenance.verifiedSourceFeatureIds.includes('way/bent-chain-b'));
+
+      const resMesh = bentForwardScene.roadsGroup.children.find(
+        (c) => c.name === 'Roads_residential'
+      ) as THREE.Mesh;
+      assert.ok(resMesh);
+      const faceRanges = resMesh.userData.faceRanges as FaceFeatureRange[];
+      const segARange = faceRanges.find((r) => r.info.sourceFeatureId === 'way/bent-chain-a');
+      const segBRange = faceRanges.find((r) => r.info.sourceFeatureId === 'way/bent-chain-b');
+      assert.ok(segARange, 'Expected faceRange for way/bent-chain-a');
+      assert.ok(segBRange, 'Expected faceRange for way/bent-chain-b');
+      assert.equal(segARange!.info.osmTags?.segment, 'A');
+      assert.equal(segBRange!.info.osmTags?.segment, 'B');
+      assert.deepEqual(segARange!.info.sourceFeatureIds, ['way/bent-chain-a']);
+      assert.deepEqual(segBRange!.info.sourceFeatureIds, ['way/bent-chain-b']);
+
+      // 3. Reversing source-way orientation (two-way roads with reversed vertex arrays and reversed feature order)
+      // must produce identical road surface coverage and deterministic single-owner disk assignment.
+      const bentReversedData = createSyntheticDataset([
+        {
+          id: 'way/bent-chain-b',
+          sourceFeatureId: 'way/bent-chain-b',
+          roadClass: 'residential',
+          width: 8.0,
+          name: 'Bochtstraat',
+          osmTags: { segment: 'B' },
+          points: [
+            [20, 35],
+            [0, 0],
+          ],
+          nodeIds: ['b3', 'b2'],
+        },
+        {
+          id: 'way/bent-chain-a',
+          sourceFeatureId: 'way/bent-chain-a',
+          roadClass: 'residential',
+          width: 8.0,
+          name: 'Bochtstraat',
+          osmTags: { segment: 'A' },
+          points: [
+            [0, 0],
+            [-40, 0],
+          ],
+          nodeIds: ['b2', 'b1'],
+        },
+      ]);
+
+      const bentReversedScene = buildSurfaceFirstScene(bentReversedData);
+      try {
+        const revValidation = validateSurfaceFirstRoadGeometry(bentReversedScene, bentReversedData);
+        assert.equal(revValidation.valid, true);
+        assert.equal(revValidation.overlaps.totalPositiveAreaOverlapCount, 0);
+        assert.ok(
+          Math.abs(
+            revValidation.coverage.emittedAtGradeUnionAreaM2 -
+              validation.coverage.emittedAtGradeUnionAreaM2
+          ) < 1e-4,
+          'Reversing source-way vertex orientation must preserve total emitted road coverage area'
+        );
+        const revStats: GraphRoadRenderStats = bentReversedScene.roadsGroup.userData.graphRoadStats;
+        assert.equal(revStats.generatedCapDiskPrimitiveCount, 3);
+      } finally {
+        bentReversedScene.dispose();
+      }
     } finally {
-      scene.dispose();
+      bentForwardScene.dispose();
+    }
+
+    // 2. Straight provenance split produces no unnecessary geometry (no internal cap disk):
+    const straightSplitData = createSyntheticDataset([
+      {
+        id: 'way/straight-a',
+        sourceFeatureId: 'way/straight-a',
+        roadClass: 'residential',
+        width: 8.0,
+        name: 'Rechtestraat',
+        osmTags: { segment: 'A' },
+        points: [
+          [-40, 0],
+          [0, 0],
+        ],
+        nodeIds: ['s1', 's2'],
+      },
+      {
+        id: 'way/straight-b',
+        sourceFeatureId: 'way/straight-b',
+        roadClass: 'residential',
+        width: 8.0,
+        name: 'Rechtestraat',
+        osmTags: { segment: 'B' },
+        points: [
+          [0, 0],
+          [40, 0],
+        ],
+        nodeIds: ['s2', 's3'],
+      },
+    ]);
+
+    const straightScene = buildSurfaceFirstScene(straightSplitData);
+    try {
+      const straightStats: GraphRoadRenderStats = straightScene.roadsGroup.userData.graphRoadStats;
+      assert.equal(straightStats.provenanceSplitSegmentCount, 1);
+      // Only the 2 outer endpoints of the chain receive caps; the straight internal split at (0, 0) adds 0 caps
+      assert.equal(
+        straightStats.generatedCapDiskPrimitiveCount,
+        2,
+        'Straight internal provenance split must not generate an unnecessary internal rounding disk'
+      );
+      assert.ok(straightStats.outputTriangleCount > 0);
+      const straightVal = validateSurfaceFirstRoadGeometry(straightScene, straightSplitData);
+      assert.equal(straightVal.valid, true);
+    } finally {
+      straightScene.dispose();
+    }
+
+    // 4. Different-width connected ways (both at graph node junctions and in resolveInternalProvenanceBoundaryCaps)
+    const widthStepCaps = resolveInternalProvenanceBoundaryCaps(
+      {
+        id: 'edge#seg0',
+        sourceKey: 'way/narrow',
+        points: [
+          [-20, 0],
+          [0, 0],
+        ],
+        width: 5.0,
+      },
+      {
+        id: 'edge#seg1',
+        sourceKey: 'way/wide',
+        points: [
+          [0, 0],
+          [20, 0],
+        ],
+        width: 8.0,
+      }
+    );
+    assert.deepEqual(
+      widthStepCaps,
+      { capEndOnA: false, capStartOnB: true },
+      'When adjacent subsegments have different widths, the wider subsegment must deterministically own the single join disk'
+    );
+
+    const diffWidthWaysData = createSyntheticDataset([
+      {
+        id: 'way/wide-branch',
+        sourceFeatureId: 'way/wide-branch',
+        roadClass: 'residential',
+        width: 9.0,
+        name: 'Bredestraat',
+        points: [
+          [-35, 0],
+          [0, 0],
+        ],
+        nodeIds: ['w1', 'w2'],
+      },
+      {
+        id: 'way/narrow-branch',
+        sourceFeatureId: 'way/narrow-branch',
+        roadClass: 'residential',
+        width: 5.5,
+        name: 'Bredestraat',
+        points: [
+          [0, 0],
+          [25, 25],
+        ],
+        nodeIds: ['w2', 'w3'],
+      },
+    ]);
+    const diffWidthScene = buildSurfaceFirstScene(diffWidthWaysData);
+    try {
+      const diffWidthVal = validateSurfaceFirstRoadGeometry(diffWidthScene, diffWidthWaysData);
+      assert.equal(diffWidthVal.valid, true);
+      assert.equal(diffWidthVal.overlaps.totalPositiveAreaOverlapCount, 0);
+    } finally {
+      diffWidthScene.dispose();
+    }
+
+    // 7. E2 ('graph') and Legacy ('legacy') rendering remain completely unaffected
+    const e2Options = { roads: 'graph' as const, railways: 'legacy' as const };
+    const e2Builder = new GeometryBuilder({
+      infrastructureRenderOptions: e2Options,
+      infrastructureRenderPreview: prepareInfrastructureRenderPreview(bentForwardData, e2Options),
+    });
+    const e2Scene = e2Builder.buildScene(bentForwardData, MAP_THEMES.tactical);
+    const legacyBuilder = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
+    });
+    const legacyScene = legacyBuilder.buildScene(bentForwardData, MAP_THEMES.tactical);
+    try {
+      const e2Stats: GraphRoadRenderStats = e2Scene.roadsGroup.userData.graphRoadStats;
+      assert.equal(e2Stats.generatedCapDiskPrimitiveCount, 0);
+      assert.equal(e2Stats.generatedRectanglePrimitiveCount, 0);
+      assert.equal(legacyScene.roadsGroup.userData.graphRoadStats, undefined);
+      assert.ok(legacyScene.roadsGroup.children.length > 0);
+    } finally {
+      e2Scene.dispose();
+      legacyScene.dispose();
+    }
+
+    // Negative validator check: stripping the internal bend cap triangles from way/bent-chain-b
+    // must still cause validateSurfaceFirstRoadGeometry to flag provenance_split_bend_gap.
+    const strippedBendScene = buildSurfaceFirstScene(bentForwardData);
+    try {
+      const mesh = strippedBendScene.roadsGroup.children.find(
+        (c) => c.name === 'Roads_residential'
+      ) as THREE.Mesh;
+      const idx = mesh.geometry.getIndex()!;
+      const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const newIndices: number[] = [];
+      const newRanges: FaceFeatureRange[] = [];
+      const oldRanges = mesh.userData.faceRanges as FaceFeatureRange[];
+
+      for (const range of oldRanges) {
+        const startFace = newIndices.length / 3;
+        for (let f = range.startFace; f < range.endFace; f++) {
+          const i0 = idx.getX(f * 3);
+          const i1 = idx.getX(f * 3 + 1);
+          const i2 = idx.getX(f * 3 + 2);
+          // Drop triangles whose centroid or vertices lie in the outer-corner bend quadrant (x > 0, z < 0)
+          const cx = (pos.getX(i0) + pos.getX(i1) + pos.getX(i2)) / 3;
+          const cz = (pos.getZ(i0) + pos.getZ(i1) + pos.getZ(i2)) / 3;
+          if (cx > 0 && cz < 0) {
+            continue;
+          }
+          newIndices.push(i0, i1, i2);
+        }
+        const endFace = newIndices.length / 3;
+        if (endFace > startFace) {
+          newRanges.push({ startFace, endFace, info: range.info });
+        }
+      }
+      mesh.geometry.setIndex(newIndices);
+      mesh.userData.faceRanges = newRanges;
+
+      const strippedReport = validateSurfaceFirstRoadGeometry(strippedBendScene, bentForwardData);
+      assert.ok(
+        strippedReport.coverage.defects.some((d) => d.kind === 'provenance_split_bend_gap'),
+        'Validator must still detect provenance_split_bend_gap when outer-corner join triangles are missing'
+      );
+    } finally {
+      strippedBendScene.dispose();
     }
   });
 

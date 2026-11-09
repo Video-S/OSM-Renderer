@@ -30,6 +30,127 @@ export interface SurfaceFirstBufferInstrumentation {
   polygonUnionTimeMs: number;
 }
 
+export interface SurfaceFirstProvenanceSubSegmentSpec {
+  id: string;
+  sourceKey: string;
+  points: ReadonlyArray<readonly [number, number]>;
+  width: number;
+}
+
+export function cleanSurfaceFirstPolyline(
+  points: ReadonlyArray<readonly [number, number]>
+): Point[] {
+  const clean: Point[] = [];
+  for (const p of points) {
+    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+    if (
+      !clean.length ||
+      Math.hypot(
+        p[0] - clean[clean.length - 1][0],
+        p[1] - clean[clean.length - 1][1]
+      ) > 0.02
+    ) {
+      clean.push([p[0], p[1]]);
+    }
+  }
+  return clean;
+}
+
+function computeCleanedPolylineLength(clean: ReadonlyArray<Point>): number {
+  let total = 0;
+  for (let i = 1; i < clean.length; i++) {
+    total += Math.hypot(clean[i][0] - clean[i - 1][0], clean[i][1] - clean[i - 1][1]);
+  }
+  return total;
+}
+
+function compareStringsLexical(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Determines whether the shared internal boundary between two consecutive
+ * provenance subsegments `subA` (at its end) and `subB` (at its start)
+ * requires a rounding join disk, and assigns that join to at most one of
+ * the two subsegments deterministically.
+ *
+ * - Straight equal-width boundaries (`dot >= 0.9986`) receive no disk on either side.
+ * - Angled boundaries (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3`)
+ *   assign a single rounding disk to one deterministic owner:
+ *   1. Wider segment if widths differ (`|wA - wB| > 1e-3`).
+ *   2. Longer segment if millimeter-rounded cleaned arc lengths differ.
+ *   3. Lexically smaller `sourceKey` (then `id`) for ties.
+ */
+export function resolveInternalProvenanceBoundaryCaps(
+  subA: SurfaceFirstProvenanceSubSegmentSpec,
+  subB: SurfaceFirstProvenanceSubSegmentSpec
+): { capEndOnA: boolean; capStartOnB: boolean } {
+  if (
+    subA.width <= 0 ||
+    subB.width <= 0 ||
+    !Number.isFinite(subA.width) ||
+    !Number.isFinite(subB.width)
+  ) {
+    return { capEndOnA: false, capStartOnB: false };
+  }
+
+  const cleanA = cleanSurfaceFirstPolyline(subA.points);
+  const cleanB = cleanSurfaceFirstPolyline(subB.points);
+  if (cleanA.length < 2 || cleanB.length < 2) {
+    return { capEndOnA: false, capStartOnB: false };
+  }
+
+  const pJoinA = cleanA[cleanA.length - 1];
+  const pJoinB = cleanB[0];
+  if (Math.hypot(pJoinA[0] - pJoinB[0], pJoinA[1] - pJoinB[1]) >= 0.05) {
+    return { capEndOnA: false, capStartOnB: false };
+  }
+
+  const a = cleanA[cleanA.length - 2];
+  const c = cleanB[1];
+  const ux = pJoinA[0] - a[0];
+  const uz = pJoinA[1] - a[1];
+  const vx = c[0] - pJoinB[0];
+  const vz = c[1] - pJoinB[1];
+  const len = Math.hypot(ux, uz) * Math.hypot(vx, vz);
+  if (len <= 1e-6) {
+    return { capEndOnA: false, capStartOnB: false };
+  }
+
+  const dot = (ux * vx + uz * vz) / len;
+  const hasBend = dot < 0.9986;
+  const hasWidthTransition = Math.abs(subA.width - subB.width) > 1e-3;
+
+  if (!hasBend && !hasWidthTransition) {
+    return { capEndOnA: false, capStartOnB: false };
+  }
+
+  if (hasWidthTransition) {
+    return subA.width >= subB.width
+      ? { capEndOnA: true, capStartOnB: false }
+      : { capEndOnA: false, capStartOnB: true };
+  }
+
+  const lenAMm = Math.round(computeCleanedPolylineLength(cleanA) * 1000);
+  const lenBMm = Math.round(computeCleanedPolylineLength(cleanB) * 1000);
+  if (lenAMm !== lenBMm) {
+    return lenAMm > lenBMm
+      ? { capEndOnA: true, capStartOnB: false }
+      : { capEndOnA: false, capStartOnB: true };
+  }
+
+  const keyCmp = compareStringsLexical(subA.sourceKey, subB.sourceKey);
+  if (keyCmp !== 0) {
+    return keyCmp < 0
+      ? { capEndOnA: true, capStartOnB: false }
+      : { capEndOnA: false, capStartOnB: true };
+  }
+
+  return compareStringsLexical(subA.id, subB.id) <= 0
+    ? { capEndOnA: true, capStartOnB: false }
+    : { capEndOnA: false, capStartOnB: true };
+}
+
 /**
  * E2+ rounded stroke footprint. A centerline is buffered as a local union
  * of full-width segment rectangles and round joins/caps. Junctions are the
@@ -44,14 +165,7 @@ export function bufferSurfaceFirstRoadCenterline(
 ): MultiPolygonCoords {
   const tStart = instrumentation ? performance.now() : 0;
   if (width <= 0 || !Number.isFinite(width) || points.length < 2) return [];
-  const clean: Point[] = [];
-  for (const p of points) {
-    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
-    if (!clean.length || Math.hypot(
-      p[0] - clean[clean.length - 1][0],
-      p[1] - clean[clean.length - 1][1]
-    ) > 0.02) clean.push([p[0], p[1]]);
-  }
+  const clean = cleanSurfaceFirstPolyline(points);
   if (clean.length < 2) return [];
   const closed = clean.length >= 4 && Math.hypot(
     clean[0][0] - clean[clean.length - 1][0],

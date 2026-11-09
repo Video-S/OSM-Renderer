@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadGenerationTiming
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:423
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:424
 
 High-resolution wall-clock timing breakdown (`ms`) for at-grade road geometry generation.
 Stored separately from `GraphRoadRenderStats` so deterministic counter snapshots remain
@@ -18,7 +18,7 @@ bit-for-bit identical across runs.
 
 > **footprintConstructionTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:427
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:428
 
 Wall-clock time (`ms`) spent constructing rounded stroke footprints (primitive setup + union).
 
@@ -28,7 +28,7 @@ Wall-clock time (`ms`) spent constructing rounded stroke footprints (primitive s
 
 > **ownershipClippingTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:433
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:434
 
 Wall-clock time (`ms`) spent in bbox blocker checks and `polygonClipping.difference` ownership clipping.
 
@@ -38,7 +38,7 @@ Wall-clock time (`ms`) spent in bbox blocker checks and `polygonClipping.differe
 
 > **polygonUnionTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:431
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:432
 
 Wall-clock time (`ms`) spent inside `polygonClipping.union` during footprint buffering.
 
@@ -48,7 +48,7 @@ Wall-clock time (`ms`) spent inside `polygonClipping.union` during footprint buf
 
 > **primitiveConstructionTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:429
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:430
 
 Wall-clock time (`ms`) spent constructing segment rectangle and disk primitives prior to union.
 
@@ -58,7 +58,7 @@ Wall-clock time (`ms`) spent constructing segment rectangle and disk primitives 
 
 > **totalRoadGenerationTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:425
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:426
 
 Total wall-clock time (`ms`) spent inside `buildGraphAtGradeRoadGeometries`.
 
@@ -68,6 +68,6 @@ Total wall-clock time (`ms`) spent inside `buildGraphAtGradeRoadGeometries`.
 
 > **triangulationAndValidationTimeMs**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:435
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:436
 
 Wall-clock time (`ms`) spent in `createShapesFromMultiPolygon`, `ShapeGeometry`, and `validateAndPruneHorizontalGeometry`.

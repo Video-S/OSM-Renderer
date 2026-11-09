@@ -19,7 +19,7 @@ We adopt **Surface-First Road Rendering (`E2+`, `roads: 'graph-surface'`)** as t
 1. **Continuous Rounded-Stroke Buffering**:
    - Every eligible at-grade road edge (or provenance sub-segment) is buffered directly along its untrimmed centerline via `bufferSurfaceFirstRoadCenterline(points, width, { capStart, capEnd })` in `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`.
    - Each stroke is constructed as the 2D Boolean union (`polygonClipping.union`) of full-width segment rectangles, 16-sided round join disks at interior bends (`dot < 0.9986`, `> ~3°`), and 16-sided round endpoint cap disks.
-   - Endpoint caps are enabled at topological road junctions and dead ends so meeting strokes naturally form smooth round joins, and are suppressed only at closed loops (`isClosedLoop`), dataset boundary clips (`clippedAtStart`/`clippedAtEnd`), grade transitions (`hasGradeStart`/`hasGradeEnd`), and internal provenance split boundaries.
+   - Endpoint caps are enabled at topological road junctions and dead ends so meeting strokes naturally form smooth round joins, and are suppressed at closed loops (`isClosedLoop`), dataset boundary clips (`clippedAtStart`/`clippedAtEnd`), grade transitions (`hasGradeStart`/`hasGradeEnd`), and straight equal-width internal provenance split boundaries (`resolveInternalProvenanceBoundaryCaps`). When an internal provenance split bends (`dot < 0.9986`) or changes width (`|wA - wB| > 1e-3 m`), a single 16-sided rounding disk is deterministically assigned to one adjacent provenance sub-segment.
 2. **Emergent Junctions via Priority-Ordered 2D Ownership Clipping**:
    - Explicit junction trimming (`trimmedEndpoints`), degree-2 miter portals, and separate `junction-*` / `path-junction-*` meshes are eliminated in `graph-surface` mode (`renderedJunctionCount === 0`).
    - Road and path strokes are emitted in deterministic priority order: vehicular before non-vehicular (`tier === 'path'`), higher `ROAD_CLASS_PRIORITY` before lower, and lexicographical `compareStringsCodeUnit(a.id, b.id)` for ties.
@@ -34,11 +34,10 @@ We adopt **Surface-First Road Rendering (`E2+`, `roads: 'graph-surface'`)** as t
 
 - **Positive**:
   - Eliminates portal-pinch, acute-fork shoulder kinks, and "pizza-slice" junction patch artifacts across tested urban extracts without per-topology special cases.
-  - The first 12-dataset baseline reports no winding or degenerate triangle defects, and no significant overlap in **11 of 12 E2+ datasets**. The **H01 Utrecht** dataset still has two detected overlaps totaling **0.0312 m²**.
+  - The 12-dataset baseline reports **zero coverage defects** (`0` `provenance_split_bend_gap`, `0` missing road surfaces), zero winding or degenerate triangle defects, and no significant overlap in **11 of 12 E2+ datasets**. The **H01 Utrecht** dataset still has two detected overlaps totaling **0.0312 m²**.
   - Simplifies the **active E2+ geometry path** by bypassing the E2 junction-trimming/portal solver. The older solver remains implemented and selectable, not deleted.
 - **Negative / Trade-offs**:
   - Increases `polygonClipping.union` invocations (one local union per buffered provenance segment) compared with direct quad-strip ribbon extrusion.
-  - Multi-segment simplified edges that bend at an internal provenance split boundary (`#seg0` -> `#seg1`) currently suppress endpoint disks on both sides of the internal split (`capStart = false`, `capEnd = false`), which can leave a small outer-corner wedge gap at angled provenance split vertices (documented and reproduced by `validateSurfaceFirstRoadGeometry`).
 
 
 ## Validation evidence and architectural boundaries
@@ -47,8 +46,8 @@ The graph describes **connectivity**, while buffered 2D footprints describe **oc
 
 The project owner repeatedly reports substantially improved real-world visuals. The automated 24-gon corridor reference is **independently implemented but still an approximation**, not a measured kerb outline or proof of complete real-world correctness.
 
-**Three unresolved issues:** (1) missing disks at some internal provenance-split bends; (2) desynchronized `diagnostics.featuresFullySubtracted` accounting for E2+ full subtraction; (3) **H01 0.0312 m² coplanar overlap** after pinched contour triangulation. The first E2+ prototype changed both junction patching and rounded buffers, so their independent contribution has **not been isolated**.
+**Resolved issue:** (1) internal provenance-split bend gaps (`provenance_split_bend_gap`) are resolved via `resolveInternalProvenanceBoundaryCaps` (`0` coverage defects across all 12 benchmark datasets). **Two remaining unresolved issues:** (2) desynchronized `diagnostics.featuresFullySubtracted` accounting for E2+ full subtraction; (3) **H01 0.0312 m² coplanar overlap** after pinched contour triangulation. The first E2+ prototype changed both junction patching and rounded buffers, so their independent contribution has **not been isolated**.
 
-Legacy remains the default. Before switching defaults: resolve or document all three cases with regression fixtures; verify geometry and source attribution; benchmark whole-Hengelo and progressively larger Twente tiles; obtain owner visual approval. The initial benchmark does not prove Twente-scale performance.
+Legacy remains the default. Before switching defaults: resolve or document the remaining two cases with regression fixtures; verify geometry and source attribution; benchmark whole-Hengelo and progressively larger Twente tiles; obtain owner visual approval. The initial benchmark does not prove Twente-scale performance.
 
 Related: [technical design](../e2-plus-surface-first-road-rendering.md), [history](../project-history.md), [roadmap](../road-rendering-roadmap.md), [benchmark](../../research/surface-first-road-rendering/baseline-results.json).

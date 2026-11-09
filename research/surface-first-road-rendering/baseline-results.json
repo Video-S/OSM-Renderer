@@ -1,6 +1,6 @@
 {
   "benchmarkSuite": "E2+ Surface-First Road Rendering Geometry Integrity & Performance Baseline",
-  "generatedAt": "2026-11-09T14:41:24.766Z",
+  "generatedAt": "2026-11-09T16:20:07.522Z",
   "methodology": {
     "warmupRuns": 2,
     "measuredRuns": 7,
@@ -21,10 +21,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 3.462,
-          "min": 2.214,
-          "max": 9.124,
-          "p95": 5.326
+          "median": 4.014,
+          "min": 2.289,
+          "max": 14.08,
+          "p95": 6.706
         },
         "graphBuild": {
           "median": 0,
@@ -71,7 +71,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 63,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 85,
+        "triangles": 65
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -106,28 +109,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.868,
-          "min": 5.178,
-          "max": 11.121,
-          "p95": 8.918
+          "median": 8.159,
+          "min": 5.369,
+          "max": 21.623,
+          "p95": 18.478
         },
         "graphBuild": {
-          "median": 0.565,
-          "min": 0.458,
-          "max": 1.55,
-          "p95": 1.062
+          "median": 0.792,
+          "min": 0.514,
+          "max": 2.34,
+          "p95": 1.974
         },
         "adapterBuild": {
-          "median": 0.097,
-          "min": 0.094,
-          "max": 0.682,
-          "p95": 0.195
+          "median": 0.112,
+          "min": 0.102,
+          "max": 4.367,
+          "p95": 0.156
         },
         "roadGenerationTotal": {
-          "median": 5.469,
-          "min": 4.787,
-          "max": 10.388,
-          "p95": 8.227
+          "median": 7.548,
+          "min": 4.952,
+          "max": 21.055,
+          "p95": 14.496
         },
         "footprintConstruction": {
           "median": 0,
@@ -187,7 +190,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 103,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 123,
+        "triangles": 105
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9949,
@@ -222,52 +228,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 4.949,
-          "min": 4.156,
-          "max": 6.375,
-          "p95": 6.146
+          "median": 5.804,
+          "min": 4.543,
+          "max": 11.847,
+          "p95": 7.812
         },
         "graphBuild": {
-          "median": 0.427,
-          "min": 0.409,
-          "max": 0.464,
-          "p95": 0.441
+          "median": 0.455,
+          "min": 0.429,
+          "max": 0.666,
+          "p95": 0.555
         },
         "adapterBuild": {
-          "median": 0.089,
+          "median": 0.093,
           "min": 0.086,
-          "max": 0.092,
-          "p95": 0.091
+          "max": 0.162,
+          "p95": 0.108
         },
         "roadGenerationTotal": {
-          "median": 4.484,
-          "min": 3.791,
-          "max": 5.967,
-          "p95": 5.746
+          "median": 5.408,
+          "min": 4.105,
+          "max": 11.203,
+          "p95": 7.317
         },
         "footprintConstruction": {
-          "median": 1.901,
-          "min": 1.484,
-          "max": 3.013,
-          "p95": 1.954
+          "median": 2.519,
+          "min": 1.741,
+          "max": 3.268,
+          "p95": 2.937
         },
         "polygonUnion": {
-          "median": 1.66,
-          "min": 1.38,
-          "max": 1.83,
-          "p95": 1.77
+          "median": 2.254,
+          "min": 1.617,
+          "max": 3.014,
+          "p95": 2.807
         },
         "ownershipClipping": {
-          "median": 1.644,
-          "min": 1.317,
-          "max": 2.903,
-          "p95": 1.969
+          "median": 1.737,
+          "min": 1.546,
+          "max": 6.224,
+          "p95": 2.995
         },
         "triangulationAndValidation": {
-          "median": 0.689,
-          "min": 0.61,
-          "max": 1.215,
-          "p95": 1.068
+          "median": 0.748,
+          "min": 0.53,
+          "max": 1.873,
+          "p95": 1.37
         }
       },
       "counters": {
@@ -303,7 +309,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 127,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 143,
+        "triangles": 129
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9996,
@@ -338,10 +347,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 1.092,
-          "min": 0.991,
-          "max": 2.499,
-          "p95": 1.581
+          "median": 1.015,
+          "min": 0.983,
+          "max": 2.192,
+          "p95": 1.614
         },
         "graphBuild": {
           "median": 0,
@@ -388,7 +397,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 72,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 94,
+        "triangles": 74
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -423,28 +435,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 4.082,
-          "min": 2.863,
-          "max": 5.629,
-          "p95": 4.898
+          "median": 4.888,
+          "min": 3.348,
+          "max": 8.599,
+          "p95": 6.607
         },
         "graphBuild": {
-          "median": 0.39,
-          "min": 0.359,
-          "max": 0.446,
-          "p95": 0.441
+          "median": 0.627,
+          "min": 0.444,
+          "max": 1.712,
+          "p95": 0.844
         },
         "adapterBuild": {
-          "median": 0.099,
-          "min": 0.089,
-          "max": 0.623,
-          "p95": 0.099
+          "median": 0.179,
+          "min": 0.101,
+          "max": 0.235,
+          "p95": 0.207
         },
         "roadGenerationTotal": {
-          "median": 3.585,
-          "min": 2.529,
-          "max": 5.041,
-          "p95": 4.256
+          "median": 4.26,
+          "min": 2.717,
+          "max": 8.119,
+          "p95": 5.473
         },
         "footprintConstruction": {
           "median": 0,
@@ -504,7 +516,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 61,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 79,
+        "triangles": 63
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9941,
@@ -539,52 +554,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.302,
-          "min": 3.691,
-          "max": 6.333,
-          "p95": 6.244
+          "median": 5.38,
+          "min": 4.308,
+          "max": 16.142,
+          "p95": 8.137
         },
         "graphBuild": {
-          "median": 0.387,
-          "min": 0.349,
-          "max": 0.506,
-          "p95": 0.435
+          "median": 0.369,
+          "min": 0.337,
+          "max": 0.53,
+          "p95": 0.483
         },
         "adapterBuild": {
-          "median": 0.1,
-          "min": 0.09,
-          "max": 1.542,
-          "p95": 0.139
+          "median": 0.134,
+          "min": 0.097,
+          "max": 0.189,
+          "p95": 0.159
         },
         "roadGenerationTotal": {
-          "median": 4.843,
-          "min": 3.343,
-          "max": 5.637,
-          "p95": 5.122
+          "median": 4.922,
+          "min": 3.819,
+          "max": 14.887,
+          "p95": 6.893
         },
         "footprintConstruction": {
-          "median": 1.728,
-          "min": 1.279,
-          "max": 1.975,
-          "p95": 1.888
+          "median": 2.56,
+          "min": 1.461,
+          "max": 6.451,
+          "p95": 3.142
         },
         "polygonUnion": {
-          "median": 1.615,
-          "min": 1.183,
-          "max": 1.861,
-          "p95": 1.79
+          "median": 2.41,
+          "min": 1.361,
+          "max": 6.023,
+          "p95": 2.997
         },
         "ownershipClipping": {
-          "median": 1.83,
-          "min": 1.465,
-          "max": 3.028,
-          "p95": 2.393
+          "median": 2.183,
+          "min": 1.42,
+          "max": 6.326,
+          "p95": 2.81
         },
         "triangulationAndValidation": {
-          "median": 0.678,
-          "min": 0.385,
-          "max": 0.815,
-          "p95": 0.744
+          "median": 0.759,
+          "min": 0.512,
+          "max": 1.35,
+          "p95": 1.076
         }
       },
       "counters": {
@@ -620,7 +635,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 131,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 150,
+        "triangles": 133
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9975,
@@ -655,10 +673,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 1.924,
-          "min": 1.361,
-          "max": 3.694,
-          "p95": 3.603
+          "median": 2.871,
+          "min": 1.252,
+          "max": 4.289,
+          "p95": 3.847
         },
         "graphBuild": {
           "median": 0,
@@ -705,7 +723,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 95,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 107,
+        "triangles": 97
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -740,28 +761,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 2.794,
-          "min": 2.038,
-          "max": 4.368,
-          "p95": 3.692
+          "median": 2.428,
+          "min": 1.864,
+          "max": 6.259,
+          "p95": 3.197
         },
         "graphBuild": {
-          "median": 0.7,
-          "min": 0.523,
-          "max": 0.864,
+          "median": 0.742,
+          "min": 0.547,
+          "max": 0.997,
           "p95": 0.786
         },
         "adapterBuild": {
-          "median": 0.087,
-          "min": 0.078,
-          "max": 0.146,
-          "p95": 0.128
+          "median": 0.091,
+          "min": 0.085,
+          "max": 0.128,
+          "p95": 0.109
         },
         "roadGenerationTotal": {
-          "median": 2.374,
-          "min": 1.682,
-          "max": 3.881,
-          "p95": 3.2
+          "median": 2.106,
+          "min": 1.578,
+          "max": 4.577,
+          "p95": 2.786
         },
         "footprintConstruction": {
           "median": 0,
@@ -821,7 +842,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 91,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 101,
+        "triangles": 93
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9998,
@@ -856,52 +880,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.215,
-          "min": 4.077,
-          "max": 7.049,
-          "p95": 6.861
+          "median": 7.576,
+          "min": 4.857,
+          "max": 13.932,
+          "p95": 9.34
         },
         "graphBuild": {
-          "median": 0.713,
-          "min": 0.487,
-          "max": 2.154,
-          "p95": 0.86
+          "median": 0.661,
+          "min": 0.496,
+          "max": 0.83,
+          "p95": 0.727
         },
         "adapterBuild": {
-          "median": 0.115,
-          "min": 0.078,
-          "max": 0.162,
-          "p95": 0.151
+          "median": 0.11,
+          "min": 0.083,
+          "max": 0.379,
+          "p95": 0.16
         },
         "roadGenerationTotal": {
-          "median": 4.866,
-          "min": 3.771,
-          "max": 6.649,
-          "p95": 6.297
+          "median": 7.255,
+          "min": 4.532,
+          "max": 13.506,
+          "p95": 9.024
         },
         "footprintConstruction": {
-          "median": 2.777,
-          "min": 2.355,
-          "max": 3.7,
-          "p95": 3.64
+          "median": 5.582,
+          "min": 2.476,
+          "max": 9.835,
+          "p95": 7.194
         },
         "polygonUnion": {
-          "median": 2.673,
-          "min": 2.27,
-          "max": 3.576,
-          "p95": 3.544
+          "median": 5.473,
+          "min": 2.376,
+          "max": 9.698,
+          "p95": 7.101
         },
         "ownershipClipping": {
-          "median": 1.136,
-          "min": 0.919,
-          "max": 1.576,
-          "p95": 1.548
+          "median": 1.581,
+          "min": 1.009,
+          "max": 2.002,
+          "p95": 1.617
         },
         "triangulationAndValidation": {
-          "median": 0.496,
-          "min": 0.317,
-          "max": 1.746,
-          "p95": 0.708
+          "median": 0.546,
+          "min": 0.366,
+          "max": 1.163,
+          "p95": 0.809
         }
       },
       "counters": {
@@ -937,7 +961,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 204,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 216,
+        "triangles": 206
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9995,
@@ -972,10 +999,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 1.04,
-          "min": 0.973,
-          "max": 2.565,
-          "p95": 1.179
+          "median": 1.334,
+          "min": 1.167,
+          "max": 2.472,
+          "p95": 1.665
         },
         "graphBuild": {
           "median": 0,
@@ -1022,7 +1049,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 76,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 94,
+        "triangles": 78
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -1057,28 +1087,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 3.499,
-          "min": 2.92,
-          "max": 6.164,
-          "p95": 5.136
+          "median": 3.671,
+          "min": 3.372,
+          "max": 6.36,
+          "p95": 5.089
         },
         "graphBuild": {
-          "median": 0.445,
-          "min": 0.439,
-          "max": 0.602,
-          "p95": 0.598
+          "median": 0.463,
+          "min": 0.428,
+          "max": 0.628,
+          "p95": 0.519
         },
         "adapterBuild": {
-          "median": 0.101,
-          "min": 0.097,
-          "max": 1.251,
-          "p95": 0.16
+          "median": 0.12,
+          "min": 0.096,
+          "max": 0.166,
+          "p95": 0.151
         },
         "roadGenerationTotal": {
-          "median": 3.199,
-          "min": 2.631,
-          "max": 5.688,
-          "p95": 4.584
+          "median": 3.204,
+          "min": 3.084,
+          "max": 5.957,
+          "p95": 4.812
         },
         "footprintConstruction": {
           "median": 0,
@@ -1138,7 +1168,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 109,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 127,
+        "triangles": 111
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -1173,52 +1206,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.961,
-          "min": 4.326,
-          "max": 6.995,
-          "p95": 6.496
+          "median": 4.416,
+          "min": 4.234,
+          "max": 6.117,
+          "p95": 5.698
         },
         "graphBuild": {
-          "median": 0.447,
-          "min": 0.432,
-          "max": 0.726,
-          "p95": 0.645
+          "median": 0.438,
+          "min": 0.412,
+          "max": 0.665,
+          "p95": 0.508
         },
         "adapterBuild": {
-          "median": 0.102,
-          "min": 0.098,
-          "max": 0.142,
-          "p95": 0.126
+          "median": 0.108,
+          "min": 0.094,
+          "max": 0.12,
+          "p95": 0.113
         },
         "roadGenerationTotal": {
-          "median": 5.577,
-          "min": 4.024,
-          "max": 6.402,
-          "p95": 6.09
+          "median": 4.02,
+          "min": 3.888,
+          "max": 5.807,
+          "p95": 5.385
         },
         "footprintConstruction": {
-          "median": 3.574,
-          "min": 2.354,
-          "max": 3.834,
-          "p95": 3.755
+          "median": 2.383,
+          "min": 2.224,
+          "max": 3.965,
+          "p95": 3.694
         },
         "polygonUnion": {
-          "median": 3.48,
-          "min": 2.275,
-          "max": 3.74,
-          "p95": 3.661
+          "median": 2.296,
+          "min": 2.141,
+          "max": 3.872,
+          "p95": 3.613
         },
         "ownershipClipping": {
-          "median": 1.194,
-          "min": 1.062,
-          "max": 1.757,
-          "p95": 1.66
+          "median": 1.126,
+          "min": 1.007,
+          "max": 1.243,
+          "p95": 1.24
         },
         "triangulationAndValidation": {
-          "median": 0.51,
-          "min": 0.361,
-          "max": 0.752,
-          "p95": 0.604
+          "median": 0.376,
+          "min": 0.341,
+          "max": 0.448,
+          "p95": 0.407
         }
       },
       "counters": {
@@ -1254,7 +1287,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 177,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 191,
+        "triangles": 179
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9992,
@@ -1289,10 +1325,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 1.253,
-          "min": 0.91,
-          "max": 2.369,
-          "p95": 2.311
+          "median": 0.892,
+          "min": 0.785,
+          "max": 2.068,
+          "p95": 1.643
         },
         "graphBuild": {
           "median": 0,
@@ -1339,7 +1375,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 73,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 88,
+        "triangles": 75
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -1374,28 +1413,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 3.593,
-          "min": 2.476,
-          "max": 5.373,
-          "p95": 4.338
+          "median": 2.824,
+          "min": 2.291,
+          "max": 4.827,
+          "p95": 3.465
         },
         "graphBuild": {
-          "median": 0.603,
-          "min": 0.484,
-          "max": 0.654,
-          "p95": 0.63
+          "median": 0.475,
+          "min": 0.434,
+          "max": 0.987,
+          "p95": 0.603
         },
         "adapterBuild": {
-          "median": 0.125,
-          "min": 0.083,
-          "max": 0.239,
-          "p95": 0.135
+          "median": 0.086,
+          "min": 0.08,
+          "max": 0.158,
+          "p95": 0.122
         },
         "roadGenerationTotal": {
-          "median": 3.132,
-          "min": 2.161,
-          "max": 4.912,
-          "p95": 3.911
+          "median": 2.531,
+          "min": 1.978,
+          "max": 4.386,
+          "p95": 3.08
         },
         "footprintConstruction": {
           "median": 0,
@@ -1455,7 +1494,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 89,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 103,
+        "triangles": 91
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -1490,52 +1532,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 3.535,
-          "min": 3.288,
-          "max": 4.433,
-          "p95": 4.346
+          "median": 3.974,
+          "min": 3.23,
+          "max": 5.582,
+          "p95": 5.463
         },
         "graphBuild": {
-          "median": 0.497,
-          "min": 0.437,
-          "max": 1.891,
-          "p95": 1.037
+          "median": 0.442,
+          "min": 0.428,
+          "max": 0.641,
+          "p95": 0.533
         },
         "adapterBuild": {
-          "median": 0.095,
-          "min": 0.083,
-          "max": 0.154,
-          "p95": 0.105
+          "median": 0.094,
+          "min": 0.085,
+          "max": 0.332,
+          "p95": 0.145
         },
         "roadGenerationTotal": {
-          "median": 3.186,
-          "min": 2.956,
-          "max": 4.102,
-          "p95": 4.019
+          "median": 3.622,
+          "min": 2.906,
+          "max": 5.303,
+          "p95": 4.966
         },
         "footprintConstruction": {
-          "median": 1.645,
-          "min": 1.563,
-          "max": 2.248,
-          "p95": 2.084
+          "median": 2.047,
+          "min": 1.658,
+          "max": 3.704,
+          "p95": 2.513
         },
         "polygonUnion": {
-          "median": 1.574,
-          "min": 1.48,
-          "max": 2.165,
-          "p95": 2.008
+          "median": 1.95,
+          "min": 1.581,
+          "max": 3.63,
+          "p95": 2.434
         },
         "ownershipClipping": {
-          "median": 0.973,
-          "min": 0.838,
-          "max": 1.913,
-          "p95": 1.216
+          "median": 1.032,
+          "min": 0.812,
+          "max": 1.703,
+          "p95": 1.058
         },
         "triangulationAndValidation": {
-          "median": 0.379,
-          "min": 0.319,
-          "max": 0.703,
-          "p95": 0.467
+          "median": 0.378,
+          "min": 0.276,
+          "max": 0.525,
+          "p95": 0.417
         }
       },
       "counters": {
@@ -1571,7 +1613,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 150,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 162,
+        "triangles": 152
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9994,
@@ -1606,10 +1651,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 14.096,
-          "min": 10.658,
-          "max": 25.27,
-          "p95": 15.48
+          "median": 12.812,
+          "min": 11.343,
+          "max": 16.876,
+          "p95": 14.797
         },
         "graphBuild": {
           "median": 0,
@@ -1656,7 +1701,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 408,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 520,
+        "triangles": 410
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -1691,28 +1739,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 18.812,
-          "min": 16.117,
-          "max": 23.646,
-          "p95": 23.205
+          "median": 20.561,
+          "min": 18.118,
+          "max": 33.157,
+          "p95": 29.529
         },
         "graphBuild": {
-          "median": 1.802,
-          "min": 1.658,
-          "max": 2.201,
-          "p95": 2.146
+          "median": 2.79,
+          "min": 1.686,
+          "max": 3.877,
+          "p95": 3.163
         },
         "adapterBuild": {
-          "median": 0.421,
-          "min": 0.353,
-          "max": 0.482,
-          "p95": 0.443
+          "median": 0.464,
+          "min": 0.358,
+          "max": 0.882,
+          "p95": 0.575
         },
         "roadGenerationTotal": {
-          "median": 18.279,
-          "min": 15.643,
-          "max": 23.091,
-          "p95": 22.594
+          "median": 19.957,
+          "min": 17.39,
+          "max": 32.554,
+          "p95": 28.821
         },
         "footprintConstruction": {
           "median": 0,
@@ -1772,7 +1820,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 459,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 567,
+        "triangles": 461
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.9795,
@@ -1885,52 +1936,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 43.794,
-          "min": 39.782,
-          "max": 59.719,
-          "p95": 49.911
+          "median": 42.006,
+          "min": 38.458,
+          "max": 48.531,
+          "p95": 46.365
         },
         "graphBuild": {
-          "median": 1.912,
-          "min": 1.653,
-          "max": 3.437,
-          "p95": 2.112
+          "median": 1.865,
+          "min": 1.684,
+          "max": 3.096,
+          "p95": 2.291
         },
         "adapterBuild": {
-          "median": 0.379,
-          "min": 0.344,
-          "max": 0.51,
-          "p95": 0.465
+          "median": 0.38,
+          "min": 0.372,
+          "max": 0.492,
+          "p95": 0.399
         },
         "roadGenerationTotal": {
-          "median": 43.12,
-          "min": 39.226,
-          "max": 59.127,
-          "p95": 49.104
+          "median": 41.353,
+          "min": 37.854,
+          "max": 47.8,
+          "p95": 45.563
         },
         "footprintConstruction": {
-          "median": 21.161,
-          "min": 17.95,
-          "max": 24.369,
-          "p95": 22.303
+          "median": 20.999,
+          "min": 17.538,
+          "max": 23.766,
+          "p95": 22.192
         },
         "polygonUnion": {
-          "median": 20.444,
-          "min": 16.874,
-          "max": 23.75,
-          "p95": 21.559
+          "median": 20.277,
+          "min": 16.947,
+          "max": 23.05,
+          "p95": 21.385
         },
         "ownershipClipping": {
-          "median": 16,
-          "min": 12.989,
-          "max": 32.84,
-          "p95": 19.594
+          "median": 16.453,
+          "min": 13.086,
+          "max": 18.692,
+          "p95": 17.645
         },
         "triangulationAndValidation": {
-          "median": 3.687,
-          "min": 2.589,
-          "max": 5.817,
-          "p95": 5.77
+          "median": 3.943,
+          "min": 2.511,
+          "max": 4.976,
+          "p95": 4.954
         }
       },
       "counters": {
@@ -1949,51 +2000,36 @@
         "provenanceSplitSegmentCount": 1,
         "generatedRectanglePrimitiveCount": 125,
         "generatedBendDiskPrimitiveCount": 66,
-        "generatedCapDiskPrimitiveCount": 75,
-        "generatedDiskPrimitiveCount": 141,
-        "generatedTotalPrimitiveCount": 266,
+        "generatedCapDiskPrimitiveCount": 76,
+        "generatedDiskPrimitiveCount": 142,
+        "generatedTotalPrimitiveCount": 267,
         "polygonUnionOperationCount": 39,
         "polygonDifferenceOperationCount": 36,
         "candidateBlockerCheckCount": 741,
         "overlappingBlockerCount": 80,
         "outputPolygonCount": 41,
         "outputHoleRingCount": 1,
-        "outputTriangleCount": 1221,
+        "outputTriangleCount": 1225,
         "roundedBufferFailureCount": 0,
         "flatRibbonFallbackCount": 0,
         "surfaceClipFailureCount": 0,
         "emptyShapeCount": 0,
         "invalidTriangleGeometryCount": 0
       },
-      "roadGroupTriangles": 1221,
-      "sceneStats": {},
+      "roadGroupTriangles": 1225,
+      "sceneStats": {
+        "vertices": 1313,
+        "triangles": 1227
+      },
       "integrity": {
-        "valid": false,
-        "networkCoverageRatio": 0.9991,
+        "valid": true,
+        "networkCoverageRatio": 0.9996,
         "independentExpectedUnionAreaM2": 6262.48,
-        "emittedAtGradeUnionAreaM2": 6256.75,
-        "unexplainedMissingAreaM2": 5.918,
-        "coverageDefectCount": 1,
-        "coverageDefectsByKind": {
-          "provenance_split_bend_gap": 1
-        },
-        "coverageDefectSamples": [
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1447458538-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1447458538",
-            "roadClass": "pedestrian",
-            "expectedAreaM2": 211.19184489499912,
-            "ownEmittedAreaM2": 510.22088245897294,
-            "occludedByHigherPriorityAreaM2": 0.20814797999855728,
-            "unexplainedMissingAreaM2": 3.11705470499993,
-            "sampleWorldPoint": [
-              -14.590188461870978,
-              -54.69724845874345
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-14.59, -56.46) between way/1447458538 and way/1447458538"
-          }
-        ],
+        "emittedAtGradeUnionAreaM2": 6259.81,
+        "unexplainedMissingAreaM2": 2.852,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
         "coplanarOverlapCount": 0,
         "coplanarOverlapAreaM2": 0,
         "overlapsByCategory": {
@@ -2019,10 +2055,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.267,
-          "min": 4.5,
-          "max": 6.865,
-          "p95": 6.362
+          "median": 6.665,
+          "min": 4.61,
+          "max": 10.817,
+          "p95": 7.085
         },
         "graphBuild": {
           "median": 0,
@@ -2069,7 +2105,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 554,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 887,
+        "triangles": 556
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -2119,28 +2158,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 13.542,
-          "min": 10.9,
-          "max": 39.127,
-          "p95": 20.563
+          "median": 17.377,
+          "min": 12.222,
+          "max": 21.543,
+          "p95": 19.048
         },
         "graphBuild": {
-          "median": 1.666,
-          "min": 1.461,
-          "max": 15.014,
-          "p95": 1.951
+          "median": 2.6,
+          "min": 2.097,
+          "max": 6.99,
+          "p95": 5.215
         },
         "adapterBuild": {
-          "median": 0.378,
-          "min": 0.356,
-          "max": 0.552,
-          "p95": 0.411
+          "median": 0.602,
+          "min": 0.463,
+          "max": 1.436,
+          "p95": 0.815
         },
         "roadGenerationTotal": {
-          "median": 12.946,
-          "min": 9.929,
-          "max": 36.038,
-          "p95": 19.928
+          "median": 16.538,
+          "min": 10.885,
+          "max": 20.506,
+          "p95": 18.392
         },
         "footprintConstruction": {
           "median": 0,
@@ -2200,7 +2239,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 567,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 905,
+        "triangles": 569
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.9995,
@@ -2235,52 +2277,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 29.075,
-          "min": 25.875,
-          "max": 32.682,
-          "p95": 31.932
+          "median": 30.531,
+          "min": 25.122,
+          "max": 46.754,
+          "p95": 39.589
         },
         "graphBuild": {
-          "median": 1.935,
-          "min": 1.506,
-          "max": 2.214,
-          "p95": 2.124
+          "median": 2.111,
+          "min": 1.644,
+          "max": 3.58,
+          "p95": 2.743
         },
         "adapterBuild": {
-          "median": 0.383,
-          "min": 0.356,
-          "max": 0.781,
-          "p95": 0.763
+          "median": 0.59,
+          "min": 0.387,
+          "max": 0.779,
+          "p95": 0.751
         },
         "roadGenerationTotal": {
-          "median": 28.359,
-          "min": 24.985,
-          "max": 31.805,
-          "p95": 30.866
+          "median": 29.789,
+          "min": 24.388,
+          "max": 45.585,
+          "p95": 38.709
         },
         "footprintConstruction": {
-          "median": 12.764,
-          "min": 10.363,
-          "max": 17.266,
-          "p95": 15.079
+          "median": 12.879,
+          "min": 11.833,
+          "max": 18.999,
+          "p95": 17.551
         },
         "polygonUnion": {
-          "median": 12.356,
-          "min": 9.939,
-          "max": 14.804,
-          "p95": 14.649
+          "median": 12.476,
+          "min": 11.389,
+          "max": 18.621,
+          "p95": 16.862
         },
         "ownershipClipping": {
-          "median": 12.733,
-          "min": 9.662,
-          "max": 15.911,
-          "p95": 15.261
+          "median": 13.389,
+          "min": 10.029,
+          "max": 22.585,
+          "p95": 14.59
         },
         "triangulationAndValidation": {
-          "median": 1.836,
-          "min": 1.472,
-          "max": 2.481,
-          "p95": 2.109
+          "median": 1.545,
+          "min": 1.321,
+          "max": 3.899,
+          "p95": 2.179
         }
       },
       "counters": {
@@ -2299,66 +2341,36 @@
         "provenanceSplitSegmentCount": 4,
         "generatedRectanglePrimitiveCount": 86,
         "generatedBendDiskPrimitiveCount": 46,
-        "generatedCapDiskPrimitiveCount": 45,
-        "generatedDiskPrimitiveCount": 91,
-        "generatedTotalPrimitiveCount": 177,
+        "generatedCapDiskPrimitiveCount": 48,
+        "generatedDiskPrimitiveCount": 94,
+        "generatedTotalPrimitiveCount": 180,
         "polygonUnionOperationCount": 28,
         "polygonDifferenceOperationCount": 24,
         "candidateBlockerCheckCount": 378,
         "overlappingBlockerCount": 80,
         "outputPolygonCount": 30,
         "outputHoleRingCount": 0,
-        "outputTriangleCount": 746,
+        "outputTriangleCount": 783,
         "roundedBufferFailureCount": 0,
         "flatRibbonFallbackCount": 0,
         "surfaceClipFailureCount": 0,
         "emptyShapeCount": 0,
         "invalidTriangleGeometryCount": 0
       },
-      "roadGroupTriangles": 1010,
-      "sceneStats": {},
+      "roadGroupTriangles": 1047,
+      "sceneStats": {
+        "vertices": 1375,
+        "triangles": 1049
+      },
       "integrity": {
-        "valid": false,
-        "networkCoverageRatio": 0.9995,
+        "valid": true,
+        "networkCoverageRatio": 0.9997,
         "independentExpectedUnionAreaM2": 3092.14,
-        "emittedAtGradeUnionAreaM2": 3090.67,
-        "unexplainedMissingAreaM2": 1.513,
-        "coverageDefectCount": 2,
-        "coverageDefectsByKind": {
-          "provenance_split_bend_gap": 2
-        },
-        "coverageDefectSamples": [
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/445997917-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/445997917",
-            "roadClass": "tertiary",
-            "expectedAreaM2": 869.9619093850015,
-            "ownEmittedAreaM2": 869.5543095315898,
-            "occludedByHigherPriorityAreaM2": 0.08728810000047815,
-            "unexplainedMissingAreaM2": 0.3276420349995135,
-            "sampleWorldPoint": [
-              -19.377812158399,
-              -37.07304661669949
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-20.40, -35.82) between way/445997917 and way/7376108"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/601018475-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/601018475",
-            "roadClass": "tertiary",
-            "expectedAreaM2": 190.62354269500014,
-            "ownEmittedAreaM2": 178.9088113309076,
-            "occludedByHigherPriorityAreaM2": 11.480024320000183,
-            "unexplainedMissingAreaM2": 0.24193515499999307,
-            "sampleWorldPoint": [
-              7.892729188584542,
-              33.77581385737192
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (9.26, 34.63) between way/601018475 and way/609997806"
-          }
-        ],
+        "emittedAtGradeUnionAreaM2": 3091.14,
+        "unexplainedMissingAreaM2": 1.036,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
         "coplanarOverlapCount": 0,
         "coplanarOverlapAreaM2": 0,
         "overlapsByCategory": {
@@ -2384,10 +2396,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 6.779,
-          "min": 5.641,
-          "max": 8.46,
-          "p95": 7.255
+          "median": 7.522,
+          "min": 5.727,
+          "max": 9.728,
+          "p95": 8.286
         },
         "graphBuild": {
           "median": 0,
@@ -2434,7 +2446,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 382,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 468,
+        "triangles": 384
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -2484,28 +2499,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 15.722,
-          "min": 14.41,
-          "max": 21.694,
-          "p95": 18.549
+          "median": 19.862,
+          "min": 16.347,
+          "max": 26.535,
+          "p95": 23.492
         },
         "graphBuild": {
-          "median": 1.621,
-          "min": 1.522,
-          "max": 1.907,
-          "p95": 1.851
+          "median": 2.175,
+          "min": 1.612,
+          "max": 2.728,
+          "p95": 2.435
         },
         "adapterBuild": {
-          "median": 0.376,
-          "min": 0.365,
-          "max": 0.676,
-          "p95": 0.671
+          "median": 0.567,
+          "min": 0.5,
+          "max": 0.811,
+          "p95": 0.718
         },
         "roadGenerationTotal": {
-          "median": 14.97,
-          "min": 13.978,
-          "max": 21.283,
-          "p95": 17.998
+          "median": 19.105,
+          "min": 15.59,
+          "max": 25.901,
+          "p95": 22.807
         },
         "footprintConstruction": {
           "median": 0,
@@ -2565,7 +2580,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 415,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 501,
+        "triangles": 417
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.999,
@@ -2600,52 +2618,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 34.696,
-          "min": 31.292,
-          "max": 43.691,
-          "p95": 39.453
+          "median": 28.966,
+          "min": 25.472,
+          "max": 35.848,
+          "p95": 33.402
         },
         "graphBuild": {
-          "median": 1.84,
-          "min": 1.535,
-          "max": 5.235,
-          "p95": 2.687
+          "median": 1.677,
+          "min": 1.539,
+          "max": 4.063,
+          "p95": 2.657
         },
         "adapterBuild": {
-          "median": 0.381,
-          "min": 0.352,
-          "max": 0.588,
-          "p95": 0.487
+          "median": 0.379,
+          "min": 0.361,
+          "max": 0.503,
+          "p95": 0.468
         },
         "roadGenerationTotal": {
-          "median": 34.139,
-          "min": 30.619,
-          "max": 43.18,
-          "p95": 38.964
+          "median": 28.413,
+          "min": 25.008,
+          "max": 35.291,
+          "p95": 32.787
         },
         "footprintConstruction": {
-          "median": 16.167,
-          "min": 12.417,
-          "max": 22.636,
-          "p95": 20.495
+          "median": 12.897,
+          "min": 12.284,
+          "max": 14.376,
+          "p95": 14.1
         },
         "polygonUnion": {
-          "median": 15.553,
-          "min": 11.905,
-          "max": 21.894,
-          "p95": 19.88
+          "median": 12.478,
+          "min": 11.7,
+          "max": 13.899,
+          "p95": 13.633
         },
         "ownershipClipping": {
-          "median": 13.8,
-          "min": 11.707,
-          "max": 26.606,
-          "p95": 17.017
+          "median": 13.157,
+          "min": 10.488,
+          "max": 18.185,
+          "p95": 17.162
         },
         "triangulationAndValidation": {
-          "median": 1.846,
-          "min": 1.621,
-          "max": 2.609,
-          "p95": 2.556
+          "median": 1.471,
+          "min": 1.337,
+          "max": 2.203,
+          "p95": 1.966
         }
       },
       "counters": {
@@ -2664,51 +2682,36 @@
         "provenanceSplitSegmentCount": 3,
         "generatedRectanglePrimitiveCount": 105,
         "generatedBendDiskPrimitiveCount": 45,
-        "generatedCapDiskPrimitiveCount": 57,
-        "generatedDiskPrimitiveCount": 102,
-        "generatedTotalPrimitiveCount": 207,
+        "generatedCapDiskPrimitiveCount": 59,
+        "generatedDiskPrimitiveCount": 104,
+        "generatedTotalPrimitiveCount": 209,
         "polygonUnionOperationCount": 32,
         "polygonDifferenceOperationCount": 26,
         "candidateBlockerCheckCount": 496,
         "overlappingBlockerCount": 86,
         "outputPolygonCount": 34,
         "outputHoleRingCount": 0,
-        "outputTriangleCount": 921,
+        "outputTriangleCount": 939,
         "roundedBufferFailureCount": 0,
         "flatRibbonFallbackCount": 0,
         "surfaceClipFailureCount": 0,
         "emptyShapeCount": 0,
         "invalidTriangleGeometryCount": 0
       },
-      "roadGroupTriangles": 921,
-      "sceneStats": {},
+      "roadGroupTriangles": 939,
+      "sceneStats": {
+        "vertices": 1011,
+        "triangles": 941
+      },
       "integrity": {
-        "valid": false,
-        "networkCoverageRatio": 0.9994,
+        "valid": true,
+        "networkCoverageRatio": 0.9995,
         "independentExpectedUnionAreaM2": 4283.55,
-        "emittedAtGradeUnionAreaM2": 4281,
-        "unexplainedMissingAreaM2": 2.639,
-        "coverageDefectCount": 1,
-        "coverageDefectsByKind": {
-          "provenance_split_bend_gap": 1
-        },
-        "coverageDefectSamples": [
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/601018475-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/601018475",
-            "roadClass": "tertiary",
-            "expectedAreaM2": 190.62580205499998,
-            "ownEmittedAreaM2": 178.9098942390283,
-            "occludedByHigherPriorityAreaM2": 11.480838369999958,
-            "unexplainedMissingAreaM2": 0.24178932499998496,
-            "sampleWorldPoint": [
-              15.12979080261676,
-              -29.631776000248117
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (16.50, -28.78) between way/601018475 and way/609997806"
-          }
-        ],
+        "emittedAtGradeUnionAreaM2": 4281.27,
+        "unexplainedMissingAreaM2": 2.37,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
         "coplanarOverlapCount": 0,
         "coplanarOverlapAreaM2": 0,
         "overlapsByCategory": {
@@ -2734,10 +2737,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 2.206,
-          "min": 1.813,
-          "max": 5.349,
-          "p95": 2.292
+          "median": 1.86,
+          "min": 1.779,
+          "max": 3.845,
+          "p95": 3.426
         },
         "graphBuild": {
           "median": 0,
@@ -2784,7 +2787,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 159,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 189,
+        "triangles": 161
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -2855,28 +2861,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.661,
-          "min": 3.964,
-          "max": 7.913,
-          "p95": 7.302
+          "median": 4.89,
+          "min": 4.269,
+          "max": 9.937,
+          "p95": 7.988
         },
         "graphBuild": {
-          "median": 0.923,
-          "min": 0.84,
-          "max": 1.436,
-          "p95": 1.241
+          "median": 1.079,
+          "min": 0.829,
+          "max": 1.193,
+          "p95": 1.143
         },
         "adapterBuild": {
-          "median": 0.251,
-          "min": 0.194,
-          "max": 2.526,
-          "p95": 0.511
+          "median": 0.224,
+          "min": 0.202,
+          "max": 0.337,
+          "p95": 0.276
         },
         "roadGenerationTotal": {
-          "median": 5.265,
-          "min": 3.6,
-          "max": 7.558,
-          "p95": 6.869
+          "median": 4.543,
+          "min": 3.984,
+          "max": 9.585,
+          "p95": 7.643
         },
         "footprintConstruction": {
           "median": 0,
@@ -2936,7 +2942,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 159,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 197,
+        "triangles": 161
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9995,
@@ -2971,52 +2980,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 10.922,
-          "min": 8.671,
-          "max": 19.353,
-          "p95": 15.8
+          "median": 12.438,
+          "min": 10.025,
+          "max": 19.952,
+          "p95": 14.044
         },
         "graphBuild": {
-          "median": 0.929,
-          "min": 0.869,
-          "max": 1.339,
-          "p95": 1.102
+          "median": 0.912,
+          "min": 0.885,
+          "max": 0.989,
+          "p95": 0.987
         },
         "adapterBuild": {
-          "median": 0.207,
-          "min": 0.198,
-          "max": 0.26,
-          "p95": 0.241
+          "median": 0.221,
+          "min": 0.216,
+          "max": 0.298,
+          "p95": 0.227
         },
         "roadGenerationTotal": {
-          "median": 10.535,
-          "min": 8.336,
-          "max": 18.994,
-          "p95": 15.404
+          "median": 12.019,
+          "min": 9.659,
+          "max": 19.563,
+          "p95": 13.522
         },
         "footprintConstruction": {
-          "median": 3.928,
-          "min": 3.665,
-          "max": 7.347,
-          "p95": 6.328
+          "median": 4.489,
+          "min": 4.25,
+          "max": 11.095,
+          "p95": 6.679
         },
         "polygonUnion": {
-          "median": 3.823,
-          "min": 3.577,
-          "max": 7.223,
-          "p95": 6.207
+          "median": 4.333,
+          "min": 4.145,
+          "max": 10.796,
+          "p95": 6.458
         },
         "ownershipClipping": {
-          "median": 4.359,
-          "min": 3.744,
-          "max": 6.569,
-          "p95": 5.644
+          "median": 5.939,
+          "min": 4.122,
+          "max": 7.96,
+          "p95": 6.537
         },
         "triangulationAndValidation": {
-          "median": 0.638,
-          "min": 0.534,
-          "max": 0.94,
-          "p95": 0.705
+          "median": 0.627,
+          "min": 0.548,
+          "max": 1.147,
+          "p95": 0.732
         }
       },
       "counters": {
@@ -3035,81 +3044,36 @@
         "provenanceSplitSegmentCount": 4,
         "generatedRectanglePrimitiveCount": 46,
         "generatedBendDiskPrimitiveCount": 10,
-        "generatedCapDiskPrimitiveCount": 23,
-        "generatedDiskPrimitiveCount": 33,
-        "generatedTotalPrimitiveCount": 79,
+        "generatedCapDiskPrimitiveCount": 27,
+        "generatedDiskPrimitiveCount": 37,
+        "generatedTotalPrimitiveCount": 83,
         "polygonUnionOperationCount": 16,
         "polygonDifferenceOperationCount": 13,
         "candidateBlockerCheckCount": 114,
         "overlappingBlockerCount": 36,
         "outputPolygonCount": 14,
         "outputHoleRingCount": 0,
-        "outputTriangleCount": 359,
+        "outputTriangleCount": 365,
         "roundedBufferFailureCount": 0,
         "flatRibbonFallbackCount": 0,
         "surfaceClipFailureCount": 0,
         "emptyShapeCount": 0,
         "invalidTriangleGeometryCount": 0
       },
-      "roadGroupTriangles": 359,
-      "sceneStats": {},
+      "roadGroupTriangles": 365,
+      "sceneStats": {
+        "vertices": 397,
+        "triangles": 367
+      },
       "integrity": {
-        "valid": false,
-        "networkCoverageRatio": 0.9992,
+        "valid": true,
+        "networkCoverageRatio": 0.9996,
         "independentExpectedUnionAreaM2": 3123.81,
-        "emittedAtGradeUnionAreaM2": 3121.18,
-        "unexplainedMissingAreaM2": 2.693,
-        "coverageDefectCount": 3,
-        "coverageDefectsByKind": {
-          "provenance_split_bend_gap": 3
-        },
-        "coverageDefectSamples": [
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1510044772-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1510044772",
-            "roadClass": "primary",
-            "expectedAreaM2": 401.5800449650004,
-            "ownEmittedAreaM2": 400.6198024729829,
-            "occludedByHigherPriorityAreaM2": 0.15624048499995524,
-            "unexplainedMissingAreaM2": 0.8162667700000839,
-            "sampleWorldPoint": [
-              -39.148152595398685,
-              -5.855554039873464
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-38.77, -8.04) between way/1510044772 and way/287963191"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1510044777-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1510044777",
-            "roadClass": "unclassified",
-            "expectedAreaM2": 45.961387005,
-            "ownEmittedAreaM2": 13.715340871838748,
-            "occludedByHigherPriorityAreaM2": 31.743842239999996,
-            "unexplainedMissingAreaM2": 0.5022050500000077,
-            "sampleWorldPoint": [
-              9.11578217805813,
-              5.58226354406448
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.89, 4.70) between way/1510044777 and way/1535707895"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1513244486-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1513244486",
-            "roadClass": "unclassified",
-            "expectedAreaM2": 112.36257174999997,
-            "ownEmittedAreaM2": 97.1754098846541,
-            "occludedByHigherPriorityAreaM2": 14.78958661499999,
-            "unexplainedMissingAreaM2": 0.4036973249998612,
-            "sampleWorldPoint": [
-              6.125069162364051,
-              -20.91488302344855
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.16, -19.81) between way/1513244486 and way/7375286"
-          }
-        ],
+        "emittedAtGradeUnionAreaM2": 3122.5,
+        "unexplainedMissingAreaM2": 1.381,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
         "coplanarOverlapCount": 0,
         "coplanarOverlapAreaM2": 0,
         "overlapsByCategory": {
@@ -3135,10 +3099,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 23.278,
-          "min": 19.941,
-          "max": 28.996,
-          "p95": 28.593
+          "median": 21.254,
+          "min": 19.289,
+          "max": 40.466,
+          "p95": 26.923
         },
         "graphBuild": {
           "median": 0,
@@ -3185,7 +3149,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 667,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 858,
+        "triangles": 669
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -3256,28 +3223,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 41.254,
-          "min": 38.719,
-          "max": 48.975,
-          "p95": 47.935
+          "median": 59.529,
+          "min": 47.47,
+          "max": 71.907,
+          "p95": 67.667
         },
         "graphBuild": {
-          "median": 3.078,
-          "min": 3.04,
-          "max": 5.026,
-          "p95": 4.471
+          "median": 3.404,
+          "min": 3.172,
+          "max": 7.139,
+          "p95": 6.672
         },
         "adapterBuild": {
-          "median": 0.784,
-          "min": 0.631,
-          "max": 1.136,
-          "p95": 0.98
+          "median": 0.962,
+          "min": 0.765,
+          "max": 2.556,
+          "p95": 1.649
         },
         "roadGenerationTotal": {
-          "median": 40.642,
-          "min": 38.155,
-          "max": 48.384,
-          "p95": 47.151
+          "median": 58.563,
+          "min": 46.546,
+          "max": 70.938,
+          "p95": 66.795
         },
         "footprintConstruction": {
           "median": 0,
@@ -3337,7 +3304,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 810,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 1038,
+        "triangles": 812
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.959,
@@ -3466,52 +3436,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 79.163,
-          "min": 72.548,
-          "max": 93.344,
-          "p95": 84.901
+          "median": 90.115,
+          "min": 84.615,
+          "max": 97.166,
+          "p95": 96.18
         },
         "graphBuild": {
-          "median": 3.411,
-          "min": 2.855,
-          "max": 4.276,
-          "p95": 3.572
+          "median": 3.315,
+          "min": 2.959,
+          "max": 4.624,
+          "p95": 3.895
         },
         "adapterBuild": {
-          "median": 1.142,
-          "min": 0.741,
-          "max": 2.166,
-          "p95": 1.736
+          "median": 0.911,
+          "min": 0.792,
+          "max": 1.453,
+          "p95": 1.334
         },
         "roadGenerationTotal": {
-          "median": 78.52,
-          "min": 71.915,
-          "max": 92.647,
-          "p95": 83.993
+          "median": 89.423,
+          "min": 83.856,
+          "max": 96.485,
+          "p95": 95.372
         },
         "footprintConstruction": {
-          "median": 28.196,
-          "min": 22.423,
-          "max": 33.741,
-          "p95": 30.975
+          "median": 28.688,
+          "min": 25.858,
+          "max": 40.659,
+          "p95": 36.547
         },
         "polygonUnion": {
-          "median": 27.541,
-          "min": 21.836,
-          "max": 32.8,
-          "p95": 30.32
+          "median": 27.997,
+          "min": 25.173,
+          "max": 39.26,
+          "p95": 35.853
         },
         "ownershipClipping": {
-          "median": 44.544,
-          "min": 35.178,
-          "max": 52.343,
-          "p95": 49.954
+          "median": 51.486,
+          "min": 44.62,
+          "max": 58.624,
+          "p95": 53.089
         },
         "triangulationAndValidation": {
-          "median": 4.174,
-          "min": 3.432,
-          "max": 6.395,
-          "p95": 4.882
+          "median": 5.072,
+          "min": 3.667,
+          "max": 8.172,
+          "p95": 6.314
         }
       },
       "counters": {
@@ -3530,96 +3500,36 @@
         "provenanceSplitSegmentCount": 9,
         "generatedRectanglePrimitiveCount": 202,
         "generatedBendDiskPrimitiveCount": 66,
-        "generatedCapDiskPrimitiveCount": 161,
-        "generatedDiskPrimitiveCount": 227,
-        "generatedTotalPrimitiveCount": 429,
+        "generatedCapDiskPrimitiveCount": 166,
+        "generatedDiskPrimitiveCount": 232,
+        "generatedTotalPrimitiveCount": 434,
         "polygonUnionOperationCount": 92,
         "polygonDifferenceOperationCount": 85,
         "candidateBlockerCheckCount": 4148,
-        "overlappingBlockerCount": 345,
-        "outputPolygonCount": 100,
+        "overlappingBlockerCount": 349,
+        "outputPolygonCount": 101,
         "outputHoleRingCount": 0,
-        "outputTriangleCount": 1904,
+        "outputTriangleCount": 1965,
         "roundedBufferFailureCount": 0,
         "flatRibbonFallbackCount": 0,
         "surfaceClipFailureCount": 0,
         "emptyShapeCount": 0,
         "invalidTriangleGeometryCount": 0
       },
-      "roadGroupTriangles": 1904,
-      "sceneStats": {},
+      "roadGroupTriangles": 1965,
+      "sceneStats": {
+        "vertices": 2179,
+        "triangles": 1967
+      },
       "integrity": {
         "valid": false,
-        "networkCoverageRatio": 0.9995,
+        "networkCoverageRatio": 0.9997,
         "independentExpectedUnionAreaM2": 6237.11,
-        "emittedAtGradeUnionAreaM2": 6233.94,
-        "unexplainedMissingAreaM2": 3.247,
-        "coverageDefectCount": 4,
-        "coverageDefectsByKind": {
-          "provenance_split_bend_gap": 4
-        },
-        "coverageDefectSamples": [
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1374152347-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1374152347",
-            "roadClass": "footway",
-            "expectedAreaM2": 17.399086794999974,
-            "ownEmittedAreaM2": 18.903224051609754,
-            "occludedByHigherPriorityAreaM2": 7.75731651000001,
-            "unexplainedMissingAreaM2": 0.15345256000000518,
-            "sampleWorldPoint": [
-              8.698484364525351,
-              46.56658458326582
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (8.26, 45.75) between way/1374152347 and way/1576579934"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1374152348-0:seg_1:p_0#seg0",
-            "sourceFeatureId": "way/1374152348",
-            "roadClass": "footway",
-            "expectedAreaM2": 150.91820540999908,
-            "ownEmittedAreaM2": 38.60625783573414,
-            "occludedByHigherPriorityAreaM2": 120.29403676999914,
-            "unexplainedMissingAreaM2": 0.8886634250000611,
-            "sampleWorldPoint": [
-              17.04825269273149,
-              51.59921112436721
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (17.75, 51.00) between way/1374152348 and way/1426273688"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1375802562-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1375802562",
-            "roadClass": "footway",
-            "expectedAreaM2": 10.403452475000051,
-            "ownEmittedAreaM2": 2.040845394740245,
-            "occludedByHigherPriorityAreaM2": 8.182147340000029,
-            "unexplainedMissingAreaM2": 0.18892042999999603,
-            "sampleWorldPoint": [
-              8.428236044306987,
-              49.889406549734424
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.52, 50.04) between way/1375802562 and way/1576579935"
-          },
-          {
-            "kind": "provenance_split_bend_gap",
-            "featureId": "road_edge:way/1375802573-0:seg_0:p_0#seg0",
-            "sourceFeatureId": "way/1375802573",
-            "roadClass": "footway",
-            "expectedAreaM2": 99.73318546000053,
-            "ownEmittedAreaM2": 98.12411441277436,
-            "occludedByHigherPriorityAreaM2": 9.262235685000576,
-            "unexplainedMissingAreaM2": 0.23546065000005,
-            "sampleWorldPoint": [
-              59.08598921677475,
-              47.283928017888904
-            ],
-            "description": "Outer-corner wedge gap detected at internal provenance split vertex (58.78, 48.16) between way/1375802573 and way/1375870561"
-          }
-        ],
+        "emittedAtGradeUnionAreaM2": 6235.44,
+        "unexplainedMissingAreaM2": 1.752,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
         "coplanarOverlapCount": 2,
         "coplanarOverlapAreaM2": 0.0312,
         "overlapsByCategory": {
@@ -3645,10 +3555,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 5.541,
-          "min": 3.638,
-          "max": 7.985,
-          "p95": 5.833
+          "median": 8.513,
+          "min": 6.257,
+          "max": 15.379,
+          "p95": 10.61
         },
         "graphBuild": {
           "median": 0,
@@ -3695,7 +3605,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 584,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 976,
+        "triangles": 586
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 1,
@@ -3730,28 +3643,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 6.111,
-          "min": 5.599,
-          "max": 7.948,
-          "p95": 7.753
+          "median": 8.558,
+          "min": 6.287,
+          "max": 14.278,
+          "p95": 11.447
         },
         "graphBuild": {
-          "median": 1.159,
-          "min": 1.11,
-          "max": 2.627,
-          "p95": 1.52
+          "median": 1.289,
+          "min": 1.164,
+          "max": 2.612,
+          "p95": 1.887
         },
         "adapterBuild": {
-          "median": 0.27,
-          "min": 0.26,
-          "max": 1.809,
-          "p95": 0.284
+          "median": 0.286,
+          "min": 0.27,
+          "max": 0.519,
+          "p95": 0.353
         },
         "roadGenerationTotal": {
-          "median": 5.662,
-          "min": 5.121,
-          "max": 7.454,
-          "p95": 7.261
+          "median": 7.921,
+          "min": 5.784,
+          "max": 13.397,
+          "p95": 10.833
         },
         "footprintConstruction": {
           "median": 0,
@@ -3811,7 +3724,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 599,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 989,
+        "triangles": 601
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.9955,
@@ -3864,52 +3780,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 16.846,
-          "min": 15.37,
-          "max": 21.957,
-          "p95": 17.063
+          "median": 24.735,
+          "min": 18.302,
+          "max": 34.232,
+          "p95": 30.91
         },
         "graphBuild": {
-          "median": 1.149,
-          "min": 1.111,
-          "max": 3.593,
-          "p95": 1.568
+          "median": 1.654,
+          "min": 1.228,
+          "max": 3.459,
+          "p95": 2.753
         },
         "adapterBuild": {
-          "median": 0.265,
-          "min": 0.258,
-          "max": 0.325,
-          "p95": 0.32
+          "median": 0.309,
+          "min": 0.286,
+          "max": 1.16,
+          "p95": 0.536
         },
         "roadGenerationTotal": {
-          "median": 16.309,
-          "min": 14.865,
-          "max": 21.402,
-          "p95": 16.539
+          "median": 23.859,
+          "min": 17.345,
+          "max": 33.481,
+          "p95": 29.488
         },
         "footprintConstruction": {
-          "median": 8.378,
-          "min": 6.16,
-          "max": 8.925,
-          "p95": 8.673
+          "median": 9.522,
+          "min": 8.224,
+          "max": 19.495,
+          "p95": 11.698
         },
         "polygonUnion": {
-          "median": 8.18,
-          "min": 6,
-          "max": 8.76,
-          "p95": 8.486
+          "median": 9.324,
+          "min": 8.024,
+          "max": 19.278,
+          "p95": 11.504
         },
         "ownershipClipping": {
-          "median": 7.51,
-          "min": 5.85,
-          "max": 11.552,
-          "p95": 8.281
+          "median": 9.819,
+          "min": 6.633,
+          "max": 19.659,
+          "p95": 12.87
         },
         "triangulationAndValidation": {
-          "median": 0.876,
-          "min": 0.824,
-          "max": 1.073,
-          "p95": 0.954
+          "median": 1.201,
+          "min": 0.949,
+          "max": 4.903,
+          "p95": 1.397
         }
       },
       "counters": {
@@ -3945,7 +3861,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 936,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 1318,
+        "triangles": 938
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9997,
@@ -3980,10 +3899,10 @@
       "rendererMode": "legacy",
       "timingMs": {
         "sceneBuild": {
-          "median": 36.986,
-          "min": 36.313,
-          "max": 38.962,
-          "p95": 38.525
+          "median": 36.957,
+          "min": 36.567,
+          "max": 41.17,
+          "p95": 39.595
         },
         "graphBuild": {
           "median": 0,
@@ -4030,7 +3949,10 @@
       },
       "counters": null,
       "roadGroupTriangles": 1342,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 1994,
+        "triangles": 1344
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 1,
@@ -4065,28 +3987,28 @@
       "rendererMode": "graph",
       "timingMs": {
         "sceneBuild": {
-          "median": 53.884,
-          "min": 47.111,
-          "max": 67.178,
-          "p95": 60.805
+          "median": 60.544,
+          "min": 45.127,
+          "max": 75.516,
+          "p95": 73.772
         },
         "graphBuild": {
-          "median": 4.632,
-          "min": 3.67,
-          "max": 6.248,
-          "p95": 5.688
+          "median": 5.414,
+          "min": 3.918,
+          "max": 6.213,
+          "p95": 5.928
         },
         "adapterBuild": {
-          "median": 1.207,
-          "min": 0.865,
-          "max": 5.653,
-          "p95": 1.239
+          "median": 1.227,
+          "min": 1.055,
+          "max": 1.593,
+          "p95": 1.26
         },
         "roadGenerationTotal": {
-          "median": 53.148,
-          "min": 46.343,
-          "max": 66.39,
-          "p95": 60.028
+          "median": 59.707,
+          "min": 44.304,
+          "max": 74.61,
+          "p95": 72.905
         },
         "footprintConstruction": {
           "median": 0,
@@ -4146,7 +4068,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 1226,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 1804,
+        "triangles": 1228
+      },
       "integrity": {
         "valid": false,
         "networkCoverageRatio": 0.996,
@@ -4259,52 +4184,52 @@
       "rendererMode": "graph-surface",
       "timingMs": {
         "sceneBuild": {
-          "median": 82.076,
-          "min": 72.212,
-          "max": 121.239,
-          "p95": 109.208
+          "median": 88.285,
+          "min": 83.867,
+          "max": 96.28,
+          "p95": 91.915
         },
         "graphBuild": {
-          "median": 4.943,
-          "min": 3.762,
-          "max": 9.448,
-          "p95": 5.808
+          "median": 5.831,
+          "min": 4.437,
+          "max": 7.543,
+          "p95": 5.943
         },
         "adapterBuild": {
-          "median": 1.348,
-          "min": 1.056,
-          "max": 3.736,
-          "p95": 3.538
+          "median": 1.421,
+          "min": 1.181,
+          "max": 2.268,
+          "p95": 1.568
         },
         "roadGenerationTotal": {
-          "median": 81.212,
-          "min": 71.439,
-          "max": 119.911,
-          "p95": 103.249
+          "median": 87.389,
+          "min": 80.743,
+          "max": 95.35,
+          "p95": 90.129
         },
         "footprintConstruction": {
-          "median": 24.966,
-          "min": 18.756,
-          "max": 34.728,
-          "p95": 28.013
+          "median": 25.299,
+          "min": 22.462,
+          "max": 26.989,
+          "p95": 25.765
         },
         "polygonUnion": {
-          "median": 24.269,
-          "min": 18.083,
-          "max": 33.881,
-          "p95": 27.315
+          "median": 24.5,
+          "min": 21.645,
+          "max": 26.076,
+          "p95": 24.892
         },
         "ownershipClipping": {
-          "median": 45.541,
-          "min": 43.222,
-          "max": 73.665,
-          "p95": 64.697
+          "median": 54.529,
+          "min": 46.58,
+          "max": 57.376,
+          "p95": 55.913
         },
         "triangulationAndValidation": {
-          "median": 5.383,
-          "min": 3.459,
-          "max": 8.265,
-          "p95": 5.917
+          "median": 4.555,
+          "min": 3.865,
+          "max": 9.123,
+          "p95": 8.599
         }
       },
       "counters": {
@@ -4340,7 +4265,10 @@
         "invalidTriangleGeometryCount": 0
       },
       "roadGroupTriangles": 1734,
-      "sceneStats": {},
+      "sceneStats": {
+        "vertices": 2140,
+        "triangles": 1736
+      },
       "integrity": {
         "valid": true,
         "networkCoverageRatio": 0.9999,

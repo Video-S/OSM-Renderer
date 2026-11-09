@@ -8,7 +8,7 @@
 
 > **isNonVehicularRoadClass**(`roadClass`): `boolean`
 
-Defined in: world/ElevationPolicy.ts:116
+Defined in: world/ElevationPolicy.ts:117
 
 Helper to determine if a RoadClass belongs to the non-vehicular path/pedestrian category.
 Used for semantic categorization, width rules, and 2D carriageway clipping priority

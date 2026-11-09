@@ -8,7 +8,7 @@
 
 > **getLanduseElevationAndOffset**(`subtype`): `object`
 
-Defined in: world/ElevationPolicy.ts:288
+Defined in: world/ElevationPolicy.ts:289
 
 Returns the physical Y-elevation, renderOrder, and depth bias config for a landuse subtype.
 All ordinary ground-cover fills share the uniform flush GROUND_COVER_SURFACE (+0.025m),

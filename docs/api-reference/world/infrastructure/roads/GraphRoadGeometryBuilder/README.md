@@ -9,6 +9,7 @@
 ## Interfaces
 
 - [GraphRoadDegenerateTriangleDefect](interfaces/GraphRoadDegenerateTriangleDefect.md)
+- [GraphRoadGenerationTiming](interfaces/GraphRoadGenerationTiming.md)
 - [GraphRoadGeometryBuildOptions](interfaces/GraphRoadGeometryBuildOptions.md)
 - [GraphRoadGeometryBuildResult](interfaces/GraphRoadGeometryBuildResult.md)
 - [GraphRoadMeshIntegrityReport](interfaces/GraphRoadMeshIntegrityReport.md)

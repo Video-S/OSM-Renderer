@@ -8,4 +8,4 @@
 
 > `const` **ROAD\_CLASS\_MAP**: `Record`\<`string`, \{ `label`: `string`; `roadClass`: [`RoadClass`](../../../types/MapFeature/type-aliases/RoadClass.md); \}\>
 
-Defined in: world/FeatureCatalogue.ts:225
+Defined in: world/FeatureCatalogue.ts:226

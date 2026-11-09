@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import polygonClipping from 'polygon-clipping';
 import { proposeRoundedPathJunctionOutline } from './PathJunctionCornerSmoothing';
-import { bufferSurfaceFirstRoadCenterline } from './SurfaceFirstRoadFootprints';
+import {
+  bufferSurfaceFirstRoadCenterline,
+  type SurfaceFirstBufferInstrumentation,
+} from './SurfaceFirstRoadFootprints';
 import {
   InspectableFeatureInfo,
   ProcessedMapData,
@@ -413,7 +416,27 @@ export function auditGraphRoadMeshIntegrity(
 }
 
 /**
- * Diagnostic and benchmark counters emitted by the Stage E2 graph-driven road geometry builder.
+ * High-resolution wall-clock timing breakdown (`ms`) for at-grade road geometry generation.
+ * Stored separately from `GraphRoadRenderStats` so deterministic counter snapshots remain
+ * bit-for-bit identical across runs.
+ */
+export interface GraphRoadGenerationTiming {
+  /** Total wall-clock time (`ms`) spent inside `buildGraphAtGradeRoadGeometries`. */
+  totalRoadGenerationTimeMs: number;
+  /** Wall-clock time (`ms`) spent constructing rounded stroke footprints (primitive setup + union). */
+  footprintConstructionTimeMs: number;
+  /** Wall-clock time (`ms`) spent constructing segment rectangle and disk primitives prior to union. */
+  primitiveConstructionTimeMs: number;
+  /** Wall-clock time (`ms`) spent inside `polygonClipping.union` during footprint buffering. */
+  polygonUnionTimeMs: number;
+  /** Wall-clock time (`ms`) spent in bbox blocker checks and `polygonClipping.difference` ownership clipping. */
+  ownershipClippingTimeMs: number;
+  /** Wall-clock time (`ms`) spent in `createShapesFromMultiPolygon`, `ShapeGeometry`, and `validateAndPruneHorizontalGeometry`. */
+  triangulationAndValidationTimeMs: number;
+}
+
+/**
+ * Diagnostic and benchmark counters emitted by the Stage E2 / E2+ graph-driven road geometry builder.
  */
 export interface GraphRoadRenderStats {
   /** Total road node descriptors in the input adapter bundle. */
@@ -422,6 +445,8 @@ export interface GraphRoadRenderStats {
   inputRoadEdgeCount: number;
   /** Number of road edge descriptors eligible for at-grade ribbon construction (`isAtGradeBuildable`). */
   atGradeRoadEdgeCount: number;
+  /** Total provenance sub-segments processed in the road surface emission pass. */
+  processedProvenanceSegmentCount: number;
   /** Total rendered at-grade road/path ribbon geometry items emitted (including provenance sub-segments). */
   renderedRoadRibbonCount: number;
   /** Total rendered junction polygon geometry items emitted (vehicular + path junctions). */
@@ -440,6 +465,40 @@ export interface GraphRoadRenderStats {
   fullySubtractedCount: number;
   /** Number of additional sub-segments produced by splitting simplified edges at provenance boundaries. */
   provenanceSplitSegmentCount: number;
+  /** Number of segment rectangle primitives generated during E2+ rounded footprint buffering. */
+  generatedRectanglePrimitiveCount: number;
+  /** Number of interior bend disk primitives generated during E2+ rounded footprint buffering. */
+  generatedBendDiskPrimitiveCount: number;
+  /** Number of endpoint or closed-loop cap disk primitives generated during E2+ rounded footprint buffering. */
+  generatedCapDiskPrimitiveCount: number;
+  /** Total disk primitives (`generatedBendDiskPrimitiveCount + generatedCapDiskPrimitiveCount`) generated in E2+. */
+  generatedDiskPrimitiveCount: number;
+  /** Total rectangle and disk primitives generated during E2+ rounded footprint buffering. */
+  generatedTotalPrimitiveCount: number;
+  /** Number of `polygonClipping.union` operations invoked during road geometry generation. */
+  polygonUnionOperationCount: number;
+  /** Number of `polygonClipping.difference` operations invoked during ownership clipping. */
+  polygonDifferenceOperationCount: number;
+  /** Total placed-footprint bounding-box candidate checks evaluated during ownership clipping. */
+  candidateBlockerCheckCount: number;
+  /** Number of candidate footprints whose bounding box overlapped and were passed to Boolean clipping. */
+  overlappingBlockerCount: number;
+  /** Total outer polygon components across all emitted at-grade road/junction surfaces. */
+  outputPolygonCount: number;
+  /** Total interior hole rings across all emitted at-grade road/junction surfaces. */
+  outputHoleRingCount: number;
+  /** Total indexed triangles emitted across all at-grade road, step-tread, and junction geometries. */
+  outputTriangleCount: number;
+  /** Number of E2+ rounded buffer construction failures (`e2plus_rounded_buffer_failed`). */
+  roundedBufferFailureCount: number;
+  /** Number of E2+ flat ribbon fallbacks (`e2plus_flat_ribbon_fallback`). */
+  flatRibbonFallbackCount: number;
+  /** Number of E2+ surface ownership clipping failures (`e2plus_surface_clip_failed`). */
+  surfaceClipFailureCount: number;
+  /** Number of E2+ empty `THREE.Shape` conversions (`e2plus_empty_shapes`). */
+  emptyShapeCount: number;
+  /** Number of E2+ triangulated geometries rejected by `validateAndPruneHorizontalGeometry` (`e2plus_invalid_triangles`). */
+  invalidTriangleGeometryCount: number;
 }
 
 /**
@@ -461,7 +520,7 @@ export interface GraphRoadGeometryBuildOptions {
 }
 
 /**
- * Output of `buildGraphAtGradeRoadGeometries` consumed by `GeometryBuilder.buildScene()` when `roads === 'graph'`.
+ * Output of `buildGraphAtGradeRoadGeometries` consumed by `GeometryBuilder.buildScene()` when `roads === 'graph' | 'graph-surface'`.
  */
 export interface GraphRoadGeometryBuildResult {
   /** Per-class arrays of registered `BufferGeometry` + `InspectableFeatureInfo` items (ribbons, treads, junctions). */
@@ -472,8 +531,10 @@ export interface GraphRoadGeometryBuildResult {
   renderedSourceIds: Set<string>;
   /** Set of edge/source feature IDs completely subtracted by 2D Boolean clipping. */
   fullySubtractedRoadIds: Set<string>;
-  /** Detailed Stage E2 graph-road rendering statistics. */
+  /** Deterministic Stage E2 / E2+ graph-road rendering statistics and operation counters. */
   stats: GraphRoadRenderStats;
+  /** High-resolution wall-clock timing breakdown (`ms`) for this road generation pass. */
+  timing: GraphRoadGenerationTiming;
 }
 
 interface PortalSpec {
@@ -2259,10 +2320,29 @@ export function buildGraphAtGradeRoadGeometries(
   } = options;
   const surfaceFirst = options.surfaceFirst === true;
 
+  const tTotalStart = performance.now();
+  const timing: GraphRoadGenerationTiming = {
+    totalRoadGenerationTimeMs: 0,
+    footprintConstructionTimeMs: 0,
+    primitiveConstructionTimeMs: 0,
+    polygonUnionTimeMs: 0,
+    ownershipClippingTimeMs: 0,
+    triangulationAndValidationTimeMs: 0,
+  };
+  const bufferInstrumentation: SurfaceFirstBufferInstrumentation = {
+    rectanglePrimitiveCount: 0,
+    bendDiskPrimitiveCount: 0,
+    capDiskPrimitiveCount: 0,
+    unionOperationCount: 0,
+    primitiveConstructionTimeMs: 0,
+    polygonUnionTimeMs: 0,
+  };
+
   const stats: GraphRoadRenderStats = {
     inputRoadNodeCount: descriptors.roadNodes.length,
     inputRoadEdgeCount: descriptors.roadEdges.length,
     atGradeRoadEdgeCount: 0,
+    processedProvenanceSegmentCount: 0,
     renderedRoadRibbonCount: 0,
     renderedJunctionCount: 0,
     branchingJunctionCount: 0,
@@ -2272,6 +2352,23 @@ export function buildGraphAtGradeRoadGeometries(
     rejectedOrDegenerateCount: 0,
     fullySubtractedCount: 0,
     provenanceSplitSegmentCount: 0,
+    generatedRectanglePrimitiveCount: 0,
+    generatedBendDiskPrimitiveCount: 0,
+    generatedCapDiskPrimitiveCount: 0,
+    generatedDiskPrimitiveCount: 0,
+    generatedTotalPrimitiveCount: 0,
+    polygonUnionOperationCount: 0,
+    polygonDifferenceOperationCount: 0,
+    candidateBlockerCheckCount: 0,
+    overlappingBlockerCount: 0,
+    outputPolygonCount: 0,
+    outputHoleRingCount: 0,
+    outputTriangleCount: 0,
+    roundedBufferFailureCount: 0,
+    flatRibbonFallbackCount: 0,
+    surfaceClipFailureCount: 0,
+    emptyShapeCount: 0,
+    invalidTriangleGeometryCount: 0,
   };
 
   const roadsByClass = new Map<
@@ -3037,6 +3134,8 @@ export function buildGraphAtGradeRoadGeometries(
         let activeStartPortal = sub.startPortal;
         let activeEndPortal = sub.endPortal;
 
+        stats.processedProvenanceSegmentCount++;
+
         const isClosedSubLoop =
           pts.length >= 4 &&
           Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) <
@@ -3061,14 +3160,21 @@ export function buildGraphAtGradeRoadGeometries(
 
           let stroke: MultiPolygonCoords = [];
           try {
-            stroke = bufferSurfaceFirstRoadCenterline(pts, width, { capStart, capEnd });
+            stroke = bufferSurfaceFirstRoadCenterline(
+              pts,
+              width,
+              { capStart, capEnd },
+              bufferInstrumentation
+            );
           } catch {
+            stats.roundedBufferFailureCount++;
             recordGraphRoadDiagnostic(diagnostics, 'e2plus_rounded_buffer_failed', sub.subId);
           }
           if (stroke.length === 0) {
             const fallback = buildRoadRibbonOutlineRing(cleanPolylineForClipping(pts), width);
             if (fallback && fallback[0] && !hasRingSelfIntersection(fallback[0])) {
               stroke = [fallback];
+              stats.flatRibbonFallbackCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_flat_ribbon_fallback', sub.subId);
             } else {
               stats.rejectedOrDegenerateCount++;
@@ -3076,22 +3182,29 @@ export function buildGraphAtGradeRoadGeometries(
             }
           }
 
+          const tClipStart = performance.now();
           const ptsOnSurface = stroke.flatMap((polygon) => polygon.flat());
           const minX = Math.min(...ptsOnSurface.map((p) => p[0]));
           const maxX = Math.max(...ptsOnSurface.map((p) => p[0]));
           const minZ = Math.min(...ptsOnSurface.map((p) => p[1]));
           const maxZ = Math.max(...ptsOnSurface.map((p) => p[1]));
+          stats.candidateBlockerCheckCount += placedRoadFootprints.length;
           const blockers = placedRoadFootprints.filter((fp) =>
             (isPath || !fp.isPath) && fp.maxX > minX && fp.minX < maxX &&
             fp.maxZ > minZ && fp.minZ < maxZ
           );
+          stats.overlappingBlockerCount += blockers.length;
           try {
+            if (blockers.length > 0) {
+              stats.polygonDifferenceOperationCount++;
+            }
             const visible = blockers.length > 0
               ? filterDegenerateBooleanArtifacts(polygonClipping.difference(
                   stroke as unknown as polygonClipping.Geom,
                   ...(blockers.map((fp) => fp.poly) as unknown as polygonClipping.Geom[])
                 ) as unknown as MultiPolygonCoords)
               : stroke;
+            timing.ownershipClippingTimeMs += performance.now() - tClipStart;
             if (visible.length === 0) {
               stats.fullySubtractedCount++;
               fullySubtractedRoadIds.add(sub.subId);
@@ -3099,8 +3212,11 @@ export function buildGraphAtGradeRoadGeometries(
               for (const sid of sids) fullySubtractedRoadIds.add(sid);
               continue;
             }
+            const tTriStart = performance.now();
             const shapes = createShapesFromMultiPolygon(visible);
             if (shapes.length === 0) {
+              timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
+              stats.emptyShapeCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
               continue;
@@ -3110,13 +3226,22 @@ export function buildGraphAtGradeRoadGeometries(
             geo.translate(0, roadElevation, 0);
             if (geo.hasAttribute('uv')) geo.deleteAttribute('uv');
             if (!validateAndPruneHorizontalGeometry(geo)) {
+              timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
               geo.dispose();
+              stats.invalidTriangleGeometryCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
               continue;
             }
+            timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
             resourceManager.registerGeometry(geo);
             registerRoadFootprint(sub.subId, isPath, visible);
+            stats.outputPolygonCount += visible.length;
+            for (const poly of visible) {
+              if (poly.length > 1) {
+                stats.outputHoleRingCount += poly.length - 1;
+              }
+            }
             const name = typeof sub.seg.osmTags?.name === 'string'
               ? sub.seg.osmTags.name.trim() : edge.name;
             const cartoLabel = formatRoadCartoLabel(edge.roadClass);
@@ -3154,6 +3279,8 @@ export function buildGraphAtGradeRoadGeometries(
               }
             }
           } catch {
+            timing.ownershipClippingTimeMs += performance.now() - tClipStart;
+            stats.surfaceClipFailureCount++;
             stats.rejectedOrDegenerateCount++;
             recordGraphRoadDiagnostic(diagnostics, 'e2plus_surface_clip_failed', sub.subId);
           }
@@ -3686,11 +3813,53 @@ export function buildGraphAtGradeRoadGeometries(
     roadsByClass.get(roadClass)!.push(...items);
   });
 
+  // Finalize aggregate primitive, polygon, triangle, and timing counters
+  if (surfaceFirst) {
+    stats.generatedRectanglePrimitiveCount = bufferInstrumentation.rectanglePrimitiveCount;
+    stats.generatedBendDiskPrimitiveCount = bufferInstrumentation.bendDiskPrimitiveCount;
+    stats.generatedCapDiskPrimitiveCount = bufferInstrumentation.capDiskPrimitiveCount;
+    stats.generatedDiskPrimitiveCount =
+      bufferInstrumentation.bendDiskPrimitiveCount + bufferInstrumentation.capDiskPrimitiveCount;
+    stats.generatedTotalPrimitiveCount =
+      stats.generatedRectanglePrimitiveCount + stats.generatedDiskPrimitiveCount;
+    stats.polygonUnionOperationCount = bufferInstrumentation.unionOperationCount;
+    timing.primitiveConstructionTimeMs = bufferInstrumentation.primitiveConstructionTimeMs;
+    timing.polygonUnionTimeMs = bufferInstrumentation.polygonUnionTimeMs;
+    timing.footprintConstructionTimeMs =
+      bufferInstrumentation.primitiveConstructionTimeMs + bufferInstrumentation.polygonUnionTimeMs;
+  } else {
+    for (const fp of placedRoadFootprints) {
+      stats.outputPolygonCount += fp.poly.length;
+      for (const poly of fp.poly) {
+        if (poly.length > 1) {
+          stats.outputHoleRingCount += poly.length - 1;
+        }
+      }
+    }
+  }
+
+  let totalEmittedTriangles = 0;
+  roadsByClass.forEach((items) => {
+    for (const item of items) {
+      const idx = item.geom.getIndex();
+      const pos = item.geom.getAttribute('position');
+      const triCount = idx
+        ? Math.floor(idx.count / 3)
+        : pos
+          ? Math.floor(pos.count / 3)
+          : 0;
+      totalEmittedTriangles += triCount;
+    }
+  });
+  stats.outputTriangleCount = totalEmittedTriangles;
+  timing.totalRoadGenerationTimeMs = performance.now() - tTotalStart;
+
   return {
     roadsByClass,
     atGradeRoadEndpoints,
     renderedSourceIds,
     fullySubtractedRoadIds,
     stats,
+    timing,
   };
 }

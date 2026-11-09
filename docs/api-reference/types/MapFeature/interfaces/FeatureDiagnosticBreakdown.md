@@ -6,7 +6,7 @@
 
 # Interface: FeatureDiagnosticBreakdown
 
-Defined in: types/MapFeature.ts:404
+Defined in: types/MapFeature.ts:405
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:404
 
 > **count**: `number`
 
-Defined in: types/MapFeature.ts:405
+Defined in: types/MapFeature.ts:406
 
 ***
 
@@ -22,4 +22,4 @@ Defined in: types/MapFeature.ts:405
 
 > **sampleIds**: `string`[]
 
-Defined in: types/MapFeature.ts:406
+Defined in: types/MapFeature.ts:407

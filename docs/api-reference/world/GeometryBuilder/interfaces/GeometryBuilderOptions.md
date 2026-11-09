@@ -6,7 +6,7 @@
 
 # Interface: GeometryBuilderOptions
 
-Defined in: world/GeometryBuilder.ts:116
+Defined in: world/GeometryBuilder.ts:154
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:116
 
 > `optional` **bevelEnabled?**: `boolean`
 
-Defined in: world/GeometryBuilder.ts:119
+Defined in: world/GeometryBuilder.ts:157
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:119
 
 > `optional` **buildingHeightMultiplier?**: `number`
 
-Defined in: world/GeometryBuilder.ts:117
+Defined in: world/GeometryBuilder.ts:155
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/GeometryBuilder.ts:117
 
 > `optional` **infrastructureRenderOptions?**: `Partial`\<[`InfrastructureRenderOptions`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderOptions.md)\>
 
-Defined in: world/GeometryBuilder.ts:121
+Defined in: world/GeometryBuilder.ts:159
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/GeometryBuilder.ts:121
 
 > `optional` **infrastructureRenderPreview?**: [`InfrastructureRenderPreviewResult`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderPreviewResult.md)
 
-Defined in: world/GeometryBuilder.ts:122
+Defined in: world/GeometryBuilder.ts:160
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/GeometryBuilder.ts:122
 
 > `optional` **initialCameraZoom?**: `number`
 
-Defined in: world/GeometryBuilder.ts:120
+Defined in: world/GeometryBuilder.ts:158
 
 ***
 
@@ -54,4 +54,4 @@ Defined in: world/GeometryBuilder.ts:120
 
 > `optional` **roadWidthMultiplier?**: `number`
 
-Defined in: world/GeometryBuilder.ts:118
+Defined in: world/GeometryBuilder.ts:156

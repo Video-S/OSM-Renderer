@@ -6,7 +6,7 @@
 
 # Interface: MapFeatureDiagnostics
 
-Defined in: types/MapFeature.ts:409
+Defined in: types/MapFeature.ts:410
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:409
 
 > **byGeometryType**: `object`
 
-Defined in: types/MapFeature.ts:511
+Defined in: types/MapFeature.ts:512
 
 Source features breakdown by GeoJSON geometry type
 
@@ -56,7 +56,7 @@ Source features breakdown by GeoJSON geometry type
 
 > `optional` **cartoSubtypesCount?**: `Record`\<`string`, `number`\>
 
-Defined in: types/MapFeature.ts:486
+Defined in: types/MapFeature.ts:487
 
 Count of classified features by human-readable OSM Carto subtype
 
@@ -66,7 +66,7 @@ Count of classified features by human-readable OSM Carto subtype
 
 > `optional` **clippingFailures?**: `object`
 
-Defined in: types/MapFeature.ts:480
+Defined in: types/MapFeature.ts:481
 
 Boolean clipping failures recorded during surface or road/path resolution
 
@@ -84,7 +84,7 @@ Boolean clipping failures recorded during surface or road/path resolution
 
 > **constructedMeshesCount**: `number`
 
-Defined in: types/MapFeature.ts:419
+Defined in: types/MapFeature.ts:420
 
 5. Total discrete Three.js meshes constructed in the scene graph
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:419
 
 > `optional` **featureLineage?**: `object`
 
-Defined in: types/MapFeature.ts:501
+Defined in: types/MapFeature.ts:502
 
 Feature processing outcomes and lineage tracking
 
@@ -128,7 +128,7 @@ Feature processing outcomes and lineage tracking
 
 > `optional` **featuresClippedByBoundary?**: `object`
 
-Defined in: types/MapFeature.ts:467
+Defined in: types/MapFeature.ts:468
 
 Features clipped or omitted at the loaded region boundary
 
@@ -150,7 +150,7 @@ Features clipped or omitted at the loaded region boundary
 
 > `optional` **featuresFullySubtracted?**: `object`
 
-Defined in: types/MapFeature.ts:474
+Defined in: types/MapFeature.ts:475
 
 Features completely removed by Boolean surface/carriageway subtraction
 
@@ -168,7 +168,7 @@ Features completely removed by Boolean surface/carriageway subtraction
 
 > **geometryPartsGenerated**: `object`
 
-Defined in: types/MapFeature.ts:451
+Defined in: types/MapFeature.ts:452
 
 3D geometry parts actually constructed in GeometryBuilder.buildScene()
 
@@ -222,7 +222,7 @@ Defined in: types/MapFeature.ts:451
 
 > **parsedByCategory**: `object`
 
-Defined in: types/MapFeature.ts:422
+Defined in: types/MapFeature.ts:423
 
 Counts of source features classified by category
 
@@ -268,7 +268,7 @@ Counts of source features classified by category
 
 > `optional` **parsedFeatureParts?**: `object`
 
-Defined in: types/MapFeature.ts:435
+Defined in: types/MapFeature.ts:436
 
 Parsed feature parts extracted during GeoJSON parsing (before 3D mesh generation)
 
@@ -322,7 +322,7 @@ Parsed feature parts extracted during GeoJSON parsing (before 3D mesh generation
 
 > `optional` **planarValidation?**: `object`
 
-Defined in: types/MapFeature.ts:527
+Defined in: types/MapFeature.ts:528
 
 Post-build planar polygon layering & Z-fighting validation report
 
@@ -356,7 +356,7 @@ Post-build planar polygon layering & Z-fighting validation report
 
 > **rejectedInvalid**: `object`
 
-Defined in: types/MapFeature.ts:495
+Defined in: types/MapFeature.ts:496
 
 Features rejected due to malformed or degenerate coordinates
 
@@ -374,7 +374,7 @@ Features rejected due to malformed or degenerate coordinates
 
 > **skippedUnsupported**: `object`
 
-Defined in: types/MapFeature.ts:489
+Defined in: types/MapFeature.ts:490
 
 Features skipped due to unsupported tags or non-linear infrastructure
 
@@ -392,7 +392,7 @@ Features skipped due to unsupported tags or non-linear infrastructure
 
 > **sourceFeaturesClassified**: `number`
 
-Defined in: types/MapFeature.ts:413
+Defined in: types/MapFeature.ts:414
 
 2. Total source GeoJSON features successfully classified into a supported category
 
@@ -402,7 +402,7 @@ Defined in: types/MapFeature.ts:413
 
 > **sourceFeaturesReceived**: `number`
 
-Defined in: types/MapFeature.ts:411
+Defined in: types/MapFeature.ts:412
 
 1. Total raw GeoJSON Feature objects received from source data
 
@@ -412,7 +412,7 @@ Defined in: types/MapFeature.ts:411
 
 > **sourceFeaturesRendered**: `number`
 
-Defined in: types/MapFeature.ts:417
+Defined in: types/MapFeature.ts:418
 
 4. Total source features represented in the final 3D scene
 
@@ -422,7 +422,7 @@ Defined in: types/MapFeature.ts:417
 
 > **totalFeaturesParsed**: `number`
 
-Defined in: types/MapFeature.ts:415
+Defined in: types/MapFeature.ts:416
 
 3. Total source features whose geometry was valid and yielded parsed features
 
@@ -432,7 +432,7 @@ Defined in: types/MapFeature.ts:415
 
 > **totalFeaturesReceived**: `number`
 
-Defined in: types/MapFeature.ts:523
+Defined in: types/MapFeature.ts:524
 
 ***
 
@@ -440,4 +440,4 @@ Defined in: types/MapFeature.ts:523
 
 > **totalFeaturesRendered**: `number`
 
-Defined in: types/MapFeature.ts:524
+Defined in: types/MapFeature.ts:525

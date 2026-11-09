@@ -6,9 +6,9 @@
 
 # Type Alias: RoadInfrastructureRenderSource
 
-> **RoadInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"` \| `"graph"`
+> **RoadInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"` \| `"graph"` \| `"graph-surface"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:49
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:50
 
 Selects the data source mode for road infrastructure rendering in Milestone 2.3 Stage E2.
 
@@ -20,3 +20,4 @@ Selects the data source mode for road infrastructure rendering in Milestone 2.3 
 - `'graph'`: Stage E2 graph-driven road rendering mode. Builds and validates `InfrastructureGraph`
   and `InfrastructureRenderDescriptorBundle`, then constructs at-grade road ribbons, degree-2
   continuity joins, and boundary-derived junction polygons directly from the road render descriptors.
+- `'graph-surface'`: E2+ experiment: rounded centerline buffers with planar ownership, no junction cuts.

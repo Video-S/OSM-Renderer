@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderOptions
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:69
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:70
 
 Independent developer configuration switches for road and railway topology-to-renderer modes.
 
@@ -16,7 +16,7 @@ Independent developer configuration switches for road and railway topology-to-re
 
 > **railways**: [`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:71
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:72
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:71
 
 > **roads**: [`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:70
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:71

@@ -8,7 +8,7 @@
 
 > **getRailwayElevations**(`layer?`, `isBridge?`, `isTunnel?`): `object`
 
-Defined in: world/ElevationPolicy.ts:177
+Defined in: world/ElevationPolicy.ts:178
 
 Determines the physical Y-elevation for a railway feature (ballast bed, cross-tie sleepers, and steel rails).
 

@@ -8,7 +8,7 @@
 
 > **getRoadElevation**(`roadClass`, `layer?`, `isBridge?`, `isTunnel?`, `_featureId?`): `number`
 
-Defined in: world/ElevationPolicy.ts:150
+Defined in: world/ElevationPolicy.ts:151
 
 Determines the physical Y-elevation for a road feature.
 - All ordinary at-grade roads and paths share the uniform physical baseline ELEVATION_POLICY.ROAD_SURFACE (0.050m).

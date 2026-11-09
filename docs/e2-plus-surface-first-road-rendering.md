@@ -1,136 +1,86 @@
-# E2+ Surface-First Road Rendering — Architecture and Geometry Design
+# E2+ Surface-First At-Grade Road Rendering (`roads: 'graph-surface'`)
 
-**Scope:** As implemented in the [E2+ reference commit d2455b7](https://github.com/Video-S/OSM-Renderer/commit/d2455b7b8c711e689cabfc827b7f44ae2428b2ab), 2026-11-09.  
-**Decision:** [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md).  
-**Standing:** Preferred direction, still experimental; E2 remains an independent selectable renderer.
+> **Status**: Experimental — Preferred Architectural Direction (`ADR-0010`). Opt-in via `?topologyRoads=graph-surface` or the Developer Tools panel (`Roads: E2+ Surface-First`). Production default remains `'legacy'`.
 
-## 1. Why the design changed
+## 1. Overview
 
-E2 is **junction-first**: discover a graph junction, calculate cutback distances and portal boundaries, synthesize a new junction polygon, trim each road, then reconcile seams. Any inconsistent trim/portal/patch calculation can leave a visible wedge, gap, corner discontinuity or seam.
+**E2+** (`roads: 'graph-surface'`) is a surface-first OpenStreetMap road renderer that replaces Stage E2's explicit junction-cutting and portal-patching solver with continuous rounded-stroke footprints and priority-ordered 2D Boolean surface ownership clipping.
 
-E2+ is **surface-first**: derive each road's physical 2D footprint from its unchanged centerline and width, then resolve overlapping footprints with Boolean geometry. **No explicit intersection polygon is required.** Junction appearance is an emergent property of overlapping valid footprints.
+While E2+ shares the complete upstream topology graph (`M2.3-B/C/D`) and render descriptor adapter (`M2.3-E1`) with E2 (`roads: 'graph'`), it changes how at-grade road and path polygons are synthesized in `buildGraphAtGradeRoadGeometries`:
 
-This resembles cartographic line-stroke buffering, but it produces **non-overlapping 3D mesh surfaces**, not overlapping painted pixels.
+1. **No Centerline Trimming or Junction Patches**:
+   - Topological node trimming (`trimmedEndpoints`), degree-2 continuity miter portals, and boundary-derived junction polygons (`junction-*`, `path-junction-*`) are skipped (`if (surfaceFirst) continue;`).
+   - Every eligible at-grade road edge (or provenance sub-segment) retains its full centerline span.
+2. **Local Rounded-Stroke Footprint Construction (`bufferSurfaceFirstRoadCenterline`)**:
+   - Implemented in `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`.
+   - Deduplicates consecutive centerline vertices closer than `0.02 m` and snaps primitive coordinates to a `1e-4 m` (`0.1 mm`) grid.
+   - Emits a full-width rectangle ring (`width = edge.width * roadWidthMultiplier`) for every centerline segment longer than `0.02 m`.
+   - Emits a 16-sided disk polygon of radius `width / 2` at every interior bend where the cosine of the turn angle is `< 0.9986` (`> ~3.0°`).
+   - Emits 16-sided endpoint cap disks according to cap rules:
+     - `capStart` is enabled on the first provenance sub-segment (`sub === subSegments[0]`) when the edge is not a closed loop (`!edge.isClosedLoop`), not clipped at the dataset boundary (`!edge.clippedAtStart && !startNode?.isBoundaryClipped`), and does not touch a grade transition (`!hasGradeStart`).
+     - `capEnd` is enabled on the last provenance sub-segment (`sub === subSegments[subSegments.length - 1]`) under the symmetric conditions at `toNodeId`.
+     - Closed loops (`clean.length >= 4` and endpoint distance `< 0.05 m`) receive a closing disk at `clean[0]`.
+   - Unions all rectangle and disk primitives for that stroke via `filterDegenerateBooleanArtifacts(polygonClipping.union(...))`.
+   - If the rounded buffer throws or yields an empty polygon, falls back to a flat ribbon outline (`buildRoadRibbonOutlineRing`) and records `e2plus_rounded_buffer_failed` / `e2plus_flat_ribbon_fallback`.
+3. **Deterministic Priority-Ordered 2D Ownership Clipping**:
+   - Buildable edges are sorted in deterministic ownership order:
+     1. Vehicular tier before path tier (`isPath`).
+     2. Higher `ROAD_CLASS_PRIORITY` before lower.
+     3. Canonical code-unit ID order (`compareStringsCodeUnit(a.id, b.id)`).
+   - For each stroke, already-placed footprints (`placedRoadFootprints`) whose bounding boxes overlap the stroke and which are eligible blockers (`isPath || !fp.isPath`) are subtracted via `filterDegenerateBooleanArtifacts(polygonClipping.difference(stroke, ...blockers))`.
+   - If the visible remainder is empty (`visible.length === 0`), the segment is recorded in `fullySubtractedRoadIds` and `stats.fullySubtractedCount`.
+   - Otherwise, `visible` is converted to `THREE.Shape` instances (`createShapesFromMultiPolygon`), triangulated via `THREE.ShapeGeometry`, rotated onto the horizontal `XZ` plane at `roadElevation` (`+0.050 m`), validated/pruned via `validateAndPruneHorizontalGeometry`, and registered in `placedRoadFootprints` (`registerRoadFootprint(sub.subId, isPath, visible)`).
 
-## 2. Placement in the pipeline
+---
 
-~~~text
-OSM / Overpass / GeoJSON
-  → LocalGeoJsonProvider / metric projection / clipping
-  → ProcessedMapData.topologySource
-  → InfrastructureGraph (connectivity, grade, provenance)
-  → InfrastructureRenderAdapter (roadEdges/roadNodes descriptors)
-  → GeometryBuilder.buildScene
-      ├── Legacy: original road geometry
-      ├── E1: graph preview, legacy visuals
-      ├── E2: GraphRoadGeometryBuilder junction patches + trimmed ribbons
-      └── E2+: GraphRoadGeometryBuilder surfaceFirst branch
-                 → SurfaceFirstRoadFootprints (rectangles + round disks)
-                 → class/tier/ID-ordered Boolean ownership
-                 → THREE.ShapeGeometry, correct elevation/normal
-                 → merged Roads_* meshes + faceRanges
-~~~
+## 2. Automated Geometry Correctness Validation (`SurfaceFirstRoadValidator.ts`)
 
-Mode value is `roads: 'graph-surface'`, URL `?topologyRoads=graph-surface`, in **Dev Tools → Rendering → Road Infrastructure Engine → Graph (E2+)**. The original E2 value is `roads: 'graph'`. Both consume the same descriptor data. Railways are independently selectable.
+`validateSurfaceFirstRoadGeometry(scene, data, options)` in `src/world/infrastructure/roads/SurfaceFirstRoadValidator.ts` audits E2+ (and E2) road meshes against four independent verification categories without modifying geometry generation:
 
-| Concern | Module |
-| --- | --- |
-| Option and graph adapter | `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts` |
-| Selection UI | `src/components/DevToolsPanel.tsx` |
-| Scene dispatch, resources, style, lineage | `src/world/GeometryBuilder.ts` |
-| E2/E2+ per-edge processing and ownership | `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts` |
-| New local road buffering algorithm | `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts` |
-| Polygon area/degenerate cleanup | `src/world/PlanarLayerValidator.ts` |
-| Tests | `src/world/SurfaceFirstRoadRendering.test.ts` and E2 regression suites |
+### A1. Surface Coverage (`SurfaceFirstCoverageValidationReport`)
+- **Non-Circular Analytical Reference**: Independently constructs 24-gon analytical road corridors (`buildIndependentAnalyticalRoadCorridor`) directly from source/descriptor centerlines and widths rather than comparing `bufferSurfaceFirstRoadCenterline` against itself.
+- **Legitimate Ownership Accounting**: For each eligible at-grade edge, subtracts overlapping higher-priority emitted triangles first (`occludedByHigherPriorityAreaM2`) and then subtracts the edge's own emitted triangles (`ownEmittedAreaM2`). Only unexplained uncovered area exceeding discretization tolerance (`max(0.05 m², 4% of corridor area)`) is flagged as `missing_road_surface_area` or `omitted_road_feature`.
+- **Topological Node & Provenance Split Continuity**:
+  - Verifies that every connected at-grade topological road node (`>= 2` incident buildable edges, non-clipped, non-grade-transition) is covered by emitted road triangles (`connected_node_gap`).
+  - Probes the exterior angle bisector at internal provenance split vertices (`#seg0 -> #seg1`) where a simplified multi-way edge bends (`dot < 0.996`), detecting `provenance_split_bend_gap`.
+- **Unintended Interior Hole Detection**: Unions all emitted at-grade road triangles and flags any interior hole ring (`1e-4 m² < area <= 2.0 m²`) that does not correspond to a genuine closed loop in the analytical reference (`unintended_interior_hole`).
 
-## 3. Buffering a road into an area
+### A2. Coplanar Overlap Validation (`SurfaceFirstOverlapValidationReport`)
+- Reuses `validateRoadNetworkGeometry(scene)` from `src/world/ZFightingValidator.ts` (`COPLANAR_OVERLAP_AREA_TOLERANCE_M2 = 1e-3 m²`) and categorizes any positive-area coplanar overlaps into:
+  - `cross_class_vehicular`
+  - `same_class_road`
+  - `path_or_cycleway`
+  - `multi_provenance_segment`
+  - `intra_feature_self_overlap`
+- Shared 1D boundaries (`<= 1e-3 m²`) and grade-separated features (bridges, tunnels, raised step treads at `+0.056 m`) are excluded.
 
-For a clean centerline polyline P and physical width w, E2+ constructs a polygonal approximation to a Minkowski-sum line buffer with radius `r = w / 2`.
+### A3. Mesh Integrity (`SurfaceFirstMeshIntegrityValidationReport`)
+- Reuses `auditGraphRoadMeshIntegrity(scene.roadsGroup)` to verify counter-clockwise upward normals (`geomNormal.y > 0.99`), vertex-normal agreement (`dot > 0.99`), finite coordinates, and zero degenerate triangles (`area <= 1e-6 m²`).
+- Verifies physical elevation consistency (`Y = 0.050 m ± 1e-4 m` for horizontal road meshes; `0.056 m ± 1e-4 m` for step treads) and checks for tiny disconnected feature fragments (`< 1e-3 m²`).
 
-**Actual implementation details (important when debugging):**
+### A4. Source-Feature Provenance (`SurfaceFirstProvenanceValidationReport`)
+- Verifies every triangle face on every `Roads_*` mesh resolves via `resolveInspectedFeature` to a valid `InspectableFeatureInfo` with a known `sourceFeatureId`, complete `sourceFeatureIds` (including deduplicated OSM ways), matching `RoadClass`, preserved primitive `osmTags`, and spatial containment within the source way's bounding envelope.
 
-1. Reject non-finite coordinates and nonpositive widths. Drop consecutive points separated by no more than **0.02 m**.
-2. For each segment A→B, compute the normal `(-dz, dx) / length`. Offset A and B by `±r` to create a full-width quadrilateral.
-3. At interior bends with normalized incoming/outgoing dot product below **0.9986**, add a disk centered at the bend. Each disk is a **16-vertex polygon**. Nearly collinear bends get no extra disk.
-4. Add a disk at eligible original edge endpoints. Suppress endpoint disks at a clipped region boundary, a graph-confirmed grade-transition handoff, or an internal source-provenance split. A closed loop gets a closure disk.
-5. Snap coordinates to **0.0001 m**; union the segment rectangles/disks using the existing `polygon-clipping` library; filter degenerate results.
-6. Return `MultiPolygonCoords` (possibly multiple components/holes). This is a *candidate footprint*, not yet an accepted visible surface.
+---
 
-The result is a **polygonal** round join/cap, not an exact circle. Full disks at connected endpoints fill the missing regions that flat-cut ribbons can produce between incident roads. Very gentle bends can still have tiny unrounded outer corners; the bend threshold is an optimization/quality tradeoff.
+## 3. Performance Instrumentation (`GraphRoadRenderStats` & `GraphRoadGenerationTiming`)
 
-**No new Clipper2 dependency was installed.** E2+ uses existing `polygon-clipping` and Three.js infrastructure.
+Lightweight instrumentation is collected on every scene build and reset per rebuild:
 
-## 4. How overlapping roads become a valid surface
-
-For two candidate footprints A and B at the same grade, the desired coverage is `A ∪ B`. To keep attribution and prevent coplanar z-fighting, E2+ renders **A**, then **B minus A**, instead of rendering both polygons or constructing a third junction patch.
-
-**Current deterministic order:**
-
-- Vehicle-tier road edges precede path/nonvehicular-tier edges.
-- Within a tier, higher `ROAD_CLASS_PRIORITY` claims geometry first.
-- An edge-ID string comparison breaks remaining ties.
-- Each edge may be split into constituent OSM provenance subsegments; each retains its tags and source identities.
-- The builder scans previously accepted polygon footprints and filters candidates by overlapping bounding boxes before running `polygonClipping.difference`.
-- Paths can be clipped by existing vehicle and path footprints. Vehicular surfaces are not clipped by path-tier footprints.
-
-An intersection's apparent geometric union is achieved as **a partition into disjoint visible pieces**. This is not a single whole-map polygon union. The class that owns the overlap determines its visible material; the road graph still determines actual connectivity.
-
-**Key invariant:** register **only the successfully triangulated, accepted remainder** as an occupied footprint for subsequent road clipping. Geometry that fails validation is not allowed to overlap the already accepted mesh as a fallback.
-
-## 5. What happens for each accepted piece
-
-The graph builder already splits simplified road edges by `EdgeSegmentProvenance`, carrying `sourceFeatureId`, `sourceFeatureIds`, `osmTags` and `roadClass`. In E2+ the junction-processing loop is skipped, so there are no E2 trim states or dedicated junction meshes.
-
-For each provenance subsegment:
-
-1. Build rounded footprint. If buffering throws or yields no polygon, attempt the existing validated **flat ribbon-outline** fallback.
-2. Compute candidate bounds and locate earlier blocking surfaces of the appropriate tier.
-3. Subtract earlier footprints with `polygonClipping.difference` and clean degenerate artifacts; fully consumed segments are recorded as subtracted.
-4. Convert visible polygons via `createShapesFromMultiPolygon` into `THREE.ShapeGeometry`, rotate into XZ and translate to `roadElevation` (ordinary roads typically `+0.050 m`).
-5. Validate and prune invalid horizontal geometry; register it in `SceneResourceManager`.
-6. Register its **visible** 2D footprint for subsequent clipping, and its feature metadata for merged `Roads_*` groups and `faceRanges` inspection.
-7. `highway=steps` still receives step treads from the existing component, positioned above the base road surface.
-
-On irrecoverable clipping, invalid shapes or geometry rejection, E2+ records a diagnostic and **skips that segment**. That may create a missing patch, but it avoids silently drawing new coplanar overlaps.
-
-## 6. Unchanged constraints and contracts
-
-- **Topology:** OSM node identities, graph degree, source lineage and grade-transition relationships are not rebuilt by the new geometry branch. A visual crossing is not automatically a connected road graph node.
-- **Width:** E2+ uses the existing source/tag-driven edge width multiplied by the scene's road-width multiplier; it does not infer physical width from lane count alone.
-- **Elevation:** At-grade roads remain on the same physical plane according to `ElevationPolicy`. Bridges/tunnels/grade-separated segments stay in their existing Stage 6D pipeline, not in the at-grade buffer union.
-- **Materials:** Road classes, theme materials and source inspection remain in the existing renderer.
-- **Scene/lifecycle:** Mesh registration, grouping, resource disposal, diagnostic and geometry-audit systems are reused.
-- **Rollback/comparison:** E2 and Legacy remain selectable. E2+ is currently **one branch in the existing graph builder**, not yet a fully independent module boundary.
-
-## 7. Observed results versus unproven claims
-
-| Statement | Status |
-| --- | --- |
-| E2+ skips the E2 node-patch constructor | Verified by code path; tests assert zero emitted junction patches |
-| Uses segment rectangles, selected 16-vertex bend/endpoint disks and local polygon unions | Verified by source |
-| Uses deterministic tier/class/ID ownership, retains OSM lineage | Verified by design/code path; broader provenance audits outstanding |
-| Junction consistency improves dramatically across real map locations | **Project owner's repeated visual observation** |
-| Whether removing junction patches or adding rounding caused most of the improvement | **Not isolated** |
-| Fully correct geometry for every case | **Not established** |
-| Acceptable CPU/memory at whole-Twente scale | **Not measured** |
-
-Tests were added to the prototype, but no assistant-run `npm test`, `npm run lint` or browser visual validation occurred at that commit. Do not conflate source assertions with an executed green test suite.
-
-## 8. Risks and precise follow-up questions
-
-- **Scale:** The builder performs a local union for each provenance section and scans prior accepted footprints before bbox filtering. Worst-case CPU work can grow substantially; consider a spatial index, chunking, worker processing or offline baking **after benchmarking**.
-- **Geometry:** Disks are full 16-gons; rounded junctions may overshoot intended curb shapes. Width transitions are not smoothed by E2's taper logic. Tight folds, micro-segments and loops deserve adversarial tests.
-- **Floating precision:** 0.0001 m snapping and sub-centimeter remnants may introduce degenerate artifacts; audit, rather than assume absence.
-- **Material semantics:** The owner of overlapping visible areas is priority-dependent. Verify mixed cycleway/footway and vehicle/path areas with ground-truth inspection.
-- **Attribution:** A source's segment can be fully subtracted while another segment survives; check aggregate `fullySubtractedRoadIds` and lineage accounting for partial cases.
-- **Failure modes:** Every buffer fallback, skipped segment, and clipping exception should be counted and visually inspected.
-- **Causality:** A three-way comparison (E2; E2+ without rounded join disks; E2+ current rounded) would determine which design change contributes most.
-
-## 9. Safe development workflow
-
-- Treat commit [d2455b7](https://github.com/Video-S/OSM-Renderer/commit/d2455b7b8c711e689cabfc827b7f44ae2428b2ab) as a **reference**; this does not imply a Git tag was created.
-- Make fixture-backed, small geometric changes; never add location- or OSM-ID-specific production conditionals.
-- Run `npm run lint` and `npm test`, including `SurfaceFirstRoadRendering.test.ts`, `GraphRoadRendering.test.ts`, and the previous Hengelo regression fixtures.
-- Measure area coverage, overlap, mesh winding/normals, width and attribution. Keep source data and camera pose constant for E2 vs E2+ visual comparisons.
-- Project owner conducts the visual checks; AI/browser-generated visual verdicts are not a substitute.
-- Do not change defaults, delete E2 code, or generalize to all Twente until the [road-rendering roadmap](./road-rendering-roadmap.md) gates are satisfied.
+- **Deterministic Counters (`roadsGroup.userData.graphRoadStats: GraphRoadRenderStats`)**:
+  - `inputRoadNodeCount`, `inputRoadEdgeCount`, `atGradeRoadEdgeCount`
+  - `processedProvenanceSegmentCount`, `provenanceSplitSegmentCount`
+  - `generatedRectanglePrimitiveCount`, `generatedBendDiskPrimitiveCount`, `generatedCapDiskPrimitiveCount`, `generatedDiskPrimitiveCount`, `generatedTotalPrimitiveCount`
+  - `polygonUnionOperationCount`, `polygonDifferenceOperationCount`
+  - `candidateBlockerCheckCount`, `overlappingBlockerCount`
+  - `renderedRoadRibbonCount`, `outputPolygonCount`, `outputHoleRingCount`, `outputTriangleCount`
+  - `fullySubtractedCount`, `rejectedOrDegenerateCount`
+  - `roundedBufferFailureCount`, `flatRibbonFallbackCount`, `surfaceClipFailureCount`, `emptyShapeCount`, `invalidTriangleGeometryCount`
+- **Wall-Clock Timings (`roadsGroup.userData.graphRoadTiming: GraphRoadGenerationTiming`)**:
+  - `totalRoadGenerationTimeMs`
+  - `footprintConstructionTimeMs` (`primitiveConstructionTimeMs + polygonUnionTimeMs`)
+  - `primitiveConstructionTimeMs`
+  - `polygonUnionTimeMs`
+  - `ownershipClippingTimeMs`
+  - `triangulationAndValidationTimeMs`
+  - Stored separately from `graphRoadStats` so deterministic counter snapshots remain bit-for-bit invariant across runs.

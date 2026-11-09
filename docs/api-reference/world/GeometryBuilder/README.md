@@ -13,12 +13,34 @@
 ## Interfaces
 
 - [BuiltSceneGeometry](interfaces/BuiltSceneGeometry.md)
+- [CategorizedRoadOverlapDefect](interfaces/CategorizedRoadOverlapDefect.md)
 - [FaceFeatureRange](interfaces/FaceFeatureRange.md)
 - [GeometryBuilderOptions](interfaces/GeometryBuilderOptions.md)
 - [RoadRibbonOptions](interfaces/RoadRibbonOptions.md)
+- [SurfaceCoverageDefect](interfaces/SurfaceCoverageDefect.md)
+- [SurfaceFirstCoverageValidationReport](interfaces/SurfaceFirstCoverageValidationReport.md)
+- [SurfaceFirstMeshIntegrityValidationReport](interfaces/SurfaceFirstMeshIntegrityValidationReport.md)
+- [SurfaceFirstOverlapValidationReport](interfaces/SurfaceFirstOverlapValidationReport.md)
+- [SurfaceFirstProvenanceValidationReport](interfaces/SurfaceFirstProvenanceValidationReport.md)
+- [SurfaceFirstRoadValidationReport](interfaces/SurfaceFirstRoadValidationReport.md)
+- [SurfaceMeshArtifactDefect](interfaces/SurfaceMeshArtifactDefect.md)
+- [SurfaceProvenanceDefect](interfaces/SurfaceProvenanceDefect.md)
+
+## Type Aliases
+
+- [SurfaceCoverageDefectKind](type-aliases/SurfaceCoverageDefectKind.md)
+- [SurfaceOverlapCategory](type-aliases/SurfaceOverlapCategory.md)
+
+## Variables
+
+- [COVERAGE\_DISCRETIZATION\_RATIO\_TOLERANCE](variables/COVERAGE_DISCRETIZATION_RATIO_TOLERANCE.md)
+- [MIN\_COVERAGE\_DEFECT\_AREA\_M2](variables/MIN_COVERAGE_DEFECT_AREA_M2.md)
+- [TINY\_DISCONNECTED\_ARTIFACT\_AREA\_M2](variables/TINY_DISCONNECTED_ARTIFACT_AREA_M2.md)
+- [UNINTENDED\_INTERIOR\_HOLE\_MAX\_AREA\_M2](variables/UNINTENDED_INTERIOR_HOLE_MAX_AREA_M2.md)
 
 ## Functions
 
+- [buildIndependentAnalyticalRoadCorridor](functions/buildIndependentAnalyticalRoadCorridor.md)
 - [buildRoadRibbonOutlineRing](functions/buildRoadRibbonOutlineRing.md)
 - [buildSafeExteriorSubPolylines](functions/buildSafeExteriorSubPolylines.md)
 - [cleanPolylineForClipping](functions/cleanPolylineForClipping.md)
@@ -32,6 +54,7 @@
 - [resolveInspectedFeature](functions/resolveInspectedFeature.md)
 - [sanitizeOsmTags](functions/sanitizeOsmTags.md)
 - [splitRoadsAtSharedInteriorNodes](functions/splitRoadsAtSharedInteriorNodes.md)
+- [validateSurfaceFirstRoadGeometry](functions/validateSurfaceFirstRoadGeometry.md)
 
 ## References
 
@@ -74,6 +97,12 @@ Re-exports [DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS](../infrastructure/rendering/I
 ### GraphRoadDegenerateTriangleDefect
 
 Re-exports [GraphRoadDegenerateTriangleDefect](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadDegenerateTriangleDefect.md)
+
+***
+
+### GraphRoadGenerationTiming
+
+Re-exports [GraphRoadGenerationTiming](../infrastructure/roads/GraphRoadGeometryBuilder/interfaces/GraphRoadGenerationTiming.md)
 
 ***
 

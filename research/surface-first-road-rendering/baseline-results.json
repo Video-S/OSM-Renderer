@@ -1,0 +1,4371 @@
+{
+  "benchmarkSuite": "E2+ Surface-First Road Rendering Geometry Integrity & Performance Baseline",
+  "generatedAt": "2026-11-09T14:41:24.766Z",
+  "methodology": {
+    "warmupRuns": 2,
+    "measuredRuns": 7,
+    "rendererModes": [
+      "legacy",
+      "graph",
+      "graph-surface"
+    ],
+    "nodeVersion": "v22.23.2",
+    "platform": "linux-x64"
+  },
+  "results": [
+    {
+      "datasetId": "repro-nieuwstraat",
+      "datasetName": "Hengelo Nieuwstraat–Stationsplein (Pedestrian/Cycleway)",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 6,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 3.462,
+          "min": 2.214,
+          "max": 9.124,
+          "p95": 5.326
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 63,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-nieuwstraat",
+      "datasetName": "Hengelo Nieuwstraat–Stationsplein (Pedestrian/Cycleway)",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 6,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.868,
+          "min": 5.178,
+          "max": 11.121,
+          "p95": 8.918
+        },
+        "graphBuild": {
+          "median": 0.565,
+          "min": 0.458,
+          "max": 1.55,
+          "p95": 1.062
+        },
+        "adapterBuild": {
+          "median": 0.097,
+          "min": 0.094,
+          "max": 0.682,
+          "p95": 0.195
+        },
+        "roadGenerationTotal": {
+          "median": 5.469,
+          "min": 4.787,
+          "max": 10.388,
+          "p95": 8.227
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 6,
+        "inputRoadEdgeCount": 6,
+        "atGradeRoadEdgeCount": 6,
+        "processedProvenanceSegmentCount": 6,
+        "renderedRoadRibbonCount": 6,
+        "renderedJunctionCount": 2,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 2,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 8,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 103,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 103,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9949,
+        "independentExpectedUnionAreaM2": 661.3,
+        "emittedAtGradeUnionAreaM2": 657.92,
+        "unexplainedMissingAreaM2": 3.499,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-nieuwstraat",
+      "datasetName": "Hengelo Nieuwstraat–Stationsplein (Pedestrian/Cycleway)",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 6,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 4.949,
+          "min": 4.156,
+          "max": 6.375,
+          "p95": 6.146
+        },
+        "graphBuild": {
+          "median": 0.427,
+          "min": 0.409,
+          "max": 0.464,
+          "p95": 0.441
+        },
+        "adapterBuild": {
+          "median": 0.089,
+          "min": 0.086,
+          "max": 0.092,
+          "p95": 0.091
+        },
+        "roadGenerationTotal": {
+          "median": 4.484,
+          "min": 3.791,
+          "max": 5.967,
+          "p95": 5.746
+        },
+        "footprintConstruction": {
+          "median": 1.901,
+          "min": 1.484,
+          "max": 3.013,
+          "p95": 1.954
+        },
+        "polygonUnion": {
+          "median": 1.66,
+          "min": 1.38,
+          "max": 1.83,
+          "p95": 1.77
+        },
+        "ownershipClipping": {
+          "median": 1.644,
+          "min": 1.317,
+          "max": 2.903,
+          "p95": 1.969
+        },
+        "triangulationAndValidation": {
+          "median": 0.689,
+          "min": 0.61,
+          "max": 1.215,
+          "p95": 1.068
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 6,
+        "inputRoadEdgeCount": 6,
+        "atGradeRoadEdgeCount": 6,
+        "processedProvenanceSegmentCount": 6,
+        "renderedRoadRibbonCount": 6,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 12,
+        "generatedBendDiskPrimitiveCount": 2,
+        "generatedCapDiskPrimitiveCount": 12,
+        "generatedDiskPrimitiveCount": 14,
+        "generatedTotalPrimitiveCount": 26,
+        "polygonUnionOperationCount": 6,
+        "polygonDifferenceOperationCount": 5,
+        "candidateBlockerCheckCount": 15,
+        "overlappingBlockerCount": 9,
+        "outputPolygonCount": 6,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 127,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 127,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9996,
+        "independentExpectedUnionAreaM2": 661.3,
+        "emittedAtGradeUnionAreaM2": 661.01,
+        "unexplainedMissingAreaM2": 0.31,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-hengelo-corners",
+      "datasetName": "Hengelo Closely Spaced Path Corners",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 1.092,
+          "min": 0.991,
+          "max": 2.499,
+          "p95": 1.581
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 72,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-hengelo-corners",
+      "datasetName": "Hengelo Closely Spaced Path Corners",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 4.082,
+          "min": 2.863,
+          "max": 5.629,
+          "p95": 4.898
+        },
+        "graphBuild": {
+          "median": 0.39,
+          "min": 0.359,
+          "max": 0.446,
+          "p95": 0.441
+        },
+        "adapterBuild": {
+          "median": 0.099,
+          "min": 0.089,
+          "max": 0.623,
+          "p95": 0.099
+        },
+        "roadGenerationTotal": {
+          "median": 3.585,
+          "min": 2.529,
+          "max": 5.041,
+          "p95": 4.256
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 8,
+        "inputRoadEdgeCount": 7,
+        "atGradeRoadEdgeCount": 7,
+        "processedProvenanceSegmentCount": 7,
+        "renderedRoadRibbonCount": 7,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 7,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 61,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 61,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9941,
+        "independentExpectedUnionAreaM2": 66.98,
+        "emittedAtGradeUnionAreaM2": 66.59,
+        "unexplainedMissingAreaM2": 0.407,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-hengelo-corners",
+      "datasetName": "Hengelo Closely Spaced Path Corners",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.302,
+          "min": 3.691,
+          "max": 6.333,
+          "p95": 6.244
+        },
+        "graphBuild": {
+          "median": 0.387,
+          "min": 0.349,
+          "max": 0.506,
+          "p95": 0.435
+        },
+        "adapterBuild": {
+          "median": 0.1,
+          "min": 0.09,
+          "max": 1.542,
+          "p95": 0.139
+        },
+        "roadGenerationTotal": {
+          "median": 4.843,
+          "min": 3.343,
+          "max": 5.637,
+          "p95": 5.122
+        },
+        "footprintConstruction": {
+          "median": 1.728,
+          "min": 1.279,
+          "max": 1.975,
+          "p95": 1.888
+        },
+        "polygonUnion": {
+          "median": 1.615,
+          "min": 1.183,
+          "max": 1.861,
+          "p95": 1.79
+        },
+        "ownershipClipping": {
+          "median": 1.83,
+          "min": 1.465,
+          "max": 3.028,
+          "p95": 2.393
+        },
+        "triangulationAndValidation": {
+          "median": 0.678,
+          "min": 0.385,
+          "max": 0.815,
+          "p95": 0.744
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 8,
+        "inputRoadEdgeCount": 7,
+        "atGradeRoadEdgeCount": 7,
+        "processedProvenanceSegmentCount": 7,
+        "renderedRoadRibbonCount": 7,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 8,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 14,
+        "generatedDiskPrimitiveCount": 14,
+        "generatedTotalPrimitiveCount": 22,
+        "polygonUnionOperationCount": 7,
+        "polygonDifferenceOperationCount": 5,
+        "candidateBlockerCheckCount": 21,
+        "overlappingBlockerCount": 13,
+        "outputPolygonCount": 7,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 131,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 131,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9975,
+        "independentExpectedUnionAreaM2": 66.98,
+        "emittedAtGradeUnionAreaM2": 66.81,
+        "unexplainedMissingAreaM2": 0.178,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-prins-hendrikkade-fork",
+      "datasetName": "Amsterdam Prins Hendrikkade Acute Fork",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 3,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 1.924,
+          "min": 1.361,
+          "max": 3.694,
+          "p95": 3.603
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 95,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-prins-hendrikkade-fork",
+      "datasetName": "Amsterdam Prins Hendrikkade Acute Fork",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 3,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 2.794,
+          "min": 2.038,
+          "max": 4.368,
+          "p95": 3.692
+        },
+        "graphBuild": {
+          "median": 0.7,
+          "min": 0.523,
+          "max": 0.864,
+          "p95": 0.786
+        },
+        "adapterBuild": {
+          "median": 0.087,
+          "min": 0.078,
+          "max": 0.146,
+          "p95": 0.128
+        },
+        "roadGenerationTotal": {
+          "median": 2.374,
+          "min": 1.682,
+          "max": 3.881,
+          "p95": 3.2
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 4,
+        "inputRoadEdgeCount": 3,
+        "atGradeRoadEdgeCount": 3,
+        "processedProvenanceSegmentCount": 3,
+        "renderedRoadRibbonCount": 3,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 3,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 91,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 91,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9998,
+        "independentExpectedUnionAreaM2": 540.04,
+        "emittedAtGradeUnionAreaM2": 539.95,
+        "unexplainedMissingAreaM2": 0.231,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-prins-hendrikkade-fork",
+      "datasetName": "Amsterdam Prins Hendrikkade Acute Fork",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 3,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.215,
+          "min": 4.077,
+          "max": 7.049,
+          "p95": 6.861
+        },
+        "graphBuild": {
+          "median": 0.713,
+          "min": 0.487,
+          "max": 2.154,
+          "p95": 0.86
+        },
+        "adapterBuild": {
+          "median": 0.115,
+          "min": 0.078,
+          "max": 0.162,
+          "p95": 0.151
+        },
+        "roadGenerationTotal": {
+          "median": 4.866,
+          "min": 3.771,
+          "max": 6.649,
+          "p95": 6.297
+        },
+        "footprintConstruction": {
+          "median": 2.777,
+          "min": 2.355,
+          "max": 3.7,
+          "p95": 3.64
+        },
+        "polygonUnion": {
+          "median": 2.673,
+          "min": 2.27,
+          "max": 3.576,
+          "p95": 3.544
+        },
+        "ownershipClipping": {
+          "median": 1.136,
+          "min": 0.919,
+          "max": 1.576,
+          "p95": 1.548
+        },
+        "triangulationAndValidation": {
+          "median": 0.496,
+          "min": 0.317,
+          "max": 1.746,
+          "p95": 0.708
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 4,
+        "inputRoadEdgeCount": 3,
+        "atGradeRoadEdgeCount": 3,
+        "processedProvenanceSegmentCount": 3,
+        "renderedRoadRibbonCount": 3,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 35,
+        "generatedBendDiskPrimitiveCount": 10,
+        "generatedCapDiskPrimitiveCount": 6,
+        "generatedDiskPrimitiveCount": 16,
+        "generatedTotalPrimitiveCount": 51,
+        "polygonUnionOperationCount": 3,
+        "polygonDifferenceOperationCount": 2,
+        "candidateBlockerCheckCount": 3,
+        "overlappingBlockerCount": 3,
+        "outputPolygonCount": 4,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 204,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 204,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9995,
+        "independentExpectedUnionAreaM2": 540.04,
+        "emittedAtGradeUnionAreaM2": 539.76,
+        "unexplainedMissingAreaM2": 0.293,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-veloursstraat-split",
+      "datasetName": "Hengelo Veloursstraat Carriageway Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 5,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 1.04,
+          "min": 0.973,
+          "max": 2.565,
+          "p95": 1.179
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 76,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-veloursstraat-split",
+      "datasetName": "Hengelo Veloursstraat Carriageway Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 5,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 3.499,
+          "min": 2.92,
+          "max": 6.164,
+          "p95": 5.136
+        },
+        "graphBuild": {
+          "median": 0.445,
+          "min": 0.439,
+          "max": 0.602,
+          "p95": 0.598
+        },
+        "adapterBuild": {
+          "median": 0.101,
+          "min": 0.097,
+          "max": 1.251,
+          "p95": 0.16
+        },
+        "roadGenerationTotal": {
+          "median": 3.199,
+          "min": 2.631,
+          "max": 5.688,
+          "p95": 4.584
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 6,
+        "inputRoadEdgeCount": 5,
+        "atGradeRoadEdgeCount": 5,
+        "processedProvenanceSegmentCount": 5,
+        "renderedRoadRibbonCount": 5,
+        "renderedJunctionCount": 2,
+        "branchingJunctionCount": 2,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 7,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 109,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 109,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 1216.05,
+        "emittedAtGradeUnionAreaM2": 1231.82,
+        "unexplainedMissingAreaM2": 1.077,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-veloursstraat-split",
+      "datasetName": "Hengelo Veloursstraat Carriageway Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 5,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.961,
+          "min": 4.326,
+          "max": 6.995,
+          "p95": 6.496
+        },
+        "graphBuild": {
+          "median": 0.447,
+          "min": 0.432,
+          "max": 0.726,
+          "p95": 0.645
+        },
+        "adapterBuild": {
+          "median": 0.102,
+          "min": 0.098,
+          "max": 0.142,
+          "p95": 0.126
+        },
+        "roadGenerationTotal": {
+          "median": 5.577,
+          "min": 4.024,
+          "max": 6.402,
+          "p95": 6.09
+        },
+        "footprintConstruction": {
+          "median": 3.574,
+          "min": 2.354,
+          "max": 3.834,
+          "p95": 3.755
+        },
+        "polygonUnion": {
+          "median": 3.48,
+          "min": 2.275,
+          "max": 3.74,
+          "p95": 3.661
+        },
+        "ownershipClipping": {
+          "median": 1.194,
+          "min": 1.062,
+          "max": 1.757,
+          "p95": 1.66
+        },
+        "triangulationAndValidation": {
+          "median": 0.51,
+          "min": 0.361,
+          "max": 0.752,
+          "p95": 0.604
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 6,
+        "inputRoadEdgeCount": 5,
+        "atGradeRoadEdgeCount": 5,
+        "processedProvenanceSegmentCount": 5,
+        "renderedRoadRibbonCount": 5,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 20,
+        "generatedBendDiskPrimitiveCount": 12,
+        "generatedCapDiskPrimitiveCount": 10,
+        "generatedDiskPrimitiveCount": 22,
+        "generatedTotalPrimitiveCount": 42,
+        "polygonUnionOperationCount": 5,
+        "polygonDifferenceOperationCount": 4,
+        "candidateBlockerCheckCount": 10,
+        "overlappingBlockerCount": 6,
+        "outputPolygonCount": 5,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 177,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 177,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9992,
+        "independentExpectedUnionAreaM2": 1216.05,
+        "emittedAtGradeUnionAreaM2": 1215.07,
+        "unexplainedMissingAreaM2": 1.026,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-parallelweg-4arm",
+      "datasetName": "Parallelweg 4-Arm Junction Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 1.253,
+          "min": 0.91,
+          "max": 2.369,
+          "p95": 2.311
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 73,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 2,
+        "coplanarOverlapAreaM2": 2.076,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 1,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 1
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-parallelweg-4arm",
+      "datasetName": "Parallelweg 4-Arm Junction Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 3.593,
+          "min": 2.476,
+          "max": 5.373,
+          "p95": 4.338
+        },
+        "graphBuild": {
+          "median": 0.603,
+          "min": 0.484,
+          "max": 0.654,
+          "p95": 0.63
+        },
+        "adapterBuild": {
+          "median": 0.125,
+          "min": 0.083,
+          "max": 0.239,
+          "p95": 0.135
+        },
+        "roadGenerationTotal": {
+          "median": 3.132,
+          "min": 2.161,
+          "max": 4.912,
+          "p95": 3.911
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 5,
+        "inputRoadEdgeCount": 4,
+        "atGradeRoadEdgeCount": 4,
+        "processedProvenanceSegmentCount": 4,
+        "renderedRoadRibbonCount": 4,
+        "renderedJunctionCount": 1,
+        "branchingJunctionCount": 1,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 5,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 89,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 89,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 1950.13,
+        "emittedAtGradeUnionAreaM2": 1971.55,
+        "unexplainedMissingAreaM2": 1.614,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "repro-parallelweg-4arm",
+      "datasetName": "Parallelweg 4-Arm Junction Split",
+      "category": "repro-fixture",
+      "inputRoadFeatures": 4,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 3.535,
+          "min": 3.288,
+          "max": 4.433,
+          "p95": 4.346
+        },
+        "graphBuild": {
+          "median": 0.497,
+          "min": 0.437,
+          "max": 1.891,
+          "p95": 1.037
+        },
+        "adapterBuild": {
+          "median": 0.095,
+          "min": 0.083,
+          "max": 0.154,
+          "p95": 0.105
+        },
+        "roadGenerationTotal": {
+          "median": 3.186,
+          "min": 2.956,
+          "max": 4.102,
+          "p95": 4.019
+        },
+        "footprintConstruction": {
+          "median": 1.645,
+          "min": 1.563,
+          "max": 2.248,
+          "p95": 2.084
+        },
+        "polygonUnion": {
+          "median": 1.574,
+          "min": 1.48,
+          "max": 2.165,
+          "p95": 2.008
+        },
+        "ownershipClipping": {
+          "median": 0.973,
+          "min": 0.838,
+          "max": 1.913,
+          "p95": 1.216
+        },
+        "triangulationAndValidation": {
+          "median": 0.379,
+          "min": 0.319,
+          "max": 0.703,
+          "p95": 0.467
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 5,
+        "inputRoadEdgeCount": 4,
+        "atGradeRoadEdgeCount": 4,
+        "processedProvenanceSegmentCount": 4,
+        "renderedRoadRibbonCount": 4,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 23,
+        "generatedBendDiskPrimitiveCount": 5,
+        "generatedCapDiskPrimitiveCount": 8,
+        "generatedDiskPrimitiveCount": 13,
+        "generatedTotalPrimitiveCount": 36,
+        "polygonUnionOperationCount": 4,
+        "polygonDifferenceOperationCount": 3,
+        "candidateBlockerCheckCount": 6,
+        "overlappingBlockerCount": 5,
+        "outputPolygonCount": 4,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 150,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 150,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9994,
+        "independentExpectedUnionAreaM2": 1950.13,
+        "emittedAtGradeUnionAreaM2": 1948.88,
+        "unexplainedMissingAreaM2": 1.304,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H06",
+      "datasetName": "Hengelo - Deldenerstraat / Langestraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 21,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 14.096,
+          "min": 10.658,
+          "max": 25.27,
+          "p95": 15.48
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 408,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 3,
+        "coplanarOverlapAreaM2": 19.4399,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 3,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H06",
+      "datasetName": "Hengelo - Deldenerstraat / Langestraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 21,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 18.812,
+          "min": 16.117,
+          "max": 23.646,
+          "p95": 23.205
+        },
+        "graphBuild": {
+          "median": 1.802,
+          "min": 1.658,
+          "max": 2.201,
+          "p95": 2.146
+        },
+        "adapterBuild": {
+          "median": 0.421,
+          "min": 0.353,
+          "max": 0.482,
+          "p95": 0.443
+        },
+        "roadGenerationTotal": {
+          "median": 18.279,
+          "min": 15.643,
+          "max": 23.091,
+          "p95": 22.594
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 32,
+        "inputRoadEdgeCount": 38,
+        "atGradeRoadEdgeCount": 38,
+        "processedProvenanceSegmentCount": 39,
+        "renderedRoadRibbonCount": 39,
+        "renderedJunctionCount": 8,
+        "branchingJunctionCount": 7,
+        "degree2ContinuityJoinCount": 11,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 9,
+        "rejectedOrDegenerateCount": 1,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 1,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 53,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 459,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 459,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9795,
+        "independentExpectedUnionAreaM2": 6262.48,
+        "emittedAtGradeUnionAreaM2": 6134.21,
+        "unexplainedMissingAreaM2": 131.532,
+        "coverageDefectCount": 7,
+        "coverageDefectsByKind": {
+          "missing_road_surface_area": 7
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/1447458538-0:seg_0:p_0",
+            "sourceFeatureId": "way/1447458538",
+            "roadClass": "pedestrian",
+            "expectedAreaM2": 211.19184489499912,
+            "ownEmittedAreaM2": 415.4645973736997,
+            "occludedByHigherPriorityAreaM2": 0.04387447499925656,
+            "unexplainedMissingAreaM2": 17.96071243999981,
+            "sampleWorldPoint": [
+              -28.409908102448085,
+              -68.41695904219091
+            ],
+            "description": "At-grade road edge road_edge:way/1447458538-0:seg_0:p_0 (way/1447458538) is missing 17.961 m² of expected corridor coverage (expected 211.19 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/1447458538-0:seg_1:p_1",
+            "sourceFeatureId": "way/1447458538",
+            "roadClass": "pedestrian",
+            "expectedAreaM2": 329.8430617000022,
+            "ownEmittedAreaM2": 415.4645973736997,
+            "occludedByHigherPriorityAreaM2": 14.084479260001444,
+            "unexplainedMissingAreaM2": 93.87355362000034,
+            "sampleWorldPoint": [
+              -28.409908102448085,
+              -68.41695904219091
+            ],
+            "description": "At-grade road edge road_edge:way/1447458538-0:seg_1:p_1 (way/1447458538) is missing 93.874 m² of expected corridor coverage (expected 329.84 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/570051478-0:seg_1:p_0",
+            "sourceFeatureId": "way/570051478",
+            "roadClass": "service",
+            "expectedAreaM2": 360.35046034999687,
+            "ownEmittedAreaM2": 370.0827298277727,
+            "occludedByHigherPriorityAreaM2": 13.157724114999837,
+            "unexplainedMissingAreaM2": 16.61045273499576,
+            "sampleWorldPoint": [
+              -69.37604177623084,
+              -64.33153372979343
+            ],
+            "description": "At-grade road edge road_edge:way/570051478-0:seg_1:p_0 (way/570051478) is missing 16.610 m² of expected corridor coverage (expected 360.35 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/6670664-0:seg_0:p_0",
+            "sourceFeatureId": "way/6670664",
+            "roadClass": "pedestrian",
+            "expectedAreaM2": 49.62347809000039,
+            "ownEmittedAreaM2": 122.7544280674083,
+            "occludedByHigherPriorityAreaM2": 25.198100485000396,
+            "unexplainedMissingAreaM2": 7.399347644999921,
+            "sampleWorldPoint": [
+              -32.456787098303636,
+              -60.88062951521396
+            ],
+            "description": "At-grade road edge road_edge:way/6670664-0:seg_0:p_0 (way/6670664) is missing 7.399 m² of expected corridor coverage (expected 49.62 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/6670664-0:seg_1:p_0",
+            "sourceFeatureId": "way/6670664",
+            "roadClass": "pedestrian",
+            "expectedAreaM2": 132.04661993499985,
+            "ownEmittedAreaM2": 122.7544280674083,
+            "occludedByHigherPriorityAreaM2": 15.09990190000019,
+            "unexplainedMissingAreaM2": 11.510220974999925,
+            "sampleWorldPoint": [
+              -28.409908102448085,
+              -68.41695904219091
+            ],
+            "description": "At-grade road edge road_edge:way/6670664-0:seg_1:p_0 (way/6670664) is missing 11.510 m² of expected corridor coverage (expected 132.05 m²)"
+          }
+        ],
+        "coplanarOverlapCount": 1,
+        "coplanarOverlapAreaM2": 0.001,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 1
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H06",
+      "datasetName": "Hengelo - Deldenerstraat / Langestraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 21,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 43.794,
+          "min": 39.782,
+          "max": 59.719,
+          "p95": 49.911
+        },
+        "graphBuild": {
+          "median": 1.912,
+          "min": 1.653,
+          "max": 3.437,
+          "p95": 2.112
+        },
+        "adapterBuild": {
+          "median": 0.379,
+          "min": 0.344,
+          "max": 0.51,
+          "p95": 0.465
+        },
+        "roadGenerationTotal": {
+          "median": 43.12,
+          "min": 39.226,
+          "max": 59.127,
+          "p95": 49.104
+        },
+        "footprintConstruction": {
+          "median": 21.161,
+          "min": 17.95,
+          "max": 24.369,
+          "p95": 22.303
+        },
+        "polygonUnion": {
+          "median": 20.444,
+          "min": 16.874,
+          "max": 23.75,
+          "p95": 21.559
+        },
+        "ownershipClipping": {
+          "median": 16,
+          "min": 12.989,
+          "max": 32.84,
+          "p95": 19.594
+        },
+        "triangulationAndValidation": {
+          "median": 3.687,
+          "min": 2.589,
+          "max": 5.817,
+          "p95": 5.77
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 32,
+        "inputRoadEdgeCount": 38,
+        "atGradeRoadEdgeCount": 38,
+        "processedProvenanceSegmentCount": 39,
+        "renderedRoadRibbonCount": 39,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 1,
+        "generatedRectanglePrimitiveCount": 125,
+        "generatedBendDiskPrimitiveCount": 66,
+        "generatedCapDiskPrimitiveCount": 75,
+        "generatedDiskPrimitiveCount": 141,
+        "generatedTotalPrimitiveCount": 266,
+        "polygonUnionOperationCount": 39,
+        "polygonDifferenceOperationCount": 36,
+        "candidateBlockerCheckCount": 741,
+        "overlappingBlockerCount": 80,
+        "outputPolygonCount": 41,
+        "outputHoleRingCount": 1,
+        "outputTriangleCount": 1221,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 1221,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9991,
+        "independentExpectedUnionAreaM2": 6262.48,
+        "emittedAtGradeUnionAreaM2": 6256.75,
+        "unexplainedMissingAreaM2": 5.918,
+        "coverageDefectCount": 1,
+        "coverageDefectsByKind": {
+          "provenance_split_bend_gap": 1
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1447458538-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1447458538",
+            "roadClass": "pedestrian",
+            "expectedAreaM2": 211.19184489499912,
+            "ownEmittedAreaM2": 510.22088245897294,
+            "occludedByHigherPriorityAreaM2": 0.20814797999855728,
+            "unexplainedMissingAreaM2": 3.11705470499993,
+            "sampleWorldPoint": [
+              -14.590188461870978,
+              -54.69724845874345
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-14.59, -56.46) between way/1447458538 and way/1447458538"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A02",
+      "datasetName": "Nieuwe Westerdokstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 24,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.267,
+          "min": 4.5,
+          "max": 6.865,
+          "p95": 6.362
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 554,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 13,
+        "coplanarOverlapAreaM2": 7.3989,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 10,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 3
+        },
+        "windingDefectCount": 1,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 2,
+        "provenanceDefectSamples": [
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_tertiary",
+            "featureId": "way/445997917-0+way/7376108-0",
+            "sourceFeatureId": "way/445997917",
+            "description": "Feature way/445997917-0+way/7376108-0 lost or altered OSM tag \"timestamp\": expected \"2026-01-28T19:47:56Z\", got \"2026-01-28T19:48:01Z\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_tertiary",
+            "featureId": "way/445997917-0+way/7376108-0",
+            "sourceFeatureId": "way/445997917",
+            "description": "Triangles of way/445997917-0+way/7376108-0 (way/445997917) escaped source way envelope: mesh bbox [-161.9, -9.7]x[-117.0, 25.1] vs source [-160.0, -20.4]x[-115.1, -35.8] ± 5.3m"
+          }
+        ]
+      }
+    },
+    {
+      "datasetId": "A02",
+      "datasetName": "Nieuwe Westerdokstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 24,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 13.542,
+          "min": 10.9,
+          "max": 39.127,
+          "p95": 20.563
+        },
+        "graphBuild": {
+          "median": 1.666,
+          "min": 1.461,
+          "max": 15.014,
+          "p95": 1.951
+        },
+        "adapterBuild": {
+          "median": 0.378,
+          "min": 0.356,
+          "max": 0.552,
+          "p95": 0.411
+        },
+        "roadGenerationTotal": {
+          "median": 12.946,
+          "min": 9.929,
+          "max": 36.038,
+          "p95": 19.928
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 24,
+        "inputRoadEdgeCount": 26,
+        "atGradeRoadEdgeCount": 24,
+        "processedProvenanceSegmentCount": 28,
+        "renderedRoadRibbonCount": 28,
+        "renderedJunctionCount": 7,
+        "branchingJunctionCount": 7,
+        "degree2ContinuityJoinCount": 2,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 3,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 4,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 35,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 303,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 567,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9995,
+        "independentExpectedUnionAreaM2": 3092.14,
+        "emittedAtGradeUnionAreaM2": 3090.61,
+        "unexplainedMissingAreaM2": 1.907,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 2,
+        "coplanarOverlapAreaM2": 1.1761,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 1,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 1,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A02",
+      "datasetName": "Nieuwe Westerdokstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 24,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 29.075,
+          "min": 25.875,
+          "max": 32.682,
+          "p95": 31.932
+        },
+        "graphBuild": {
+          "median": 1.935,
+          "min": 1.506,
+          "max": 2.214,
+          "p95": 2.124
+        },
+        "adapterBuild": {
+          "median": 0.383,
+          "min": 0.356,
+          "max": 0.781,
+          "p95": 0.763
+        },
+        "roadGenerationTotal": {
+          "median": 28.359,
+          "min": 24.985,
+          "max": 31.805,
+          "p95": 30.866
+        },
+        "footprintConstruction": {
+          "median": 12.764,
+          "min": 10.363,
+          "max": 17.266,
+          "p95": 15.079
+        },
+        "polygonUnion": {
+          "median": 12.356,
+          "min": 9.939,
+          "max": 14.804,
+          "p95": 14.649
+        },
+        "ownershipClipping": {
+          "median": 12.733,
+          "min": 9.662,
+          "max": 15.911,
+          "p95": 15.261
+        },
+        "triangulationAndValidation": {
+          "median": 1.836,
+          "min": 1.472,
+          "max": 2.481,
+          "p95": 2.109
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 24,
+        "inputRoadEdgeCount": 26,
+        "atGradeRoadEdgeCount": 24,
+        "processedProvenanceSegmentCount": 28,
+        "renderedRoadRibbonCount": 28,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 4,
+        "generatedRectanglePrimitiveCount": 86,
+        "generatedBendDiskPrimitiveCount": 46,
+        "generatedCapDiskPrimitiveCount": 45,
+        "generatedDiskPrimitiveCount": 91,
+        "generatedTotalPrimitiveCount": 177,
+        "polygonUnionOperationCount": 28,
+        "polygonDifferenceOperationCount": 24,
+        "candidateBlockerCheckCount": 378,
+        "overlappingBlockerCount": 80,
+        "outputPolygonCount": 30,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 746,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 1010,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9995,
+        "independentExpectedUnionAreaM2": 3092.14,
+        "emittedAtGradeUnionAreaM2": 3090.67,
+        "unexplainedMissingAreaM2": 1.513,
+        "coverageDefectCount": 2,
+        "coverageDefectsByKind": {
+          "provenance_split_bend_gap": 2
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/445997917-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/445997917",
+            "roadClass": "tertiary",
+            "expectedAreaM2": 869.9619093850015,
+            "ownEmittedAreaM2": 869.5543095315898,
+            "occludedByHigherPriorityAreaM2": 0.08728810000047815,
+            "unexplainedMissingAreaM2": 0.3276420349995135,
+            "sampleWorldPoint": [
+              -19.377812158399,
+              -37.07304661669949
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-20.40, -35.82) between way/445997917 and way/7376108"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/601018475-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/601018475",
+            "roadClass": "tertiary",
+            "expectedAreaM2": 190.62354269500014,
+            "ownEmittedAreaM2": 178.9088113309076,
+            "occludedByHigherPriorityAreaM2": 11.480024320000183,
+            "unexplainedMissingAreaM2": 0.24193515499999307,
+            "sampleWorldPoint": [
+              7.892729188584542,
+              33.77581385737192
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (9.26, 34.63) between way/601018475 and way/609997806"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A01",
+      "datasetName": "Droogbak / Singel",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 28,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 6.779,
+          "min": 5.641,
+          "max": 8.46,
+          "p95": 7.255
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 382,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 16,
+        "coplanarOverlapAreaM2": 8.509,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 12,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 4
+        },
+        "windingDefectCount": 1,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 2,
+        "provenanceDefectSamples": [
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_residential",
+            "featureId": "way/1184498888-0+way/762640611-0",
+            "sourceFeatureId": "way/1184498888",
+            "description": "Feature way/1184498888-0+way/762640611-0 lost or altered OSM tag \"timestamp\": expected \"2025-11-13T18:40:35Z\", got \"2025-10-13T15:33:56Z\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_residential",
+            "featureId": "way/1184498888-0+way/762640611-0",
+            "sourceFeatureId": "way/1184498888",
+            "description": "Triangles of way/1184498888-0+way/762640611-0 (way/1184498888) escaped source way envelope: mesh bbox [2.5, 54.3]x[35.9, 72.2] vs source [4.3, 47.6]x[40.8, 70.4] ± 5.1m"
+          }
+        ]
+      }
+    },
+    {
+      "datasetId": "A01",
+      "datasetName": "Droogbak / Singel",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 28,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 15.722,
+          "min": 14.41,
+          "max": 21.694,
+          "p95": 18.549
+        },
+        "graphBuild": {
+          "median": 1.621,
+          "min": 1.522,
+          "max": 1.907,
+          "p95": 1.851
+        },
+        "adapterBuild": {
+          "median": 0.376,
+          "min": 0.365,
+          "max": 0.676,
+          "p95": 0.671
+        },
+        "roadGenerationTotal": {
+          "median": 14.97,
+          "min": 13.978,
+          "max": 21.283,
+          "p95": 17.998
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 26,
+        "inputRoadEdgeCount": 29,
+        "atGradeRoadEdgeCount": 29,
+        "processedProvenanceSegmentCount": 32,
+        "renderedRoadRibbonCount": 32,
+        "renderedJunctionCount": 9,
+        "branchingJunctionCount": 9,
+        "degree2ContinuityJoinCount": 1,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 3,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 3,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 41,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 415,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 415,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.999,
+        "independentExpectedUnionAreaM2": 4283.55,
+        "emittedAtGradeUnionAreaM2": 4279.31,
+        "unexplainedMissingAreaM2": 4.954,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 3,
+        "coplanarOverlapAreaM2": 1.9588,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 2,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 1,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A01",
+      "datasetName": "Droogbak / Singel",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 28,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 34.696,
+          "min": 31.292,
+          "max": 43.691,
+          "p95": 39.453
+        },
+        "graphBuild": {
+          "median": 1.84,
+          "min": 1.535,
+          "max": 5.235,
+          "p95": 2.687
+        },
+        "adapterBuild": {
+          "median": 0.381,
+          "min": 0.352,
+          "max": 0.588,
+          "p95": 0.487
+        },
+        "roadGenerationTotal": {
+          "median": 34.139,
+          "min": 30.619,
+          "max": 43.18,
+          "p95": 38.964
+        },
+        "footprintConstruction": {
+          "median": 16.167,
+          "min": 12.417,
+          "max": 22.636,
+          "p95": 20.495
+        },
+        "polygonUnion": {
+          "median": 15.553,
+          "min": 11.905,
+          "max": 21.894,
+          "p95": 19.88
+        },
+        "ownershipClipping": {
+          "median": 13.8,
+          "min": 11.707,
+          "max": 26.606,
+          "p95": 17.017
+        },
+        "triangulationAndValidation": {
+          "median": 1.846,
+          "min": 1.621,
+          "max": 2.609,
+          "p95": 2.556
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 26,
+        "inputRoadEdgeCount": 29,
+        "atGradeRoadEdgeCount": 29,
+        "processedProvenanceSegmentCount": 32,
+        "renderedRoadRibbonCount": 32,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 3,
+        "generatedRectanglePrimitiveCount": 105,
+        "generatedBendDiskPrimitiveCount": 45,
+        "generatedCapDiskPrimitiveCount": 57,
+        "generatedDiskPrimitiveCount": 102,
+        "generatedTotalPrimitiveCount": 207,
+        "polygonUnionOperationCount": 32,
+        "polygonDifferenceOperationCount": 26,
+        "candidateBlockerCheckCount": 496,
+        "overlappingBlockerCount": 86,
+        "outputPolygonCount": 34,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 921,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 921,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9994,
+        "independentExpectedUnionAreaM2": 4283.55,
+        "emittedAtGradeUnionAreaM2": 4281,
+        "unexplainedMissingAreaM2": 2.639,
+        "coverageDefectCount": 1,
+        "coverageDefectsByKind": {
+          "provenance_split_bend_gap": 1
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/601018475-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/601018475",
+            "roadClass": "tertiary",
+            "expectedAreaM2": 190.62580205499998,
+            "ownEmittedAreaM2": 178.9098942390283,
+            "occludedByHigherPriorityAreaM2": 11.480838369999958,
+            "unexplainedMissingAreaM2": 0.24178932499998496,
+            "sampleWorldPoint": [
+              15.12979080261676,
+              -29.631776000248117
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (16.50, -28.78) between way/601018475 and way/609997806"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A05",
+      "datasetName": "De Ruijterkade",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 10,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 2.206,
+          "min": 1.813,
+          "max": 5.349,
+          "p95": 2.292
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 159,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 1,
+        "coplanarOverlapAreaM2": 0.0013,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 1,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 5,
+        "provenanceDefectSamples": [
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_unclassified",
+            "featureId": "way/1513244486-0+way/7375286-0",
+            "sourceFeatureId": "way/1513244486",
+            "description": "Feature way/1513244486-0+way/7375286-0 lost or altered OSM tag \"timestamp\": expected \"2026-05-20T12:31:12Z\", got \"2026-07-06T01:02:58Z\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_unclassified",
+            "featureId": "way/1513244486-0+way/7375286-0",
+            "sourceFeatureId": "way/1513244486",
+            "description": "Triangles of way/1513244486-0+way/7375286-0 (way/1513244486) escaped source way envelope: mesh bbox [-1.2, 14.8]x[-25.4, -2.7] vs source [7.2, 13.0]x[-23.6, -19.8] ± 5.1m"
+          },
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_unclassified",
+            "featureId": "way/1535707893-0+way/1510044776-0",
+            "sourceFeatureId": "way/1535707893",
+            "description": "Feature way/1535707893-0+way/1510044776-0 lost or altered OSM tag \"timestamp\": expected \"2026-07-06T01:02:58Z\", got \"2026-05-20T12:31:12Z\""
+          },
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_primary",
+            "featureId": "way/757674010-0+way/1510044772-0+way/287963191-0",
+            "sourceFeatureId": "way/757674010",
+            "description": "Feature way/757674010-0+way/1510044772-0+way/287963191-0 lost or altered OSM tag \"timestamp\": expected \"2026-05-06T23:40:31Z\", got \"2026-07-08T07:12:20Z\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_primary",
+            "featureId": "way/757674010-0+way/1510044772-0+way/287963191-0",
+            "sourceFeatureId": "way/757674010",
+            "description": "Triangles of way/757674010-0+way/1510044772-0+way/287963191-0 (way/757674010) escaped source way envelope: mesh bbox [-95.9, -1.2]x[-27.6, 1.5] vs source [-23.8, 0.0]x[-6.6, 0.0] ± 6.8m"
+          }
+        ]
+      }
+    },
+    {
+      "datasetId": "A05",
+      "datasetName": "De Ruijterkade",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 10,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.661,
+          "min": 3.964,
+          "max": 7.913,
+          "p95": 7.302
+        },
+        "graphBuild": {
+          "median": 0.923,
+          "min": 0.84,
+          "max": 1.436,
+          "p95": 1.241
+        },
+        "adapterBuild": {
+          "median": 0.251,
+          "min": 0.194,
+          "max": 2.526,
+          "p95": 0.511
+        },
+        "roadGenerationTotal": {
+          "median": 5.265,
+          "min": 3.6,
+          "max": 7.558,
+          "p95": 6.869
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 13,
+        "inputRoadEdgeCount": 12,
+        "atGradeRoadEdgeCount": 12,
+        "processedProvenanceSegmentCount": 15,
+        "renderedRoadRibbonCount": 15,
+        "renderedJunctionCount": 2,
+        "branchingJunctionCount": 2,
+        "degree2ContinuityJoinCount": 2,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 1,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 3,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 17,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 159,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 159,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9995,
+        "independentExpectedUnionAreaM2": 3123.81,
+        "emittedAtGradeUnionAreaM2": 3122.29,
+        "unexplainedMissingAreaM2": 2.151,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "A05",
+      "datasetName": "De Ruijterkade",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 10,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 10.922,
+          "min": 8.671,
+          "max": 19.353,
+          "p95": 15.8
+        },
+        "graphBuild": {
+          "median": 0.929,
+          "min": 0.869,
+          "max": 1.339,
+          "p95": 1.102
+        },
+        "adapterBuild": {
+          "median": 0.207,
+          "min": 0.198,
+          "max": 0.26,
+          "p95": 0.241
+        },
+        "roadGenerationTotal": {
+          "median": 10.535,
+          "min": 8.336,
+          "max": 18.994,
+          "p95": 15.404
+        },
+        "footprintConstruction": {
+          "median": 3.928,
+          "min": 3.665,
+          "max": 7.347,
+          "p95": 6.328
+        },
+        "polygonUnion": {
+          "median": 3.823,
+          "min": 3.577,
+          "max": 7.223,
+          "p95": 6.207
+        },
+        "ownershipClipping": {
+          "median": 4.359,
+          "min": 3.744,
+          "max": 6.569,
+          "p95": 5.644
+        },
+        "triangulationAndValidation": {
+          "median": 0.638,
+          "min": 0.534,
+          "max": 0.94,
+          "p95": 0.705
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 13,
+        "inputRoadEdgeCount": 12,
+        "atGradeRoadEdgeCount": 12,
+        "processedProvenanceSegmentCount": 16,
+        "renderedRoadRibbonCount": 14,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 2,
+        "provenanceSplitSegmentCount": 4,
+        "generatedRectanglePrimitiveCount": 46,
+        "generatedBendDiskPrimitiveCount": 10,
+        "generatedCapDiskPrimitiveCount": 23,
+        "generatedDiskPrimitiveCount": 33,
+        "generatedTotalPrimitiveCount": 79,
+        "polygonUnionOperationCount": 16,
+        "polygonDifferenceOperationCount": 13,
+        "candidateBlockerCheckCount": 114,
+        "overlappingBlockerCount": 36,
+        "outputPolygonCount": 14,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 359,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 359,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9992,
+        "independentExpectedUnionAreaM2": 3123.81,
+        "emittedAtGradeUnionAreaM2": 3121.18,
+        "unexplainedMissingAreaM2": 2.693,
+        "coverageDefectCount": 3,
+        "coverageDefectsByKind": {
+          "provenance_split_bend_gap": 3
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1510044772-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1510044772",
+            "roadClass": "primary",
+            "expectedAreaM2": 401.5800449650004,
+            "ownEmittedAreaM2": 400.6198024729829,
+            "occludedByHigherPriorityAreaM2": 0.15624048499995524,
+            "unexplainedMissingAreaM2": 0.8162667700000839,
+            "sampleWorldPoint": [
+              -39.148152595398685,
+              -5.855554039873464
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (-38.77, -8.04) between way/1510044772 and way/287963191"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1510044777-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1510044777",
+            "roadClass": "unclassified",
+            "expectedAreaM2": 45.961387005,
+            "ownEmittedAreaM2": 13.715340871838748,
+            "occludedByHigherPriorityAreaM2": 31.743842239999996,
+            "unexplainedMissingAreaM2": 0.5022050500000077,
+            "sampleWorldPoint": [
+              9.11578217805813,
+              5.58226354406448
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.89, 4.70) between way/1510044777 and way/1535707895"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1513244486-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1513244486",
+            "roadClass": "unclassified",
+            "expectedAreaM2": 112.36257174999997,
+            "ownEmittedAreaM2": 97.1754098846541,
+            "occludedByHigherPriorityAreaM2": 14.78958661499999,
+            "unexplainedMissingAreaM2": 0.4036973249998612,
+            "sampleWorldPoint": [
+              6.125069162364051,
+              -20.91488302344855
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.16, -19.81) between way/1513244486 and way/7375286"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H01",
+      "datasetName": "Utrecht - Lucasbolwerk / Wittevrouwenstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 38,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 23.278,
+          "min": 19.941,
+          "max": 28.996,
+          "p95": 28.593
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 667,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 21,
+        "coplanarOverlapAreaM2": 46.6395,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 1,
+          "path_or_cycleway": 18,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 2
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 14,
+        "provenanceDefectSamples": [
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_footway",
+            "featureId": "way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg0",
+            "sourceFeatureId": "way/1576579940",
+            "description": "Feature way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg0 lost or altered OSM tag \"footway\": expected \"sidewalk\", got \"crossing\""
+          },
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_footway",
+            "featureId": "way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg1",
+            "sourceFeatureId": "way/1576579940",
+            "description": "Feature way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg1 lost or altered OSM tag \"footway\": expected \"sidewalk\", got \"crossing\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_footway",
+            "featureId": "way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg1",
+            "sourceFeatureId": "way/1576579940",
+            "description": "Triangles of way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg1 (way/1576579940) escaped source way envelope: mesh bbox [6.4, 8.6]x[49.7, 59.7] vs source [7.6, 7.6]x[61.4, 61.9] ± 3.7m"
+          },
+          {
+            "kind": "osm_tag_mismatch",
+            "meshName": "Roads_footway",
+            "featureId": "way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg2",
+            "sourceFeatureId": "way/1576579940",
+            "description": "Feature way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg2 lost or altered OSM tag \"footway\": expected \"sidewalk\", got \"crossing\""
+          },
+          {
+            "kind": "provenance_span_escape",
+            "meshName": "Roads_footway",
+            "featureId": "way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg2",
+            "sourceFeatureId": "way/1576579940",
+            "description": "Triangles of way/1576579940-0+way/1374152346-0+way/1375802562-0+way/1576579935-0+way/1576579936-0_seg2 (way/1576579940) escaped source way envelope: mesh bbox [5.6, 7.8]x[47.1, 48.2] vs source [7.6, 7.6]x[61.4, 61.9] ± 3.7m"
+          }
+        ]
+      }
+    },
+    {
+      "datasetId": "H01",
+      "datasetName": "Utrecht - Lucasbolwerk / Wittevrouwenstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 38,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 41.254,
+          "min": 38.719,
+          "max": 48.975,
+          "p95": 47.935
+        },
+        "graphBuild": {
+          "median": 3.078,
+          "min": 3.04,
+          "max": 5.026,
+          "p95": 4.471
+        },
+        "adapterBuild": {
+          "median": 0.784,
+          "min": 0.631,
+          "max": 1.136,
+          "p95": 0.98
+        },
+        "roadGenerationTotal": {
+          "median": 40.642,
+          "min": 38.155,
+          "max": 48.384,
+          "p95": 47.151
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 65,
+        "inputRoadEdgeCount": 83,
+        "atGradeRoadEdgeCount": 83,
+        "processedProvenanceSegmentCount": 91,
+        "renderedRoadRibbonCount": 86,
+        "renderedJunctionCount": 23,
+        "branchingJunctionCount": 4,
+        "degree2ContinuityJoinCount": 35,
+        "pathJunctionCount": 16,
+        "crossTierOnlyNodeCount": 16,
+        "rejectedOrDegenerateCount": 3,
+        "fullySubtractedCount": 5,
+        "provenanceSplitSegmentCount": 8,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 113,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 810,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 810,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.959,
+        "independentExpectedUnionAreaM2": 6237.11,
+        "emittedAtGradeUnionAreaM2": 5981.56,
+        "unexplainedMissingAreaM2": 256.808,
+        "coverageDefectCount": 5,
+        "coverageDefectsByKind": {
+          "missing_road_surface_area": 5
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/1375802579-0:seg_0:p_0",
+            "sourceFeatureId": "way/1375802579",
+            "roadClass": "residential",
+            "expectedAreaM2": 30.317612399999774,
+            "ownEmittedAreaM2": 9.57681337849317,
+            "occludedByHigherPriorityAreaM2": 18.456060994999916,
+            "unexplainedMissingAreaM2": 7.416211429999947,
+            "sampleWorldPoint": [
+              12.611484261017376,
+              44.327421233809076
+            ],
+            "description": "At-grade road edge road_edge:way/1375802579-0:seg_0:p_0 (way/1375802579) is missing 7.416 m² of expected corridor coverage (expected 30.32 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/1375870562-0:seg_0:p_0",
+            "sourceFeatureId": "way/1375870562",
+            "roadClass": "service",
+            "expectedAreaM2": 16.84145413500005,
+            "ownEmittedAreaM2": 7.153991019033128,
+            "occludedByHigherPriorityAreaM2": 7.5826289200003885,
+            "unexplainedMissingAreaM2": 2.1054907049999656,
+            "sampleWorldPoint": [
+              60.944108595605314,
+              49.42585391160787
+            ],
+            "description": "At-grade road edge road_edge:way/1375870562-0:seg_0:p_0 (way/1375870562) is missing 2.105 m² of expected corridor coverage (expected 16.84 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/286853488-0:seg_0:p_0",
+            "sourceFeatureId": "way/286853488",
+            "roadClass": "platform",
+            "expectedAreaM2": 358.41624527,
+            "ownEmittedAreaM2": 10.216192006599158,
+            "occludedByHigherPriorityAreaM2": 248.64073604999942,
+            "unexplainedMissingAreaM2": 109.77544769000099,
+            "sampleWorldPoint": [
+              79.55357100036174,
+              59.52253172669363
+            ],
+            "description": "At-grade road edge road_edge:way/286853488-0:seg_0:p_0 (way/286853488) is missing 109.775 m² of expected corridor coverage (expected 358.42 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/286853489-0:seg_0:p_0",
+            "sourceFeatureId": "way/286853489",
+            "roadClass": "platform",
+            "expectedAreaM2": 293.40985932000126,
+            "ownEmittedAreaM2": 12.850847377470927,
+            "occludedByHigherPriorityAreaM2": 159.6577226050008,
+            "unexplainedMissingAreaM2": 131.6278975549999,
+            "sampleWorldPoint": [
+              42.355163789968884,
+              61.314775528844386
+            ],
+            "description": "At-grade road edge road_edge:way/286853489-0:seg_0:p_0 (way/286853489) is missing 131.628 m² of expected corridor coverage (expected 293.41 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/304698861-0:seg_1:p_0",
+            "sourceFeatureId": "way/304698861",
+            "roadClass": "footway",
+            "expectedAreaM2": 94.53026219499884,
+            "ownEmittedAreaM2": 6.7839907618035795,
+            "occludedByHigherPriorityAreaM2": 15.986313234999443,
+            "unexplainedMissingAreaM2": 74.72049118499967,
+            "sampleWorldPoint": [
+              39.708393503063576,
+              65.52265228096348
+            ],
+            "description": "At-grade road edge road_edge:way/304698861-0:seg_1:p_0 (way/304698861) is missing 74.720 m² of expected corridor coverage (expected 94.53 m²)"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 3,
+        "provenanceDefectSamples": [
+          {
+            "kind": "invalid_fully_subtracted_claim",
+            "sourceFeatureId": "way/286853488",
+            "description": "Feature way/286853488 is marked in fullySubtractedRoadIds, but its expected corridor was not fully covered by higher-priority road surfaces"
+          },
+          {
+            "kind": "invalid_fully_subtracted_claim",
+            "sourceFeatureId": "way/1374152346",
+            "description": "Feature way/1374152346 is marked in fullySubtractedRoadIds, but its expected corridor was not fully covered by higher-priority road surfaces"
+          },
+          {
+            "kind": "invalid_fully_subtracted_claim",
+            "sourceFeatureId": "way/1576579942",
+            "description": "Feature way/1576579942 is marked in fullySubtractedRoadIds, but its expected corridor was not fully covered by higher-priority road surfaces"
+          }
+        ]
+      }
+    },
+    {
+      "datasetId": "H01",
+      "datasetName": "Utrecht - Lucasbolwerk / Wittevrouwenstraat",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 38,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 79.163,
+          "min": 72.548,
+          "max": 93.344,
+          "p95": 84.901
+        },
+        "graphBuild": {
+          "median": 3.411,
+          "min": 2.855,
+          "max": 4.276,
+          "p95": 3.572
+        },
+        "adapterBuild": {
+          "median": 1.142,
+          "min": 0.741,
+          "max": 2.166,
+          "p95": 1.736
+        },
+        "roadGenerationTotal": {
+          "median": 78.52,
+          "min": 71.915,
+          "max": 92.647,
+          "p95": 83.993
+        },
+        "footprintConstruction": {
+          "median": 28.196,
+          "min": 22.423,
+          "max": 33.741,
+          "p95": 30.975
+        },
+        "polygonUnion": {
+          "median": 27.541,
+          "min": 21.836,
+          "max": 32.8,
+          "p95": 30.32
+        },
+        "ownershipClipping": {
+          "median": 44.544,
+          "min": 35.178,
+          "max": 52.343,
+          "p95": 49.954
+        },
+        "triangulationAndValidation": {
+          "median": 4.174,
+          "min": 3.432,
+          "max": 6.395,
+          "p95": 4.882
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 65,
+        "inputRoadEdgeCount": 83,
+        "atGradeRoadEdgeCount": 83,
+        "processedProvenanceSegmentCount": 92,
+        "renderedRoadRibbonCount": 91,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 1,
+        "provenanceSplitSegmentCount": 9,
+        "generatedRectanglePrimitiveCount": 202,
+        "generatedBendDiskPrimitiveCount": 66,
+        "generatedCapDiskPrimitiveCount": 161,
+        "generatedDiskPrimitiveCount": 227,
+        "generatedTotalPrimitiveCount": 429,
+        "polygonUnionOperationCount": 92,
+        "polygonDifferenceOperationCount": 85,
+        "candidateBlockerCheckCount": 4148,
+        "overlappingBlockerCount": 345,
+        "outputPolygonCount": 100,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 1904,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 1904,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9995,
+        "independentExpectedUnionAreaM2": 6237.11,
+        "emittedAtGradeUnionAreaM2": 6233.94,
+        "unexplainedMissingAreaM2": 3.247,
+        "coverageDefectCount": 4,
+        "coverageDefectsByKind": {
+          "provenance_split_bend_gap": 4
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1374152347-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1374152347",
+            "roadClass": "footway",
+            "expectedAreaM2": 17.399086794999974,
+            "ownEmittedAreaM2": 18.903224051609754,
+            "occludedByHigherPriorityAreaM2": 7.75731651000001,
+            "unexplainedMissingAreaM2": 0.15345256000000518,
+            "sampleWorldPoint": [
+              8.698484364525351,
+              46.56658458326582
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (8.26, 45.75) between way/1374152347 and way/1576579934"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1374152348-0:seg_1:p_0#seg0",
+            "sourceFeatureId": "way/1374152348",
+            "roadClass": "footway",
+            "expectedAreaM2": 150.91820540999908,
+            "ownEmittedAreaM2": 38.60625783573414,
+            "occludedByHigherPriorityAreaM2": 120.29403676999914,
+            "unexplainedMissingAreaM2": 0.8886634250000611,
+            "sampleWorldPoint": [
+              17.04825269273149,
+              51.59921112436721
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (17.75, 51.00) between way/1374152348 and way/1426273688"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1375802562-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1375802562",
+            "roadClass": "footway",
+            "expectedAreaM2": 10.403452475000051,
+            "ownEmittedAreaM2": 2.040845394740245,
+            "occludedByHigherPriorityAreaM2": 8.182147340000029,
+            "unexplainedMissingAreaM2": 0.18892042999999603,
+            "sampleWorldPoint": [
+              8.428236044306987,
+              49.889406549734424
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (7.52, 50.04) between way/1375802562 and way/1576579935"
+          },
+          {
+            "kind": "provenance_split_bend_gap",
+            "featureId": "road_edge:way/1375802573-0:seg_0:p_0#seg0",
+            "sourceFeatureId": "way/1375802573",
+            "roadClass": "footway",
+            "expectedAreaM2": 99.73318546000053,
+            "ownEmittedAreaM2": 98.12411441277436,
+            "occludedByHigherPriorityAreaM2": 9.262235685000576,
+            "unexplainedMissingAreaM2": 0.23546065000005,
+            "sampleWorldPoint": [
+              59.08598921677475,
+              47.283928017888904
+            ],
+            "description": "Outer-corner wedge gap detected at internal provenance split vertex (58.78, 48.16) between way/1375802573 and way/1375870561"
+          }
+        ],
+        "coplanarOverlapCount": 2,
+        "coplanarOverlapAreaM2": 0.0312,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 1,
+          "intra_feature_self_overlap": 1
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H02",
+      "datasetName": "Rotterdam - Meent / Rodezand",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 18,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 5.541,
+          "min": 3.638,
+          "max": 7.985,
+          "p95": 5.833
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 584,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H02",
+      "datasetName": "Rotterdam - Meent / Rodezand",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 18,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 6.111,
+          "min": 5.599,
+          "max": 7.948,
+          "p95": 7.753
+        },
+        "graphBuild": {
+          "median": 1.159,
+          "min": 1.11,
+          "max": 2.627,
+          "p95": 1.52
+        },
+        "adapterBuild": {
+          "median": 0.27,
+          "min": 0.26,
+          "max": 1.809,
+          "p95": 0.284
+        },
+        "roadGenerationTotal": {
+          "median": 5.662,
+          "min": 5.121,
+          "max": 7.454,
+          "p95": 7.261
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 32,
+        "inputRoadEdgeCount": 27,
+        "atGradeRoadEdgeCount": 24,
+        "processedProvenanceSegmentCount": 24,
+        "renderedRoadRibbonCount": 24,
+        "renderedJunctionCount": 7,
+        "branchingJunctionCount": 6,
+        "degree2ContinuityJoinCount": 3,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 2,
+        "rejectedOrDegenerateCount": 1,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 31,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 275,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 599,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.9955,
+        "independentExpectedUnionAreaM2": 5503.46,
+        "emittedAtGradeUnionAreaM2": 5478.77,
+        "unexplainedMissingAreaM2": 26.562,
+        "coverageDefectCount": 1,
+        "coverageDefectsByKind": {
+          "missing_road_surface_area": 1
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/1354399018-0:seg_0:p_0",
+            "sourceFeatureId": "way/1354399018",
+            "roadClass": "residential",
+            "expectedAreaM2": 474.9855272000011,
+            "ownEmittedAreaM2": 431.18117191950296,
+            "occludedByHigherPriorityAreaM2": 25.062398940001685,
+            "unexplainedMissingAreaM2": 19.255419704998985,
+            "sampleWorldPoint": [
+              -119.85471561319247,
+              -15.317561933397167
+            ],
+            "description": "At-grade road edge road_edge:way/1354399018-0:seg_0:p_0 (way/1354399018) is missing 19.255 m² of expected corridor coverage (expected 474.99 m²)"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "H02",
+      "datasetName": "Rotterdam - Meent / Rodezand",
+      "category": "real-world-extract",
+      "inputRoadFeatures": 18,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 16.846,
+          "min": 15.37,
+          "max": 21.957,
+          "p95": 17.063
+        },
+        "graphBuild": {
+          "median": 1.149,
+          "min": 1.111,
+          "max": 3.593,
+          "p95": 1.568
+        },
+        "adapterBuild": {
+          "median": 0.265,
+          "min": 0.258,
+          "max": 0.325,
+          "p95": 0.32
+        },
+        "roadGenerationTotal": {
+          "median": 16.309,
+          "min": 14.865,
+          "max": 21.402,
+          "p95": 16.539
+        },
+        "footprintConstruction": {
+          "median": 8.378,
+          "min": 6.16,
+          "max": 8.925,
+          "p95": 8.673
+        },
+        "polygonUnion": {
+          "median": 8.18,
+          "min": 6,
+          "max": 8.76,
+          "p95": 8.486
+        },
+        "ownershipClipping": {
+          "median": 7.51,
+          "min": 5.85,
+          "max": 11.552,
+          "p95": 8.281
+        },
+        "triangulationAndValidation": {
+          "median": 0.876,
+          "min": 0.824,
+          "max": 1.073,
+          "p95": 0.954
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 32,
+        "inputRoadEdgeCount": 27,
+        "atGradeRoadEdgeCount": 24,
+        "processedProvenanceSegmentCount": 24,
+        "renderedRoadRibbonCount": 24,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 66,
+        "generatedBendDiskPrimitiveCount": 26,
+        "generatedCapDiskPrimitiveCount": 42,
+        "generatedDiskPrimitiveCount": 68,
+        "generatedTotalPrimitiveCount": 134,
+        "polygonUnionOperationCount": 24,
+        "polygonDifferenceOperationCount": 20,
+        "candidateBlockerCheckCount": 276,
+        "overlappingBlockerCount": 49,
+        "outputPolygonCount": 26,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 612,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 936,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9997,
+        "independentExpectedUnionAreaM2": 5503.46,
+        "emittedAtGradeUnionAreaM2": 5502.03,
+        "unexplainedMissingAreaM2": 1.534,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "stress-urban-grid-270",
+      "datasetName": "Dense Urban Mixed Grid (209 Vehicular/Path Ways)",
+      "category": "stress-grid",
+      "inputRoadFeatures": 197,
+      "rendererMode": "legacy",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 36.986,
+          "min": 36.313,
+          "max": 38.962,
+          "p95": 38.525
+        },
+        "graphBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "adapterBuild": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "roadGenerationTotal": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": null,
+      "roadGroupTriangles": 1342,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 1,
+        "independentExpectedUnionAreaM2": 0,
+        "emittedAtGradeUnionAreaM2": 0,
+        "unexplainedMissingAreaM2": 0,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 28,
+        "coplanarOverlapAreaM2": 14.4479,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 28,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "stress-urban-grid-270",
+      "datasetName": "Dense Urban Mixed Grid (209 Vehicular/Path Ways)",
+      "category": "stress-grid",
+      "inputRoadFeatures": 197,
+      "rendererMode": "graph",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 53.884,
+          "min": 47.111,
+          "max": 67.178,
+          "p95": 60.805
+        },
+        "graphBuild": {
+          "median": 4.632,
+          "min": 3.67,
+          "max": 6.248,
+          "p95": 5.688
+        },
+        "adapterBuild": {
+          "median": 1.207,
+          "min": 0.865,
+          "max": 5.653,
+          "p95": 1.239
+        },
+        "roadGenerationTotal": {
+          "median": 53.148,
+          "min": 46.343,
+          "max": 66.39,
+          "p95": 60.028
+        },
+        "footprintConstruction": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "polygonUnion": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "ownershipClipping": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        },
+        "triangulationAndValidation": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "p95": 0
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 90,
+        "inputRoadEdgeCount": 197,
+        "atGradeRoadEdgeCount": 197,
+        "processedProvenanceSegmentCount": 197,
+        "renderedRoadRibbonCount": 197,
+        "renderedJunctionCount": 90,
+        "branchingJunctionCount": 86,
+        "degree2ContinuityJoinCount": 4,
+        "pathJunctionCount": 28,
+        "crossTierOnlyNodeCount": 1,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 0,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 0,
+        "generatedDiskPrimitiveCount": 0,
+        "generatedTotalPrimitiveCount": 0,
+        "polygonUnionOperationCount": 0,
+        "polygonDifferenceOperationCount": 0,
+        "candidateBlockerCheckCount": 0,
+        "overlappingBlockerCount": 0,
+        "outputPolygonCount": 287,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 1226,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 1226,
+      "sceneStats": {},
+      "integrity": {
+        "valid": false,
+        "networkCoverageRatio": 0.996,
+        "independentExpectedUnionAreaM2": 32447.04,
+        "emittedAtGradeUnionAreaM2": 32318.35,
+        "unexplainedMissingAreaM2": 128.688,
+        "coverageDefectCount": 6,
+        "coverageDefectsByKind": {
+          "missing_road_surface_area": 6
+        },
+        "coverageDefectSamples": [
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/h-0-0-0:seg_0:p_0",
+            "sourceFeatureId": "way/h-0-0",
+            "roadClass": "primary",
+            "expectedAreaM2": 379.60389240000586,
+            "ownEmittedAreaM2": 284.57249450683594,
+            "occludedByHigherPriorityAreaM2": 140.84573014000034,
+            "unexplainedMissingAreaM2": 23.403162260004137,
+            "sampleWorldPoint": [
+              -126,
+              -112
+            ],
+            "description": "At-grade road edge road_edge:way/h-0-0-0:seg_0:p_0 (way/h-0-0) is missing 23.403 m² of expected corridor coverage (expected 379.60 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/h-0-8-0:seg_0:p_0",
+            "sourceFeatureId": "way/h-0-8",
+            "roadClass": "primary",
+            "expectedAreaM2": 379.60389240000586,
+            "ownEmittedAreaM2": 357.3750686645508,
+            "occludedByHigherPriorityAreaM2": 136.1990755150009,
+            "unexplainedMissingAreaM2": 28.049816885003565,
+            "sampleWorldPoint": [
+              98,
+              -112
+            ],
+            "description": "At-grade road edge road_edge:way/h-0-8-0:seg_0:p_0 (way/h-0-8) is missing 28.050 m² of expected corridor coverage (expected 379.60 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/h-8-0-0:seg_0:p_0",
+            "sourceFeatureId": "way/h-8-0",
+            "roadClass": "primary",
+            "expectedAreaM2": 379.60389240000586,
+            "ownEmittedAreaM2": 284.57249450683594,
+            "occludedByHigherPriorityAreaM2": 140.84573014000034,
+            "unexplainedMissingAreaM2": 23.403162260004137,
+            "sampleWorldPoint": [
+              -126,
+              112
+            ],
+            "description": "At-grade road edge road_edge:way/h-8-0-0:seg_0:p_0 (way/h-8-0) is missing 23.403 m² of expected corridor coverage (expected 379.60 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/h-8-8-0:seg_0:p_0",
+            "sourceFeatureId": "way/h-8-8",
+            "roadClass": "primary",
+            "expectedAreaM2": 379.60389240000586,
+            "ownEmittedAreaM2": 357.3750686645508,
+            "occludedByHigherPriorityAreaM2": 136.1990755150009,
+            "unexplainedMissingAreaM2": 28.049816885003565,
+            "sampleWorldPoint": [
+              98,
+              112
+            ],
+            "description": "At-grade road edge road_edge:way/h-8-8-0:seg_0:p_0 (way/h-8-8) is missing 28.050 m² of expected corridor coverage (expected 379.60 m²)"
+          },
+          {
+            "kind": "missing_road_surface_area",
+            "featureId": "road_edge:way/v-0-0-0:seg_0:p_0",
+            "sourceFeatureId": "way/v-0-0",
+            "roadClass": "secondary",
+            "expectedAreaM2": 294.0991164799989,
+            "ownEmittedAreaM2": 221.7800178527832,
+            "occludedByHigherPriorityAreaM2": 116.36433735999981,
+            "unexplainedMissingAreaM2": 14.024779119999948,
+            "sampleWorldPoint": [
+              -126,
+              -112
+            ],
+            "description": "At-grade road edge road_edge:way/v-0-0-0:seg_0:p_0 (way/v-0-0) is missing 14.025 m² of expected corridor coverage (expected 294.10 m²)"
+          }
+        ],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    },
+    {
+      "datasetId": "stress-urban-grid-270",
+      "datasetName": "Dense Urban Mixed Grid (209 Vehicular/Path Ways)",
+      "category": "stress-grid",
+      "inputRoadFeatures": 197,
+      "rendererMode": "graph-surface",
+      "timingMs": {
+        "sceneBuild": {
+          "median": 82.076,
+          "min": 72.212,
+          "max": 121.239,
+          "p95": 109.208
+        },
+        "graphBuild": {
+          "median": 4.943,
+          "min": 3.762,
+          "max": 9.448,
+          "p95": 5.808
+        },
+        "adapterBuild": {
+          "median": 1.348,
+          "min": 1.056,
+          "max": 3.736,
+          "p95": 3.538
+        },
+        "roadGenerationTotal": {
+          "median": 81.212,
+          "min": 71.439,
+          "max": 119.911,
+          "p95": 103.249
+        },
+        "footprintConstruction": {
+          "median": 24.966,
+          "min": 18.756,
+          "max": 34.728,
+          "p95": 28.013
+        },
+        "polygonUnion": {
+          "median": 24.269,
+          "min": 18.083,
+          "max": 33.881,
+          "p95": 27.315
+        },
+        "ownershipClipping": {
+          "median": 45.541,
+          "min": 43.222,
+          "max": 73.665,
+          "p95": 64.697
+        },
+        "triangulationAndValidation": {
+          "median": 5.383,
+          "min": 3.459,
+          "max": 8.265,
+          "p95": 5.917
+        }
+      },
+      "counters": {
+        "inputRoadNodeCount": 90,
+        "inputRoadEdgeCount": 197,
+        "atGradeRoadEdgeCount": 197,
+        "processedProvenanceSegmentCount": 197,
+        "renderedRoadRibbonCount": 197,
+        "renderedJunctionCount": 0,
+        "branchingJunctionCount": 0,
+        "degree2ContinuityJoinCount": 0,
+        "pathJunctionCount": 0,
+        "crossTierOnlyNodeCount": 0,
+        "rejectedOrDegenerateCount": 0,
+        "fullySubtractedCount": 0,
+        "provenanceSplitSegmentCount": 0,
+        "generatedRectanglePrimitiveCount": 197,
+        "generatedBendDiskPrimitiveCount": 0,
+        "generatedCapDiskPrimitiveCount": 394,
+        "generatedDiskPrimitiveCount": 394,
+        "generatedTotalPrimitiveCount": 591,
+        "polygonUnionOperationCount": 197,
+        "polygonDifferenceOperationCount": 192,
+        "candidateBlockerCheckCount": 19306,
+        "overlappingBlockerCount": 661,
+        "outputPolygonCount": 201,
+        "outputHoleRingCount": 0,
+        "outputTriangleCount": 1734,
+        "roundedBufferFailureCount": 0,
+        "flatRibbonFallbackCount": 0,
+        "surfaceClipFailureCount": 0,
+        "emptyShapeCount": 0,
+        "invalidTriangleGeometryCount": 0
+      },
+      "roadGroupTriangles": 1734,
+      "sceneStats": {},
+      "integrity": {
+        "valid": true,
+        "networkCoverageRatio": 0.9999,
+        "independentExpectedUnionAreaM2": 32447.04,
+        "emittedAtGradeUnionAreaM2": 32444.02,
+        "unexplainedMissingAreaM2": 3.213,
+        "coverageDefectCount": 0,
+        "coverageDefectsByKind": {},
+        "coverageDefectSamples": [],
+        "coplanarOverlapCount": 0,
+        "coplanarOverlapAreaM2": 0,
+        "overlapsByCategory": {
+          "cross_class_vehicular": 0,
+          "same_class_road": 0,
+          "path_or_cycleway": 0,
+          "multi_provenance_segment": 0,
+          "intra_feature_self_overlap": 0
+        },
+        "windingDefectCount": 0,
+        "degenerateTriangleCount": 0,
+        "inconsistentElevationCount": 0,
+        "tinyFragmentCount": 0,
+        "provenanceDefectCount": 0,
+        "provenanceDefectSamples": []
+      }
+    }
+  ]
+}

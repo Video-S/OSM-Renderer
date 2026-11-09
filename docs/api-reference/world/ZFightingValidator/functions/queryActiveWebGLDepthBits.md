@@ -17,7 +17,7 @@ defaulting to testing both 16-bit (WebGL minimum guarantee) and 24-bit fixed-poi
 
 ### gl?
 
-`WebGL2RenderingContext` \| `WebGLRenderingContext`
+`WebGLRenderingContext` \| `WebGL2RenderingContext`
 
 ## Returns
 

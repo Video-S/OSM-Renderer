@@ -73,21 +73,44 @@ import {
   buildGraphAtGradeRoadGeometries,
   MIN_NONDEGENERATE_TRIANGLE_AREA_M2,
   type GraphRoadDegenerateTriangleDefect,
+  type GraphRoadGenerationTiming,
   type GraphRoadGeometryBuildOptions,
   type GraphRoadGeometryBuildResult,
   type GraphRoadMeshIntegrityReport,
   type GraphRoadRenderStats,
   type GraphRoadWindingDefect,
 } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import {
+  buildIndependentAnalyticalRoadCorridor,
+  COVERAGE_DISCRETIZATION_RATIO_TOLERANCE,
+  MIN_COVERAGE_DEFECT_AREA_M2,
+  TINY_DISCONNECTED_ARTIFACT_AREA_M2,
+  UNINTENDED_INTERIOR_HOLE_MAX_AREA_M2,
+  validateSurfaceFirstRoadGeometry,
+  type CategorizedRoadOverlapDefect,
+  type SurfaceCoverageDefect,
+  type SurfaceCoverageDefectKind,
+  type SurfaceFirstCoverageValidationReport,
+  type SurfaceFirstMeshIntegrityValidationReport,
+  type SurfaceFirstOverlapValidationReport,
+  type SurfaceFirstProvenanceValidationReport,
+  type SurfaceFirstRoadValidationReport,
+  type SurfaceMeshArtifactDefect,
+  type SurfaceOverlapCategory,
+  type SurfaceProvenanceDefect,
+} from './infrastructure/roads/SurfaceFirstRoadValidator';
 
 export {
   SceneResourceManager,
   adaptInfrastructureGraphToRenderDescriptors,
   auditGraphRoadMeshIntegrity,
   buildGraphAtGradeRoadGeometries,
+  buildIndependentAnalyticalRoadCorridor,
   buildInfrastructureRenderDescriptors,
   cloneDescriptorOsmTags,
+  COVERAGE_DISCRETIZATION_RATIO_TOLERANCE,
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
+  MIN_COVERAGE_DEFECT_AREA_M2,
   MIN_NONDEGENERATE_TRIANGLE_AREA_M2,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
@@ -96,8 +119,13 @@ export {
   parseRoadInfrastructureRenderSource,
   prepareInfrastructureRenderPreview,
   requiresInfrastructureGraphPreview,
+  TINY_DISCONNECTED_ARTIFACT_AREA_M2,
+  UNINTENDED_INTERIOR_HOLE_MAX_AREA_M2,
   validateInfrastructureRenderDescriptors,
+  validateSurfaceFirstRoadGeometry,
+  type CategorizedRoadOverlapDefect,
   type GraphRoadDegenerateTriangleDefect,
+  type GraphRoadGenerationTiming,
   type GraphRoadGeometryBuildOptions,
   type GraphRoadGeometryBuildResult,
   type GraphRoadMeshIntegrityReport,
@@ -110,6 +138,16 @@ export {
   type InfrastructureRenderValidationReport,
   type RailwayInfrastructureRenderSource,
   type RoadInfrastructureRenderSource,
+  type SurfaceCoverageDefect,
+  type SurfaceCoverageDefectKind,
+  type SurfaceFirstCoverageValidationReport,
+  type SurfaceFirstMeshIntegrityValidationReport,
+  type SurfaceFirstOverlapValidationReport,
+  type SurfaceFirstProvenanceValidationReport,
+  type SurfaceFirstRoadValidationReport,
+  type SurfaceMeshArtifactDefect,
+  type SurfaceOverlapCategory,
+  type SurfaceProvenanceDefect,
 };
 
 
@@ -2739,6 +2777,7 @@ export class GeometryBuilder {
         graphRoadResult.fullySubtractedRoadIds
       );
       roadsGroup.userData.graphRoadStats = graphRoadResult.stats;
+      roadsGroup.userData.graphRoadTiming = graphRoadResult.timing;
       roadsGroup.userData.graphRoadMode = infrastructureRenderOptions.roads;
       const deduplicatedCount = Object.values(roadLineage.deduplicatedMap).reduce(
         (sum, arr) => sum + arr.length,

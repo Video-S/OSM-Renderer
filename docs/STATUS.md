@@ -1,8 +1,5 @@
 # Current Project Status
 
-> **Current update — 2026-11-09 (supersedes older E2-only mode descriptions below):** E2+ (`roads: 'graph-surface'` / **Graph (E2+)**) is implemented and manually evaluated by the project owner, who reports dramatic, consistent visual improvements and has chosen **surface-first road rendering as the preferred architectural direction**. This is recorded in [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md). The reference code state is [d2455b7](https://github.com/Video-S/OSM-Renderer/commit/d2455b7b8c711e689cabfc827b7f44ae2428b2ab). **E2+ is not the production default; automated post-prototype test/build results and full Hengelo/Twente scale benchmarks are not recorded here.** The older test counts and Stage E2 status below are dated historical baselines, not current E2+ verification. E2 remains selectable. See the [technical design](./e2-plus-surface-first-road-rendering.md) and [roadmap](./road-rendering-roadmap.md).
-
-
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
@@ -28,8 +25,9 @@
    - Cross-modal and vertical connectivity analysis (`CrossModalAnalyzer.ts`, `buildInfrastructureGraph`): confirmed vs. unresolved road/rail level crossings (`LevelCrossingRelation` for `road_rail_level_crossing` and `pedestrian_rail_crossing`, rejecting untagged 2D intersections and point-tag/tier conflicts), road crosswalk preservation (`highway_crossing` role), same-domain road and railway grade transitions (`GradeTransitionRelation` across Tier 1 explicit OSM portal nodes and Tier 2 `0.15 m` terminal collinear coordinate fallback, plus `0.80 m` diagnostic horizon in `UnresolvedGradeTransitionCandidate`), and grade-separated overpasses/underpasses (`GradeSeparatedCrossingRelation`).
    - Graph-to-renderer adapter and safe preview integration (`M2.3-E1` / `TKT-007`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`): pure, deterministic transformation of `InfrastructureGraph` into render-ready road, railway, and cross-domain descriptors (`InfrastructureRenderDescriptorBundle`) with complete source-feature lineage (`sourceFeatureToRoadEdgeIds`, `sourceFeatureToRailwayEdgeIds`, `roadFeatureLineage`, `railwayFeatureLineage`), contract validation (`validateInfrastructureRenderDescriptors`), and independent developer switches (`?topologyRoads=legacy|graph-preview|graph&topologyRailways=legacy|graph-preview`).
    - Graph-driven road and junction geometry (`M2.3-E2` / `TKT-008`, `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`): when `roads: 'graph'` is selected, constructs at-grade road ribbons, degree-2 continuity joins (`requiresVehicularContinuityMiter`), boundary-derived branching junction polygons (`requiresVehicularJunctionTrimming`, `requiresPathJunctionTrimming`), per-segment provenance sub-ribbons, step treads (`highway=steps`), and carriageway-vs-path 2D Boolean clipping directly from `InfrastructureRenderDescriptorBundle` without invoking legacy `splitRoadsAtSharedInteriorNodes` or `TopologicalNodeIndex`.
+   - Surface-first road rendering (`E2+` / `roads: 'graph-surface'`, `ADR-0010`, `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`, `src/world/infrastructure/roads/SurfaceFirstRoadValidator.ts`): selected as the preferred architectural direction for at-grade road rendering (`?topologyRoads=graph-surface`, while `'legacy'` remains the production default pending final validation). Buffers each at-grade road provenance segment into a rounded 2D stroke (`bufferSurfaceFirstRoadCenterline` unioning oriented segment rectangles with 16-sided bend and eligible endpoint disks), resolves overlapping surfaces via priority-ordered Boolean subtraction (`clipSurfacePolygon`), and triangulates remaining polygons at `ROAD_SURFACE = 0.050 m` with full OSM provenance. Includes automated non-circular geometry validation (`validateSurfaceFirstRoadGeometry`) and stage-separated performance instrumentation (`GraphRoadGenerationTiming`, `GraphRoadRenderStats`).
 3. **Procedural Geometry Synthesis**:
-   - Uniform `ROAD_SURFACE = 0.050 m` at-grade road baseline with boundary-derived junction meshing and miter limits (supported in both `'legacy'` and `'graph'` road modes).
+   - Uniform `ROAD_SURFACE = 0.050 m` at-grade road baseline with boundary-derived junction meshing (`'legacy'` and `'graph'`) and surface-first rounded stroke union/subtraction (`'graph-surface'`).
    - Carriageway-vs-path 2D Boolean clipping removing coplanar overlapping road surfaces.
    - Building prism vertical extrusions preserving complex 2D footprints and interior courtyard holes.
    - Hybrid multi-component railway geometry (`ADR-0008`, `TKT-001`, `TKT-002`) with crushed-stone ballast (`+0.060 m`), close-zoom (`> 4.5 CSS px/m`) 3D instanced sleepers (`+0.072 m`) and 3D extruded steel rails (`+0.085 m`), medium/far (`<= 4.5 CSS px/m`) derivative-filtered (`fwidth`) procedural UV-ribbons, elongated shared turnout bearers, multi-interval parallel-track sleeper clipping, and `128 m x 128 m` spatial chunking.
@@ -46,7 +44,7 @@
    - Raycast feature inspection via `faceRanges` binary search and instanced sleeper `instanceInfos` mapping 3D faces/instances back to OSM tags.
 7. **Developer Tools Interface & Self-Contained Reproduction Reporting (`TKT-009`)**:
    - In-app runtime panel (`src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`) replacing manual URL parameter editing.
-   - Instant in-memory switching between road engines (`legacy`, `graph`, `graph-preview`) and railway implementations (`production`, `candidateA`, `candidateB`, `disabled`, `graph-preview`) without page reloads.
+   - Instant in-memory switching between road engines (`legacy`, `graph`, `graph-surface`, `graph-preview`) and railway implementations (`production`, `candidateA`, `candidateB`, `disabled`, `graph-preview`) without page reloads, plus live E2/E2+ road geometry counters and stage timings.
    - Interactive spatial bounding box selection and 3D visual highlight overlays for features and topological nodes.
    - 1-click loading of development fixtures (`prins-fork` acute cycleway fork, `switchyard` benchmark with zone camera presets, `hengelo`, `amsterdam`).
    - Self-contained `.json` defect report export and re-import bundling selected OSM features, connected incident context (preserving original OSM node identities), configuration, camera pose, and developer notes.
@@ -58,6 +56,7 @@
 - **Single-Threaded Geometry Synthesis**: Large OSM queries (> 5,000 ways) execute polygon clipping and triangulation on the main browser thread; background web worker offloading is not yet implemented.
 - **Local Metric Projection Range**: The equirectangular projection assumes a constant meridian radius and is optimized for neighborhood tiles up to ~5 km. Continental-scale streaming is out of scope.
 - **Complex Multi-Level Stack Interchanges**: Highly skewed 5+ way junctions with overlapping flyover tiers rely on OSM layer tags; incomplete source tags can lead to flat road merges.
+- **E2+ Internal Provenance-Split Bend Caps (`provenance_split_bend_gap`)**: In `roads: 'graph-surface'`, simplified multi-way edges (`edge.provenance.segments.length > 1`) that bend at an internal `#seg0 -> #seg1` provenance boundary currently omit the 16-sided bend disk at the shared split vertex (`capStart` / `capEnd` are only enabled on the outer ends of the full edge), leaving a small outer-corner wedge gap until resolved in the planned Phase 2 follow-up (`docs/road-rendering-roadmap.md`).
 
 ---
 
@@ -85,16 +84,16 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-06 — Stage E2 `M2.3-E2` Verification)
+## Verified Test & Build Results (2026-11-09 — E2+ Geometry Integrity & Performance Baseline Verification)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1, M2.2, M2.3-B, M2.3-C, M2.3-D, M2.3-E1 & M2.3-E2 Tests** | `npm test` | **161 / 161 passed** (0 failures) |
+| **Unit, Integration, M2.1–M2.3-E2, DevTools & E2+ Surface-First Tests** | `npm test` | **202 / 202 passed** (15 suites, 0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
 
-*(Historical baselines preserved: initial M2.3-E2 stabilization baseline on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` lint errors, clean production build and API docs.)*
+*(Historical baselines preserved: Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -107,20 +106,22 @@
 | `RailwayNetworkTopology.test.ts` (`M2.3-C`) | 18 |
 | `CrossModalTopology.test.ts` (`M2.3-D`) | 9 |
 | `InfrastructureRenderAdapter.test.ts` (`M2.3-E1`) | 10 |
-| `GraphRoadRendering.test.ts` (`M2.3-E2`) | 16 |
-| **Total** | **161** |
+| `GraphRoadRendering.test.ts` (`M2.3-E2`) | 29 |
+| `DevToolsAndReproduction.test.ts` (`TKT-009`) | 11 |
+| `SurfaceFirstRoadRendering.test.ts` (`E2+` / `ADR-0010`) | 7 |
+| **Total (`it` declarations / total subtests)** | **192 (`202` with suite subtests)** |
 
 ---
 
 ## Active & Planned Milestones
 
-1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage E2 Implemented, Pending Owner Review`)**:
+1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage E2 & E2+ Surface-First Baseline Implemented`)**:
    - **Stage A (`M2.3-A` / `TKT-003` — `closed`)**: Source audit completed and **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Accepted`) approved by project owner.
    - **Stage B (`M2.3-B` / `TKT-004` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource` road capture, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts` (`108 / 108` Stage B baseline).
    - **Stage C (`M2.3-C` / `TKT-005` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints`, pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
    - **Stage D (`M2.3-D` / `TKT-006` — `closed`)**: Completed point-level infrastructure capture across all 5 `InfrastructurePointKind` categories, implemented `CrossModalAnalyzer` and `buildInfrastructureGraph` for level crossings, grade transitions, and grade-separated crossings, and added `9` automated tests in `src/world/CrossModalTopology.test.ts` (`135 / 135` Stage D baseline).
    - **Stage E1 (`M2.3-E1` / `TKT-007` — `closed`)**: Implemented pure graph-to-renderer adapter (`src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`), independent road and railway switches, memoized single shared `InfrastructureGraph` preview preparation, and `10` automated tests in `src/world/InfrastructureRenderAdapter.test.ts` (`145 / 145` Stage E1 baseline).
-   - **Stage E2 (`M2.3-E2` / `TKT-008` — `in_progress`, pending project-owner review)**: Implemented graph-driven at-grade road ribbon, non-pinching degree-2 continuity joins, localized road-footprint junction polygon synthesis (`solveBoundaryDerivedJunctionNode`), and geometric triangle winding/normal auditor (`auditGraphRoadMeshIntegrity` in `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`), selectable via `roads: 'graph'` (`?topologyRoads=graph`) while keeping `railways` restricted to `'legacy' | 'graph-preview'`, and added `16` automated test suites in `src/world/GraphRoadRendering.test.ts` (`161 / 161` total tests).
+   - **Stage E2 (`M2.3-E2` / `TKT-008` — `in_progress`, pending project-owner review)** & **E2+ Surface-First Road Rendering (`ADR-0010` — Preferred Architectural Direction)**: Implemented graph-driven road rendering (`roads: 'graph'`) and experimental surface-first rounded stroke road rendering (`roads: 'graph-surface'`), automated non-circular geometry validation (`SurfaceFirstRoadValidator.ts`), lightweight stage-separated timing and operation counters (`GraphRoadGenerationTiming`, `GraphRoadRenderStats`), and a reproducible 12-dataset baseline (`research/surface-first-road-rendering/baseline-results.json`).
    - **Stage E3 (`M2.3-E3` — Planned, requires separate explicit approval)**: Graph-driven railway rendering and switches (`RailwayEdgeRenderDescriptor` / `RailwayNodeRenderDescriptor` / `RailwayFlatCrossingRenderDescriptor` consumption).
    - **Stage E4 (`M2.3-E4` — Planned, requires separate explicit approval)**: Level crossings, bridges, and tunnels (`LevelCrossingRenderDescriptor` / `GradeTransitionRenderDescriptor` / `GradeSeparatedCrossingRenderDescriptor` consumption).
    - **Stage E5 (`M2.3-E5` — Planned, requires separate explicit approval)**: Legacy cleanup and regression hardening.

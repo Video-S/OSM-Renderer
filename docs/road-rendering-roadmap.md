@@ -1,75 +1,52 @@
-# Road Rendering: Future Plans and E2+ Validation Roadmap
+# Road Rendering Validation & Migration Roadmap
 
-**Updated:** 2026-11-09. **Preferred direction:** E2+ surface-first geometry. **Current status:** Visual success reported by project owner; production promotion not yet justified by systematic metrics.
+## 1. Current State & Renderer Modes
 
-This plan focuses on reliable **map rendering and camera use** before future gameplay or simulations. Rendering Hengelo/Twente at scale is the meaningful target. Stored, precomputed/baked geometry is acceptable if reproducible and queryable.
+The 3D OpenStreetMap viewer currently supports three runtime road rendering engines selectable via `InfrastructureRenderOptions.roads` (`?topologyRoads=...` or **Dev Tools → Rendering → Road Infrastructure Engine**):
 
-## Phase 0 — Preserve the successful baseline
+| Mode | Selector | Status | Description |
+| :--- | :--- | :--- | :--- |
+| **Legacy** | `'legacy'` | **Current Production Default** | Pre-M2.3-E2 polyline ribbon & `TopologicalNodeIndex` junction synthesizer (`ADR-0002`). |
+| **Graph (E2)** | `'graph'` | **Implemented (`TKT-008`)** | Graph-driven ribbon & boundary-derived portal-chord junction solver (`solveBoundaryDerivedJunctionNode`). |
+| **Graph Surface (E2+)** | `'graph-surface'` | **Preferred Direction (`ADR-0010`)** | Surface-first rounded 2D stroke union + priority-ordered Boolean ownership clipping (`SurfaceFirstRoadFootprints.ts`). |
 
-- Record E2+ reference implementation commit [d2455b7](https://github.com/Video-S/OSM-Renderer/commit/d2455b7b8c711e689cabfc827b7f44ae2428b2ab). This is a **reference commit**, not a Git tag.
-- Keep Graph (E2), Graph (E2+) and Legacy selectable, and keep the exact visualization fixtures/repro imports.
-- Avoid unrelated junction logic changes until the new geometric baseline is characterized.
+*(Note: `'graph-preview'` remains available as the Stage E1 diagnostic mode that builds and validates `InfrastructureRenderDescriptorBundle` while delegating mesh synthesis to `'legacy'`.)*
 
-**Done when:** a future developer can reproduce the starting state and compare modes on the same source data and camera pose.
+---
 
-## Phase 1 — Characterize remaining visual defects
+## 2. Phase 1: Automated Geometry Integrity & Performance Baseline (Complete)
 
-- Inspect a representative matrix: ordinary cross/T/Y, acute forks, clustered nodes, roundabouts and other loops, mixed path/cycleway/vehicle intersections, steps, width changes, boundaries, culverts, bridges and tunnels.
-- Capture the actual OSM features and stable repro configurations for defects. Use coordinates/node IDs only for fixtures, not production conditionals.
-- Report which mode performs better and whether any E2 behavior is still necessary.
+Implemented in this milestone without altering E2+'s geometry generation algorithm:
+1. **Non-Circular Surface Coverage Validation (`SurfaceFirstRoadValidator.ts` — Task A1)**:
+   - Evaluates emitted at-grade road triangles against an independent 24-gon analytical centerline buffer reference (`buildIndependentAnalyticalRoadCorridor`).
+   - Distinguishes genuine missing-surface defects (`completely_omitted_road_feature`, `missing_road_surface_area`, `unintended_footprint_hole`, `disconnected_segment_gap`, `provenance_split_bend_gap`) from legitimate higher-priority road occlusion (`occludedByHigherPriorityAreaM2`, `fullySubtractedRoadIds`), grade-separated bridges/tunnels, and boundary-clipped endpoints.
+2. **Coplanar Overlap Validation (Task A2)**:
+   - Reuses `ZFightingValidator.validateRoadNetworkGeometry(scene)` with a documented `1e-3 m²` (`10 cm²`) positive-area tolerance and categorizes conflicts by pair type (`cross_class_vehicular`, `same_class_road`, `path_or_cycleway`, `multi_provenance_segment`, `intra_feature_self_overlap`).
+3. **Mesh Integrity & Elevation Verification (Task A3)**:
+   - Reuses `auditGraphRoadMeshIntegrity(scene.roadsGroup)` (upward `+Y` winding, normal agreement, finite coordinates, zero degenerate triangles `<= 1e-6 m²`) and adds physical elevation checks (`0.050 m ± 1e-4 m`, `+0.056 m` for step treads) and tiny disconnected polygon detection (`< 1e-3 m²`).
+4. **Source-Feature Provenance Verification (Task A4)**:
+   - Audits `faceRanges`, `sourceFeatureId`, `sourceFeatureIds`, `RoadClass` subtype, preserved `osmTags`, spatial bounding envelope containment across provenance splits (`#seg0`, `#seg1`), deduplication lineage, and `fullySubtractedRoadIds`.
+5. **Lightweight Performance Instrumentation (Tasks B1–B3)**:
+   - Stage-separated wall-clock timings (`GraphRoadGenerationTiming` on `roadsGroup.userData.graphRoadTiming`) and deterministic geometry/Boolean counters (`GraphRoadRenderStats` on `roadsGroup.userData.graphRoadStats`), surfaced in `DevToolsPanel.tsx`, `window.__M21_LAB__.getSnapshot()`, and `research/surface-first-road-rendering/baseline-results.json`.
 
-**Done when:** remaining failure categories are explicitly named, documented and reproducible rather than described only as sporadic artifacts.
+---
 
-## Phase 2 — Quantitative geometry invariants
+## 3. Phase 2: Targeted Geometry Defect Resolution (Next Step Before Default Promotion)
 
-- For identical source edges, compare expected buffered coverage with emitted triangles; test for gaps, unexpected extensions, and positive-area overlaps.
-- Audit upward winding/normals, degenerate triangles, class ownership and source-feature metadata through `faceRanges`.
-- Exercise source segments partially/fully subtracted by higher priority roads; verify diagnostics and deduplicated lineage counts.
-- Run `npm run lint`, `npm test` and the E2+ fixture test; establish new measured baselines and avoid changing expected outputs merely to force green tests.
-- If useful, compare E2 versus E2+ without round disks versus current rounded E2+ to isolate the causal effect of junction elimination and of rounding.
+Automated validation in Phase 1 identified two concrete, localized defects in the current E2+ implementation that should be resolved in a dedicated follow-up ticket before promoting `roads: 'graph-surface'` to the default renderer:
 
-**Done when:** the recorded invariants pass on representative fixtures and human visual inspection finds no major regressions.
+1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`)**:
+   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3080–3083), when a simplified graph edge consists of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` is only enabled on `subSegments[0]` and `capEnd` is only enabled on `subSegments[subSegments.length - 1]`. Internal boundary vertices between `#seg0` and `#seg1` receive neither a start cap nor an end cap, leaving an unrounded wedge gap on the outside of bends that occur at an internal provenance split.
+   - **Planned Fix**: Enable a round disk cap (`radius = w/2`) at internal provenance-split vertices whenever the meeting angle between consecutive provenance segments is non-collinear (or unconditionally at internal provenance joints, since overlapping same-edge provenance strokes are subsequently clipped against each other in priority/lexical order).
+2. **Diagnostic Counter Synchronization on Full Subtraction**:
+   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3121–3127), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3383).
+   - **Planned Fix**: Call `recordDiagnosticSample(diagnostics.featuresFullySubtracted, sub.sourceFeatureId)` when all provenance segments of a source feature are fully subtracted in E2+.
 
-## Phase 3 — Benchmark Hengelo to Twente
+---
 
-For each fixed extract, measure:
+## 4. Phase 3: Promotion Criteria for Production Default
 
-| Signal | Why it matters |
-| --- | --- |
-| Stage-6 road build duration, total scene build duration, p50/p95 across runs | CPU/latency and main-thread responsiveness |
-| Peak memory and allocated mesh buffers | Browser stability |
-| Rectangle/disk pieces, Boolean unions/differences, rejected/fallback segments | Algorithm scaling and robustness |
-| Road triangles, retained geometry bytes and draw calls | WebGL cost |
-| Area covered, unintended overlap and source attribution | Correctness during optimization |
-
-Include small fixtures, neighborhoods, dense Hengelo extracts, then larger Twente tiles. Compare E2/E2+ under identical options. Agree performance thresholds **after collecting** representative measurements rather than inventing budgets now.
-
-**Potential optimizations, only if data justify them:** index accepted footprints spatially; chunk by geographic tile with seam reconciliation; reuse/deduplicate repeated disks; optimize polygon simplification and unions; move geometry work to web workers; or bake/cache validated geometry offline. If results can be stored and queried, runtime re-computation is not inherently necessary.
-
-## Phase 4 — Architecture hardening and migration
-
-- Improve module separation: E2+ should own footprint construction and the surface-ownership phase without relying on confusing E2-only portal state.
-- Preserve source IDs, graph topology, width policy, bridge/tunnel semantics, class styling, deterministic outcomes and inspection.
-- Write tests to prove E2/Legacy remain unaffected while switching modes.
-- Only with owner sign-off consider making E2+ the default; retain E2 as an opt-in fallback until migration is complete and edge-case evidence supports deletion.
-- Update `ADR-0002` cross-references and generated API docs when public types change. Record any new implementation decision rather than silently rewriting history.
-
-## Deferred, not part of the E2+ commitment
-
-- Full graph-driven railway rendering and crossing behavior remain separate milestones.
-- Broad gameplay, zombies, crowds, fluid/agent simulations and traffic/pathfinding are outside current road rendering scope.
-- Optional Dutch BGT or other country-specific reference data should never be a mandatory runtime dependency. Preserve robust fallback when reference data are absent.
-- A whole-Twente renderer may use cached/baked outputs; this is a later optimization, not a prerequisite to validate E2+.
-
-## Decision gates
-
-1. **Remain experimental:** owner visual judgment is favorable but key metrics or edge-case coverage remain unknown. This is the current state.
-2. **Candidate for default:** core geometry tests and representative visual regression matrix pass, benchmarks are acceptable, and owner approves the transition.
-3. **Remove old solver:** only after default migration is stable and no unique E2 fallback behavior remains justified.
-
-### Documentation links
-
-- [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md)
-- [E2+ architecture and geometry design](./e2-plus-surface-first-road-rendering.md)
-- [Project history](./project-history.md)
-- [Experimental research README](../research/surface-first-road-rendering/README.md)
+`roads: 'graph-surface'` (E2+) will be promoted to the default road renderer (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.roads = 'graph-surface'`) once:
+1. The internal provenance-split bend cap fix and `featuresFullySubtracted` diagnostic sync (Phase 2) are implemented and verified with `0` `provenance_split_bend_gap` defects across all real-world urban extracts.
+2. Automated validation confirms `0` positive-area coplanar overlaps (`> 1e-3 m²`), `0` winding/normal/degenerate triangle defects, and `100%` provenance attribution across the regression suite.
+3. Project owner signs off on the Phase 2 fix and authorizes default promotion and Stage E5 legacy cleanup.

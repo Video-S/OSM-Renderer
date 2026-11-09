@@ -6,7 +6,7 @@
 
 # Interface: RoadFeature
 
-Defined in: types/MapFeature.ts:263
+Defined in: types/MapFeature.ts:264
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:263
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:277
+Defined in: types/MapFeature.ts:278
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:277
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:264
+Defined in: types/MapFeature.ts:265
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:264
 
 > **isBridge**: `boolean`
 
-Defined in: types/MapFeature.ts:274
+Defined in: types/MapFeature.ts:275
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:274
 
 > **isTunnel**: `boolean`
 
-Defined in: types/MapFeature.ts:275
+Defined in: types/MapFeature.ts:276
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:275
 
 > **layer**: `number`
 
-Defined in: types/MapFeature.ts:276
+Defined in: types/MapFeature.ts:277
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:276
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:268
+Defined in: types/MapFeature.ts:269
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:268
 
 > `optional` **nodeIds?**: (`string` \| `number`)[]
 
-Defined in: types/MapFeature.ts:270
+Defined in: types/MapFeature.ts:271
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:270
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:279
+Defined in: types/MapFeature.ts:280
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:279
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: types/MapFeature.ts:269
+Defined in: types/MapFeature.ts:270
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:269
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:278
+Defined in: types/MapFeature.ts:279
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:278
 
 > **roadClass**: [`RoadClass`](../type-aliases/RoadClass.md)
 
-Defined in: types/MapFeature.ts:271
+Defined in: types/MapFeature.ts:272
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:271
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:265
+Defined in: types/MapFeature.ts:266
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: types/MapFeature.ts:265
 
 > `optional` **sourceFeatureIds?**: `string`[]
 
-Defined in: types/MapFeature.ts:266
+Defined in: types/MapFeature.ts:267
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: types/MapFeature.ts:266
 
 > `optional` **subtype?**: `string`
 
-Defined in: types/MapFeature.ts:272
+Defined in: types/MapFeature.ts:273
 
 ***
 
@@ -126,7 +126,7 @@ Defined in: types/MapFeature.ts:272
 
 > **type**: `"road"`
 
-Defined in: types/MapFeature.ts:267
+Defined in: types/MapFeature.ts:268
 
 ***
 
@@ -134,4 +134,4 @@ Defined in: types/MapFeature.ts:267
 
 > **width**: `number`
 
-Defined in: types/MapFeature.ts:273
+Defined in: types/MapFeature.ts:274

@@ -13,14 +13,6 @@ This documentation is organized into two distinct categories:
 
 ## Manually Maintained Documents
 
-**Current road-rendering direction (2026-11-09):** [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) selects E2+ surface-first rendering as the preferred architecture, based on strong owner visual evaluation. It is **not yet the production default**; full geometry and performance validation remain outstanding.
-
-- **[Project History](./project-history.md)** — Goals, junction-rendering evolution, E2 to E2+ turning point, and evidence.
-- **[E2+ Architecture & Geometry Design](./e2-plus-surface-first-road-rendering.md)** — Exact buffer algorithm, priority clipping, meshes/provenance, mode integration, limits.
-- **[Road-Rendering Future Plans / Validation Roadmap](./road-rendering-roadmap.md)** — Baseline, regression matrix, scaling benchmarks, staged migration gates.
-- **[E2+ Research Prototype](../research/surface-first-road-rendering/README.md)** — User-facing mode selection and experimental usage.
-
-
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
   Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1 & M2.2 complete, M2.3 Stage A active), verified test/build status, known limitations, and next steps.
 
@@ -33,11 +25,20 @@ This documentation is organized into two distinct categories:
 - **[Geometry & Rendering Rules (geometry-and-rendering.md)](./geometry-and-rendering.md)**  
   Elevation policy, ground layering, road ribbons, boundary-derived junction meshing, bridges, tunnels, building footprints, and z-fighting prevention.
 
+- **[E2+ Surface-First Road Rendering Pipeline (e2-plus-surface-first-road-rendering.md)](./e2-plus-surface-first-road-rendering.md)**  
+  Detailed specification of the E2+ (`roads: 'graph-surface'`) rounded 2D stroke buffering, priority-ordered Boolean ownership subtraction, triangulation, non-circular geometry validation (`SurfaceFirstRoadValidator.ts`), and performance instrumentation.
+
+- **[Project History: Road Surface & Junction Rendering (project-history.md)](./project-history.md)**  
+  Chronological evolution from Goalpost 1 boundary-derived junctions (`ADR-0002`) and Stage E2 (`TKT-008`) to the E2+ surface-first road renderer (`ADR-0010`).
+
+- **[Road Rendering Validation & Migration Roadmap (road-rendering-roadmap.md)](./road-rendering-roadmap.md)**  
+  Validation architecture, discovered geometry edge cases, and promotion criteria for migrating E2+ (`roads: 'graph-surface'`) to the production default.
+
 - **[Camera & World Coordinates (camera-and-world-coordinates.md)](./camera-and-world-coordinates.md)**  
   Local meter coordinate projection, orthographic camera configuration, viewport framing, zoom/pan/tilt controls, and bounds containment.
 
 - **[Testing & Diagnostics (testing-and-diagnostics.md)](./testing-and-diagnostics.md)**  
-  Unit/integration test suite, coplanar triangle overlap validators, junction portal continuity checks, feature counters, and regression verification.
+  Unit/integration test suite, coplanar triangle overlap validators, junction portal continuity checks, E2+ surface-first geometry validator & performance counters, and regression verification.
 
 - **[Architectural Decision Records (decisions/README.md)](./decisions/README.md)**  
   Index of formal architectural decision records (ADRs) and guidelines on recording decisions.
@@ -46,8 +47,12 @@ This documentation is organized into two distinct categories:
 - **[Ticket Workflow & Lifecycle (ticket-workflow.md)](./ticket-workflow.md)**  
   Authoritative guide for tracking, developing, verifying, and closing issues in the repository-local [Ticket Tracker](../tickets/).
 
-- **[Exploratory Research & Experiments](../research/road-surface-reconstruction/README.md)**  
+- **[E2+ Surface-First Road Rendering Experiment & Baseline (`research/surface-first-road-rendering/`)](../research/surface-first-road-rendering/README.md)**  
+  Evaluation guide, reproduction commands, and reproducible 12-dataset geometry integrity and performance baseline (`baseline-results.json`) comparing `legacy`, `graph` (E2), and `graph-surface` (E2+).
+
+- **[Archived Exploratory Research (`research/road-surface-reconstruction/`)](../research/road-surface-reconstruction/README.md)**  
   Archived exploratory research evaluating independent road-surface and junction reconstruction algorithms against external ground truth (BGT). Closed and not adopted for production.
+
 
 ---
 

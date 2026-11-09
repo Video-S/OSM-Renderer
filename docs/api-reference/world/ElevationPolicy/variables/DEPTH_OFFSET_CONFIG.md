@@ -8,7 +8,7 @@
 
 > `const` **DEPTH\_OFFSET\_CONFIG**: `object`
 
-Defined in: world/ElevationPolicy.ts:215
+Defined in: world/ElevationPolicy.ts:216
 
 Three.js material polygonOffset configurations.
 Mutually exclusive ground-cover fills do not rely on polygonOffset against each other

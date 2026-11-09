@@ -12,6 +12,25 @@ export interface SurfaceFirstBufferOptions {
 }
 
 /**
+ * Optional per-call or per-build accumulator for E2+ footprint construction metrics.
+ * Recording into this structure is purely observational and never alters geometry output.
+ */
+export interface SurfaceFirstBufferInstrumentation {
+  /** Number of segment rectangle primitives generated. */
+  rectanglePrimitiveCount: number;
+  /** Number of interior bend disk primitives generated (`dot < 0.9986`). */
+  bendDiskPrimitiveCount: number;
+  /** Number of endpoint or closed-loop cap disk primitives generated. */
+  capDiskPrimitiveCount: number;
+  /** Number of `polygonClipping.union` operations invoked during stroke buffering. */
+  unionOperationCount: number;
+  /** Wall-clock time (`ms`) spent constructing segment rectangle and disk primitives prior to Boolean union. */
+  primitiveConstructionTimeMs: number;
+  /** Wall-clock time (`ms`) spent in `polygonClipping.union` and `filterDegenerateBooleanArtifacts` during stroke buffering. */
+  polygonUnionTimeMs: number;
+}
+
+/**
  * E2+ rounded stroke footprint. A centerline is buffered as a local union
  * of full-width segment rectangles and round joins/caps. Junctions are the
  * union of intersecting strokes through the existing class-ordered ownership
@@ -20,8 +39,10 @@ export interface SurfaceFirstBufferOptions {
 export function bufferSurfaceFirstRoadCenterline(
   points: ReadonlyArray<readonly [number, number]>,
   width: number,
-  options: SurfaceFirstBufferOptions
+  options: SurfaceFirstBufferOptions,
+  instrumentation?: SurfaceFirstBufferInstrumentation
 ): MultiPolygonCoords {
+  const tStart = instrumentation ? performance.now() : 0;
   if (width <= 0 || !Number.isFinite(width) || points.length < 2) return [];
   const clean: Point[] = [];
   for (const p of points) {
@@ -49,6 +70,9 @@ export function bufferSurfaceFirstRoadCenterline(
     ring.push([ring[0][0], ring[0][1]]);
     return [[ring]];
   };
+  let rectCount = 0;
+  let bendDiskCount = 0;
+  let capDiskCount = 0;
   for (let i = 1; i < clean.length; i++) {
     const a = clean[i - 1], b = clean[i];
     const dx = b[0] - a[0], dz = b[1] - a[1];
@@ -63,6 +87,7 @@ export function bufferSurfaceFirstRoadCenterline(
     ];
     ring.push([ring[0][0], ring[0][1]]);
     pieces.push([[ring]]);
+    rectCount++;
   }
   for (let i = 1; i < clean.length - 1; i++) {
     const a = clean[i - 1], b = clean[i], c = clean[i + 1];
@@ -71,14 +96,39 @@ export function bufferSurfaceFirstRoadCenterline(
     const len = Math.hypot(ux, uz) * Math.hypot(vx, vz);
     if (len > 1e-6 && (ux * vx + uz * vz) / len < 0.9986) {
       pieces.push(disk(b));
+      bendDiskCount++;
     }
   }
-  if (!closed && options.capStart) pieces.push(disk(clean[0]));
-  if (!closed && options.capEnd) pieces.push(disk(clean[clean.length - 1]));
-  if (closed) pieces.push(disk(clean[0]));
+  if (!closed && options.capStart) {
+    pieces.push(disk(clean[0]));
+    capDiskCount++;
+  }
+  if (!closed && options.capEnd) {
+    pieces.push(disk(clean[clean.length - 1]));
+    capDiskCount++;
+  }
+  if (closed) {
+    pieces.push(disk(clean[0]));
+    capDiskCount++;
+  }
+  if (instrumentation) {
+    instrumentation.rectanglePrimitiveCount += rectCount;
+    instrumentation.bendDiskPrimitiveCount += bendDiskCount;
+    instrumentation.capDiskPrimitiveCount += capDiskCount;
+    instrumentation.primitiveConstructionTimeMs += performance.now() - tStart;
+  }
   if (!pieces.length) return [];
-  return filterDegenerateBooleanArtifacts(polygonClipping.union(
-    pieces[0] as unknown as polygonClipping.Geom,
-    ...(pieces.slice(1) as unknown as polygonClipping.Geom[])
-  ) as unknown as MultiPolygonCoords);
+  const tUnionStart = instrumentation ? performance.now() : 0;
+  try {
+    return filterDegenerateBooleanArtifacts(polygonClipping.union(
+      pieces[0] as unknown as polygonClipping.Geom,
+      ...(pieces.slice(1) as unknown as polygonClipping.Geom[])
+    ) as unknown as MultiPolygonCoords);
+  } finally {
+    if (instrumentation) {
+      instrumentation.unionOperationCount += 1;
+      instrumentation.polygonUnionTimeMs += performance.now() - tUnionStart;
+    }
+  }
 }
+

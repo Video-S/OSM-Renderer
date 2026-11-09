@@ -8,6 +8,6 @@
 
 > **InfrastructureRenderSource** = [`RoadInfrastructureRenderSource`](RoadInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:64
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:65
 
 Union of supported infrastructure render source modes across road and railway domains.

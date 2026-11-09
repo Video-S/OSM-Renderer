@@ -39,6 +39,11 @@ import {
 } from '../world/dev/ReproductionReport';
 import { InspectableFeatureInfo, ProcessedMapData } from '../types/MapFeature';
 import { SerializedCameraPose } from '../world/dev/ReproductionReport';
+import type {
+  GraphRoadGenerationTiming,
+  GraphRoadRenderStats,
+} from '../world/infrastructure/roads/GraphRoadGeometryBuilder';
+import type { InfrastructureRenderPreviewTiming } from '../world/infrastructure/rendering/InfrastructureRenderAdapter';
 
 export interface DevToolsPanelProps {
   isOpen: boolean;
@@ -79,6 +84,11 @@ export interface DevToolsPanelProps {
   roadWidthMultiplier: number;
   heightMultiplier: number;
   themeId: string;
+  // Road geometry & performance instrumentation
+  roadRenderStats?: GraphRoadRenderStats | null;
+  roadRenderTiming?: GraphRoadGenerationTiming | null;
+  infrastructurePreviewTiming?: InfrastructureRenderPreviewTiming | null;
+  cpuBuildTimeMs?: number | null;
 }
 
 export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
@@ -115,6 +125,10 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   roadWidthMultiplier,
   heightMultiplier,
   themeId,
+  roadRenderStats = null,
+  roadRenderTiming = null,
+  infrastructurePreviewTiming = null,
+  cpuBuildTimeMs = null,
 }) => {
   const [activeDevTab, setActiveDevTab] = useState<'rendering' | 'inspection' | 'reporting' | 'fixtures'>('rendering');
 
@@ -490,6 +504,143 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 )}
               </div>
             </section>
+
+            {/* Road Geometry & E2+ Performance Telemetry */}
+            {roadRenderStats && (
+              <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-200">
+                    Road Geometry &amp; Perf ({infrastructureRenderOptions.roads})
+                  </div>
+                  <span className="text-[10px] font-mono text-cyan-400">
+                    {roadRenderTiming
+                      ? `${roadRenderTiming.totalRoadGenerationTimeMs.toFixed(1)} ms road build`
+                      : 'Active'}
+                  </span>
+                </div>
+
+                {/* Pipeline Stage Separation */}
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono bg-slate-950/80 border border-slate-800/80 rounded-lg p-2">
+                  <div className="text-slate-400">
+                    Graph Build:{' '}
+                    <span className="text-slate-200">
+                      {infrastructurePreviewTiming
+                        ? `${infrastructurePreviewTiming.graphBuildTimeMs.toFixed(1)}ms`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="text-slate-400">
+                    Adapter:{' '}
+                    <span className="text-slate-200">
+                      {infrastructurePreviewTiming
+                        ? `${infrastructurePreviewTiming.adapterBuildTimeMs.toFixed(1)}ms`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="text-slate-400">
+                    Road Geom:{' '}
+                    <span className="text-cyan-300 font-semibold">
+                      {roadRenderTiming
+                        ? `${roadRenderTiming.totalRoadGenerationTimeMs.toFixed(1)}ms`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="text-slate-400">
+                    Scene Total:{' '}
+                    <span className="text-slate-200">
+                      {typeof cpuBuildTimeMs === 'number' ? `${cpuBuildTimeMs}ms` : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* E2+ Sub-stage Timings */}
+                {roadRenderTiming && infrastructureRenderOptions.roads === 'graph-surface' && (
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono bg-slate-950/80 border border-slate-800/80 rounded-lg p-2">
+                    <div className="text-slate-400">
+                      Footprint Buffer:{' '}
+                      <span className="text-emerald-300">
+                        {roadRenderTiming.footprintConstructionTimeMs.toFixed(1)}ms
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Poly Union:{' '}
+                      <span className="text-emerald-300">
+                        {roadRenderTiming.polygonUnionTimeMs.toFixed(1)}ms
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Ownership Clip:{' '}
+                      <span className="text-amber-300">
+                        {roadRenderTiming.ownershipClippingTimeMs.toFixed(1)}ms
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Triangulation:{' '}
+                      <span className="text-cyan-300">
+                        {roadRenderTiming.triangulationAndValidationTimeMs.toFixed(1)}ms
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Operation & Geometry Counters */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] font-mono text-slate-400">
+                  <div>
+                    Edges (In/AtGrade):{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.inputRoadEdgeCount}/{roadRenderStats.atGradeRoadEdgeCount}
+                    </span>
+                  </div>
+                  <div>
+                    Prov Segs (+Splits):{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.processedProvenanceSegmentCount} (+
+                      {roadRenderStats.provenanceSplitSegmentCount})
+                    </span>
+                  </div>
+                  <div>
+                    Rect / Disk Prims:{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.generatedRectanglePrimitiveCount} /{' '}
+                      {roadRenderStats.generatedDiskPrimitiveCount}
+                    </span>
+                  </div>
+                  <div>
+                    Unions / Diffs:{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.polygonUnionOperationCount} /{' '}
+                      {roadRenderStats.polygonDifferenceOperationCount}
+                    </span>
+                  </div>
+                  <div>
+                    Blocker Checks:{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.overlappingBlockerCount}/
+                      {roadRenderStats.candidateBlockerCheckCount}
+                    </span>
+                  </div>
+                  <div>
+                    Polys / Holes:{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.outputPolygonCount} / {roadRenderStats.outputHoleRingCount}
+                    </span>
+                  </div>
+                  <div>
+                    Output Triangles:{' '}
+                    <span className="text-cyan-300 font-semibold">
+                      {roadRenderStats.outputTriangleCount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    Subtracted / Rej:{' '}
+                    <span className="text-slate-200">
+                      {roadRenderStats.fullySubtractedCount} /{' '}
+                      {roadRenderStats.rejectedOrDegenerateCount}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            )}
           </div>
         )}
 

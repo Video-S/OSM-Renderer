@@ -101,24 +101,41 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **Configuration & Mode Switching**: Verifies `normalizeInfrastructureRenderOptions` and legacy URL parameter compatibility (`?topologyRoads=...&topologyRailways=...`).
    - **Connected OSM Feature Extraction & Transit Route Filtering**: Verifies extraction of selected road features and connected ways sharing OSM node IDs (`_nodeIds`), spatial bounding-box extraction, and strict exclusion of non-physical route relations (`route=bus`, `route=bicycle`, `type=route`) and distant unrelated streets so municipal bus routes do not bloat exported packages.
    - **Hengelo Junction Real-World Regressions (`way/230163945`, `way/230163947`, `way/532064931`, `node/45928009`, `node/45929045`)**: Verifies raycast pass-through inside an active spatial selection rectangle (`raycast={() => null}` on `DevTools_SpatialSelectionBox` so clicks inside the rectangle pick `way/230163945`), multi-object selection and individual deselection synchronization, distinction between `selectedObjects` and `connectedContextFeatureCount`, preservation of `selectedArea` and `graphContext`, and full export/import round-trip topological invariance.
+14. **`SurfaceFirstRoadRendering.test.ts`** (`ADR-0010` E2+ Surface-First Road Rendering Geometry Integrity & Performance Instrumentation Suite — 7 tests):
+   - **Real-World E2 Defect Reproduction Fixtures (Nieuwstraat Pedestrian/Cycleway & Hengelo Closely Spaced Corners)**: Verifies `roads: 'graph-surface'` eliminates missing junction patches and corner gaps while keeping `railwaysGroup` invariant.
+   - **Comprehensive A1–A5 Synthetic Scenarios**: Verifies straight/curved roads, 2/3/4-way junctions, acute forks, closely spaced junctions, mixed vehicular/path intersections, degree-2 width transitions, closed loops, dead-end cul-de-sacs, boundary-clipped endpoints, and bridge grade transitions under `validateSurfaceFirstRoadGeometry(scene, data)`.
+   - **A4 Provenance Splits, Exact `1 mm` Deduplication & Full Ownership Subtraction**: Verifies `#seg0`/`#seg1` provenance splits preserve individual OSM tags, deduplicated survivor ways propagate all `deduplicatedFeatureIds` into `FaceFeatureRange.info.sourceFeatureIds`, and completely occluded narrow ways are recorded in `fullySubtractedRoadIds` (`stats.fullySubtractedCount`) without false-positive missing-coverage errors.
+   - **A1 Internal Provenance-Split Bend Gap Reproduction (`provenance_split_bend_gap`)**: Reproduces and verifies detection of the outer-corner wedge gap when two chained OSM ways bend at an internal `#seg0 -> #seg1` provenance split.
+   - **Deliberate Negative Mutation Verification**: Confirms `validateSurfaceFirstRoadGeometry` catches removed road meshes (`omitted_road_feature`), injected coplanar overlaps, inverted triangle winding, vertex elevation drift, and corrupted OSM tag / subtype provenance.
+   - **B1–B3 Performance Instrumentation Invariance & Determinism**: Verifies `bufferSurfaceFirstRoadCenterline` bit-for-bit geometry invariance with and without `SurfaceFirstBufferInstrumentation`, deterministic `GraphRoadRenderStats` counters across repeated builds and 5 seeded input permutations, clean per-rebuild reset, and `GraphRoadGenerationTiming` population on `roadsGroup.userData.graphRoadTiming`.
 
-### Recorded Verification Status (2026-11-07 — Stage E2 & Developer Tools `TKT-009` Verification)
+### Recorded Verification Status (2026-11-09 — E2+ Geometry Integrity & Performance Baseline Verification)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **184 / 184 passed**, 0 failures (`66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts` + `18` in `RailwayNetworkTopology.test.ts` + `9` in `CrossModalTopology.test.ts` + `10` in `InfrastructureRenderAdapter.test.ts` + `28` in `GraphRoadRendering.test.ts` + `11` in `DevToolsAndReproduction.test.ts`) |
+| `npm test` | **202 / 202 passed**, 0 failures across 15 suites (`192` `it` declarations: `66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts` + `18` in `RailwayNetworkTopology.test.ts` + `9` in `CrossModalTopology.test.ts` + `10` in `InfrastructureRenderAdapter.test.ts` + `29` in `GraphRoadRendering.test.ts` + `11` in `DevToolsAndReproduction.test.ts` + `7` in `SurfaceFirstRoadRendering.test.ts`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |
 
-*(Historical baselines preserved: M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
+*(Historical baselines preserved: Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 
 
 ---
 
 ## 3. Geometry Validation Utilities
 
-Geometry verification is performed by three dedicated validator utilities:
+Geometry verification is performed by four dedicated validator utilities:
+
+### `validateSurfaceFirstRoadGeometry` (`src/world/infrastructure/roads/SurfaceFirstRoadValidator.ts`)
+- **Non-Circular Surface Coverage Check (A1)**:
+  - Constructs an independent 24-gon analytical corridor (`buildIndependentAnalyticalRoadCorridor`) from source edge centerlines and widths, subtracts legitimate higher-priority road triangles to compute `occludedByHigherPriorityAreaM2`, and measures unexplained missing surface area (`missing_road_surface_area`, `omitted_road_feature`, `unintended_footprint_hole`, `disconnected_segment_gap`, and `provenance_split_bend_gap`).
+- **Coplanar Overlap Categorization (A2)**:
+  - Reuses `ZFightingValidator.validateRoadNetworkGeometry(scene)` (`COPLANAR_OVERLAP_AREA_TOLERANCE_M2 = 1e-3 m²`) and classifies positive-area coplanar overlaps into `cross_class_vehicular`, `same_class_road`, `path_or_cycleway`, `multi_provenance_segment`, and `intra_feature_self_overlap`.
+- **Mesh Integrity & Physical Elevation Audit (A3)**:
+  - Combines `auditGraphRoadMeshIntegrity(scene.roadsGroup)` with physical elevation consistency checks (`ROAD_SURFACE = 0.050 m ± 1e-4 m`, `+0.056 m` for `highway=steps` treads) and tiny disconnected fragment detection (`< 1e-3 m²`).
+- **Source-Feature Provenance Verification (A4)**:
+  - Verifies 100% face attribution via `resolveInspectedFeature`, valid `sourceFeatureId` / `sourceFeatureIds` across both `data.roads` and pre-chaining `data.topologySource.roadParts`, `RoadClass` subtype matching, preserved primitive `osmTags`, spatial bounding-box containment, deduplicated feature lineage, and `fullySubtractedRoadIds`.
 
 ### `auditGraphRoadMeshIntegrity` (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`)
 - **Geometric Face Normal & Winding Audit**:
@@ -131,7 +148,7 @@ Geometry verification is performed by three dedicated validator utilities:
   - Extracts upward-facing surface triangles from rendered scene meshes.
   - Groups triangles by coplanar elevation layers.
   - Computes 2D polygon intersection area using Martínez-Rueda boolean clipping.
-  - Flags any positive-area coplanar intersection $> 0.05\text{ m²}$ as an overlap defect.
+  - Flags any positive-area coplanar intersection $> 10^{-3}\text{ m²}$ as an overlap defect.
 - **Same-Feature Self-Overlap Check**:
   - Validates that complex road ribbons (e.g., self-crossing loops) do not overlap their own quads.
 - **Junction Portal Continuity Check**:

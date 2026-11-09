@@ -793,6 +793,8 @@ export default function App() {
         sceneTriangles: totalSceneTriangles,
         cpuBufferMB: totalCpuBufferMB,
         railwayGroupStats: railStats,
+        graphRoadStats: builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null,
+        graphRoadTiming: builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null,
         liveWebGL: latestTelemetryRef.current || liveTelemetry,
       }),
       runCameraScenario: async (
@@ -2396,6 +2398,10 @@ export default function App() {
         onLoadHengelo={() => loadLiveHengeloPreset()}
         onLoadAmsterdam={() => loadLiveAmsterdamPreset()}
         onImportReproductionPackage={handleImportReproductionPackage}
+        roadRenderStats={builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null}
+        roadRenderTiming={builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null}
+        infrastructurePreviewTiming={infrastructureRenderPreview?.timing ?? null}
+        cpuBuildTimeMs={cpuBuildTimeMs}
       />
     </div>
   );

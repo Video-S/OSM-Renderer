@@ -33,14 +33,14 @@ Implemented in this milestone without altering E2+'s geometry generation algorit
 
 ## 3. Phase 2: Targeted Geometry Defect Resolution (In Progress Before Default Promotion)
 
-Automated validation in Phase 1 identified three concrete issues in E2+, both geometry defects of which are now resolved while one diagnostic counter item remains open before promoting `roads: 'graph-surface'` to the default renderer:
+Automated validation in Phase 1 identified three concrete issues in E2+, whose two geometry defects and E2+ diagnostic counter mismatch are now addressed in the code, with broader real-world and performance validation still required before promoting `roads: 'graph-surface'` to the default renderer:
 
 1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`) — Resolved**:
    - **Root Cause**: When a simplified graph edge consisted of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` was only enabled on `subSegments[0]` and `capEnd` was only enabled on `subSegments[subSegments.length - 1]`, leaving an unrounded wedge gap on the outside of bends occurring at an internal provenance split.
    - **Implemented Fix**: `resolveInternalProvenanceBoundaryCaps` (`SurfaceFirstRoadFootprints.ts`) inspects adjacent provenance subsegments (`#seg0 -> #seg1` and multi-segment closed-loop seams). Straight equal-width boundaries (`dot >= 0.9986` and `|wA - wB| <= 1e-3 m`) emit no additional disk, whereas angled bends (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3 m`) deterministically assign a single 16-sided rounding disk to one adjacent provenance subsegment (wider subsegment first, longer millimeter-rounded cleaned arc length second, lexical `partId`/`sourceFeatureId` tie-breaker third). Verified with `0` `provenance_split_bend_gap` defects across `H06`, `A02`, `A01`, `A05`, and `H01`.
-2. **Diagnostic Counter Synchronization on Full Subtraction — Open**:
-   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3276–3282), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3551).
-   - **Planned Fix**: Reconcile source-level versus provenance-segment accounting and only count a source as fully subtracted **once all of its parts are occluded**; avoid inflating the count for partially visible sources.
+2. **Diagnostic Counter Synchronization on Full Subtraction — Resolved (Source-Level Accounting)**:
+   - **Original Defect**: The E2+ `visible.length === 0` path updated the per-segment `fullySubtractedCount` and mixed `fullySubtractedRoadIds` but never synchronized source-level `diagnostics.featuresFullySubtracted`.
+   - **Implemented Fix**: Record source IDs from fully occluded provenance segments, then after all E2+ roads are processed exclude any IDs with visible geometry, deduplicate, sort deterministically and add the remaining unique OSM source IDs to `diagnostics.featuresFullySubtracted` (at most ten sample IDs). `stats.fullySubtractedCount` remains the number of occluded segments. The change does not modify emitted geometry, and E2/Legacy accounting remains unchanged. Covered by the existing full-occlusion fixture and a multi-part/partially-visible source regression test.
 
 ---
 

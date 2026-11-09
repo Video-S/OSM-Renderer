@@ -100,3 +100,10 @@ Lightweight instrumentation is collected on every scene build and reset per rebu
 
 Full-Hengelo and Twente performance remain **unmeasured**. Spatial indexing, chunking, web workers and precomputed/baked queryable geometry are possible later strategies, not justifications for changing the currently successful geometry prematurely.
 
+
+
+## E2+ Full-Subtraction Source Diagnostics (Follow-Up)
+
+`GraphRoadRenderStats.fullySubtractedCount` counts **completely occluded provenance subsegments**, while `ProcessedMapData.diagnostics.featuresFullySubtracted` reports **distinct original OSM source features** with no visible E2+ output. Each completely occluded E2+ subsegment contributes its source IDs to an accumulator. After all at-grade segments are processed, the accumulator excludes any source IDs in `renderedSourceIds`, then deduplicates and sorts the remaining IDs before recording the source-level diagnostic count and up to ten samples. A source with both hidden and visible parts is therefore **not** reported as fully subtracted. This only changes diagnostics and does not alter E2+, E2 or Legacy meshes.
+
+**Integration note:** The H01 pinched-ring cleanup and this diagnostics fix were developed independently. Run the full E2+ regression tests, benchmark, lint and build after integration. A clean geometry benchmark alone does not prove full-Hengelo or Twente readiness.

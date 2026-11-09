@@ -2379,6 +2379,10 @@ export function buildGraphAtGradeRoadGeometries(
   const atGradeRoadEndpoints: [number, number][] = [];
   const renderedSourceIds = new Set<string>();
   const fullySubtractedRoadIds = new Set<string>();
+  // Unlike fullySubtractedRoadIds (which also records edge and subsegment IDs),
+  // this tracks only original OSM source IDs that had an entirely occluded E2+ subsegment.
+  // A source can still have visible geometry elsewhere, so finalize after all edges.
+  const e2PlusOccludedSourceCandidates = new Set<string>();
 
   // 1. Filter at-grade buildable road edges and initialize endpoint trim states
   const buildableEdges: RoadEdgeRenderDescriptor[] = [];
@@ -3277,7 +3281,10 @@ export function buildGraphAtGradeRoadGeometries(
               stats.fullySubtractedCount++;
               fullySubtractedRoadIds.add(sub.subId);
               fullySubtractedRoadIds.add(edge.id);
-              for (const sid of sids) fullySubtractedRoadIds.add(sid);
+              for (const sid of sids) {
+                fullySubtractedRoadIds.add(sid);
+                e2PlusOccludedSourceCandidates.add(sid);
+              }
               continue;
             }
             const tTriStart = performance.now();
@@ -3921,6 +3928,26 @@ export function buildGraphAtGradeRoadGeometries(
   });
   stats.outputTriangleCount = totalEmittedTriangles;
   timing.totalRoadGenerationTimeMs = performance.now() - tTotalStart;
+
+  if (surfaceFirst && diagnostics) {
+    // Report fully removed *source features*, not provenance subsegments.
+    // One source can be split across multiple edges and may remain visible
+    // even if some of its subsegments were completely subtracted.
+    const fullyOccludedSourceIds = [...e2PlusOccludedSourceCandidates]
+      .filter((sourceId) => !renderedSourceIds.has(sourceId))
+      .sort(compareStringsCodeUnit);
+    if (fullyOccludedSourceIds.length > 0) {
+      const summary = diagnostics.featuresFullySubtracted ??
+        (diagnostics.featuresFullySubtracted = { count: 0, sampleIds: [] });
+      summary.count += fullyOccludedSourceIds.length;
+      for (const sourceId of fullyOccludedSourceIds) {
+        if (summary.sampleIds.length >= 10) break;
+        if (!summary.sampleIds.includes(sourceId)) {
+          summary.sampleIds.push(sourceId);
+        }
+      }
+    }
+  }
 
   return {
     roadsByClass,

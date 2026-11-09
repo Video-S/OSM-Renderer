@@ -829,6 +829,8 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
       const stats: GraphRoadRenderStats = scene.roadsGroup.userData.graphRoadStats;
       assert.equal(stats.provenanceSplitSegmentCount, 2);
       assert.equal(stats.fullySubtractedCount, 1);
+      assert.equal(data.diagnostics?.featuresFullySubtracted?.count, 1);
+      assert.deepEqual(data.diagnostics?.featuresFullySubtracted?.sampleIds, ['way/occluded-footway']);
 
       const validation = validateSurfaceFirstRoadGeometry(scene, data);
       assert.equal(validation.valid, true);
@@ -840,6 +842,71 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
       assert.ok(
         validation.coverage.legitimatelyFullSubtractedFeatureIds.includes('way/occluded-footway')
       );
+    } finally {
+      scene.dispose();
+    }
+  });
+
+
+  it('A4: E2+ fully-subtracted diagnostics count unique OSM sources, not subsegments or partly visible sources', () => {
+    const data = createSyntheticDataset([
+      {
+        id: 'way/main-carriageway',
+        roadClass: 'primary',
+        width: 12.0,
+        points: [[-90, 0], [90, 0]],
+        nodeIds: ['main-west', 'main-east'],
+      },
+      // Two different parts of the same original source are completely hidden.
+      // Count one source-level diagnostic but two subsegment-level events.
+      {
+        id: 'way/hidden-part-a',
+        sourceFeatureId: 'way/hidden-original',
+        roadClass: 'footway',
+        width: 1.2,
+        points: [[-50, 0], [-30, 0]],
+        nodeIds: ['hidden-a0', 'hidden-a1'],
+      },
+      {
+        id: 'way/hidden-part-b',
+        sourceFeatureId: 'way/hidden-original',
+        roadClass: 'footway',
+        width: 1.2,
+        points: [[30, 0], [50, 0]],
+        nodeIds: ['hidden-b0', 'hidden-b1'],
+      },
+      // Here one part is hidden, but the source has a visible second part.
+      {
+        id: 'way/partial-hidden',
+        sourceFeatureId: 'way/partially-visible-original',
+        roadClass: 'footway',
+        width: 1.2,
+        points: [[-20, 0], [-10, 0]],
+        nodeIds: ['partial-a0', 'partial-a1'],
+      },
+      {
+        id: 'way/partial-visible',
+        sourceFeatureId: 'way/partially-visible-original',
+        roadClass: 'footway',
+        width: 1.2,
+        points: [[-20, 20], [-10, 20]],
+        nodeIds: ['partial-b0', 'partial-b1'],
+      },
+    ]);
+
+    const scene = buildSurfaceFirstScene(data);
+    try {
+      const stats: GraphRoadRenderStats = scene.roadsGroup.userData.graphRoadStats;
+      const diagnostics = data.diagnostics?.featuresFullySubtracted;
+      assert.equal(stats.fullySubtractedCount, 3, 'Three source parts are fully occluded');
+      assert.equal(diagnostics?.count, 1, 'Only one complete OSM source is hidden');
+      assert.deepEqual(diagnostics?.sampleIds, ['way/hidden-original']);
+
+      const lineage = scene.roadsGroup.userData.graphRoadLineage as {
+        renderedSourceIds: string[];
+      };
+      assert.ok(lineage.renderedSourceIds.includes('way/partially-visible-original'));
+      assert.ok(!lineage.renderedSourceIds.includes('way/hidden-original'));
     } finally {
       scene.dispose();
     }

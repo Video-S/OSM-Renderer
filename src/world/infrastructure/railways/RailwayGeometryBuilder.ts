@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   InspectableFeatureInfo,
+  MapFeatureDiagnostics,
   MapStyleTheme,
   ProcessedMapData,
+  RailwayFeature,
 } from '../../../types/MapFeature';
 import {
   DEPTH_OFFSET_CONFIG,
@@ -26,6 +28,12 @@ import {
   configureProceduralSleeperMaterial,
   ProceduralRailwayMaterialControl,
 } from '../rendering/InfrastructureShaderChunks';
+import {
+  adaptRailwayEdgeDescriptorsToFeatures,
+  InfrastructureRenderDescriptorBundle,
+  prepareInfrastructureRenderPreview,
+  RailwayInfrastructureRenderSource,
+} from '../rendering/InfrastructureRenderAdapter';
 import {
   computeContinuousTrackPhases,
   HostTrackSpatialIndex,
@@ -56,6 +64,12 @@ export interface BuildRailwayPrototypeOptions {
   resourceManager?: SceneResourceManager;
   /** Optional existing THREE.Group to populate directly (used when integrated into GeometryBuilder) */
   targetGroup?: THREE.Group;
+  /** Railway render source mode ('legacy' | 'graph-preview' | 'graph'). Defaults to 'legacy'. */
+  renderSource?: RailwayInfrastructureRenderSource;
+  /** Optional pre-built descriptor bundle when available from infrastructureRenderPreview */
+  descriptors?: InfrastructureRenderDescriptorBundle | null;
+  /** Optional diagnostics container to record fallback events */
+  diagnostics?: MapFeatureDiagnostics;
 }
 
 export interface RailwayBuildProfile {
@@ -116,6 +130,16 @@ export interface RailwayPrototypeStats {
   sleeper3DMode: 'merged' | 'instanced';
   spatialChunkSizeMeters: number;
   spatialChunkCount: number;
+  /** Active railway infrastructure render source mode (Stage E3-A1) */
+  railwayRenderSource?: RailwayInfrastructureRenderSource;
+  /** True if graph mode fell back to legacy */
+  graphFallbackOccurred?: boolean;
+  /** Explanation for fallback event */
+  graphFallbackReason?: string;
+  /** Number of simplified railway edges in graph mode */
+  graphEdgeCount?: number;
+  /** Total raw source railway feature count in mapData.railways */
+  sourceRailwayCount?: number;
 }
 
 export interface RailwayPrototypeResult {
@@ -554,8 +578,41 @@ export function buildRailwayGroupInternal(
   const tunnelMouthItems: ChunkedGeoItem[] = [];
   const tunnelTraceItems: ChunkedGeoItem[] = [];
 
+  const requestedSource: RailwayInfrastructureRenderSource =
+    options?.renderSource ?? 'legacy';
+  let effectiveSource: RailwayInfrastructureRenderSource = requestedSource;
+  let graphFallbackOccurred = false;
+  let graphFallbackReason: string | undefined;
+  let activeDescriptors: InfrastructureRenderDescriptorBundle | null = options?.descriptors ?? null;
+  let graphEdgeCount: number | undefined;
+
+  let sourceFeatures: RailwayFeature[];
+
+  if (requestedSource === 'graph') {
+    if (!activeDescriptors && options?.descriptors === undefined) {
+      const preview = prepareInfrastructureRenderPreview(data, { railways: 'graph' });
+      activeDescriptors = preview.descriptors;
+    }
+
+    if (activeDescriptors?.railwayEdges && activeDescriptors.railwayEdges.length > 0) {
+      graphEdgeCount = activeDescriptors.railwayEdges.length;
+      sourceFeatures = adaptRailwayEdgeDescriptorsToFeatures(activeDescriptors.railwayEdges);
+    } else {
+      // Graceful fallback to legacy
+      effectiveSource = 'legacy';
+      graphFallbackOccurred = true;
+      graphFallbackReason = 'missing_or_empty_descriptors';
+      sourceFeatures = data.railways || [];
+      if (options?.diagnostics) {
+        options.diagnostics.railwayRendererFallback = 'legacy_due_to_missing_descriptors';
+      }
+    }
+  } else {
+    sourceFeatures = data.railways || [];
+  }
+
   const tPhase0 = performance.now();
-  const activeRailways = sortRailwaysMainlineFirst(data.railways || []);
+  const activeRailways = sortRailwaysMainlineFirst(sourceFeatures);
   const trackPhaseMap = computeContinuousTrackPhases(activeRailways);
 
   const hostIndexByScope = new Map<string, HostTrackSpatialIndex>();
@@ -2044,6 +2101,11 @@ export function buildRailwayGroupInternal(
       sleeper3DMode,
       spatialChunkSizeMeters,
       spatialChunkCount,
+      railwayRenderSource: effectiveSource,
+      graphFallbackOccurred,
+      graphFallbackReason,
+      graphEdgeCount,
+      sourceRailwayCount: (data.railways || []).length,
     },
     updateTheme: (newTheme: MapStyleTheme) => {
       if (ballastMat) ballastMat.color.set(newTheme.railwayColors.ballast);
@@ -2123,5 +2185,8 @@ export function buildRailwayInfrastructure(
     closeZoomSleeperPeriodMeters: options?.closeZoomSleeperPeriodMeters,
     resourceManager: options?.resourceManager,
     targetGroup: options?.targetGroup,
+    renderSource: options?.renderSource,
+    descriptors: options?.descriptors,
+    diagnostics: options?.diagnostics,
   });
 }

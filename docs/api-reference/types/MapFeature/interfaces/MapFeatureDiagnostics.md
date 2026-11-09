@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:410
 
 > **byGeometryType**: `object`
 
-Defined in: types/MapFeature.ts:512
+Defined in: types/MapFeature.ts:515
 
 Source features breakdown by GeoJSON geometry type
 
@@ -56,7 +56,7 @@ Source features breakdown by GeoJSON geometry type
 
 > `optional` **cartoSubtypesCount?**: `Record`\<`string`, `number`\>
 
-Defined in: types/MapFeature.ts:487
+Defined in: types/MapFeature.ts:490
 
 Count of classified features by human-readable OSM Carto subtype
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:420
 
 > `optional` **featureLineage?**: `object`
 
-Defined in: types/MapFeature.ts:502
+Defined in: types/MapFeature.ts:505
 
 Feature processing outcomes and lineage tracking
 
@@ -322,7 +322,7 @@ Parsed feature parts extracted during GeoJSON parsing (before 3D mesh generation
 
 > `optional` **planarValidation?**: `object`
 
-Defined in: types/MapFeature.ts:528
+Defined in: types/MapFeature.ts:531
 
 Post-build planar polygon layering & Z-fighting validation report
 
@@ -352,11 +352,21 @@ Post-build planar polygon layering & Z-fighting validation report
 
 ***
 
+### railwayRendererFallback?
+
+> `optional` **railwayRendererFallback?**: `string`
+
+Defined in: types/MapFeature.ts:487
+
+Observable railway renderer fallback reason when graph mode falls back to legacy (Stage E3-A1)
+
+***
+
 ### rejectedInvalid
 
 > **rejectedInvalid**: `object`
 
-Defined in: types/MapFeature.ts:496
+Defined in: types/MapFeature.ts:499
 
 Features rejected due to malformed or degenerate coordinates
 
@@ -374,7 +384,7 @@ Features rejected due to malformed or degenerate coordinates
 
 > **skippedUnsupported**: `object`
 
-Defined in: types/MapFeature.ts:490
+Defined in: types/MapFeature.ts:493
 
 Features skipped due to unsupported tags or non-linear infrastructure
 
@@ -432,7 +442,7 @@ Defined in: types/MapFeature.ts:416
 
 > **totalFeaturesReceived**: `number`
 
-Defined in: types/MapFeature.ts:524
+Defined in: types/MapFeature.ts:527
 
 ***
 
@@ -440,4 +450,4 @@ Defined in: types/MapFeature.ts:524
 
 > **totalFeaturesRendered**: `number`
 
-Defined in: types/MapFeature.ts:525
+Defined in: types/MapFeature.ts:528

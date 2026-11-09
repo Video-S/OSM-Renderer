@@ -641,19 +641,19 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     assert.equal(parseRoadInfrastructureRenderSource('graph'), 'graph');
     assert.equal(parseRoadInfrastructureRenderSource('invalid'), 'legacy');
 
-    // Railway render source in E2 must reject 'graph' and fall back safely to 'legacy'
+    // Railway render source in Stage E3-A1 accepts 'graph' alongside 'legacy' and 'graph-preview'
     assert.equal(parseRailwayInfrastructureRenderSource('legacy'), 'legacy');
     assert.equal(parseRailwayInfrastructureRenderSource('graph-preview'), 'graph-preview');
-    assert.equal(parseRailwayInfrastructureRenderSource('graph'), 'legacy');
+    assert.equal(parseRailwayInfrastructureRenderSource('graph'), 'graph');
 
     assert.equal(parseInfrastructureRenderSource('graph', 'roads'), 'graph');
-    assert.equal(parseInfrastructureRenderSource('graph', 'railways'), 'legacy');
+    assert.equal(parseInfrastructureRenderSource('graph', 'railways'), 'graph');
 
     assert.deepEqual(
       parseInfrastructureRenderOptionsFromSearch('?topologyRoads=graph&topologyRailways=graph'),
       {
         roads: 'graph',
-        railways: 'legacy',
+        railways: 'graph',
       }
     );
     assert.deepEqual(
@@ -666,7 +666,14 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
       }
     );
     assert.deepEqual(
-      normalizeInfrastructureRenderOptions({ roads: 'graph', railways: 'graph' as any }),
+      normalizeInfrastructureRenderOptions({ roads: 'graph', railways: 'graph' }),
+      {
+        roads: 'graph',
+        railways: 'graph',
+      }
+    );
+    assert.deepEqual(
+      normalizeInfrastructureRenderOptions({ roads: 'graph', railways: 'invalid' as any }),
       {
         roads: 'graph',
         railways: 'legacy',

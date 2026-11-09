@@ -1,5 +1,6 @@
 import {
   ProcessedMapData,
+  RailwayFeature,
   RailwayType,
   RawGeoJsonProperties,
   RoadClass,
@@ -50,14 +51,14 @@ import {
 export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph' | 'graph-surface';
 
 /**
- * Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E2.
+ * Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E3.
  *
  * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.railways`.
  * - `'graph-preview'`: Builds and validates railway render descriptors alongside the legacy railway renderer.
- *   (Graph-driven railway rendering `'graph'` remains deferred to Stage E3; setting `topologyRailways=graph`
- *   in Stage E2 resolves safely to `'legacy'`.)
+ * - `'graph'`: Stage E3-A1 graph-driven railway rendering mode. Adapts `RailwayEdgeRenderDescriptor`s
+ *   into Candidate B inputs without altering physical geometry generation rules.
  */
-export type RailwayInfrastructureRenderSource = 'legacy' | 'graph-preview';
+export type RailwayInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph';
 
 /**
  * Union of supported infrastructure render source modes across road and railway domains.
@@ -97,15 +98,66 @@ export function parseRoadInfrastructureRenderSource(
 }
 
 /**
- * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview'`),
- * resolving any absent or unrecognized value (including `'graph'` during Stage E2) safely to `'legacy'`.
+ * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
+ * resolving any absent or unrecognized value safely to `'legacy'`.
  */
 export function parseRailwayInfrastructureRenderSource(
   raw: string | null | undefined
 ): RailwayInfrastructureRenderSource {
   if (typeof raw !== 'string') return 'legacy';
   const normalized = raw.trim();
-  return normalized === 'graph-preview' ? 'graph-preview' : 'legacy';
+  if (normalized === 'graph-preview' || normalized === 'graph') {
+    return normalized;
+  }
+  return 'legacy';
+}
+
+/**
+ * Adapts Stage E1/E3 railway edge render descriptors into `RailwayFeature` records
+ * consumed by Candidate B (`RailwayGeometryBuilder.ts`) in Milestone 2.3 Stage E3-A1.
+ *
+ * Preserves:
+ * - Edge ID and canonical points polyline `[x, z][]`
+ * - Track gauge, widths, layers, and bridge/tunnel profile flags
+ * - Primary source feature ID and complete constituent `sourceFeatureIds` (retaining full OSM provenance)
+ * - Raw OSM node IDs and original tags
+ * - Railway classifications (`railwayType`, `service`, `usage`)
+ */
+export function adaptRailwayEdgeDescriptorsToFeatures(
+  edges: readonly RailwayEdgeRenderDescriptor[]
+): RailwayFeature[] {
+  return edges.map((edge) => {
+    const sids =
+      edge.sourceFeatureIds && edge.sourceFeatureIds.length > 0
+        ? [...edge.sourceFeatureIds]
+        : [edge.sourceFeatureId || edge.id];
+
+    return {
+      id: edge.id,
+      sourceFeatureId: edge.sourceFeatureId || sids[0],
+      sourceFeatureIds: sids,
+      type: 'railway',
+      name: edge.name,
+      points: edge.points.map((p) => [p[0], p[1]] as [number, number]),
+      nodeIds: edge.vertexRawOsmNodeIds.map((nid) => nid ?? ''),
+      railwayType: edge.railwayType,
+      width: edge.width,
+      isBridge: edge.isBridge,
+      isTunnel: edge.isTunnel,
+      layer: edge.layer,
+      gauge: edge.gauge ? Number(edge.gauge) : undefined,
+      electrified: edge.electrified ? edge.electrified !== 'no' : undefined,
+      cartoLabel: edge.name || `Railway (${edge.railwayType})`,
+      primaryTag: `railway=${edge.railwayType}`,
+      osmTags: {
+        ...edge.primaryOsmTags,
+        ...(edge.service ? { service: edge.service } : {}),
+        ...(edge.usage ? { usage: edge.usage } : {}),
+        ...(edge.gauge ? { gauge: edge.gauge } : {}),
+        ...(edge.electrified ? { electrified: edge.electrified } : {}),
+      },
+    };
+  });
 }
 
 /**

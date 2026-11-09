@@ -483,6 +483,9 @@ export interface MapFeatureDiagnostics {
     sampleIds: string[];
   };
 
+  /** Observable railway renderer fallback reason when graph mode falls back to legacy (Stage E3-A1) */
+  railwayRendererFallback?: string;
+
   /** Count of classified features by human-readable OSM Carto subtype */
   cartoSubtypesCount?: Record<string, number>;
 

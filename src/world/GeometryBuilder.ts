@@ -2674,7 +2674,13 @@ export class GeometryBuilder {
     // 5. RAILWAYS & AERIALWAYS (Delegated to Hybrid Candidate B RailwayGeometryBuilder)
     // ==========================================================================
     let railwayInfrastructureResult: RailwayPrototypeResult | null = null;
-    if (data.railways && data.railways.length > 0) {
+    const hasRailways =
+      (data.railways && data.railways.length > 0) ||
+      (infrastructureRenderOptions.railways === 'graph' &&
+        infrastructureRenderPreview?.descriptors?.railwayEdges &&
+        infrastructureRenderPreview.descriptors.railwayEdges.length > 0);
+
+    if (hasRailways) {
       railwayInfrastructureResult = buildRailwayInfrastructure(
         data,
         theme,
@@ -2682,6 +2688,9 @@ export class GeometryBuilder {
         {
           resourceManager,
           targetGroup: railwaysGroup,
+          renderSource: infrastructureRenderOptions.railways,
+          descriptors: infrastructureRenderPreview?.descriptors,
+          diagnostics: data.diagnostics,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {
@@ -2690,6 +2699,11 @@ export class GeometryBuilder {
       drawCalls += railwayInfrastructureResult.stats.drawCalls;
       totalVertices += railwayInfrastructureResult.stats.totalVertices;
       totalTriangles += railwayInfrastructureResult.stats.totalTriangles;
+
+      railwaysGroup.userData.railwayRenderSource =
+        railwayInfrastructureResult.stats.railwayRenderSource ?? infrastructureRenderOptions.railways;
+      railwaysGroup.userData.railwayStats = railwayInfrastructureResult.stats;
+      railwaysGroup.userData.railwayProfile = railwayInfrastructureResult.profile;
     }
 
     const bridgeSubstructureItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];

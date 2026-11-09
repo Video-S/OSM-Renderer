@@ -407,7 +407,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                M2.2 production implements Candidate B. Graph-driven railway rendering remains deferred to Stage E3.
+                M2.2 production implements Candidate B. Stage E3-A1 allows Candidate B to consume graph descriptors directly.
               </p>
 
               <div className="grid grid-cols-2 gap-2">
@@ -423,8 +423,24 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <div className="text-xs">Production (Candidate B)</div>
+                  <div className="text-xs">Production (Legacy)</div>
                   <div className="text-[10px] text-slate-400 mt-0.5">3D sleepers & procedural ballast</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeRailwayPrototypeMode('production');
+                    onChangeInfrastructureRenderOptions({ railways: 'graph' });
+                  }}
+                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                    railwayPrototypeMode === 'production' && infrastructureRenderOptions.railways === 'graph'
+                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-xs">Graph-Driven (E3-A1)</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Candidate B via graph descriptors</div>
                 </button>
 
                 <button
@@ -459,7 +475,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => onChangeRailwayPrototypeMode('disabled')}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                  className={`p-2 rounded-lg border text-left transition cursor-pointer col-span-2 ${
                     railwayPrototypeMode === 'disabled'
                       ? 'bg-rose-500/20 border-rose-400 text-rose-200 font-bold'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'

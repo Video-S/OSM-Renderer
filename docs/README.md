@@ -13,6 +13,14 @@ This documentation is organized into two distinct categories:
 
 ## Manually Maintained Documents
 
+**Current road-rendering direction (2026-11-09):** [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) selects E2+ surface-first rendering as the preferred architecture, based on strong owner visual evaluation. It is **not yet the production default**; full geometry and performance validation remain outstanding.
+
+- **[Project History](./project-history.md)** — Goals, junction-rendering evolution, E2 to E2+ turning point, and evidence.
+- **[E2+ Architecture & Geometry Design](./e2-plus-surface-first-road-rendering.md)** — Exact buffer algorithm, priority clipping, meshes/provenance, mode integration, limits.
+- **[Road-Rendering Future Plans / Validation Roadmap](./road-rendering-roadmap.md)** — Baseline, regression matrix, scaling benchmarks, staged migration gates.
+- **[E2+ Research Prototype](../research/surface-first-road-rendering/README.md)** — User-facing mode selection and experimental usage.
+
+
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
   Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1 & M2.2 complete, M2.3 Stage A active), verified test/build status, known limitations, and next steps.
 

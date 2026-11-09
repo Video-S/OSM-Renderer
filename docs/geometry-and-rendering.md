@@ -220,3 +220,18 @@ When `infrastructureRenderOptions.roads === 'graph'`, Stage 6A–C of `GeometryB
 ### Clipped road footprint finalization
 
 After Boolean subtraction, graph road remainders are conditioned on the coordinate grid. A polygon union resolves any folded boundaries introduced by conditioning before triangulation. The same finalized polygons supply clipping footprints and junction portal reconciliation. Winding, overlap, and continuity validation remain mandatory.
+
+---
+
+## 12. E2+ Experimental Surface-First Road Geometry (Current Preferred Direction)
+
+**Scope note:** Sections 2 and 11 above document the existing Legacy/E2 junction-first methods, which remain selectable. The project owner has since selected **E2+** as the preferred future approach, **not** yet the production default. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md).
+
+When `infrastructureRenderOptions.roads === 'graph-surface'`, `GraphRoadGeometryBuilder` skips node-patch construction and generates full-width footprints from centerline segments and selected 16-sided round joins/caps using `SurfaceFirstRoadFootprints.ts`. It clips each candidate against previously accepted same-grade road footprints in stable vehicle/path, road-class-priority and edge-ID order. Only the remainder is triangulated and registered as a blocker for subsequent roads. This retains source-ID inspection, materials and the uniform at-grade elevation while avoiding separate junction portals and patches.
+
+The important difference from simply drawing overlapping strokes is the **planar ownership step**: accepted meshes are disjoint in positive area, minimizing road-vs-road coplanar z-fighting. E2+ does not merge all roads into one global polygon, nor does physical surface overlap alter topology.
+
+- [Detailed algorithm, thresholds, and failure modes](./e2-plus-surface-first-road-rendering.md)
+- [E2+ experimental usage](../research/surface-first-road-rendering/README.md)
+- [Validation plan](./road-rendering-roadmap.md)
+

@@ -1,6 +1,6 @@
 # E2+ — Surface-first road rendering experiment
 
-Status: experimental comparison, not a replacement for accepted E2.
+Status: **experimental implementation, preferred architectural direction** after project-owner visual evaluation (2026-11-09). E2 remains selectable and E2+ is not yet the production default. See [ADR-0010](../../docs/decisions/ADR-0010-surface-first-road-rendering.md), [architecture/design](../../docs/e2-plus-surface-first-road-rendering.md), [project history](../../docs/project-history.md) and [roadmap](../../docs/road-rendering-roadmap.md).
 
 ## Select
 

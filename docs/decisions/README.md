@@ -66,3 +66,6 @@ The following architectural decisions have been accepted and represent the estab
 
 - **[ADR-0009: Infrastructure Graph Topology, Domain Contracts, and Simplification Architecture](./ADR-0009-infrastructure-graph-topology.md)**  
   OSMnx-referenced pure-TypeScript infrastructure topology graph (`RoadNetwork`, `RailwayNetwork`, `GradeTransitionRelation`, `RailwayFlatCrossingRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`), non-destructive pre-deduplication/pre-chaining `TopologySourceData` handoff, non-interstitial degree-2 simplification with per-segment provenance, and staged renderer integration plan.
+
+- **[ADR-0010: Surface-First Road Footprints as the Preferred At-Grade Rendering Architecture](./ADR-0010-surface-first-road-rendering.md)**  
+  Accepted *architectural direction* (E2+ remains experimental): use full-width rounded road footprints and priority-ordered planar ownership instead of constructing explicit junction patches. ADR-0002 remains historically and operationally valid for the selectable E2/Legacy implementations.

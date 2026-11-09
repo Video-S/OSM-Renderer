@@ -1,5 +1,8 @@
 # Current Project Status
 
+> **Current update — 2026-11-09 (supersedes older E2-only mode descriptions below):** E2+ (`roads: 'graph-surface'` / **Graph (E2+)**) is implemented and manually evaluated by the project owner, who reports dramatic, consistent visual improvements and has chosen **surface-first road rendering as the preferred architectural direction**. This is recorded in [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md). The reference code state is [d2455b7](https://github.com/Video-S/OSM-Renderer/commit/d2455b7b8c711e689cabfc827b7f44ae2428b2ab). **E2+ is not the production default; automated post-prototype test/build results and full Hengelo/Twente scale benchmarks are not recorded here.** The older test counts and Stage E2 status below are dated historical baselines, not current E2+ verification. E2 remains selectable. See the [technical design](./e2-plus-surface-first-road-rendering.md) and [roadmap](./road-rendering-roadmap.md).
+
+
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer

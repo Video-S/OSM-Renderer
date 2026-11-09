@@ -102,3 +102,19 @@ flowchart TD
 
 
 
+
+---
+
+## E2+ Architectural Direction (2026-11-09)
+
+**Current addendum to the historical E2 description above:** The project owner selected **Graph (E2+)**, a separate `roads: 'graph-surface'` rendering mode, as the preferred *future* at-grade road-geometry approach after consistent improvements during manual map evaluation. **Legacy and E2 remain selectable; no production-default change or deletion is implied.**
+
+The unchanged OSM topology graph and adapter supply per-edge geometry, width, grade and original feature attribution. E2+ buffers road centerlines using full-width rectangles plus 16-vertex round join/endpoint disks. It then resolves competing at-grade footprint areas by stable tier/class/ID ownership, subtracts already-owned surfaces with 2D Boolean geometry, triangulates the visible remainder and retains per-feature inspection. The graph continues to define actual connectivity; planimetric overlap alone does not.
+
+This substitutes **surface construction** for E2's *junction patch + portal + trimming* subsystem; it does not change railway/bridge/tunnel rendering, OSM data interpretation, physical elevation rules, or the camera.
+
+- [ADR-0010: decision and guardrails](./decisions/ADR-0010-surface-first-road-rendering.md)
+- [E2+ architecture / geometry specification](./e2-plus-surface-first-road-rendering.md)
+- [Project history](./project-history.md)
+- [Validation and Twente scaling roadmap](./road-rendering-roadmap.md)
+

@@ -9,12 +9,15 @@ import {
   GraphRoadGenerationTiming,
   GraphRoadRenderStats,
   auditGraphRoadMeshIntegrity,
+  createShapesFromMultiPolygon,
+  hasRingSelfIntersection,
   parseInfrastructureRenderOptionsFromSearch,
   parseRoadInfrastructureRenderSource,
   prepareInfrastructureRenderPreview,
   resolveInspectedFeature,
   validateSurfaceFirstRoadGeometry,
 } from './GeometryBuilder';
+import { conditionRing, computeSignedRingArea } from './PlanarLayerValidator';
 import {
   bufferSurfaceFirstRoadCenterline,
   resolveInternalProvenanceBoundaryCaps,
@@ -1350,4 +1353,329 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
       scene2.dispose();
     }
   });
+
+  it('resolves H01 Utrecht Vredenburg pinched-ring coplanar overlap on road_edge:way/1576579935-0:seg_0:p_0#seg1', () => {
+    // 1. Direct ring-conditioning & triangulation test on the exact raw Boolean-difference contour
+    // produced for road_edge:way/1576579935-0:seg_0:p_0#seg1 in H01 before ring conditioning:
+    // contains two sub-0.1mm 180-degree fold-back needle excursions along adjacent blocker cuts
+    // ([6.65, 47.5444] -> [6.5815, 47.5705] -> [7.65365, 47.16157] and
+    //  [6.2699, 47.8963] -> [6.48286, 47.82835] -> [6.482845, 47.828354] -> [5.65870, 48.09134]).
+    const rawH01PinchedRing: [number, number][] = [
+      [5.656058424078972, 48.085201187210885],
+      [6.65, 47.5444],
+      [6.5815, 47.5705],
+      [7.653650037532806, 47.16156915520633],
+      [7.706677530285176, 47.284714108642376],
+      [7.287278302593259, 47.481913877602366],
+      [6.70266889790971, 47.73368419530781],
+      [6.269900000000001, 47.896300000000004],
+      [6.482860491566974, 47.82834779780185],
+      [6.482845045517919, 47.82835444986158],
+      [5.658703441968404, 48.091343672701434],
+      [5.656058424078972, 48.085201187210885],
+    ];
+
+    const conditionedRing = conditionRing(rawH01PinchedRing);
+    assert.equal(
+      hasRingSelfIntersection(conditionedRing),
+      false,
+      'Conditioned H01 contour must not contain a self-intersecting fold-back spike'
+    );
+    const polyArea = Math.abs(computeSignedRingArea(conditionedRing));
+    const shapes = createShapesFromMultiPolygon([[conditionedRing]]);
+    assert.equal(shapes.length, 1);
+    const shapeGeo = new THREE.ShapeGeometry(shapes);
+    shapeGeo.rotateX(-Math.PI / 2);
+    try {
+      const pos = shapeGeo.getAttribute('position') as THREE.BufferAttribute;
+      const idx = shapeGeo.getIndex()!;
+      let triAreaSum = 0;
+      for (let f = 0; f < idx.count / 3; f++) {
+        const i0 = idx.getX(f * 3);
+        const i1 = idx.getX(f * 3 + 1);
+        const i2 = idx.getX(f * 3 + 2);
+        const x0 = pos.getX(i0),
+          z0 = pos.getZ(i0);
+        const x1 = pos.getX(i1),
+          z1 = pos.getZ(i1);
+        const x2 = pos.getX(i2),
+          z2 = pos.getZ(i2);
+        triAreaSum += 0.5 * Math.abs((x1 - x0) * (z2 - z0) - (x2 - x0) * (z1 - z0));
+      }
+      assert.ok(
+        Math.abs(polyArea - triAreaSum) < 1e-4,
+        `Expected triangulated area (${triAreaSum}) to match polygon area (${polyArea}) without folded-triangle excess`
+      );
+    } finally {
+      shapeGeo.dispose();
+    }
+
+    // 2. End-to-end 8-way H01 Nobelstraat / Lucasbolwerk reproduction fixture
+    const h01NobelstraatReproGeoJson = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          id: 'way/1374152347',
+          properties: {
+            crossing: 'unmarked',
+            'crossing:island': 'no',
+            'crossing:markings': 'no',
+            footway: 'crossing',
+            highway: 'footway',
+            surface: 'paving_stones',
+            tactile_paving: 'yes',
+            id: 'way/1374152347',
+            _nodeIds: ['6573547993', '14358709398'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1264143, 52.0930337],
+              [5.1263669, 52.0930129],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/1375802578',
+          properties: {
+            foot: 'use_sidepath',
+            highway: 'cycleway',
+            lit: 'yes',
+            mofa: 'no',
+            name: 'Nobelstraat',
+            oneway: 'yes',
+            surface: 'paving_stones',
+            id: 'way/1375802578',
+            _nodeIds: ['6573547995', '6573547996', '6573547994'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1263504, 52.0929848],
+              [5.1262693, 52.0929689],
+              [5.1262584, 52.0929696],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/1375802579',
+          properties: {
+            'cycleway:both': 'no',
+            foot: 'use_sidepath',
+            highway: 'residential',
+            lane_markings: 'no',
+            lit: 'yes',
+            maxspeed: '30',
+            'maxspeed:type': 'NL:zone30',
+            name: 'Lucasbolwerk',
+            sidewalk: 'separate',
+            surface: 'asphalt',
+            id: 'way/1375802579',
+            _nodeIds: ['385177157', '6573547993'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1264305, 52.0930257],
+              [5.1264143, 52.0930337],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/1576579934',
+          properties: {
+            footway: 'sidewalk',
+            highway: 'footway',
+            surface: 'paving_stones',
+            tactile_paving: 'yes',
+            id: 'way/1576579934',
+            _nodeIds: ['14358709397', '12738574956', '14358709398'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.126266, 52.0929822],
+              [5.1263366, 52.0930058],
+              [5.1263669, 52.0930129],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/1576579935',
+          properties: {
+            crossing: 'unmarked',
+            'crossing:island': 'no',
+            'crossing:markings': 'no',
+            footway: 'crossing',
+            highway: 'footway',
+            surface: 'paving_stones',
+            tactile_paving: 'yes',
+            id: 'way/1576579935',
+            _nodeIds: ['12738574960', '6573547995', '12723268578'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1263441, 52.0929951],
+              [5.1263504, 52.0929848],
+              [5.126356, 52.0929744],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/1576579936',
+          properties: {
+            footway: 'sidewalk',
+            highway: 'footway',
+            surface: 'paving_stones',
+            tactile_paving: 'no',
+            id: 'way/1576579936',
+            _nodeIds: ['12738574956', '12738574960'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1263366, 52.0930058],
+              [5.1263441, 52.0929951],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/491572885',
+          properties: {
+            'cycleway:both': 'no',
+            highway: 'residential',
+            lane_markings: 'no',
+            lit: 'yes',
+            maxspeed: '30',
+            'maxspeed:type': 'NL:zone30',
+            name: 'Lucasbolwerk',
+            sidewalk: 'both',
+            'sidewalk:both:surface': 'paving_stones',
+            surface: 'asphalt',
+            id: 'way/491572885',
+            _nodeIds: [
+              '6573547993',
+              '6573548018',
+              '6573547992',
+              '6573548017',
+              '6573548019',
+              '45215986',
+            ],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1264143, 52.0930337],
+              [5.1263591, 52.0930797],
+              [5.1263494, 52.0930997],
+              [5.1263445, 52.0931127],
+              [5.1263363, 52.0931432],
+              [5.1262461, 52.0934239],
+            ],
+          },
+        },
+        {
+          type: 'Feature' as const,
+          id: 'way/7010264',
+          properties: {
+            foot: 'use_sidepath',
+            highway: 'cycleway',
+            lit: 'yes',
+            mofa: 'no',
+            name: 'Nobelstraat',
+            oneway: 'yes',
+            sidewalk: 'separate',
+            surface: 'paving_stones',
+            id: 'way/7010264',
+            _nodeIds: ['385177157', '6573548016', '6573547995'],
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [5.1264305, 52.0930257],
+              [5.1263999, 52.0929991],
+              [5.1263504, 52.0929848],
+            ],
+          },
+        },
+      ],
+    };
+
+    const provider = new LocalGeoJsonProvider();
+    const h01Center: [number, number] = [5.1262461, 52.0934239];
+    const forwardData = provider.parseGeoJson(
+      h01NobelstraatReproGeoJson,
+      'H01-Nobelstraat-Forward',
+      h01Center,
+      160
+    );
+    const reversedData = provider.parseGeoJson(
+      {
+        ...h01NobelstraatReproGeoJson,
+        features: [...h01NobelstraatReproGeoJson.features].reverse(),
+      },
+      'H01-Nobelstraat-Reversed',
+      h01Center,
+      160
+    );
+
+    const forwardScene = buildSurfaceFirstScene(forwardData);
+    const reversedScene = buildSurfaceFirstScene(reversedData);
+    try {
+      const valForward = validateSurfaceFirstRoadGeometry(forwardScene, forwardData);
+      assert.equal(
+        valForward.valid,
+        true,
+        `Expected H01 Nobelstraat repro fixture to pass all E2+ validations, got: ${JSON.stringify({
+          overlaps: valForward.overlaps.categorizedOverlaps,
+          coverage: valForward.coverage.defects,
+          winding: valForward.meshIntegrity.auditReport.windingDefects,
+          provenance: valForward.provenance.defects,
+        })}`
+      );
+      assert.equal(valForward.overlaps.totalPositiveAreaOverlapCount, 0);
+      assert.equal(valForward.overlaps.totalOverlapAreaM2, 0);
+      assert.equal(valForward.overlaps.byCategory.intra_feature_self_overlap, 0);
+      assert.equal(valForward.overlaps.byCategory.multi_provenance_segment, 0);
+      assert.equal(valForward.coverage.defects.length, 0);
+      assert.equal(valForward.meshIntegrity.auditReport.windingDefects.length, 0);
+      assert.equal(valForward.meshIntegrity.auditReport.degenerateTriangles.length, 0);
+
+      const footwayMesh = forwardScene.roadsGroup.children.find(
+        (c) => c.name === 'Roads_footway'
+      ) as THREE.Mesh;
+      assert.ok(footwayMesh, 'Expected Roads_footway mesh');
+      const faceRanges = footwayMesh.userData.faceRanges as FaceFeatureRange[];
+      const seg0Range = faceRanges.find(
+        (r) => r.info.id === 'road_edge:way/1576579935-0:seg_0:p_0#seg0'
+      );
+      const seg1Range = faceRanges.find(
+        (r) => r.info.id === 'road_edge:way/1576579935-0:seg_0:p_0#seg1'
+      );
+      assert.ok(seg0Range, 'Expected faceRange for road_edge:way/1576579935-0:seg_0:p_0#seg0');
+      assert.ok(seg1Range, 'Expected faceRange for road_edge:way/1576579935-0:seg_0:p_0#seg1');
+      assert.deepEqual(seg0Range!.info.sourceFeatureIds, ['way/1576579935']);
+      assert.deepEqual(seg1Range!.info.sourceFeatureIds, ['way/1576579936']);
+      assert.equal(seg1Range!.endFace - seg1Range!.startFace, 6);
+
+      const valReversed = validateSurfaceFirstRoadGeometry(reversedScene, reversedData);
+      assert.deepEqual(
+        valForward,
+        valReversed,
+        'H01 Nobelstraat validation report must be deterministic under input feature permutation'
+      );
+    } finally {
+      forwardScene.dispose();
+      reversedScene.dispose();
+    }
+  });
 });
+

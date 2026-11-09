@@ -8,7 +8,7 @@
 
 > **computeSignedRingArea**(`ring`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:291
+Defined in: world/PlanarLayerValidator.ts:316
 
 Signed area of a closed or unclosed ring in XZ coordinates.
 

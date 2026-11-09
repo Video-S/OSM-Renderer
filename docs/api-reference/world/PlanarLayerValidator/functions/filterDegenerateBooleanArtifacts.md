@@ -8,7 +8,7 @@
 
 > **filterDegenerateBooleanArtifacts**(`mp`): [`MultiPolygonCoords`](../type-aliases/MultiPolygonCoords.md)
 
-Defined in: world/PlanarLayerValidator.ts:832
+Defined in: world/PlanarLayerValidator.ts:857
 
 Provenance-Preserving Remainder Filter (v5):
 Discards ONLY degenerate numerical collapse artifacts produced by floating-point subtraction

@@ -1,6 +1,6 @@
 # Current Project Status
 
-> **E2+ baseline update (2026-11-09):** Verified `202/202` passing tests, clean TypeScript lint, successful build and API documentation generation. Internal provenance-split bend gaps (`provenance_split_bend_gap`) are resolved (`0` coverage defects across all 12 datasets in the [12-dataset baseline](../research/surface-first-road-rendering/baseline-results.json), including `H06`, `A02`, `A01`, `A05`, and `H01`). Two follow-up items remain open: the `diagnostics.featuresFullySubtracted` counter mismatch and **0.0312 m² of H01 coplanar overlap**. The historical 161/161 test result below predates E2+ validation. **E2+ is the preferred architectural direction but Legacy remains the production default**. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) and [the roadmap](./road-rendering-roadmap.md).
+> **E2+ baseline update (2026-11-09):** Verified `203/203` passing tests, clean TypeScript lint, successful build and API documentation generation. Both E2+ geometry defects—internal provenance-split bend gaps (`provenance_split_bend_gap`) and the `0.0312 m²` H01 pinched-ring coplanar overlap—are resolved (`0` coverage defects and `0` positive-area coplanar overlaps across all 12 datasets in the [12-dataset baseline](../research/surface-first-road-rendering/baseline-results.json)). One diagnostic follow-up remains open: the `diagnostics.featuresFullySubtracted` counter synchronization on full E2+ stroke subtraction. The historical 161/161 test result below predates E2+ validation. **E2+ is the preferred architectural direction but Legacy remains the production default**. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) and [the roadmap](./road-rendering-roadmap.md).
 
 ## Product & Goalpost
 
@@ -58,7 +58,7 @@
 - **Single-Threaded Geometry Synthesis**: Large OSM queries (> 5,000 ways) execute polygon clipping and triangulation on the main browser thread; background web worker offloading is not yet implemented.
 - **Local Metric Projection Range**: The equirectangular projection assumes a constant meridian radius and is optimized for neighborhood tiles up to ~5 km. Continental-scale streaming is out of scope.
 - **Complex Multi-Level Stack Interchanges**: Highly skewed 5+ way junctions with overlapping flyover tiers rely on OSM layer tags; incomplete source tags can lead to flat road merges.
-- **E2+ Remaining Pre-Promotion Follow-Ups**: While internal provenance-split bend gaps (`provenance_split_bend_gap`) are now resolved across all 12 benchmark datasets (`resolveInternalProvenanceBoundaryCaps`), `diagnostics.featuresFullySubtracted` counter synchronization on full E2+ stroke subtraction and the `0.0312 m²` pinched-ring coplanar overlap in `H01` remain open for targeted Phase 2 follow-up (`docs/road-rendering-roadmap.md`).
+- **E2+ Remaining Pre-Promotion Follow-Ups**: While internal provenance-split bend gaps (`provenance_split_bend_gap`) and the `0.0312 m²` pinched-ring coplanar overlap in `H01` are now resolved across all 12 benchmark datasets (`0` coverage defects and `0` positive-area overlaps), `diagnostics.featuresFullySubtracted` counter synchronization on full E2+ stroke subtraction remains open for targeted follow-up (`docs/road-rendering-roadmap.md`).
 
 ---
 
@@ -90,7 +90,7 @@
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1–M2.3-E2, DevTools & E2+ Surface-First Tests** | `npm test` | **202 / 202 passed** (15 suites, 0 failures) |
+| **Unit, Integration, M2.1–M2.3-E2, DevTools & E2+ Surface-First Tests** | `npm test` | **203 / 203 passed** (15 suites, 0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
@@ -110,8 +110,8 @@
 | `InfrastructureRenderAdapter.test.ts` (`M2.3-E1`) | 10 |
 | `GraphRoadRendering.test.ts` (`M2.3-E2`) | 29 |
 | `DevToolsAndReproduction.test.ts` (`TKT-009`) | 11 |
-| `SurfaceFirstRoadRendering.test.ts` (`E2+` / `ADR-0010`) | 7 |
-| **Total (`it` declarations / total subtests)** | **192 (`202` with suite subtests)** |
+| `SurfaceFirstRoadRendering.test.ts` (`E2+` / `ADR-0010`) | 8 |
+| **Total (`it` declarations / total subtests)** | **193 (`203` with suite subtests)** |
 
 ---
 

@@ -8,7 +8,7 @@
 
 > **isGeometricallyContained**(`innerMp`, `outerMp`, `innerPerimeter?`): `boolean`
 
-Defined in: world/PlanarLayerValidator.ts:517
+Defined in: world/PlanarLayerValidator.ts:542
 
 Pure Geometric Containment Test (v5):
 Determines whether `innerMp` is geometrically contained within `outerMp`

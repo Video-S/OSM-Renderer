@@ -8,7 +8,7 @@
 
 > **classifyPlanarTier**(`category`, `subtype`, `area`, `osmTags?`): `object`
 
-Defined in: world/PlanarLayerValidator.ts:605
+Defined in: world/PlanarLayerValidator.ts:630
 
 Classifies any surface polygon into its canonical SemanticSurfaceClass and rendering metadata.
 

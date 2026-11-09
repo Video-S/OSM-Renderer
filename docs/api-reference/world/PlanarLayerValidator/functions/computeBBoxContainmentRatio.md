@@ -8,7 +8,7 @@
 
 > **computeBBoxContainmentRatio**(`inner`, `outer`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:407
+Defined in: world/PlanarLayerValidator.ts:432
 
 ## Parameters
 

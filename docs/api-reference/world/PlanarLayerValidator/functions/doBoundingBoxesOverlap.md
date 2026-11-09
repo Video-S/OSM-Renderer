@@ -8,7 +8,7 @@
 
 > **doBoundingBoxesOverlap**(`a`, `b`, `margin?`): `boolean`
 
-Defined in: world/PlanarLayerValidator.ts:394
+Defined in: world/PlanarLayerValidator.ts:419
 
 ## Parameters
 

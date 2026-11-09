@@ -8,7 +8,7 @@
 
 > **resolveAndValidatePlanarPolygons**(`landuse`, `parks`, `waterBodies?`, `linearWaterways?`): `object`
 
-Defined in: world/PlanarLayerValidator.ts:930
+Defined in: world/PlanarLayerValidator.ts:955
 
 Resolves all planar surface polygons (`landuse`, `parks`, and `waterBodies`/`linearWaterways`)
 using the v5 4-Stage Semantic Surface Resolution Engine:

@@ -8,7 +8,7 @@
 
 > **conditionPolygonToMultiPolygon**(`rings`): [`MultiPolygonCoords`](../type-aliases/MultiPolygonCoords.md)
 
-Defined in: world/PlanarLayerValidator.ts:273
+Defined in: world/PlanarLayerValidator.ts:298
 
 ## Parameters
 

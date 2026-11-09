@@ -8,7 +8,7 @@
 
 > **computeDirectedBoundaryDistance**(`sourceMp`, `targetMp`, `maxStepMeters?`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:466
+Defined in: world/PlanarLayerValidator.ts:491
 
 Computes directed segment-to-segment boundary excursion:
 sup_{p in boundary(source)} dist(p, boundary(target))

@@ -207,67 +207,92 @@ const SUBTYPE_SPECIFICITY: Record<string, number> = {
   nature_reserve: 35,
 };
 
+const FOLD_BACK_SPIKE_DOT_THRESHOLD = -0.999;
+const MAX_FOLD_BACK_SPIKE_PERP_M = 5e-4; // 0.5 mm perpendicular excursion limit for fold-back needles
+
 /**
  * Step 1A & 1B: Two-step ring conditioning in Float64 local meters:
  * 1. Snap coordinates to 0.1 mm (1e-4 m) grid to stabilize sweep-line event ordering.
- * 2. Remove consecutive vertices closer than 1 mm (1e-3 m) and 180-degree zero-width fold-back spikes.
+ * 2. Iteratively remove consecutive vertices closer than 1 mm (1e-3 m) and 180-degree
+ *    sub-millimeter fold-back needle spikes (including multi-vertex dead-end cracks whose
+ *    edges would otherwise cross after 0.1 mm grid snapping).
  */
 export function conditionRing(ring: [number, number][]): [number, number][] {
   if (!ring || ring.length < 3) return [];
 
   // Step A: 0.1mm coordinate grid snap
-  const snapped: [number, number][] = ring.map(([x, z]) => [
+  let pts: [number, number][] = ring.map(([x, z]) => [
     Math.round(x / COORDINATE_SNAP_QUANTUM) * COORDINATE_SNAP_QUANTUM,
     Math.round(z / COORDINATE_SNAP_QUANTUM) * COORDINATE_SNAP_QUANTUM,
   ]);
 
-  // Step B: Remove consecutive duplicate vertices (< 1mm)
-  const deduped: [number, number][] = [];
-  for (const pt of snapped) {
-    if (
-      deduped.length === 0 ||
-      Math.hypot(pt[0] - deduped[deduped.length - 1][0], pt[1] - deduped[deduped.length - 1][1]) >=
-        MIN_VERTEX_SPACING
-    ) {
-      deduped.push(pt);
+  // Step B: Iteratively remove consecutive duplicate vertices (< 1mm) and fold-back spikes
+  let changed = true;
+  while (changed && pts.length >= 3) {
+    changed = false;
+
+    const deduped: [number, number][] = [];
+    for (const pt of pts) {
+      if (
+        deduped.length === 0 ||
+        Math.hypot(pt[0] - deduped[deduped.length - 1][0], pt[1] - deduped[deduped.length - 1][1]) >=
+          MIN_VERTEX_SPACING
+      ) {
+        deduped.push(pt);
+      } else {
+        changed = true;
+      }
     }
-  }
-  if (
-    deduped.length > 1 &&
-    Math.hypot(
-      deduped[0][0] - deduped[deduped.length - 1][0],
-      deduped[0][1] - deduped[deduped.length - 1][1]
-    ) < MIN_VERTEX_SPACING
-  ) {
-    deduped.pop();
+    while (
+      deduped.length > 1 &&
+      Math.hypot(
+        deduped[0][0] - deduped[deduped.length - 1][0],
+        deduped[0][1] - deduped[deduped.length - 1][1]
+      ) < MIN_VERTEX_SPACING
+    ) {
+      deduped.pop();
+      changed = true;
+    }
+
+    if (deduped.length < 3) return [];
+
+    // Remove 180-degree collinear / sub-millimeter fold-back needle spikes
+    const cleaned: [number, number][] = [];
+    const m = deduped.length;
+    for (let i = 0; i < m; i++) {
+      const prev = deduped[(i - 1 + m) % m];
+      const curr = deduped[i];
+      const next = deduped[(i + 1) % m];
+      const ux = curr[0] - prev[0];
+      const uz = curr[1] - prev[1];
+      const vx = next[0] - curr[0];
+      const vz = next[1] - curr[1];
+      const lenU = Math.hypot(ux, uz);
+      const lenV = Math.hypot(vx, vz);
+      if (lenU < MIN_VERTEX_SPACING || lenV < MIN_VERTEX_SPACING) {
+        changed = true;
+        continue;
+      }
+      const cross = Math.abs(ux * vz - uz * vx) / (lenU * lenV);
+      const dot = (ux * vx + uz * vz) / (lenU * lenV);
+      const hPerp = Math.min(lenU, lenV) * cross;
+      // Drop pure fold-back spike (dot < -0.9999 and cross < 1e-4, or sub-millimeter needle hPerp <= 0.5mm)
+      if (
+        (dot < -0.9999 && cross < 1e-4) ||
+        (dot < FOLD_BACK_SPIKE_DOT_THRESHOLD && hPerp <= MAX_FOLD_BACK_SPIKE_PERP_M)
+      ) {
+        changed = true;
+        continue;
+      }
+      cleaned.push(curr);
+    }
+
+    pts = cleaned;
   }
 
-  if (deduped.length < 3) return [];
-
-  // Remove 180-degree collinear needle spikes
-  const cleaned: [number, number][] = [];
-  const m = deduped.length;
-  for (let i = 0; i < m; i++) {
-    const prev = deduped[(i - 1 + m) % m];
-    const curr = deduped[i];
-    const next = deduped[(i + 1) % m];
-    const ux = curr[0] - prev[0];
-    const uz = curr[1] - prev[1];
-    const vx = next[0] - curr[0];
-    const vz = next[1] - curr[1];
-    const lenU = Math.hypot(ux, uz);
-    const lenV = Math.hypot(vx, vz);
-    if (lenU < MIN_VERTEX_SPACING || lenV < MIN_VERTEX_SPACING) continue;
-    const cross = Math.abs(ux * vz - uz * vx) / (lenU * lenV);
-    const dot = (ux * vx + uz * vz) / (lenU * lenV);
-    // Drop pure fold-back spike (dot < -0.9999 and cross < 1e-4)
-    if (dot < -0.9999 && cross < 1e-4) continue;
-    cleaned.push(curr);
-  }
-
-  if (cleaned.length < 3) return [];
+  if (pts.length < 3) return [];
   // Close ring explicitly for polygon-clipping compatibility
-  return [...cleaned, [cleaned[0][0], cleaned[0][1]]];
+  return [...pts, [pts[0][0], pts[0][1]]];
 }
 
 export function conditionPolygonToMultiPolygon(rings: [number, number][][]): MultiPolygonCoords {

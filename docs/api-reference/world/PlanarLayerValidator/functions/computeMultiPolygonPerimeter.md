@@ -8,7 +8,7 @@
 
 > **computeMultiPolygonPerimeter**(`mp`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:363
+Defined in: world/PlanarLayerValidator.ts:388
 
 ## Parameters
 

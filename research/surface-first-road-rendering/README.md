@@ -111,15 +111,15 @@ npx tsx scripts/run-e2plus-baseline.ts
 | `A05` (Amsterdam Overtoom) | `legacy` | 10 | 1.86 *(scene)* | — | — | — | — | 159 | 1 (`0.001m²`) | 0/0 | — | — |
 | `A05` (Amsterdam Overtoom) | `graph` | 10 | 4.54 | — | 0.00 | 0.00 | 0/0 | 159 | 0 (`0m²`) | 0/0 | 100.0% | 0 |
 | `A05` (Amsterdam Overtoom) | `graph-surface` | 10 | 12.02 | 4.49 / 4.33 | 5.94 | 0.63 | 16/13 | 365 | **0 (`0m²`)** | 0/0 | **100.0%** | **0** *(was 3 `provenance_split_bend_gap`)* |
-| `H01` (Utrecht Vredenburg) | `legacy` | 38 | 21.25 *(scene)* | — | — | — | — | 667 | 21 (`46.64m²`) | 0/0 | — | — |
-| `H01` (Utrecht Vredenburg) | `graph` | 38 | 58.56 | — | 0.00 | 0.00 | 0/0 | 810 | 0 (`0m²`) | 0/0 | 95.9% | 5 `missing_road_surface_area` |
-| `H01` (Utrecht Vredenburg) | `graph-surface` | 38 | 89.42 | 28.69 / 28.00 | 51.49 | 5.07 | 92/85 | 1965 | 2 (`0.0312m²`) | 0/0 | **100.0%** | **0** *(was 4 `provenance_split_bend_gap`)* |
-| `H02` (Rotterdam Coolsingel) | `legacy` | 18 | 8.51 *(scene)* | — | — | — | — | 584 | 0 (`0m²`) | 0/0 | — | — |
-| `H02` (Rotterdam Coolsingel) | `graph` | 18 | 7.92 | — | 0.00 | 0.00 | 0/0 | 275 | 0 (`0m²`) | 0/0 | 99.6% | 1 `missing_road_surface_area` |
-| `H02` (Rotterdam Coolsingel) | `graph-surface` | 18 | 23.86 | 9.52 / 9.32 | 9.82 | 1.20 | 24/20 | 612 | **0 (`0m²`)** | 0/0 | **100.0%** | **0** |
-| `stress-urban-grid-270` | `legacy` | 197 | 36.96 *(scene)* | — | — | — | — | 1342 | 28 (`14.45m²`) | 0/0 | — | — |
-| `stress-urban-grid-270` | `graph` | 197 | 59.71 | — | 0.00 | 0.00 | 0/0 | 1226 | 0 (`0m²`) | 0/0 | 99.6% | 6 `missing_road_surface_area` |
-| `stress-urban-grid-270` | `graph-surface` | 197 | 87.39 | 25.30 / 24.50 | 54.53 | 4.55 | 197/192 | 1734 | **0 (`0m²`)** | 0/0 | **100.0%** | **0** |
+| `H01` (Utrecht Vredenburg) | `legacy` | 38 | 20.39 *(scene)* | — | — | — | — | 663 | 21 (`46.64m²`) | 0/0 | — | — |
+| `H01` (Utrecht Vredenburg) | `graph` | 38 | 52.70 | — | 0.00 | 0.00 | 0/0 | 807 | 0 (`0m²`) | 0/0 | 95.9% | 5 `missing_road_surface_area` |
+| `H01` (Utrecht Vredenburg) | `graph-surface` | 38 | 78.87 | 27.14 / 26.48 | 43.85 | 4.03 | 92/85 | 1924 | **0 (`0m²`)** *(was 2 / `0.0312m²`)* | 0/0 | **100.0%** | **0** *(was 4 `provenance_split_bend_gap`)* |
+| `H02` (Rotterdam Coolsingel) | `legacy` | 18 | 5.21 *(scene)* | — | — | — | — | 584 | 0 (`0m²`) | 0/0 | — | — |
+| `H02` (Rotterdam Coolsingel) | `graph` | 18 | 7.18 | — | 0.00 | 0.00 | 0/0 | 275 | 0 (`0m²`) | 0/0 | 99.6% | 1 `missing_road_surface_area` |
+| `H02` (Rotterdam Coolsingel) | `graph-surface` | 18 | 15.93 | 8.13 / 7.97 | 5.98 | 0.94 | 24/20 | 601 | **0 (`0m²`)** | 0/0 | **100.0%** | **0** |
+| `stress-urban-grid-270` | `legacy` | 197 | 44.04 *(scene)* | — | — | — | — | 1342 | 28 (`14.45m²`) | 0/0 | — | — |
+| `stress-urban-grid-270` | `graph` | 197 | 59.63 | — | 0.00 | 0.00 | 0/0 | 1226 | 0 (`0m²`) | 0/0 | 99.6% | 6 `missing_road_surface_area` |
+| `stress-urban-grid-270` | `graph-surface` | 197 | 79.82 | 24.81 / 24.14 | 45.99 | 3.96 | 197/192 | 1734 | **0 (`0m²`)** | 0/0 | **100.0%** | **0** |
 
 ---
 
@@ -128,11 +128,11 @@ npx tsx scripts/run-e2plus-baseline.ts
 1. **Internal Provenance-Split Bend Gap (`provenance_split_bend_gap`) — Resolved**:
    - **Resolution**: `resolveInternalProvenanceBoundaryCaps` in `SurfaceFirstRoadFootprints.ts` and `GraphRoadGeometryBuilder.ts` inspects adjacent provenance subsegments (`#seg0 -> #seg1`, plus multi-segment closed-loop seams). Straight equal-width connections (`dot >= 0.9986` and `|wA - wB| <= 1e-3 m`) emit no additional disk, whereas angled bends (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3 m`) assign a single 16-sided rounding disk to at most one adjacent subsegment using a deterministic ownership rule (wider subsegment first, longer millimeter-rounded cleaned arc length second, lexical `partId`/`sourceFeatureId` tie-breaker third). All `11` previously detected `provenance_split_bend_gap` defects across `H06` (`1 -> 0`), `A02` (`2 -> 0`), `A01` (`1 -> 0`), `A05` (`3 -> 0`), and `H01` (`4 -> 0`) are eliminated with `0` new coplanar overlaps.
 2. **`diagnostics.featuresFullySubtracted` Desynchronization — Open**:
-   - **Location**: `GraphRoadGeometryBuilder.ts` lines 3121–3127.
-   - **Behavior**: When an E2+ stroke is completely occluded (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are populated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3383).
-3. **Minor Pinched-Ring `earcut` Overlap After Multi-Stroke Subtraction (`H01` Utrecht Vredenburg) — Open**:
+   - **Location**: `GraphRoadGeometryBuilder.ts` lines 3276–3282.
+   - **Behavior**: When an E2+ stroke is completely occluded (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are populated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3551).
+3. **Pinched-Ring `earcut` Overlap After Multi-Stroke Subtraction (`H01` Utrecht Vredenburg) — Resolved**:
    - **Location**: `H01` (`road_edge:way/1576579935-0:seg_0:p_0#seg1` on `Roads_footway`).
-   - **Behavior**: After sequential `polygonClipping.difference` operations on a short (`2.52 m`) footway crossing/sidewalk edge, a near-collinear pinched spike in the subtracted contour produces a `0.0295 m²` intra-feature triangle overlap and a `0.0017 m²` adjacent provenance-segment overlap (`0.0312 m²` total across `6,233.94 m²` of road surface).
+   - **Root Cause & Resolution**: When `#seg0` and adjacent footway blockers were conditioned after Boolean subtraction, `0.1 mm` (`COORDINATE_SNAP_QUANTUM`) coordinate grid snapping shifted their cut boundaries by `6.35 µm`–`23 µm`, creating two dead-end needle cracks (`0.073 m` and `0.224 m` long). Subsequent `polygonClipping.difference` on `#seg1` traced into those sub-`0.1 mm` cracks (`0` edge crossings in the raw difference output), and `conditionRing` in `PlanarLayerValidator.ts` snapped the crack tip by `~35 µm` across the entry edge without removing the fold-back spike (because `cross = hPerp / len` exceeded `1e-4` after grid snapping and spike removal was non-iterative), causing `THREE.ShapeGeometry` (`earcut`) to emit folded overlapping triangles (`+0.0312 m²` excess area: `0.0295 m²` intra-feature + `0.0017 m²` multi-provenance overlap). `conditionRing` now iteratively deduplicates consecutive vertices (`< 1 mm`) and removes `180°` sub-millimeter fold-back needle spikes (`dot < -0.999` and perpendicular excursion `hPerp <= 0.5 mm`), eliminating the self-crossing spike and reducing `H01` positive-area coplanar overlaps from `0.0312 m²` to **`0.0000 m²`** (`0` overlaps across all 12 benchmark datasets).
 
 ---
 
@@ -149,6 +149,7 @@ npm run docs:api
 
 ## 8. Interpreting the Baseline
 
-The JSON records one Linux/Node 22 benchmark environment with 2 warm-up and 7 measured runs. Legacy's "Road Gen Med" values represent **full scene construction**; graph/E2+ values represent **graph road-generation** time. Do not treat the two as a direct road-only speed comparison. H01 has **two nonzero coplanar overlaps totaling 0.0312 m²**. Following the internal provenance-split bend fix (`resolveInternalProvenanceBoundaryCaps`), all 12 benchmark datasets now report **0 coverage defects** in `graph-surface` mode.
+The JSON records one Linux/Node 22 benchmark environment with 2 warm-up and 7 measured runs. Legacy's "Road Gen Med" values represent **full scene construction**; graph/E2+ values represent **graph road-generation** time. Do not treat the two as a direct road-only speed comparison. Following the internal provenance-split bend fix (`resolveInternalProvenanceBoundaryCaps`) and the `conditionRing` sub-millimeter fold-back needle cleanup, all 12 benchmark datasets now report **0 positive-area coplanar overlaps (`0 m²`), 0 coverage defects, and 0 winding/degenerate triangle defects** in `graph-surface` mode.
 
 This baseline is a reference for correctness investigation, **not proof of whole-Hengelo or Twente scalability**.
+

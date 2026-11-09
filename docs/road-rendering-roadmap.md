@@ -33,13 +33,13 @@ Implemented in this milestone without altering E2+'s geometry generation algorit
 
 ## 3. Phase 2: Targeted Geometry Defect Resolution (In Progress Before Default Promotion)
 
-Automated validation in Phase 1 identified three concrete defects in E2+, one of which is now resolved and two of which remain open for follow-up before promoting `roads: 'graph-surface'` to the default renderer:
+Automated validation in Phase 1 identified three concrete issues in E2+, both geometry defects of which are now resolved while one diagnostic counter item remains open before promoting `roads: 'graph-surface'` to the default renderer:
 
 1. **Internal Provenance-Split Bend Disk Placement (`provenance_split_bend_gap`) — Resolved**:
    - **Root Cause**: When a simplified graph edge consisted of multiple chained OSM ways (`edge.provenance.segments.length > 1`), `capStart` was only enabled on `subSegments[0]` and `capEnd` was only enabled on `subSegments[subSegments.length - 1]`, leaving an unrounded wedge gap on the outside of bends occurring at an internal provenance split.
    - **Implemented Fix**: `resolveInternalProvenanceBoundaryCaps` (`SurfaceFirstRoadFootprints.ts`) inspects adjacent provenance subsegments (`#seg0 -> #seg1` and multi-segment closed-loop seams). Straight equal-width boundaries (`dot >= 0.9986` and `|wA - wB| <= 1e-3 m`) emit no additional disk, whereas angled bends (`dot < 0.9986`) or width transitions (`|wA - wB| > 1e-3 m`) deterministically assign a single 16-sided rounding disk to one adjacent provenance subsegment (wider subsegment first, longer millimeter-rounded cleaned arc length second, lexical `partId`/`sourceFeatureId` tie-breaker third). Verified with `0` `provenance_split_bend_gap` defects across `H06`, `A02`, `A01`, `A05`, and `H01`.
 2. **Diagnostic Counter Synchronization on Full Subtraction — Open**:
-   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3121–3127), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3383).
+   - **Root Cause**: In `GraphRoadGeometryBuilder.ts` (lines 3276–3282), when an E2+ stroke is completely covered by higher-priority road surfaces (`visible.length === 0`), `stats.fullySubtractedCount` and `fullySubtractedRoadIds` are updated, but `diagnostics.featuresFullySubtracted` is not incremented (unlike E2 at line 3551).
    - **Planned Fix**: Reconcile source-level versus provenance-segment accounting and only count a source as fully subtracted **once all of its parts are occluded**; avoid inflating the count for partially visible sources.
 
 ---
@@ -52,12 +52,14 @@ Automated validation in Phase 1 identified three concrete defects in E2+, one of
 3. Project owner signs off on the Phase 2 fix and authorizes default promotion and Stage E5 legacy cleanup.
 
 
-## 5. Third Known Defect: H01 Pinched-Ring Coplanar Overlap
+## 5. Third Defect — H01 Pinched-Ring Coplanar Overlap (Resolved)
 
-The H01 Utrecht Vredenburg benchmark reports **0.0312 m² positive-area overlap** after Boolean subtraction/triangulation of a short footway region. This is not a zero-overlap result. Reproduce the exact polygon in a small deterministic fixture before changing contour cleanup. A near-collinear spike cleanup must preserve legitimate narrow features and should never modify E2 or Legacy geometry unintentionally.
+- **Root Cause**: In `H01` (Utrecht Vredenburg), `road_edge:way/1576579935-0:seg_0:p_0#seg1` (`footway`, width `2.2 m`) was subtracted against higher-priority Nobelstraat cycleways (`way/1375802578`, `way/7010264`), adjacent footways (`way/1374152347`, `way/1576579934`), and its sibling provenance segment `#seg0` (`way/1576579935`). Because `#seg0`'s and `way/1576579934`'s cut vertices had been snapped to the `0.1 mm` (`1e-4 m`) grid by `conditionRing`, their cut boundaries diverged from adjacent blockers by `6.35 µm` and `23 µm`, forming two dead-end needle cracks (`0.224 m` and `0.073 m` long). When `polygonClipping.difference` subtracted those blockers from `#seg1`, its raw contour traced into both cracks without crossing itself, and `conditionRing` then snapped the `6.35 µm` crack's tip by `~35 µm` across the entry edge while failing to strip the `180°` fold-back spike (`cross = hPerp / len > 1e-4` after grid snapping). `THREE.ShapeGeometry` (`earcut`) triangulated the resulting self-crossing contour into overlapping triangles (`0.0295 m²` intra-feature + `0.0017 m²` multi-provenance overlap = `0.0312 m²`).
+- **Implemented Fix**: `conditionRing` in `src/world/PlanarLayerValidator.ts` now iteratively deduplicates consecutive vertices (`< 1 mm`) and strips `180°` sub-millimeter fold-back needle spikes (`dot < -0.999` with perpendicular excursion `hPerp <= 0.5 mm`), preserving legitimate narrow wedges while eliminating sub-millimeter grid-snap fold-backs. Verified with `0` positive-area coplanar overlaps (`0.0000 m²`) in `H01` and across all 12 benchmark datasets.
 
 ## 6. Required Scaling Evidence — Hengelo and Twente
 
 The existing samples are small (the synthetic stress case has 197 road ways); they **do not** validate whole-city costs. Before production promotion, benchmark representative complete Hengelo data and increasingly large Twente tiles. Record **full scene** and **road-only** times separately, CPU/memory, unions/differences, candidate blocker checks, triangle counts, skipped segments, provenance coverage and tile boundary seams.
 
 Consider spatial indexing, workers, chunking and **baked/queryable geometry** only when the measured workload justifies them. A working renderer should not be refactored merely to optimize theoretical costs. Preserve E2 and Legacy until owner visual sign-off and adequate metrics. Railway ballast experiments, although potentially compatible with surface-first ideas, are separate from this road milestone.
+

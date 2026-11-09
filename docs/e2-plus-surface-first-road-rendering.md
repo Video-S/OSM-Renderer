@@ -30,7 +30,7 @@ While E2+ shares the complete upstream topology graph (`M2.3-B/C/D`) and render 
      1. Vehicular tier before path tier (`isPath`).
      2. Higher `ROAD_CLASS_PRIORITY` before lower.
      3. Canonical code-unit ID order (`compareStringsCodeUnit(a.id, b.id)`).
-   - For each stroke, already-placed footprints (`placedRoadFootprints`) whose bounding boxes overlap the stroke and which are eligible blockers (`isPath || !fp.isPath`) are subtracted via `filterDegenerateBooleanArtifacts(polygonClipping.difference(stroke, ...blockers))`.
+   - For each stroke, already-placed footprints (`placedRoadFootprints`) whose bounding boxes overlap the stroke and which are eligible blockers (`isPath || !fp.isPath`) are subtracted via `filterDegenerateBooleanArtifacts(polygonClipping.difference(stroke, ...blockers))`, where `conditionRing` snaps coordinates to the `0.1 mm` grid and iteratively removes consecutive sub-millimeter duplicate vertices (`< 1 mm`) and `180°` sub-millimeter fold-back needle spikes (`dot < -0.999` and perpendicular excursion `<= 0.5 mm`) before triangulation.
    - If the visible remainder is empty (`visible.length === 0`), the segment is recorded in `fullySubtractedRoadIds` and `stats.fullySubtractedCount`.
    - Otherwise, `visible` is converted to `THREE.Shape` instances (`createShapesFromMultiPolygon`), triangulated via `THREE.ShapeGeometry`, rotated onto the horizontal `XZ` plane at `roadElevation` (`+0.050 m`), validated/pruned via `validateAndPruneHorizontalGeometry`, and registered in `placedRoadFootprints` (`registerRoadFootprint(sub.subId, isPath, visible)`).
 
@@ -95,7 +95,8 @@ Lightweight instrumentation is collected on every scene build and reset per rebu
 - **End caps** on outer edge endpoints are conditional on boundary clipping, closed-loop and grade-transition rules; at internal provenance-split boundaries (`#seg0 -> #seg1`), `resolveInternalProvenanceBoundaryCaps` suppresses caps on straight equal-width joins (`dot >= 0.9986`) and assigns a single rounding disk to one deterministic owner when the boundary bends or changes width.
 - The independent 24-gon reference uses a different buffer implementation than E2+'s 16-gon generator, but is still a **polygonal approximation** with declared tolerances, not ground-truth surveyed road geometry.
 - **Timing units are not fully comparable across the table**: Legacy rows use **scene-build** medians under "Road Gen Med", whereas graph/E2+ rows use **graph-road generation** medians. Compare full-scene-to-full-scene data before making relative speed claims.
-- The H01 data explicitly contain **0.0312 m² of coplanar triangle overlap**. High aggregate coverage percentages do not rule out localized gaps or self-overlaps.
+- Following the `conditionRing` iterative sub-millimeter fold-back needle cleanup, the previously reported `0.0312 m²` H01 pinched-ring coplanar overlap (`road_edge:way/1576579935-0:seg_0:p_0#seg1`) is resolved (`0` positive-area overlaps across all 12 benchmark datasets). High aggregate coverage percentages alone still do not substitute for explicit overlap, mesh-integrity, and provenance checks.
 - E2+ still shares the builder with E2; it bypasses, but does not remove, E2's junction solver. Grade-separated and railway geometry remain separately rendered, and true connectivity still comes from the graph.
 
 Full-Hengelo and Twente performance remain **unmeasured**. Spatial indexing, chunking, web workers and precomputed/baked queryable geometry are possible later strategies, not justifications for changing the currently successful geometry prematurely.
+

@@ -8,7 +8,7 @@
 
 > **computeMultiPolygonBBox**(`mp`): [`PlanarBoundingBox`](../interfaces/PlanarBoundingBox.md)
 
-Defined in: world/PlanarLayerValidator.ts:373
+Defined in: world/PlanarLayerValidator.ts:398
 
 ## Parameters
 

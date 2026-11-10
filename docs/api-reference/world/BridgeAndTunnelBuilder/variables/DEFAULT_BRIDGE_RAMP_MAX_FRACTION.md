@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_BRIDGE\_RAMP\_MAX\_FRACTION**: `0.3` = `0.30`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:24
+Defined in: world/BridgeAndTunnelBuilder.ts:30

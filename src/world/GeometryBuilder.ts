@@ -35,6 +35,8 @@ import {
   generateBridgeStructureGeometries,
   generateProfiledRibbon3D,
   generateTunnelPortalAndTraceGeometries,
+  GradeTransitionRenderDiagnostics,
+  resolveGraphGradeSeparatedPlans,
   trimPolylineByArcLength,
 } from './BridgeAndTunnelBuilder';
 import {
@@ -3765,158 +3767,412 @@ export class GeometryBuilder {
     // D. Build grade-separated roads:
     // - Bridges: 3D sloped approach ramps connecting at-grade roads to elevated bridge decks + substructure + parapets + piers
     // - Tunnels: 3D concrete tunnel portal arches + dark recessed entrance mouths + dashed underground traces
-    for (const road of gradeSeparatedRoads) {
-      try {
-        const width = road.width * this.options.roadWidthMultiplier;
-        const sids =
-          road.sourceFeatureIds && road.sourceFeatureIds.length > 0
-            ? road.sourceFeatureIds
-            : road.sourceFeatureId
-              ? [road.sourceFeatureId]
-              : [road.id];
+    const tRoadBridgeTunnel0 = performance.now();
+    const isGraphRoadMode =
+      (infrastructureRenderOptions.roads === 'graph' ||
+        infrastructureRenderOptions.roads === 'graph-surface') &&
+      Boolean(infrastructureRenderPreview?.descriptors);
+    const roadGradeSeparatedPlans =
+      isGraphRoadMode && infrastructureRenderPreview?.descriptors
+        ? resolveGraphGradeSeparatedPlans(
+            infrastructureRenderPreview.descriptors,
+            'road',
+            (edge) => {
+              const roadEdge = infrastructureRenderPreview.descriptors!.roadEdgesById.get(edge.id);
+              const roadClass = roadEdge?.roadClass ?? 'residential';
+              return getRoadElevation(
+                roadClass,
+                edge.layer,
+                edge.isBridge,
+                edge.isTunnel,
+                edge.sourceFeatureIds[0] || edge.id
+              );
+            }
+          )
+        : null;
+    const roadGradeTransitionDiagnostics: GradeTransitionRenderDiagnostics =
+      roadGradeSeparatedPlans
+        ? { ...roadGradeSeparatedPlans.diagnostics }
+        : {
+            mode: 'legacy',
+            confirmedTransitionsConsumed: 0,
+            confirmedElevatedContinuations: 0,
+            unresolvedTransitionsCount: 0,
+            boundaryClippedEndpointsCount: 0,
+            intentionallyStandaloneEndpointsCount: 0,
+            legacyFallbacksCount: gradeSeparatedRoads.length,
+            correctedPortalDiscontinuitiesCount: 0,
+            bridgeAndTunnelBuildTimeMs: 0,
+          };
 
-        if (road.isTunnel || road.layer < 0) {
-          const tunnelInfo: InspectableFeatureInfo = {
+    if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
+      const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
+      for (const edge of infrastructureRenderPreview.descriptors.roadEdges) {
+        if (edge.isAtGradeBuildable || edge.isCulvert) continue;
+        try {
+          const plan = roadGradeSeparatedPlans.plansByEdgeId.get(edge.id);
+          const pts: [number, number][] = plan
+            ? plan.points
+            : edge.points.map((p) => [p[0], p[1]] as [number, number]);
+          if (pts.length < 2) continue;
+
+          const width = edge.width * this.options.roadWidthMultiplier;
+          const sids =
+            edge.sourceFeatureIds && edge.sourceFeatureIds.length > 0
+              ? [...edge.sourceFeatureIds]
+              : [edge.sourceFeatureId || edge.id];
+          const rawTags = (edge.primaryOsmTags || {}) as Record<string, string | number | boolean>;
+          const cartoLabel =
+            typeof rawTags.name === 'string' && rawTags.name.trim().length > 0
+              ? rawTags.name
+              : edge.name;
+
+          const markEdgeRendered = () => {
+            for (const sid of sids) {
+              renderedSourceIds.add(sid);
+              const dups = roadLineage.deduplicatedMap[sid];
+              if (dups) {
+                for (const d of dups) renderedSourceIds.add(d);
+              }
+            }
+            for (const dupId of edge.deduplicatedFeatureIds) {
+              renderedSourceIds.add(dupId);
+            }
+          };
+
+          if (edge.isTunnel || edge.layer < 0) {
+            const tunnelInfo: InspectableFeatureInfo = {
+              id: edge.id,
+              sourceFeatureId: sids[0],
+              sourceFeatureIds: sids,
+              name: edge.name || cartoLabel || `Tunnel (${edge.roadClass})`,
+              category: 'Road & Way',
+              cartoLabel: cartoLabel ? `${cartoLabel} (Tunnel)` : `${edge.roadClass} Tunnel`,
+              primaryTag: `highway=${edge.roadClass} + tunnel=yes`,
+              subtype: edge.roadClass,
+              width: Number(width.toFixed(1)),
+              elevation: getRoadElevation(edge.roadClass, edge.layer, false, true),
+              layer: edge.layer,
+              isBridge: false,
+              isTunnel: true,
+              osmTags: sanitizeOsmTags(rawTags),
+            };
+
+            const tunnelOptions = plan
+              ? {
+                  emitStartPortal:
+                    plan.startClassification !== 'confirmed_elevated_continuation' &&
+                    plan.startClassification !== 'boundary_clipped_continuation',
+                  emitEndPortal:
+                    plan.endClassification !== 'confirmed_elevated_continuation' &&
+                    plan.endClassification !== 'boundary_clipped_continuation',
+                }
+              : undefined;
+
+            const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
+              generateTunnelPortalAndTraceGeometries(
+                pts,
+                width,
+                isNonVehicularRoadClass(edge.roadClass),
+                tunnelOptions
+              );
+            if (portalStructureGeo) {
+              resourceManager.registerGeometry(portalStructureGeo);
+              tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
+            }
+            if (portalMouthGeo) {
+              resourceManager.registerGeometry(portalMouthGeo);
+              tunnelMouthItems.push({ geom: portalMouthGeo, info: tunnelInfo });
+            }
+            if (undergroundTraceGeo) {
+              resourceManager.registerGeometry(undergroundTraceGeo);
+              tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            }
+
+            markEdgeRendered();
+            continue;
+          }
+
+          const targetElevation = getRoadElevation(
+            edge.roadClass,
+            edge.layer,
+            edge.isBridge,
+            edge.isTunnel,
+            sids[0] || edge.id
+          );
+
+          const connectsStartAtGrade = plan
+            ? plan.startClassification === 'confirmed_transition'
+            : false;
+          const connectsEndAtGrade = plan
+            ? plan.endClassification === 'confirmed_transition'
+            : false;
+          const connectsStartBridge = plan
+            ? plan.startClassification === 'confirmed_elevated_continuation' ||
+              plan.startClassification === 'boundary_clipped_continuation'
+            : false;
+          const connectsEndBridge = plan
+            ? plan.endClassification === 'confirmed_elevated_continuation' ||
+              plan.endClassification === 'boundary_clipped_continuation'
+            : false;
+          const suppressStartAbutmentHeadwall = connectsStartBridge;
+          const suppressEndAbutmentHeadwall = connectsEndBridge;
+          const minElevatedDeckY = plan
+            ? Math.min(targetElevation, plan.startTargetDeckElevation, plan.endTargetDeckElevation)
+            : undefined;
+
+          const { profile, peakElevation } = buildBridgeProfile3D({
+            points: pts,
+            baseElevation: ELEVATION_POLICY.ROAD_SURFACE,
+            targetBridgeElevation: targetElevation,
+            connectsStartAtGrade,
+            connectsEndAtGrade,
+            connectsStartBridge,
+            connectsEndBridge,
+            maxSampleStep: 2.0,
+            startClassification: plan?.startClassification,
+            endClassification: plan?.endClassification,
+            startPortalDistanceMeters: plan?.startPortalDistanceMeters,
+            endPortalDistanceMeters: plan?.endPortalDistanceMeters,
+            componentRampLengthMeters: plan?.componentRampLengthMeters,
+            startTargetDeckElevation: plan?.startTargetDeckElevation,
+            endTargetDeckElevation: plan?.endTargetDeckElevation,
+          });
+
+          const geom =
+            profile.length >= 2
+              ? generateProfiledRibbon3D(profile, width)
+              : (() => {
+                  const ribbon = generateRoadRibbon(pts, width, targetElevation, {
+                    roundCaps: false,
+                  });
+                  if (!ribbon) return null;
+                  const g = new THREE.BufferGeometry();
+                  g.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
+                  g.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
+                  g.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+                  return g;
+                })();
+
+          if (!geom) continue;
+          resourceManager.registerGeometry(geom);
+
+          const bridgeInfo: InspectableFeatureInfo = {
+            id: edge.id,
+            sourceFeatureId: sids[0],
+            sourceFeatureIds: sids,
+            name: edge.name || cartoLabel || `Bridge (${edge.roadClass})`,
+            category: 'Road & Way',
+            cartoLabel: cartoLabel ? `${cartoLabel} (Bridge)` : `${edge.roadClass} Bridge`,
+            primaryTag: `highway=${edge.roadClass} + bridge=yes`,
+            subtype: edge.roadClass,
+            width: Number(width.toFixed(1)),
+            elevation: peakElevation,
+            layer: edge.layer,
+            isBridge: Boolean(edge.isBridge || edge.layer > 0),
+            isTunnel: edge.isTunnel,
+            osmTags: sanitizeOsmTags(rawTags),
+          };
+
+          if (!roadsByClass.has(edge.roadClass)) {
+            roadsByClass.set(edge.roadClass, []);
+          }
+          roadsByClass.get(edge.roadClass)!.push({ geom, info: bridgeInfo });
+
+          if (profile.length >= 2) {
+            const { substructureGeo, parapetGeo, piersGeo } = generateBridgeStructureGeometries(
+              profile,
+              width,
+              peakElevation,
+              0.36,
+              {
+                suppressStartAbutmentHeadwall,
+                suppressEndAbutmentHeadwall,
+                minElevatedDeckY,
+              }
+            );
+            if (substructureGeo) {
+              resourceManager.registerGeometry(substructureGeo);
+              bridgeSubstructureItems.push({ geom: substructureGeo, info: bridgeInfo });
+            }
+            if (parapetGeo) {
+              resourceManager.registerGeometry(parapetGeo);
+              bridgeParapetItems.push({ geom: parapetGeo, info: bridgeInfo });
+            }
+            if (piersGeo) {
+              resourceManager.registerGeometry(piersGeo);
+              bridgePierItems.push({ geom: piersGeo, info: bridgeInfo });
+            }
+          }
+
+          markEdgeRendered();
+        } catch (err) {
+          console.warn(`Skipping invalid graph grade-separated road ${edge.id}`, err);
+        }
+      }
+    } else {
+      for (const road of gradeSeparatedRoads) {
+        try {
+          const width = road.width * this.options.roadWidthMultiplier;
+          const sids =
+            road.sourceFeatureIds && road.sourceFeatureIds.length > 0
+              ? road.sourceFeatureIds
+              : road.sourceFeatureId
+                ? [road.sourceFeatureId]
+                : [road.id];
+
+          if (road.isTunnel || road.layer < 0) {
+            const tunnelInfo: InspectableFeatureInfo = {
+              id: road.id,
+              sourceFeatureId: sids[0],
+              sourceFeatureIds: sids,
+              name: road.name || road.cartoLabel || `Tunnel (${road.roadClass})`,
+              category: 'Road & Way',
+              cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Tunnel)` : `${road.roadClass} Tunnel`,
+              primaryTag: road.primaryTag || `highway=${road.roadClass} + tunnel=yes`,
+              subtype: road.roadClass,
+              width: Number(width.toFixed(1)),
+              elevation: getRoadElevation(road.roadClass, road.layer, false, true),
+              layer: road.layer,
+              isBridge: false,
+              isTunnel: true,
+              osmTags: sanitizeOsmTags(road.osmTags),
+            };
+
+            const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
+              generateTunnelPortalAndTraceGeometries(
+                road.points,
+                width,
+                isNonVehicularRoadClass(road.roadClass)
+              );
+            if (portalStructureGeo) {
+              resourceManager.registerGeometry(portalStructureGeo);
+              tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
+            }
+            if (portalMouthGeo) {
+              resourceManager.registerGeometry(portalMouthGeo);
+              tunnelMouthItems.push({ geom: portalMouthGeo, info: tunnelInfo });
+            }
+            if (undergroundTraceGeo) {
+              resourceManager.registerGeometry(undergroundTraceGeo);
+              tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            }
+
+            for (const sid of sids) renderedSourceIds.add(sid);
+            continue;
+          }
+
+          const targetElevation = getRoadElevation(
+            road.roadClass,
+            road.layer,
+            road.isBridge,
+            road.isTunnel,
+            road.sourceFeatureId || road.id
+          );
+
+          const pStart = road.points[0];
+          const pEnd = road.points[road.points.length - 1];
+          const connectsStartAtGrade = atGradeRoadEndpoints.some(
+            (pt) => Math.hypot(pt[0] - pStart[0], pt[1] - pStart[1]) <= 0.8
+          );
+          const connectsEndAtGrade = atGradeRoadEndpoints.some(
+            (pt) => Math.hypot(pt[0] - pEnd[0], pt[1] - pEnd[1]) <= 0.8
+          );
+          const connectsStartBridge = bridgeRoadEndpoints.some(
+            (b) => b.id !== road.id && Math.hypot(b.pt[0] - pStart[0], b.pt[1] - pStart[1]) <= 0.8
+          );
+          const connectsEndBridge = bridgeRoadEndpoints.some(
+            (b) => b.id !== road.id && Math.hypot(b.pt[0] - pEnd[0], b.pt[1] - pEnd[1]) <= 0.8
+          );
+
+          const { profile, peakElevation } = buildBridgeProfile3D({
+            points: road.points,
+            baseElevation: ELEVATION_POLICY.ROAD_SURFACE,
+            targetBridgeElevation: targetElevation,
+            connectsStartAtGrade,
+            connectsEndAtGrade,
+            connectsStartBridge,
+            connectsEndBridge,
+            maxSampleStep: 2.0,
+          });
+
+          const geom =
+            profile.length >= 2
+              ? generateProfiledRibbon3D(profile, width)
+              : (() => {
+                  const ribbon = generateRoadRibbon(road.points, width, targetElevation, {
+                    roundCaps: true,
+                  });
+                  if (!ribbon) return null;
+                  const g = new THREE.BufferGeometry();
+                  g.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
+                  g.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
+                  g.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+                  return g;
+                })();
+
+          if (!geom) continue;
+          resourceManager.registerGeometry(geom);
+
+          const bridgeInfo: InspectableFeatureInfo = {
             id: road.id,
             sourceFeatureId: sids[0],
             sourceFeatureIds: sids,
-            name: road.name || road.cartoLabel || `Tunnel (${road.roadClass})`,
+            name: road.name || road.cartoLabel || `Bridge (${road.roadClass})`,
             category: 'Road & Way',
-            cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Tunnel)` : `${road.roadClass} Tunnel`,
-            primaryTag: road.primaryTag || `highway=${road.roadClass} + tunnel=yes`,
+            cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Bridge)` : `${road.roadClass} Bridge`,
+            primaryTag: road.primaryTag || `highway=${road.roadClass} + bridge=yes`,
             subtype: road.roadClass,
             width: Number(width.toFixed(1)),
-            elevation: getRoadElevation(road.roadClass, road.layer, false, true),
+            elevation: peakElevation,
             layer: road.layer,
-            isBridge: false,
-            isTunnel: true,
+            isBridge: Boolean(road.isBridge || road.layer > 0),
+            isTunnel: road.isTunnel,
             osmTags: sanitizeOsmTags(road.osmTags),
           };
 
-          const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
-            generateTunnelPortalAndTraceGeometries(
-              road.points,
+          if (!roadsByClass.has(road.roadClass)) {
+            roadsByClass.set(road.roadClass, []);
+          }
+          roadsByClass.get(road.roadClass)!.push({ geom, info: bridgeInfo });
+
+          // Generate 3D bridge deck substructure (fascia + soffit + ramp embankments), side parapets, and support piers
+          if (profile.length >= 2) {
+            const { substructureGeo, parapetGeo, piersGeo } = generateBridgeStructureGeometries(
+              profile,
               width,
-              isNonVehicularRoadClass(road.roadClass)
+              peakElevation,
+              0.36,
+              {
+                suppressStartAbutmentHeadwall: connectsStartBridge,
+                suppressEndAbutmentHeadwall: connectsEndBridge,
+              }
             );
-          if (portalStructureGeo) {
-            resourceManager.registerGeometry(portalStructureGeo);
-            tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
-          }
-          if (portalMouthGeo) {
-            resourceManager.registerGeometry(portalMouthGeo);
-            tunnelMouthItems.push({ geom: portalMouthGeo, info: tunnelInfo });
-          }
-          if (undergroundTraceGeo) {
-            resourceManager.registerGeometry(undergroundTraceGeo);
-            tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            if (substructureGeo) {
+              resourceManager.registerGeometry(substructureGeo);
+              bridgeSubstructureItems.push({ geom: substructureGeo, info: bridgeInfo });
+            }
+            if (parapetGeo) {
+              resourceManager.registerGeometry(parapetGeo);
+              bridgeParapetItems.push({ geom: parapetGeo, info: bridgeInfo });
+            }
+            if (piersGeo) {
+              resourceManager.registerGeometry(piersGeo);
+              bridgePierItems.push({ geom: piersGeo, info: bridgeInfo });
+            }
           }
 
           for (const sid of sids) renderedSourceIds.add(sid);
-          continue;
+        } catch (err) {
+          console.warn(`Skipping invalid grade-separated road ${road.id}`, err);
         }
-
-        const targetElevation = getRoadElevation(
-          road.roadClass,
-          road.layer,
-          road.isBridge,
-          road.isTunnel,
-          road.sourceFeatureId || road.id
-        );
-
-        const pStart = road.points[0];
-        const pEnd = road.points[road.points.length - 1];
-        const connectsStartAtGrade = atGradeRoadEndpoints.some(
-          (pt) => Math.hypot(pt[0] - pStart[0], pt[1] - pStart[1]) <= 0.8
-        );
-        const connectsEndAtGrade = atGradeRoadEndpoints.some(
-          (pt) => Math.hypot(pt[0] - pEnd[0], pt[1] - pEnd[1]) <= 0.8
-        );
-        const connectsStartBridge = bridgeRoadEndpoints.some(
-          (b) => b.id !== road.id && Math.hypot(b.pt[0] - pStart[0], b.pt[1] - pStart[1]) <= 0.8
-        );
-        const connectsEndBridge = bridgeRoadEndpoints.some(
-          (b) => b.id !== road.id && Math.hypot(b.pt[0] - pEnd[0], b.pt[1] - pEnd[1]) <= 0.8
-        );
-
-        const { profile, peakElevation } = buildBridgeProfile3D({
-          points: road.points,
-          baseElevation: ELEVATION_POLICY.ROAD_SURFACE,
-          targetBridgeElevation: targetElevation,
-          connectsStartAtGrade,
-          connectsEndAtGrade,
-          connectsStartBridge,
-          connectsEndBridge,
-          maxSampleStep: 2.0,
-        });
-
-        const geom =
-          profile.length >= 2
-            ? generateProfiledRibbon3D(profile, width)
-            : (() => {
-                const ribbon = generateRoadRibbon(road.points, width, targetElevation, {
-                  roundCaps: true,
-                });
-                if (!ribbon) return null;
-                const g = new THREE.BufferGeometry();
-                g.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
-                g.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
-                g.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
-                return g;
-              })();
-
-        if (!geom) continue;
-        resourceManager.registerGeometry(geom);
-
-        const bridgeInfo: InspectableFeatureInfo = {
-          id: road.id,
-          sourceFeatureId: sids[0],
-          sourceFeatureIds: sids,
-          name: road.name || road.cartoLabel || `Bridge (${road.roadClass})`,
-          category: 'Road & Way',
-          cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Bridge)` : `${road.roadClass} Bridge`,
-          primaryTag: road.primaryTag || `highway=${road.roadClass} + bridge=yes`,
-          subtype: road.roadClass,
-          width: Number(width.toFixed(1)),
-          elevation: peakElevation,
-          layer: road.layer,
-          isBridge: road.isBridge,
-          isTunnel: road.isTunnel,
-          osmTags: sanitizeOsmTags(road.osmTags),
-        };
-
-        if (!roadsByClass.has(road.roadClass)) {
-          roadsByClass.set(road.roadClass, []);
-        }
-        roadsByClass.get(road.roadClass)!.push({ geom, info: bridgeInfo });
-
-        // Generate 3D bridge deck substructure (fascia + soffit + ramp embankments), side parapets, and support piers
-        if (profile.length >= 2) {
-          const { substructureGeo, parapetGeo, piersGeo } = generateBridgeStructureGeometries(
-            profile,
-            width,
-            peakElevation,
-            0.36
-          );
-          if (substructureGeo) {
-            resourceManager.registerGeometry(substructureGeo);
-            bridgeSubstructureItems.push({ geom: substructureGeo, info: bridgeInfo });
-          }
-          if (parapetGeo) {
-            resourceManager.registerGeometry(parapetGeo);
-            bridgeParapetItems.push({ geom: parapetGeo, info: bridgeInfo });
-          }
-          if (piersGeo) {
-            resourceManager.registerGeometry(piersGeo);
-            bridgePierItems.push({ geom: piersGeo, info: bridgeInfo });
-          }
-        }
-
-        for (const sid of sids) renderedSourceIds.add(sid);
-      } catch (err) {
-        console.warn(`Skipping invalid grade-separated road ${road.id}`, err);
       }
     }
+
+    roadGradeTransitionDiagnostics.bridgeAndTunnelBuildTimeMs = Number(
+      (performance.now() - tRoadBridgeTunnel0).toFixed(2)
+    );
+    roadsGroup.userData.gradeTransitionDiagnostics = roadGradeTransitionDiagnostics;
 
     // Render order must strictly exceed water (2) and parks (3) for all paths and roads
     const ROAD_CLASS_RENDER_ORDER: Record<RoadClass, number> = {

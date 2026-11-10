@@ -8,4 +8,4 @@
 
 > **BridgeRampMode** = `"standard_ramp"` \| `"adapted_ramp"` \| `"abutment_headwall"` \| `"elevated_continuation"`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:28
+Defined in: world/BridgeAndTunnelBuilder.ts:34

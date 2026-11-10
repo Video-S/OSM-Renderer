@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { ELEVATION_POLICY } from './ElevationPolicy';
+import type {
+  GradeTransitionRenderDescriptor,
+  InfrastructureRenderDescriptorBundle,
+  RailwayEdgeRenderDescriptor,
+  RoadEdgeRenderDescriptor,
+} from './infrastructure/rendering/InfrastructureRenderAdapter';
 
 export interface ProfiledPoint3D {
   x: number;
@@ -15,7 +21,7 @@ export interface ProfiledPoint3D {
  *   `targetBridgeElevation` (`ROAD_SURFACE + BRIDGE_BASE_CLEARANCE = 2.850 m` for layer 1) so vertical
  *   clearance over crossed roads/waterways/railways is never reduced.
  * - Documented Fallback for Ultra-Short Bridges (`mappedBridgeLength < MIN_RAMPED_BRIDGE_SPAN_METERS = 5.0 m`):
- *   When a bridge span is shorter than `5.0 m`, interior approach ramps cannot fit without collapsing
+ *   When a standalone bridge span is shorter than `5.0 m`, interior approach ramps cannot fit without collapsing
  *   the central clearance zone or producing an excessive ramp gradient. The builder preserves 100% of
  *   `targetBridgeElevation` across the deck (`rampMode = 'abutment_headwall'`, `rampStartLength = 0`,
  *   `rampEndLength = 0`) and closes the bridge ends with vertical abutment headwalls down to ground level.
@@ -31,6 +37,64 @@ export type BridgeRampMode =
   | 'abutment_headwall'
   | 'elevated_continuation';
 
+/**
+ * Explicit Stage E4-A classification for each endpoint of a grade-separated (bridge or tunnel) edge.
+ */
+export type GradeSeparatedEndpointClassification =
+  | 'confirmed_transition'
+  | 'confirmed_elevated_continuation'
+  | 'boundary_clipped_continuation'
+  | 'unresolved_connection'
+  | 'intentionally_standalone';
+
+export interface ResolvedGradeSeparatedEdgePlan {
+  edgeId: string;
+  network: 'road' | 'railway';
+  isBridge: boolean;
+  isTunnel: boolean;
+  points: [number, number][];
+  startClassification: GradeSeparatedEndpointClassification;
+  endClassification: GradeSeparatedEndpointClassification;
+  startTransition?: GradeTransitionRenderDescriptor;
+  endTransition?: GradeTransitionRenderDescriptor;
+  /** Shortest path distance (meters) along connected bridge component from start node to nearest confirmed transition portal (`Infinity` if none). */
+  startPortalDistanceMeters: number;
+  /** Shortest path distance (meters) along connected bridge component from end node to nearest confirmed transition portal (`Infinity` if none). */
+  endPortalDistanceMeters: number;
+  /** Effective ramp length (meters) for the connected bridge component containing this edge. */
+  componentRampLengthMeters: number;
+  /** Effective total span (meters) of the connected bridge component containing this edge. */
+  componentSpanMeters: number;
+  /** Authoritative target deck elevation at start node (supports smooth cross-layer bridge continuations). */
+  startTargetDeckElevation: number;
+  /** Authoritative target deck elevation at end node (supports smooth cross-layer bridge continuations). */
+  endTargetDeckElevation: number;
+  /** Number of portal horizontal discontinuities (> 0.0001 m) snapped to authoritative transition node on this edge. */
+  correctedPortalDiscontinuities: number;
+}
+
+export interface GradeTransitionRenderDiagnostics {
+  mode: 'legacy' | 'graph';
+  confirmedTransitionsConsumed: number;
+  confirmedElevatedContinuations: number;
+  unresolvedTransitionsCount: number;
+  boundaryClippedEndpointsCount: number;
+  intentionallyStandaloneEndpointsCount: number;
+  legacyFallbacksCount: number;
+  correctedPortalDiscontinuitiesCount: number;
+  bridgeAndTunnelBuildTimeMs: number;
+}
+
+export interface GraphGradeSeparatedResolutionResult {
+  plansByEdgeId: ReadonlyMap<string, ResolvedGradeSeparatedEdgePlan>;
+  /** Map from at-grade edge ID to authoritative portal endpoint coordinates (`start` and/or `end`) snapped to confirmed GradeTransition positions. */
+  atGradePortalSnapsByEdgeId: ReadonlyMap<
+    string,
+    { start?: readonly [number, number]; end?: readonly [number, number] }
+  >;
+  diagnostics: GradeTransitionRenderDiagnostics;
+}
+
 export interface BridgeProfileOptions {
   points: [number, number][];
   baseElevation: number;
@@ -40,6 +104,14 @@ export interface BridgeProfileOptions {
   connectsStartBridge: boolean;
   connectsEndBridge: boolean;
   maxSampleStep?: number;
+  /** Optional Stage E4-A graph-driven endpoint classifications and component ramp parameters. */
+  startClassification?: GradeSeparatedEndpointClassification;
+  endClassification?: GradeSeparatedEndpointClassification;
+  startPortalDistanceMeters?: number;
+  endPortalDistanceMeters?: number;
+  componentRampLengthMeters?: number;
+  startTargetDeckElevation?: number;
+  endTargetDeckElevation?: number;
 }
 
 /**
@@ -111,14 +183,28 @@ export function trimPolylineByArcLength(
   return out;
 }
 
+export interface BridgeStructureGenerationOptions {
+  suppressStartAbutmentHeadwall?: boolean;
+  suppressEndAbutmentHeadwall?: boolean;
+  minElevatedDeckY?: number;
+}
+
+export interface TunnelPortalGenerationOptions {
+  emitStartPortal?: boolean;
+  emitEndPortal?: boolean;
+}
+
 /**
  * Densifies a 2D polyline and computes a smooth 3D vertical elevation profile `y(s)` for a bridge.
  * - Preserves full grade separation (`peakElevation = targetBridgeElevation`) regardless of bridge length.
  * - Computes ramp lengths from `mappedBridgeLength` (`min(12.0 m, 30% of mapped bridge length)`),
- *   before any synthetic external approach segments are appended for standalone bridges.
- * - Adapts ramp lengths and longitudinal sampling density on short bridges (`5.0 m <= L < 40.0 m`)
- *   so at least `40%` of the bridge span remains flat at full `targetBridgeElevation`.
- * - Uses the documented `'abutment_headwall'` fallback when `mappedBridgeLength < 5.0 m`.
+ *   before any synthetic external approach segments are appended for standalone bridges in legacy mode.
+ * - When Stage E4-A graph classifications (`startClassification` / `endClassification`) are provided:
+ *   - Never invents synthetic external approach extensions for standalone, unresolved, or boundary-clipped ends.
+ *   - Ramps to `baseElevation` strictly at `'confirmed_transition'` portals (and along multi-edge connected bridge
+ *     components via `startPortalDistanceMeters`, `endPortalDistanceMeters`, and `componentRampLengthMeters`).
+ *   - Preserves elevated deck height conservatively at `'boundary_clipped_continuation'`, `'unresolved_connection'`,
+ *     and `'intentionally_standalone'` endpoints.
  */
 export function buildBridgeProfile3D(options: BridgeProfileOptions): {
   profile: ProfiledPoint3D[];
@@ -137,6 +223,13 @@ export function buildBridgeProfile3D(options: BridgeProfileOptions): {
     connectsStartBridge,
     connectsEndBridge,
     maxSampleStep = 2.0,
+    startClassification,
+    endClassification,
+    startPortalDistanceMeters,
+    endPortalDistanceMeters,
+    componentRampLengthMeters,
+    startTargetDeckElevation,
+    endTargetDeckElevation,
   } = options;
 
   const cleanPts: [number, number][] = [];
@@ -145,7 +238,7 @@ export function buildBridgeProfile3D(options: BridgeProfileOptions): {
       cleanPts.length === 0 ||
       Math.hypot(pt[0] - cleanPts[cleanPts.length - 1][0], pt[1] - cleanPts[cleanPts.length - 1][1]) > 0.02
     ) {
-      cleanPts.push(pt);
+      cleanPts.push([pt[0], pt[1]]);
     }
   }
 
@@ -160,105 +253,216 @@ export function buildBridgeProfile3D(options: BridgeProfileOptions): {
     };
   }
 
-  // Always preserve full grade separation as required by the elevation policy
-  const peakElevation = targetBridgeElevation;
+  const startTargetY = startTargetDeckElevation ?? targetBridgeElevation;
+  const endTargetY = endTargetDeckElevation ?? targetBridgeElevation;
+  const peakElevation = Math.max(targetBridgeElevation, startTargetY, endTargetY);
   const mappedBridgeLength = computePolylineLength(cleanPts);
 
+  const isGraphDriven = startClassification !== undefined || endClassification !== undefined;
+  const hasComponentRampModel =
+    isGraphDriven &&
+    componentRampLengthMeters !== undefined &&
+    startPortalDistanceMeters !== undefined &&
+    endPortalDistanceMeters !== undefined;
+
   let workingPts = [...cleanPts];
-  const isStandaloneStart = !connectsStartAtGrade && !connectsStartBridge;
-  const isStandaloneEnd = !connectsEndAtGrade && !connectsEndBridge;
-  const wantsInSpanStartRamp = connectsStartAtGrade && !connectsStartBridge;
-  const wantsInSpanEndRamp = connectsEndAtGrade && !connectsEndBridge;
-
-  // Determine ramp lengths from mappedBridgeLength BEFORE adding any synthetic standalone extensions
-  const nominalRampLen = Math.min(
-    DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
-    mappedBridgeLength * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
-  );
-
   let rampStartLength = 0;
   let rampEndLength = 0;
   let rampMode: BridgeRampMode = 'elevated_continuation';
 
-  if (mappedBridgeLength < MIN_RAMPED_BRIDGE_SPAN_METERS) {
-    // Documented Fallback: span is too short (< 5.0m) to fit approach ramps without losing clearance.
-    // Keep entire deck at full targetBridgeElevation and rely on vertical abutment headwalls.
-    rampStartLength = 0;
-    rampEndLength = 0;
-    rampMode =
-      connectsStartBridge && connectsEndBridge ? 'elevated_continuation' : 'abutment_headwall';
-  } else {
-    if (isStandaloneStart) {
-      const dx = workingPts[0][0] - workingPts[1][0];
-      const dz = workingPts[0][1] - workingPts[1][1];
-      const l = Math.hypot(dx, dz) || 1;
-      const ext = nominalRampLen;
-      workingPts = [
-        [workingPts[0][0] + (dx / l) * ext, workingPts[0][1] + (dz / l) * ext],
-        ...workingPts,
-      ];
-      rampStartLength = ext;
-    } else if (wantsInSpanStartRamp) {
-      rampStartLength = nominalRampLen;
+  if (hasComponentRampModel) {
+    const R = componentRampLengthMeters!;
+    const d0 = startPortalDistanceMeters!;
+    const d1 = endPortalDistanceMeters!;
+
+    if (R > 1e-3 && d0 < R) {
+      rampStartLength = Math.min(mappedBridgeLength, Math.max(0, R - d0));
+    }
+    if (R > 1e-3 && d1 < R) {
+      rampEndLength = Math.min(mappedBridgeLength, Math.max(0, R - d1));
     }
 
-    if (isStandaloneEnd) {
-      const n = workingPts.length;
-      const dx = workingPts[n - 1][0] - workingPts[n - 2][0];
-      const dz = workingPts[n - 1][1] - workingPts[n - 2][1];
-      const l = Math.hypot(dx, dz) || 1;
-      const ext = nominalRampLen;
-      workingPts = [
-        ...workingPts,
-        [workingPts[n - 1][0] + (dx / l) * ext, workingPts[n - 1][1] + (dz / l) * ext],
-      ];
-      rampEndLength = ext;
-    } else if (wantsInSpanEndRamp) {
-      rampEndLength = nominalRampLen;
-    }
-
-    // Guarantee that in-span ramps never consume more than (1 - MIN_CENTRAL_DECK_FRACTION) of mappedBridgeLength
-    const inSpanRampBudget = mappedBridgeLength * (1.0 - MIN_CENTRAL_DECK_FRACTION);
-    const activeInSpanRamps =
-      (wantsInSpanStartRamp ? rampStartLength : 0) + (wantsInSpanEndRamp ? rampEndLength : 0);
-    if (activeInSpanRamps > inSpanRampBudget && activeInSpanRamps > 1e-6) {
-      const scale = inSpanRampBudget / activeInSpanRamps;
-      if (wantsInSpanStartRamp) rampStartLength *= scale;
-      if (wantsInSpanEndRamp) rampEndLength *= scale;
-    }
-
-    const hasAnyRamp = rampStartLength > 0 || rampEndLength > 0;
-    if (!hasAnyRamp) {
+    if (R <= 1e-3) {
+      rampMode =
+        startClassification === 'confirmed_elevated_continuation' &&
+        endClassification === 'confirmed_elevated_continuation'
+          ? 'elevated_continuation'
+          : 'abutment_headwall';
+    } else if (rampStartLength <= 1e-3 && rampEndLength <= 1e-3) {
       rampMode = 'elevated_continuation';
-    } else if (
-      (rampStartLength > 0 && rampStartLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3) ||
-      (rampEndLength > 0 && rampEndLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3)
-    ) {
+    } else if (R < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3) {
       rampMode = 'adapted_ramp';
     } else {
       rampMode = 'standard_ramp';
+    }
+  } else if (isGraphDriven) {
+    // Graph-driven fallback without component distance overrides:
+    // Only confirmed_transition endpoints ramp to ground; never synthesize external extensions.
+    const wantsInSpanStartRamp = startClassification === 'confirmed_transition';
+    const wantsInSpanEndRamp = endClassification === 'confirmed_transition';
+    const nominalRampLen = Math.min(
+      DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+      mappedBridgeLength * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+    );
+
+    if (mappedBridgeLength < MIN_RAMPED_BRIDGE_SPAN_METERS && wantsInSpanStartRamp && wantsInSpanEndRamp) {
+      rampStartLength = 0;
+      rampEndLength = 0;
+      rampMode = 'abutment_headwall';
+    } else if (mappedBridgeLength < MIN_RAMPED_BRIDGE_SPAN_METERS && (wantsInSpanStartRamp || wantsInSpanEndRamp)) {
+      const otherIsContOrClip =
+        (wantsInSpanStartRamp &&
+          (endClassification === 'confirmed_elevated_continuation' ||
+            endClassification === 'boundary_clipped_continuation')) ||
+        (wantsInSpanEndRamp &&
+          (startClassification === 'confirmed_elevated_continuation' ||
+            startClassification === 'boundary_clipped_continuation'));
+      if (otherIsContOrClip) {
+        if (wantsInSpanStartRamp) rampStartLength = mappedBridgeLength;
+        if (wantsInSpanEndRamp) rampEndLength = mappedBridgeLength;
+        rampMode = 'adapted_ramp';
+      } else {
+        rampStartLength = 0;
+        rampEndLength = 0;
+        rampMode = 'abutment_headwall';
+      }
+    } else {
+      if (wantsInSpanStartRamp) rampStartLength = nominalRampLen;
+      if (wantsInSpanEndRamp) rampEndLength = nominalRampLen;
+      const inSpanRampBudget = mappedBridgeLength * (1.0 - MIN_CENTRAL_DECK_FRACTION);
+      const activeInSpanRamps = rampStartLength + rampEndLength;
+      if (activeInSpanRamps > inSpanRampBudget && activeInSpanRamps > 1e-6) {
+        const scale = inSpanRampBudget / activeInSpanRamps;
+        rampStartLength *= scale;
+        rampEndLength *= scale;
+      }
+      const hasAnyRamp = rampStartLength > 0 || rampEndLength > 0;
+      if (!hasAnyRamp) {
+        rampMode =
+          startClassification === 'confirmed_elevated_continuation' &&
+          endClassification === 'confirmed_elevated_continuation'
+            ? 'elevated_continuation'
+            : 'abutment_headwall';
+      } else if (
+        (rampStartLength > 0 && rampStartLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3) ||
+        (rampEndLength > 0 && rampEndLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3)
+      ) {
+        rampMode = 'adapted_ramp';
+      } else {
+        rampMode = 'standard_ramp';
+      }
+    }
+  } else {
+    // Legacy mode: preserve exact backward compatibility for legacy callers and unit tests
+    const isStandaloneStart = !connectsStartAtGrade && !connectsStartBridge;
+    const isStandaloneEnd = !connectsEndAtGrade && !connectsEndBridge;
+    const wantsInSpanStartRamp = connectsStartAtGrade;
+    const wantsInSpanEndRamp = connectsEndAtGrade;
+
+    const nominalRampLen = Math.min(
+      DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+      mappedBridgeLength * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+    );
+
+    if (mappedBridgeLength < MIN_RAMPED_BRIDGE_SPAN_METERS) {
+      rampStartLength = 0;
+      rampEndLength = 0;
+      rampMode =
+        connectsStartBridge && connectsEndBridge ? 'elevated_continuation' : 'abutment_headwall';
+    } else {
+      if (isStandaloneStart) {
+        const dx = workingPts[0][0] - workingPts[1][0];
+        const dz = workingPts[0][1] - workingPts[1][1];
+        const l = Math.hypot(dx, dz) || 1;
+        const ext = nominalRampLen;
+        workingPts = [
+          [workingPts[0][0] + (dx / l) * ext, workingPts[0][1] + (dz / l) * ext],
+          ...workingPts,
+        ];
+        rampStartLength = ext;
+      } else if (wantsInSpanStartRamp) {
+        rampStartLength = nominalRampLen;
+      }
+
+      if (isStandaloneEnd) {
+        const n = workingPts.length;
+        const dx = workingPts[n - 1][0] - workingPts[n - 2][0];
+        const dz = workingPts[n - 1][1] - workingPts[n - 2][1];
+        const l = Math.hypot(dx, dz) || 1;
+        const ext = nominalRampLen;
+        workingPts = [
+          ...workingPts,
+          [workingPts[n - 1][0] + (dx / l) * ext, workingPts[n - 1][1] + (dz / l) * ext],
+        ];
+        rampEndLength = ext;
+      } else if (wantsInSpanEndRamp) {
+        rampEndLength = nominalRampLen;
+      }
+
+      const inSpanRampBudget = mappedBridgeLength * (1.0 - MIN_CENTRAL_DECK_FRACTION);
+      const activeInSpanRamps =
+        (wantsInSpanStartRamp ? rampStartLength : 0) + (wantsInSpanEndRamp ? rampEndLength : 0);
+      if (activeInSpanRamps > inSpanRampBudget && activeInSpanRamps > 1e-6) {
+        const scale = inSpanRampBudget / activeInSpanRamps;
+        if (wantsInSpanStartRamp) rampStartLength *= scale;
+        if (wantsInSpanEndRamp) rampEndLength *= scale;
+      }
+
+      const hasAnyRamp = rampStartLength > 0 || rampEndLength > 0;
+      if (!hasAnyRamp) {
+        rampMode = 'elevated_continuation';
+      } else if (
+        (rampStartLength > 0 && rampStartLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3) ||
+        (rampEndLength > 0 && rampEndLength < DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS - 1e-3)
+      ) {
+        rampMode = 'adapted_ramp';
+      } else {
+        rampMode = 'standard_ramp';
+      }
     }
   }
 
   const totalLen = computePolylineLength(workingPts);
   const activeRampLengths = [rampStartLength, rampEndLength].filter((r) => r > 1e-3);
+  const hasLayerTransition = Math.abs(startTargetY - endTargetY) > 1e-4;
   const minActiveRamp =
-    activeRampLengths.length > 0 ? Math.min(...activeRampLengths) : maxSampleStep;
+    activeRampLengths.length > 0
+      ? Math.min(...activeRampLengths)
+      : hasLayerTransition
+        ? Math.min(maxSampleStep, Math.max(0.5, totalLen / 6))
+        : maxSampleStep;
   const effectiveSampleStep = Math.min(maxSampleStep, Math.max(0.35, minActiveRamp / 6));
 
   const evalElevationAt = (s: number): number => {
+    const fracEdge = totalLen > 1e-6 ? Math.min(Math.max(s / totalLen, 0), 1) : 0;
+    const easeEdge = 0.5 - 0.5 * Math.cos(Math.PI * fracEdge);
+    const localTargetY = startTargetY + (endTargetY - startTargetY) * easeEdge;
+
+    if (hasComponentRampModel) {
+      const R = componentRampLengthMeters!;
+      const d0 = startPortalDistanceMeters!;
+      const d1 = endPortalDistanceMeters!;
+      const dPortal = Math.min(d0 + s, d1 + Math.max(0, totalLen - s));
+      if (R > 1e-3 && dPortal < R) {
+        const t = Math.min(Math.max(dPortal / R, 0), 1);
+        const ease = 0.5 - 0.5 * Math.cos(Math.PI * t);
+        return baseElevation + (localTargetY - baseElevation) * ease;
+      }
+      return localTargetY;
+    }
+
     if (rampStartLength > 1e-3 && s < rampStartLength) {
       const t = Math.min(Math.max(s / rampStartLength, 0), 1);
       const ease = 0.5 - 0.5 * Math.cos(Math.PI * t);
-      return baseElevation + (peakElevation - baseElevation) * ease;
+      return baseElevation + (localTargetY - baseElevation) * ease;
     }
     if (rampEndLength > 1e-3 && s > totalLen - rampEndLength) {
       const rem = totalLen - s;
       const t = Math.min(Math.max(rem / rampEndLength, 0), 1);
       const ease = 0.5 - 0.5 * Math.cos(Math.PI * t);
-      return baseElevation + (peakElevation - baseElevation) * ease;
+      return baseElevation + (localTargetY - baseElevation) * ease;
     }
-    return peakElevation;
+    return localTargetY;
   };
 
   const profile: ProfiledPoint3D[] = [];
@@ -422,7 +626,8 @@ export function generateBridgeStructureGeometries(
   profile: ProfiledPoint3D[],
   width: number,
   peakElevation: number,
-  deckThickness: number = 0.36
+  deckThickness: number = 0.36,
+  options?: BridgeStructureGenerationOptions
 ): {
   substructureGeo: THREE.BufferGeometry | null;
   parapetGeo: THREE.BufferGeometry | null;
@@ -451,6 +656,7 @@ export function generateBridgeStructureGeometries(
   const parapetW = 0.22;
   const parapetH = 0.36;
   const groundY = ELEVATION_POLICY.GROUND_COVER_SURFACE;
+  const minDeckThresholdY = options?.minElevatedDeckY ?? peakElevation;
 
   const appendQuad = (
     posArr: number[],
@@ -482,9 +688,9 @@ export function generateBridgeStructureGeometries(
     const nx = -tz;
     const nz = tx;
 
-    // On ramp sections (where deck is transitioning below peakElevation), extend side abutment walls down to groundY
+    // On ramp sections (where deck is transitioning below minDeckThresholdY), extend side abutment walls down to groundY
     // so the bridge approach forms a solid connected embankment; on main span, use deckThickness fascia.
-    const isRampSeg = p0.y < peakElevation - 0.08 || p1.y < peakElevation - 0.08;
+    const isRampSeg = p0.y < minDeckThresholdY - 0.08 || p1.y < minDeckThresholdY - 0.08;
     const botY0 = isRampSeg ? groundY : Math.max(groundY, p0.y - deckThickness);
     const botY1 = isRampSeg ? groundY : Math.max(groundY, p1.y - deckThickness);
 
@@ -528,8 +734,8 @@ export function generateBridgeStructureGeometries(
       0, -1, 0
     );
 
-    // Start vertical abutment headwall down to groundY when start of bridge is elevated
-    if (i === 0 && p0.y > groundY + 0.08) {
+    // Start vertical abutment headwall down to groundY when start of bridge is elevated and not an elevated/clipped continuation
+    if (i === 0 && p0.y > groundY + 0.08 && !options?.suppressStartAbutmentHeadwall) {
       subV = appendQuad(
         subPos, subNorm, subIdx, subV,
         r0x, groundY, r0z,
@@ -540,8 +746,12 @@ export function generateBridgeStructureGeometries(
       );
     }
 
-    // End vertical abutment headwall down to groundY when end of bridge is elevated
-    if (i === profile.length - 2 && p1.y > groundY + 0.08) {
+    // End vertical abutment headwall down to groundY when end of bridge is elevated and not an elevated/clipped continuation
+    if (
+      i === profile.length - 2 &&
+      p1.y > groundY + 0.08 &&
+      !options?.suppressEndAbutmentHeadwall
+    ) {
       subV = appendQuad(
         subPos, subNorm, subIdx, subV,
         l1x, groundY, l1z,
@@ -724,7 +934,8 @@ export function generateBridgeStructureGeometries(
 export function generateTunnelPortalAndTraceGeometries(
   points: [number, number][],
   width: number,
-  isPedestrianOrCycle: boolean = false
+  isPedestrianOrCycle: boolean = false,
+  options?: TunnelPortalGenerationOptions
 ): {
   portalStructureGeo: THREE.BufferGeometry | null;
   portalMouthGeo: THREE.BufferGeometry | null;
@@ -736,13 +947,16 @@ export function generateTunnelPortalAndTraceGeometries(
       cleanPts.length === 0 ||
       Math.hypot(pt[0] - cleanPts[cleanPts.length - 1][0], pt[1] - cleanPts[cleanPts.length - 1][1]) > 0.02
     ) {
-      cleanPts.push(pt);
+      cleanPts.push([pt[0], pt[1]]);
     }
   }
 
   if (cleanPts.length < 2) {
     return { portalStructureGeo: null, portalMouthGeo: null, undergroundTraceGeo: null };
   }
+
+  const emitStartPortal = options?.emitStartPortal ?? true;
+  const emitEndPortal = options?.emitEndPortal ?? true;
 
   const portalPos: number[] = [];
   const portalNorm: number[] = [];
@@ -930,17 +1144,21 @@ export function generateTunnelPortalAndTraceGeometries(
   };
 
   // Start portal
-  const dx0 = cleanPts[1][0] - cleanPts[0][0];
-  const dz0 = cleanPts[1][1] - cleanPts[0][1];
-  const len0 = Math.hypot(dx0, dz0) || 1;
-  emitPortalAt(cleanPts[0][0], cleanPts[0][1], dx0 / len0, dz0 / len0);
+  if (emitStartPortal) {
+    const dx0 = cleanPts[1][0] - cleanPts[0][0];
+    const dz0 = cleanPts[1][1] - cleanPts[0][1];
+    const len0 = Math.hypot(dx0, dz0) || 1;
+    emitPortalAt(cleanPts[0][0], cleanPts[0][1], dx0 / len0, dz0 / len0);
+  }
 
   // End portal
-  const n = cleanPts.length;
-  const dxn = cleanPts[n - 2][0] - cleanPts[n - 1][0];
-  const dzn = cleanPts[n - 2][1] - cleanPts[n - 1][1];
-  const lenn = Math.hypot(dxn, dzn) || 1;
-  emitPortalAt(cleanPts[n - 1][0], cleanPts[n - 1][1], dxn / lenn, dzn / lenn);
+  if (emitEndPortal) {
+    const n = cleanPts.length;
+    const dxn = cleanPts[n - 2][0] - cleanPts[n - 1][0];
+    const dzn = cleanPts[n - 2][1] - cleanPts[n - 1][1];
+    const lenn = Math.hypot(dxn, dzn) || 1;
+    emitPortalAt(cleanPts[n - 1][0], cleanPts[n - 1][1], dxn / lenn, dzn / lenn);
+  }
 
   // 5. Dashed Underground Alignment Trace between the two portals
   const totalLen = computePolylineLength(cleanPts);
@@ -949,6 +1167,8 @@ export function generateTunnelPortalAndTraceGeometries(
     const dashSpacing = 5.2;
     const traceHalfW = Math.min(Math.max(width * 0.22, 0.35), 0.75);
     const traceY = ELEVATION_POLICY.ROAD_SURFACE + 0.003;
+    const minTraceS = emitStartPortal ? 3.2 : 0.2;
+    const maxTraceS = emitEndPortal ? totalLen - 3.2 : totalLen - 0.2;
 
     let accum = 0;
     for (let i = 0; i < cleanPts.length - 1; i++) {
@@ -963,7 +1183,7 @@ export function generateTunnelPortalAndTraceGeometries(
 
       for (let d = 0.8; d + dashLen <= segLen - 0.4; d += dashSpacing) {
         const globalS = accum + d;
-        if (globalS < 3.2 || globalS + dashLen > totalLen - 3.2) continue;
+        if (globalS < minTraceS || globalS + dashLen > maxTraceS) continue;
 
         const c0x = p0[0] + tx * d;
         const c0z = p0[1] + tz * d;
@@ -999,3 +1219,785 @@ export function generateTunnelPortalAndTraceGeometries(
     undergroundTraceGeo: makeGeo(tracePos, traceNorm, traceIdx),
   };
 }
+
+function compareStringsCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Authoritative Stage E4-A graph-driven grade-transition and continuation resolver for road and railway
+ * bridges and tunnels.
+ *
+ * Classifies every grade-separated endpoint into one of:
+ * 1. `'confirmed_transition'`
+ * 2. `'confirmed_elevated_continuation'`
+ * 3. `'boundary_clipped_continuation'`
+ * 4. `'unresolved_connection'`
+ * 5. `'intentionally_standalone'`
+ *
+ * Also computes connected bridge component path spans and shortest portal distances so multi-segment bridges,
+ * bridges with switches/turnouts near portals, and cross-layer bridge continuations share exact 3D elevations
+ * at every interior node and every confirmed ground portal without vertical cliffs.
+ */
+export function resolveGraphGradeSeparatedPlans(
+  descriptors: InfrastructureRenderDescriptorBundle,
+  network: 'road' | 'railway',
+  getTargetDeckElevation: (
+    edge: RoadEdgeRenderDescriptor | RailwayEdgeRenderDescriptor
+  ) => number
+): GraphGradeSeparatedResolutionResult {
+  const COS_60_DEG = 0.5;
+  const COS_30_DEG = Math.cos((30 * Math.PI) / 180);
+  const SNAP_TOLERANCE_METERS = 0.15;
+
+  type AnyEdge = RoadEdgeRenderDescriptor | RailwayEdgeRenderDescriptor;
+  const allEdges: readonly AnyEdge[] =
+    network === 'road' ? descriptors.roadEdges : descriptors.railwayEdges;
+
+  const isGroundEdge = (e: AnyEdge): boolean => {
+    if (network === 'road') {
+      return (e as RoadEdgeRenderDescriptor).isAtGradeBuildable;
+    }
+    return e.layer === 0 && !e.isBridge && !e.isTunnel;
+  };
+
+  const isTunnelEdge = (e: AnyEdge): boolean => {
+    if (isGroundEdge(e)) return false;
+    return Boolean(e.isTunnel || e.layer < 0);
+  };
+
+  const isBridgeEdge = (e: AnyEdge): boolean => {
+    if (isGroundEdge(e) || isTunnelEdge(e)) return false;
+    return Boolean(e.isBridge || e.layer > 0);
+  };
+
+  const getNode = (nodeId: string) =>
+    network === 'road'
+      ? descriptors.roadNodesById.get(nodeId)
+      : descriptors.railwayNodesById.get(nodeId);
+
+  const groundEdges: AnyEdge[] = [];
+  const bridgeEdges: AnyEdge[] = [];
+  const tunnelEdges: AnyEdge[] = [];
+  const groundEdgeById = new Map<string, AnyEdge>();
+  const bridgeEdgeById = new Map<string, AnyEdge>();
+  const tunnelEdgeById = new Map<string, AnyEdge>();
+
+  for (const e of allEdges) {
+    if (isGroundEdge(e)) {
+      groundEdges.push(e);
+      groundEdgeById.set(e.id, e);
+    } else if (isTunnelEdge(e)) {
+      tunnelEdges.push(e);
+      tunnelEdgeById.set(e.id, e);
+    } else if (isBridgeEdge(e)) {
+      bridgeEdges.push(e);
+      bridgeEdgeById.set(e.id, e);
+    }
+  }
+
+  let correctedPortalDiscontinuitiesCount = 0;
+  const atGradePortalSnaps = new Map<
+    string,
+    { start?: readonly [number, number]; end?: readonly [number, number] }
+  >();
+  const recordAtGradeSnap = (
+    edgeId: string,
+    endpoint: 'start' | 'end',
+    pos: readonly [number, number]
+  ) => {
+    const cur = atGradePortalSnaps.get(edgeId) ?? {};
+    const gEdge = groundEdgeById.get(edgeId);
+    if (gEdge && gEdge.points.length >= 2) {
+      const pt =
+        endpoint === 'start'
+          ? gEdge.points[0]
+          : gEdge.points[gEdge.points.length - 1];
+      if (Math.hypot(pt[0] - pos[0], pt[1] - pos[1]) > 1e-4) {
+        correctedPortalDiscontinuitiesCount++;
+      }
+    }
+    if (endpoint === 'start') cur.start = [pos[0], pos[1]];
+    else cur.end = [pos[0], pos[1]];
+    atGradePortalSnaps.set(edgeId, cur);
+  };
+
+  // Map from `${edgeId}|${'start'|'end'}` to confirmed ground-to-structure GradeTransitionRenderDescriptor
+  const confirmedTransitionByEndpoint = new Map<string, GradeTransitionRenderDescriptor>();
+  const confirmedTransitionByNodeId = new Map<string, GradeTransitionRenderDescriptor>();
+
+  // Cross-scope continuation links between nodes in the same structure stratum (bridge<->bridge or tunnel<->tunnel)
+  const crossScopeNodeLinks = new Map<string, Set<string>>();
+  const crossScopeSnapPositionByNode = new Map<string, [number, number]>();
+  const linkStructureNodes = (
+    nodeAId: string,
+    nodeBId: string,
+    snapPos?: readonly [number, number]
+  ) => {
+    if (nodeAId === nodeBId) return;
+    if (!crossScopeNodeLinks.has(nodeAId)) crossScopeNodeLinks.set(nodeAId, new Set());
+    if (!crossScopeNodeLinks.has(nodeBId)) crossScopeNodeLinks.set(nodeBId, new Set());
+    crossScopeNodeLinks.get(nodeAId)!.add(nodeBId);
+    crossScopeNodeLinks.get(nodeBId)!.add(nodeAId);
+    if (snapPos) {
+      crossScopeSnapPositionByNode.set(nodeAId, [snapPos[0], snapPos[1]]);
+      crossScopeSnapPositionByNode.set(nodeBId, [snapPos[0], snapPos[1]]);
+    }
+  };
+
+  // 1. Process confirmed GradeTransitionRenderDescriptors from the adapter
+  const domainTransitions = descriptors.gradeTransitions.filter((gt) => gt.network === network);
+  for (const gt of domainTransitions) {
+    const agIsGround = groundEdgeById.has(gt.atGradeEdgeId);
+    const gsIsGround = groundEdgeById.has(gt.gradeSeparatedEdgeId);
+    const agIsBridge = bridgeEdgeById.has(gt.atGradeEdgeId);
+    const gsIsBridge = bridgeEdgeById.has(gt.gradeSeparatedEdgeId);
+    const agIsTunnel = tunnelEdgeById.has(gt.atGradeEdgeId);
+    const gsIsTunnel = tunnelEdgeById.has(gt.gradeSeparatedEdgeId);
+
+    if (agIsGround && (gsIsBridge || gsIsTunnel)) {
+      confirmedTransitionByEndpoint.set(
+        `${gt.gradeSeparatedEdgeId}|${gt.gradeSeparatedEndpoint}`,
+        gt
+      );
+      if (!confirmedTransitionByNodeId.has(gt.gradeSeparatedNodeId)) {
+        confirmedTransitionByNodeId.set(gt.gradeSeparatedNodeId, gt);
+      }
+      recordAtGradeSnap(gt.atGradeEdgeId, gt.atGradeEndpoint, gt.position);
+    } else if (gsIsGround && (agIsBridge || agIsTunnel)) {
+      confirmedTransitionByEndpoint.set(`${gt.atGradeEdgeId}|${gt.atGradeEndpoint}`, gt);
+      if (!confirmedTransitionByNodeId.has(gt.atGradeNodeId)) {
+        confirmedTransitionByNodeId.set(gt.atGradeNodeId, gt);
+      }
+      recordAtGradeSnap(gt.gradeSeparatedEdgeId, gt.gradeSeparatedEndpoint, gt.position);
+    } else if ((agIsBridge && gsIsBridge) || (agIsTunnel && gsIsTunnel)) {
+      // Both edges belong to the same elevated or subterranean stratum (e.g. layer=1|isBridge=true meeting layer=1|isBridge=false)
+      linkStructureNodes(gt.gradeSeparatedNodeId, gt.atGradeNodeId, gt.position);
+    }
+  }
+
+  // Helper to check compatibility of two edges in the same domain
+  const areEdgesCompatible = (a: AnyEdge, b: AnyEdge): boolean => {
+    if (network === 'road') {
+      return (a as RoadEdgeRenderDescriptor).tier === (b as RoadEdgeRenderDescriptor).tier;
+    }
+    return (
+      (a as RailwayEdgeRenderDescriptor).railwayType ===
+      (b as RailwayEdgeRenderDescriptor).railwayType
+    );
+  };
+
+  // 2. Check for Elevated (layer > 0, isBridge=false) <-> Ground (layer === 0, isBridge=false) transitions
+  //    that were both treated as non-bridge in CrossModalAnalyzer
+  type EndpointRec = {
+    edge: AnyEdge;
+    endpoint: 'start' | 'end';
+    nodeId: string;
+    position: readonly [number, number];
+    inwardTangent: readonly [number, number];
+    rawOsmNodeId?: string;
+    isClipped: boolean;
+  };
+
+  const collectEndpoints = (edges: readonly AnyEdge[]): EndpointRec[] => {
+    const out: EndpointRec[] = [];
+    for (const e of edges) {
+      const startN = getNode(e.fromNodeId);
+      const endN = getNode(e.toNodeId);
+      if (startN) {
+        out.push({
+          edge: e,
+          endpoint: 'start',
+          nodeId: e.fromNodeId,
+          position: startN.position,
+          inwardTangent: e.startInwardTangent,
+          rawOsmNodeId: startN.rawOsmNodeId,
+          isClipped: Boolean(e.clippedAtStart || startN.isBoundaryClipped),
+        });
+      }
+      if (endN) {
+        out.push({
+          edge: e,
+          endpoint: 'end',
+          nodeId: e.toNodeId,
+          position: endN.position,
+          inwardTangent: e.endInwardTangent,
+          rawOsmNodeId: endN.rawOsmNodeId,
+          isClipped: Boolean(e.clippedAtEnd || endN.isBoundaryClipped),
+        });
+      }
+    }
+    return out;
+  };
+
+  const groundEndpoints = collectEndpoints(groundEdges);
+  const bridgeEndpoints = collectEndpoints(bridgeEdges);
+  const tunnelEndpoints = collectEndpoints(tunnelEdges);
+
+  for (const bEp of bridgeEndpoints) {
+    if (bEp.isClipped) continue;
+    const epKey = `${bEp.edge.id}|${bEp.endpoint}`;
+    if (
+      confirmedTransitionByEndpoint.has(epKey) ||
+      confirmedTransitionByNodeId.has(bEp.nodeId)
+    ) {
+      continue;
+    }
+    // Only needed when bEp.edge had !isBridge (e.g. layer > 0 embankment), or when a shared explicit node connects to ground
+    if (bEp.edge.isBridge) continue;
+
+    let bestGround: { gEp: EndpointRec; dot: number; dist: number; isExplicit: boolean } | null =
+      null;
+    for (const gEp of groundEndpoints) {
+      if (gEp.isClipped || !areEdgesCompatible(bEp.edge, gEp.edge)) continue;
+      const dot = -(
+        bEp.inwardTangent[0] * gEp.inwardTangent[0] +
+        bEp.inwardTangent[1] * gEp.inwardTangent[1]
+      );
+      if (bEp.rawOsmNodeId && gEp.rawOsmNodeId) {
+        if (bEp.rawOsmNodeId !== gEp.rawOsmNodeId) continue;
+        if (dot < COS_60_DEG) continue;
+        const dist = Math.hypot(
+          bEp.position[0] - gEp.position[0],
+          bEp.position[1] - gEp.position[1]
+        );
+        if (!bestGround || !bestGround.isExplicit || dot > bestGround.dot) {
+          bestGround = { gEp, dot, dist, isExplicit: true };
+        }
+      } else {
+        const dist = Math.hypot(
+          bEp.position[0] - gEp.position[0],
+          bEp.position[1] - gEp.position[1]
+        );
+        if (dist > SNAP_TOLERANCE_METERS || dot < COS_30_DEG) continue;
+        if (!bestGround || (!bestGround.isExplicit && dot > bestGround.dot)) {
+          bestGround = { gEp, dot, dist, isExplicit: false };
+        }
+      }
+    }
+
+    if (bestGround) {
+      const midPos: [number, number] = [
+        (bEp.position[0] + bestGround.gEp.position[0]) * 0.5,
+        (bEp.position[1] + bestGround.gEp.position[1]) * 0.5,
+      ];
+      const synthGt: GradeTransitionRenderDescriptor = {
+        id: `grade_transition:${network}:${bEp.edge.id}:${bEp.endpoint}->${bestGround.gEp.edge.id}:${bestGround.gEp.endpoint}`,
+        network,
+        transitionType: 'bridge_approach',
+        position: midPos,
+        rawOsmNodeId: bEp.rawOsmNodeId ?? bestGround.gEp.rawOsmNodeId,
+        atGradeNodeId: bestGround.gEp.nodeId,
+        atGradeEdgeId: bestGround.gEp.edge.id,
+        atGradeEndpoint: bestGround.gEp.endpoint,
+        atGradeSourceFeatureIds: bestGround.gEp.edge.sourceFeatureIds,
+        gradeSeparatedNodeId: bEp.nodeId,
+        gradeSeparatedEdgeId: bEp.edge.id,
+        gradeSeparatedEndpoint: bEp.endpoint,
+        gradeSeparatedSourceFeatureIds: bEp.edge.sourceFeatureIds,
+        atGradeOutwardTangent: [
+          -bestGround.gEp.inwardTangent[0],
+          -bestGround.gEp.inwardTangent[1],
+        ],
+        gradeSeparatedInwardTangent: bEp.inwardTangent,
+        atGradeToStructureDirection: bEp.inwardTangent,
+        continuousTraversalDot: bestGround.dot,
+        confidence: bestGround.isExplicit
+          ? 'explicit_osm_node'
+          : 'coordinate_fallback_confirmed',
+      };
+      confirmedTransitionByEndpoint.set(epKey, synthGt);
+      if (!confirmedTransitionByNodeId.has(bEp.nodeId)) {
+        confirmedTransitionByNodeId.set(bEp.nodeId, synthGt);
+      }
+      recordAtGradeSnap(bestGround.gEp.edge.id, bestGround.gEp.endpoint, midPos);
+    }
+  }
+
+  // 3. Detect cross-layer same-structure continuations (e.g. bridge layer=1 <-> bridge layer=2, or tunnel layer=-1 <-> tunnel layer=-2)
+  const linkCrossLayerContinuations = (eps: readonly EndpointRec[]) => {
+    for (let i = 0; i < eps.length; i++) {
+      const a = eps[i];
+      if (a.isClipped) continue;
+      for (let j = i + 1; j < eps.length; j++) {
+        const b = eps[j];
+        if (b.isClipped || a.edge.id === b.edge.id || a.nodeId === b.nodeId) continue;
+        if (a.edge.layer === b.edge.layer && a.edge.isBridge === b.edge.isBridge) continue;
+        if (!areEdgesCompatible(a.edge, b.edge)) continue;
+
+        const dot = -(
+          a.inwardTangent[0] * b.inwardTangent[0] +
+          a.inwardTangent[1] * b.inwardTangent[1]
+        );
+        if (a.rawOsmNodeId && b.rawOsmNodeId) {
+          if (a.rawOsmNodeId !== b.rawOsmNodeId || dot < COS_60_DEG) continue;
+          const mid: [number, number] = [
+            (a.position[0] + b.position[0]) * 0.5,
+            (a.position[1] + b.position[1]) * 0.5,
+          ];
+          linkStructureNodes(a.nodeId, b.nodeId, mid);
+        } else {
+          const dist = Math.hypot(
+            a.position[0] - b.position[0],
+            a.position[1] - b.position[1]
+          );
+          if (dist <= SNAP_TOLERANCE_METERS && dot >= COS_30_DEG) {
+            const mid: [number, number] = [
+              (a.position[0] + b.position[0]) * 0.5,
+              (a.position[1] + b.position[1]) * 0.5,
+            ];
+            linkStructureNodes(a.nodeId, b.nodeId, mid);
+          }
+        }
+      }
+    }
+  };
+
+  linkCrossLayerContinuations(bridgeEndpoints);
+  linkCrossLayerContinuations(tunnelEndpoints);
+
+  // 4. Index unresolved grade transitions
+  const unresolvedEndpointKeys = new Set<string>();
+  const unresolvedNodeIds = new Set<string>();
+  for (const u of descriptors.unresolvedDiagnostics.unresolvedGradeTransitions) {
+    if (u.network !== network) continue;
+    unresolvedEndpointKeys.add(`${u.gradeSeparatedEdgeId}|${u.gradeSeparatedEndpoint}`);
+    const e =
+      bridgeEdgeById.get(u.gradeSeparatedEdgeId) ?? tunnelEdgeById.get(u.gradeSeparatedEdgeId);
+    if (e) {
+      unresolvedNodeIds.add(
+        u.gradeSeparatedEndpoint === 'start' ? e.fromNodeId : e.toNodeId
+      );
+    }
+  }
+
+  // 5. Count incident structure edges per node (within bridge stratum and within tunnel stratum)
+  const bridgeIncidentByNode = new Map<string, AnyEdge[]>();
+  for (const e of bridgeEdges) {
+    if (!bridgeIncidentByNode.has(e.fromNodeId)) bridgeIncidentByNode.set(e.fromNodeId, []);
+    if (!bridgeIncidentByNode.has(e.toNodeId)) bridgeIncidentByNode.set(e.toNodeId, []);
+    bridgeIncidentByNode.get(e.fromNodeId)!.push(e);
+    bridgeIncidentByNode.get(e.toNodeId)!.push(e);
+  }
+
+  const tunnelIncidentByNode = new Map<string, AnyEdge[]>();
+  for (const e of tunnelEdges) {
+    if (!tunnelIncidentByNode.has(e.fromNodeId)) tunnelIncidentByNode.set(e.fromNodeId, []);
+    if (!tunnelIncidentByNode.has(e.toNodeId)) tunnelIncidentByNode.set(e.toNodeId, []);
+    tunnelIncidentByNode.get(e.fromNodeId)!.push(e);
+    tunnelIncidentByNode.get(e.toNodeId)!.push(e);
+  }
+
+  const getEquivalentNodeIds = (nodeId: string): string[] => {
+    const visited = new Set<string>([nodeId]);
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const links = crossScopeNodeLinks.get(cur);
+      if (!links) continue;
+      for (const nxt of links) {
+        if (!visited.has(nxt)) {
+          visited.add(nxt);
+          queue.push(nxt);
+        }
+      }
+    }
+    return [...visited].sort(compareStringsCodeUnit);
+  };
+
+  const classifyEndpoint = (
+    edge: AnyEdge,
+    endpoint: 'start' | 'end',
+    isTunnel: boolean
+  ): {
+    classification: GradeSeparatedEndpointClassification;
+    transition?: GradeTransitionRenderDescriptor;
+  } => {
+    const nodeId = endpoint === 'start' ? edge.fromNodeId : edge.toNodeId;
+    const node = getNode(nodeId);
+    const equivNodes = getEquivalentNodeIds(nodeId);
+
+    // 1. Confirmed transition to ground
+    const directGt = confirmedTransitionByEndpoint.get(`${edge.id}|${endpoint}`);
+    if (directGt) {
+      return { classification: 'confirmed_transition', transition: directGt };
+    }
+    for (const eqId of equivNodes) {
+      const nodeGt = confirmedTransitionByNodeId.get(eqId);
+      if (nodeGt) {
+        return { classification: 'confirmed_transition', transition: nodeGt };
+      }
+    }
+
+    // 2. Confirmed elevated (or tunnel) continuation within structure stratum
+    const incidentMap = isTunnel ? tunnelIncidentByNode : bridgeIncidentByNode;
+    const incidentEdgeIds = new Set<string>();
+    for (const eqId of equivNodes) {
+      for (const inc of incidentMap.get(eqId) ?? []) {
+        incidentEdgeIds.add(inc.id);
+      }
+    }
+    if (incidentEdgeIds.size >= 2) {
+      return { classification: 'confirmed_elevated_continuation' };
+    }
+
+    // 3. Boundary-clipped continuation
+    const isClipped =
+      (endpoint === 'start' ? edge.clippedAtStart : edge.clippedAtEnd) ||
+      Boolean(node?.isBoundaryClipped) ||
+      Boolean(node && (node.roles as readonly string[]).includes('boundary_clip'));
+    if (isClipped) {
+      return { classification: 'boundary_clipped_continuation' };
+    }
+
+    // 4. Unresolved connection
+    if (
+      unresolvedEndpointKeys.has(`${edge.id}|${endpoint}`) ||
+      equivNodes.some((eqId) => unresolvedNodeIds.has(eqId))
+    ) {
+      return { classification: 'unresolved_connection' };
+    }
+
+    // 5. Intentionally standalone structure
+    return { classification: 'intentionally_standalone' };
+  };
+
+  // 6. Solve bridge connected components and shortest portal distances
+  const superNodeKeyByNodeId = new Map<string, string>();
+  const superNodeTargetY = new Map<string, number>();
+  for (const e of bridgeEdges) {
+    for (const nid of [e.fromNodeId, e.toNodeId]) {
+      if (superNodeKeyByNodeId.has(nid)) continue;
+      const equiv = getEquivalentNodeIds(nid);
+      const canonicalKey = equiv[0];
+      const elevs: number[] = [];
+      for (const eqId of equiv) {
+        superNodeKeyByNodeId.set(eqId, canonicalKey);
+        for (const inc of bridgeIncidentByNode.get(eqId) ?? []) {
+          elevs.push(getTargetDeckElevation(inc));
+        }
+      }
+      const avgY =
+        elevs.length > 0
+          ? elevs.reduce((sum, v) => sum + v, 0) / elevs.length
+          : getTargetDeckElevation(e);
+      superNodeTargetY.set(canonicalKey, Number(avgY.toFixed(4)));
+    }
+  }
+
+  // Adjacency in bridge super-node graph
+  const bridgeAdj = new Map<string, Array<{ toSuperNode: string; edge: AnyEdge }>>();
+  for (const e of bridgeEdges) {
+    const u = superNodeKeyByNodeId.get(e.fromNodeId)!;
+    const v = superNodeKeyByNodeId.get(e.toNodeId)!;
+    if (!bridgeAdj.has(u)) bridgeAdj.set(u, []);
+    if (!bridgeAdj.has(v)) bridgeAdj.set(v, []);
+    bridgeAdj.get(u)!.push({ toSuperNode: v, edge: e });
+    bridgeAdj.get(v)!.push({ toSuperNode: u, edge: e });
+  }
+
+  const endpointMetaByEdgeId = new Map<
+    string,
+    {
+      start: {
+        classification: GradeSeparatedEndpointClassification;
+        transition?: GradeTransitionRenderDescriptor;
+      };
+      end: {
+        classification: GradeSeparatedEndpointClassification;
+        transition?: GradeTransitionRenderDescriptor;
+      };
+    }
+  >();
+
+  for (const e of [...bridgeEdges, ...tunnelEdges]) {
+    const isTun = tunnelEdgeById.has(e.id);
+    endpointMetaByEdgeId.set(e.id, {
+      start: classifyEndpoint(e, 'start', isTun),
+      end: classifyEndpoint(e, 'end', isTun),
+    });
+  }
+
+  const portalDistBySuperNode = new Map<string, number>();
+  const componentSpanByEdgeId = new Map<string, number>();
+  const componentRampByEdgeId = new Map<string, number>();
+
+  const visitedSuperNodes = new Set<string>();
+  const allSuperNodes = [...bridgeAdj.keys()].sort(compareStringsCodeUnit);
+
+  for (const rootSuperNode of allSuperNodes) {
+    if (visitedSuperNodes.has(rootSuperNode)) continue;
+
+    // Collect connected component
+    const compSuperNodes: string[] = [];
+    const compEdgeMap = new Map<string, AnyEdge>();
+    const bfs = [rootSuperNode];
+    visitedSuperNodes.add(rootSuperNode);
+
+    while (bfs.length > 0) {
+      const cur = bfs.shift()!;
+      compSuperNodes.push(cur);
+      for (const { toSuperNode, edge } of bridgeAdj.get(cur) ?? []) {
+        compEdgeMap.set(edge.id, edge);
+        if (!visitedSuperNodes.has(toSuperNode)) {
+          visitedSuperNodes.add(toSuperNode);
+          bfs.push(toSuperNode);
+        }
+      }
+    }
+
+    const compEdges = [...compEdgeMap.values()].sort((a, b) =>
+      compareStringsCodeUnit(a.id, b.id)
+    );
+    const portalSuperNodes = new Set<string>();
+    for (const e of compEdges) {
+      const meta = endpointMetaByEdgeId.get(e.id)!;
+      if (meta.start.classification === 'confirmed_transition') {
+        portalSuperNodes.add(superNodeKeyByNodeId.get(e.fromNodeId)!);
+      }
+      if (meta.end.classification === 'confirmed_transition') {
+        portalSuperNodes.add(superNodeKeyByNodeId.get(e.toNodeId)!);
+      }
+    }
+
+    // Dijkstra from all portalSuperNodes
+    for (const sn of compSuperNodes) {
+      portalDistBySuperNode.set(sn, portalSuperNodes.has(sn) ? 0 : Infinity);
+    }
+
+    if (portalSuperNodes.size > 0) {
+      const unvisited = new Set<string>(compSuperNodes);
+      while (unvisited.size > 0) {
+        let bestNode: string | null = null;
+        let bestDist = Infinity;
+        for (const cand of unvisited) {
+          const d = portalDistBySuperNode.get(cand) ?? Infinity;
+          if (d < bestDist) {
+            bestDist = d;
+            bestNode = cand;
+          }
+        }
+        if (bestNode === null || !Number.isFinite(bestDist)) break;
+        unvisited.delete(bestNode);
+
+        for (const { toSuperNode, edge } of bridgeAdj.get(bestNode) ?? []) {
+          const alt = bestDist + edge.lengthMeters;
+          if (alt < (portalDistBySuperNode.get(toSuperNode) ?? Infinity)) {
+            portalDistBySuperNode.set(toSuperNode, alt);
+          }
+        }
+      }
+    }
+
+    // Determine effective span and ramp length for this bridge component
+    if (compEdges.length === 1) {
+      const onlyEdge = compEdges[0];
+      const meta = endpointMetaByEdgeId.get(onlyEdge.id)!;
+      const L = onlyEdge.lengthMeters;
+      const startIsTrans = meta.start.classification === 'confirmed_transition';
+      const endIsTrans = meta.end.classification === 'confirmed_transition';
+      const otherIsClipped =
+        meta.start.classification === 'boundary_clipped_continuation' ||
+        meta.end.classification === 'boundary_clipped_continuation';
+
+      let rampLen = 0;
+      if (startIsTrans && endIsTrans) {
+        rampLen =
+          L < MIN_RAMPED_BRIDGE_SPAN_METERS
+            ? 0
+            : Math.min(
+                DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+                L * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+              );
+      } else if (startIsTrans || endIsTrans) {
+        if (L < MIN_RAMPED_BRIDGE_SPAN_METERS) {
+          rampLen = otherIsClipped
+            ? DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS
+            : Math.min(DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS, L * 0.60);
+        } else {
+          rampLen = Math.min(
+            DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+            L * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+          );
+        }
+      }
+      componentSpanByEdgeId.set(onlyEdge.id, L);
+      componentRampByEdgeId.set(onlyEdge.id, rampLen);
+    } else {
+      // Multi-edge bridge component: compute longest shortest-path diameter across component super-nodes
+      let maxPathSpan = 0;
+      const runSingleSourceShortestPath = (src: string): number => {
+        const dist = new Map<string, number>();
+        for (const sn of compSuperNodes) dist.set(sn, sn === src ? 0 : Infinity);
+        const rem = new Set<string>(compSuperNodes);
+        let maxD = 0;
+        while (rem.size > 0) {
+          let u: string | null = null;
+          let best = Infinity;
+          for (const c of rem) {
+            const d = dist.get(c)!;
+            if (d < best) {
+              best = d;
+              u = c;
+            }
+          }
+          if (u === null || !Number.isFinite(best)) break;
+          rem.delete(u);
+          if (best > maxD) maxD = best;
+          for (const { toSuperNode, edge } of bridgeAdj.get(u) ?? []) {
+            const alt = best + edge.lengthMeters;
+            if (alt < dist.get(toSuperNode)!) {
+              dist.set(toSuperNode, alt);
+            }
+          }
+        }
+        return maxD;
+      };
+
+      const seedNodes =
+        portalSuperNodes.size > 0 ? [...portalSuperNodes] : compSuperNodes.slice(0, 4);
+      for (const sNode of seedNodes) {
+        maxPathSpan = Math.max(maxPathSpan, runSingleSourceShortestPath(sNode));
+      }
+      for (const e of compEdges) {
+        maxPathSpan = Math.max(maxPathSpan, e.lengthMeters);
+      }
+
+      let rampLen = 0;
+      if (portalSuperNodes.size >= 2) {
+        rampLen =
+          maxPathSpan < MIN_RAMPED_BRIDGE_SPAN_METERS
+            ? 0
+            : Math.min(
+                DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+                maxPathSpan * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+              );
+      } else if (portalSuperNodes.size === 1) {
+        rampLen = Math.min(
+          DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS,
+          maxPathSpan < MIN_RAMPED_BRIDGE_SPAN_METERS
+            ? maxPathSpan * 0.60
+            : maxPathSpan * DEFAULT_BRIDGE_RAMP_MAX_FRACTION
+        );
+      }
+
+      for (const e of compEdges) {
+        componentSpanByEdgeId.set(e.id, maxPathSpan);
+        componentRampByEdgeId.set(e.id, rampLen);
+      }
+    }
+  }
+
+  // 7. Assemble final plans and diagnostics
+  const plansByEdgeId = new Map<string, ResolvedGradeSeparatedEdgePlan>();
+  let confirmedTransitionsConsumed = 0;
+  let confirmedElevatedContinuations = 0;
+  let unresolvedTransitionsCount = 0;
+  let boundaryClippedEndpointsCount = 0;
+  let intentionallyStandaloneEndpointsCount = 0;
+
+  const tallyClassification = (c: GradeSeparatedEndpointClassification) => {
+    if (c === 'confirmed_transition') confirmedTransitionsConsumed++;
+    else if (c === 'confirmed_elevated_continuation') confirmedElevatedContinuations++;
+    else if (c === 'boundary_clipped_continuation') boundaryClippedEndpointsCount++;
+    else if (c === 'unresolved_connection') unresolvedTransitionsCount++;
+    else intentionallyStandaloneEndpointsCount++;
+  };
+
+  for (const e of [...bridgeEdges, ...tunnelEdges].sort((a, b) =>
+    compareStringsCodeUnit(a.id, b.id)
+  )) {
+    const isTun = tunnelEdgeById.has(e.id);
+    const meta = endpointMetaByEdgeId.get(e.id)!;
+    tallyClassification(meta.start.classification);
+    tallyClassification(meta.end.classification);
+
+    const pts: [number, number][] = e.points.map((p) => [p[0], p[1]]);
+    let edgeCorrectedCount = 0;
+
+    // Snap start endpoint if confirmed transition or cross-scope continuation
+    const startSnapPos =
+      meta.start.transition?.position ?? crossScopeSnapPositionByNode.get(e.fromNodeId);
+    if (startSnapPos && pts.length >= 2) {
+      const dist = Math.hypot(pts[0][0] - startSnapPos[0], pts[0][1] - startSnapPos[1]);
+      if (dist > 1e-4) {
+        edgeCorrectedCount++;
+        correctedPortalDiscontinuitiesCount++;
+      }
+      pts[0] = [startSnapPos[0], startSnapPos[1]];
+    }
+
+    // Snap end endpoint if confirmed transition or cross-scope continuation
+    const endSnapPos =
+      meta.end.transition?.position ?? crossScopeSnapPositionByNode.get(e.toNodeId);
+    if (endSnapPos && pts.length >= 2) {
+      const lastIdx = pts.length - 1;
+      const dist = Math.hypot(
+        pts[lastIdx][0] - endSnapPos[0],
+        pts[lastIdx][1] - endSnapPos[1]
+      );
+      if (dist > 1e-4) {
+        edgeCorrectedCount++;
+        correctedPortalDiscontinuitiesCount++;
+      }
+      pts[lastIdx] = [endSnapPos[0], endSnapPos[1]];
+    }
+
+    const defaultTargetY = getTargetDeckElevation(e);
+    const uSuper = superNodeKeyByNodeId.get(e.fromNodeId);
+    const vSuper = superNodeKeyByNodeId.get(e.toNodeId);
+
+    const startPortalDistanceMeters = isTun
+      ? Infinity
+      : uSuper
+        ? (portalDistBySuperNode.get(uSuper) ?? Infinity)
+        : Infinity;
+    const endPortalDistanceMeters = isTun
+      ? Infinity
+      : vSuper
+        ? (portalDistBySuperNode.get(vSuper) ?? Infinity)
+        : Infinity;
+
+    plansByEdgeId.set(e.id, {
+      edgeId: e.id,
+      network,
+      isBridge: !isTun,
+      isTunnel: isTun,
+      points: pts,
+      startClassification: meta.start.classification,
+      endClassification: meta.end.classification,
+      startTransition: meta.start.transition,
+      endTransition: meta.end.transition,
+      startPortalDistanceMeters,
+      endPortalDistanceMeters,
+      componentRampLengthMeters: isTun ? 0 : (componentRampByEdgeId.get(e.id) ?? 0),
+      componentSpanMeters: isTun
+        ? e.lengthMeters
+        : (componentSpanByEdgeId.get(e.id) ?? e.lengthMeters),
+      startTargetDeckElevation: uSuper
+        ? (superNodeTargetY.get(uSuper) ?? defaultTargetY)
+        : defaultTargetY,
+      endTargetDeckElevation: vSuper
+        ? (superNodeTargetY.get(vSuper) ?? defaultTargetY)
+        : defaultTargetY,
+      correctedPortalDiscontinuities: edgeCorrectedCount,
+    });
+  }
+
+  return {
+    plansByEdgeId,
+    atGradePortalSnapsByEdgeId: atGradePortalSnaps,
+    diagnostics: {
+      mode: 'graph',
+      confirmedTransitionsConsumed,
+      confirmedElevatedContinuations,
+      unresolvedTransitionsCount,
+      boundaryClippedEndpointsCount,
+      intentionallyStandaloneEndpointsCount,
+      legacyFallbacksCount: 0,
+      correctedPortalDiscontinuitiesCount,
+      bridgeAndTunnelBuildTimeMs: 0,
+    },
+  };
+}
+

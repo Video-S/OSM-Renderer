@@ -6,7 +6,7 @@
 
 # Interface: BridgeProfileOptions
 
-Defined in: world/BridgeAndTunnelBuilder.ts:34
+Defined in: world/BridgeAndTunnelBuilder.ts:98
 
 ## Properties
 
@@ -14,7 +14,15 @@ Defined in: world/BridgeAndTunnelBuilder.ts:34
 
 > **baseElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:36
+Defined in: world/BridgeAndTunnelBuilder.ts:100
+
+***
+
+### componentRampLengthMeters?
+
+> `optional` **componentRampLengthMeters?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:112
 
 ***
 
@@ -22,7 +30,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:36
 
 > **connectsEndAtGrade**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:39
+Defined in: world/BridgeAndTunnelBuilder.ts:103
 
 ***
 
@@ -30,7 +38,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:39
 
 > **connectsEndBridge**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:41
+Defined in: world/BridgeAndTunnelBuilder.ts:105
 
 ***
 
@@ -38,7 +46,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:41
 
 > **connectsStartAtGrade**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:38
+Defined in: world/BridgeAndTunnelBuilder.ts:102
 
 ***
 
@@ -46,7 +54,31 @@ Defined in: world/BridgeAndTunnelBuilder.ts:38
 
 > **connectsStartBridge**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:40
+Defined in: world/BridgeAndTunnelBuilder.ts:104
+
+***
+
+### endClassification?
+
+> `optional` **endClassification?**: [`GradeSeparatedEndpointClassification`](../type-aliases/GradeSeparatedEndpointClassification.md)
+
+Defined in: world/BridgeAndTunnelBuilder.ts:109
+
+***
+
+### endPortalDistanceMeters?
+
+> `optional` **endPortalDistanceMeters?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:111
+
+***
+
+### endTargetDeckElevation?
+
+> `optional` **endTargetDeckElevation?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:114
 
 ***
 
@@ -54,7 +86,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:40
 
 > `optional` **maxSampleStep?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:42
+Defined in: world/BridgeAndTunnelBuilder.ts:106
 
 ***
 
@@ -62,7 +94,33 @@ Defined in: world/BridgeAndTunnelBuilder.ts:42
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: world/BridgeAndTunnelBuilder.ts:35
+Defined in: world/BridgeAndTunnelBuilder.ts:99
+
+***
+
+### startClassification?
+
+> `optional` **startClassification?**: [`GradeSeparatedEndpointClassification`](../type-aliases/GradeSeparatedEndpointClassification.md)
+
+Defined in: world/BridgeAndTunnelBuilder.ts:108
+
+Optional Stage E4-A graph-driven endpoint classifications and component ramp parameters.
+
+***
+
+### startPortalDistanceMeters?
+
+> `optional` **startPortalDistanceMeters?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:110
+
+***
+
+### startTargetDeckElevation?
+
+> `optional` **startTargetDeckElevation?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:113
 
 ***
 
@@ -70,4 +128,4 @@ Defined in: world/BridgeAndTunnelBuilder.ts:35
 
 > **targetBridgeElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:37
+Defined in: world/BridgeAndTunnelBuilder.ts:101

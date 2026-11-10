@@ -16,7 +16,10 @@ import {
   buildBridgeProfile3D,
   generateBridgeStructureGeometries,
   generateTunnelPortalAndTraceGeometries,
+  GradeTransitionRenderDiagnostics,
+  GraphGradeSeparatedResolutionResult,
   ProfiledPoint3D,
+  resolveGraphGradeSeparatedPlans,
 } from '../../BridgeAndTunnelBuilder';
 import { SceneResourceManager } from '../../SceneResourceManager';
 import {
@@ -167,6 +170,8 @@ export interface RailwayPrototypeStats {
   ballastBooleanUnionCount?: number;
   /** Total triangles in the ballast layer */
   ballastTriangles?: number;
+  /** Grade transition rendering diagnostics (Stage E4-A) */
+  gradeTransitionDiagnostics?: GradeTransitionRenderDiagnostics;
 }
 
 export interface RailwayPrototypeResult {
@@ -736,6 +741,84 @@ export function buildRailwayGroupInternal(
     }
   }
 
+  let graphGradeSeparatedPlans: GraphGradeSeparatedResolutionResult | null = null;
+  const gradeTransitionDiagnostics: GradeTransitionRenderDiagnostics = {
+    mode: effectiveSource !== 'legacy' && activeDescriptors ? 'graph' : 'legacy',
+    confirmedTransitionsConsumed: 0,
+    confirmedElevatedContinuations: 0,
+    unresolvedTransitionsCount: 0,
+    boundaryClippedEndpointsCount: 0,
+    intentionallyStandaloneEndpointsCount: 0,
+    legacyFallbacksCount: 0,
+    correctedPortalDiscontinuitiesCount: 0,
+    bridgeAndTunnelBuildTimeMs: 0,
+  };
+  const railwayEndpointCapPolicy = new Map<string, { capStart: boolean; capEnd: boolean }>();
+
+  if (effectiveSource !== 'legacy' && activeDescriptors) {
+    graphGradeSeparatedPlans = resolveGraphGradeSeparatedPlans(
+      activeDescriptors,
+      'railway',
+      (e) => getRailwayElevations(e.layer, e.isBridge, e.isTunnel).ballast
+    );
+    Object.assign(gradeTransitionDiagnostics, graphGradeSeparatedPlans.diagnostics);
+    if (graphFallbackOccurred) {
+      gradeTransitionDiagnostics.legacyFallbacksCount++;
+    }
+
+    const nodeById = activeDescriptors.railwayNodesById;
+    const edgeById = activeDescriptors.railwayEdgesById;
+
+    for (const f of sourceFeatures) {
+      if (!f.points || f.points.length < 2) continue;
+      const plan = graphGradeSeparatedPlans.plansByEdgeId.get(f.id);
+      if (plan && plan.points.length >= 2) {
+        f.points = plan.points.map((pt) => [pt[0], pt[1]] as [number, number]);
+      }
+
+      const snap = graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.id);
+      if (snap) {
+        const pts = f.points.map((pt) => [pt[0], pt[1]] as [number, number]);
+        if (snap.start) {
+          pts[0] = [snap.start[0], snap.start[1]];
+        }
+        if (snap.end) {
+          const lastIdx = pts.length - 1;
+          pts[lastIdx] = [snap.end[0], snap.end[1]];
+        }
+        f.points = pts;
+      }
+
+      if (f.layer === 0 && !f.isBridge && !f.isTunnel) {
+        const edgeDesc = edgeById.get(f.id);
+        if (edgeDesc) {
+          const startNode = nodeById.get(edgeDesc.fromNodeId);
+          const endNode = nodeById.get(edgeDesc.toNodeId);
+          const suppressStartCap = Boolean(
+            edgeDesc.startGradeTransitionId ||
+              snap?.start ||
+              edgeDesc.clippedAtStart ||
+              startNode?.isBoundaryClipped
+          );
+          const suppressEndCap = Boolean(
+            edgeDesc.endGradeTransitionId ||
+              snap?.end ||
+              edgeDesc.clippedAtEnd ||
+              endNode?.isBoundaryClipped
+          );
+          if (suppressStartCap || suppressEndCap) {
+            railwayEndpointCapPolicy.set(f.id, {
+              capStart: !suppressStartCap,
+              capEnd: !suppressEndCap,
+            });
+          }
+        }
+      }
+    }
+  } else if (graphFallbackOccurred) {
+    gradeTransitionDiagnostics.legacyFallbacksCount++;
+  }
+
   const tPhase0 = performance.now();
   const activeRailways = sortRailwaysMainlineFirst(
     sourceFeatures,
@@ -816,7 +899,8 @@ export function buildRailwayGroupInternal(
       activeRailways,
       atGradeElev,
       resourceManager,
-      getChunkKey
+      getChunkKey,
+      railwayEndpointCapPolicy.size > 0 ? railwayEndpointCapPolicy : undefined
     );
     if (surfaceFirstBallastResult.ballastItems.length > 0) {
       for (const item of surfaceFirstBallastResult.ballastItems) {
@@ -861,8 +945,27 @@ export function buildRailwayGroupInternal(
 
     if (r.isTunnel || r.layer < 0) {
       const tTun0 = performance.now();
+      const tunnelPlan = graphGradeSeparatedPlans?.plansByEdgeId.get(r.id);
+      if (!tunnelPlan && effectiveSource === 'legacy') {
+        gradeTransitionDiagnostics.legacyFallbacksCount++;
+      }
+      const tunnelOptions = tunnelPlan
+        ? {
+            emitStartPortal:
+              tunnelPlan.startClassification !== 'confirmed_elevated_continuation' &&
+              tunnelPlan.startClassification !== 'boundary_clipped_continuation',
+            emitEndPortal:
+              tunnelPlan.endClassification !== 'confirmed_elevated_continuation' &&
+              tunnelPlan.endClassification !== 'boundary_clipped_continuation',
+          }
+        : undefined;
       const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
-        generateTunnelPortalAndTraceGeometries(r.points, r.width || 4.8, false);
+        generateTunnelPortalAndTraceGeometries(
+          tunnelPlan ? tunnelPlan.points : r.points,
+          r.width || 4.8,
+          false,
+          tunnelOptions
+        );
       if (portalStructureGeo) {
         resourceManager.registerGeometry(portalStructureGeo);
         tunnelPortalItems.push({ geom: portalStructureGeo, info: railInfo, chunkKey });
@@ -956,31 +1059,86 @@ export function buildRailwayGroupInternal(
     let profile3D: ProfiledPoint3D[] = [];
     if (isBridge) {
       const tBr0 = performance.now();
-      const pStart = densifiedPts[0];
-      const pEnd = densifiedPts[densifiedPts.length - 1];
-      const connectsStartAtGrade = atGradeRailEndpoints.some(
-        (pt) => Math.hypot(pt[0] - pStart[0], pt[1] - pStart[1]) <= 0.8
-      );
-      const connectsEndAtGrade = atGradeRailEndpoints.some(
-        (pt) => Math.hypot(pt[0] - pEnd[0], pt[1] - pEnd[1]) <= 0.8
-      );
-      const connectsStartBridge = bridgeRailEndpoints.some(
-        (b) => b.id !== r.id && Math.hypot(b.pt[0] - pStart[0], b.pt[1] - pStart[1]) <= 0.8
-      );
-      const connectsEndBridge = bridgeRailEndpoints.some(
-        (b) => b.id !== r.id && Math.hypot(b.pt[0] - pEnd[0], b.pt[1] - pEnd[1]) <= 0.8
-      );
+      const bridgePlan = graphGradeSeparatedPlans?.plansByEdgeId.get(r.id);
+      let bridgeProf;
+      let suppressStartAbutmentHeadwall = false;
+      let suppressEndAbutmentHeadwall = false;
+      let minElevatedDeckY: number | undefined;
 
-      const bridgeProf = buildBridgeProfile3D({
-        points: densifiedPts,
-        baseElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
-        targetBridgeElevation: elevs.ballast,
-        connectsStartAtGrade,
-        connectsEndAtGrade,
-        connectsStartBridge,
-        connectsEndBridge,
-        maxSampleStep: 2.2,
-      });
+      if (bridgePlan) {
+        if (bridgePlan.points.length >= 2 && densifiedPts.length >= 2) {
+          densifiedPts[0] = [bridgePlan.points[0][0], bridgePlan.points[0][1]];
+          densifiedPts[densifiedPts.length - 1] = [
+            bridgePlan.points[bridgePlan.points.length - 1][0],
+            bridgePlan.points[bridgePlan.points.length - 1][1],
+          ];
+        }
+        const connectsStartAtGrade =
+          bridgePlan.startClassification === 'confirmed_transition';
+        const connectsEndAtGrade =
+          bridgePlan.endClassification === 'confirmed_transition';
+        const connectsStartBridge =
+          bridgePlan.startClassification === 'confirmed_elevated_continuation' ||
+          bridgePlan.startClassification === 'boundary_clipped_continuation';
+        const connectsEndBridge =
+          bridgePlan.endClassification === 'confirmed_elevated_continuation' ||
+          bridgePlan.endClassification === 'boundary_clipped_continuation';
+
+        suppressStartAbutmentHeadwall = connectsStartBridge;
+        suppressEndAbutmentHeadwall = connectsEndBridge;
+        minElevatedDeckY = Math.min(
+          elevs.ballast,
+          bridgePlan.startTargetDeckElevation,
+          bridgePlan.endTargetDeckElevation
+        );
+
+        bridgeProf = buildBridgeProfile3D({
+          points: densifiedPts,
+          baseElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
+          targetBridgeElevation: elevs.ballast,
+          connectsStartAtGrade,
+          connectsEndAtGrade,
+          connectsStartBridge,
+          connectsEndBridge,
+          maxSampleStep: 2.2,
+          startClassification: bridgePlan.startClassification,
+          endClassification: bridgePlan.endClassification,
+          startPortalDistanceMeters: bridgePlan.startPortalDistanceMeters,
+          endPortalDistanceMeters: bridgePlan.endPortalDistanceMeters,
+          componentRampLengthMeters: bridgePlan.componentRampLengthMeters,
+          startTargetDeckElevation: bridgePlan.startTargetDeckElevation,
+          endTargetDeckElevation: bridgePlan.endTargetDeckElevation,
+        });
+      } else {
+        gradeTransitionDiagnostics.legacyFallbacksCount++;
+        const pStart = densifiedPts[0];
+        const pEnd = densifiedPts[densifiedPts.length - 1];
+        const connectsStartAtGrade = atGradeRailEndpoints.some(
+          (pt) => Math.hypot(pt[0] - pStart[0], pt[1] - pStart[1]) <= 0.8
+        );
+        const connectsEndAtGrade = atGradeRailEndpoints.some(
+          (pt) => Math.hypot(pt[0] - pEnd[0], pt[1] - pEnd[1]) <= 0.8
+        );
+        const connectsStartBridge = bridgeRailEndpoints.some(
+          (b) => b.id !== r.id && Math.hypot(b.pt[0] - pStart[0], b.pt[1] - pStart[1]) <= 0.8
+        );
+        const connectsEndBridge = bridgeRailEndpoints.some(
+          (b) => b.id !== r.id && Math.hypot(b.pt[0] - pEnd[0], b.pt[1] - pEnd[1]) <= 0.8
+        );
+        suppressStartAbutmentHeadwall = connectsStartBridge;
+        suppressEndAbutmentHeadwall = connectsEndBridge;
+
+        bridgeProf = buildBridgeProfile3D({
+          points: densifiedPts,
+          baseElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
+          targetBridgeElevation: elevs.ballast,
+          connectsStartAtGrade,
+          connectsEndAtGrade,
+          connectsStartBridge,
+          connectsEndBridge,
+          maxSampleStep: 2.2,
+        });
+      }
 
       if (bridgeProf.profile.length >= 2) {
         let prof = bridgeProf.profile;
@@ -1029,7 +1187,12 @@ export function buildRailwayGroupInternal(
           prof,
           ballastWidth + 0.6,
           bridgeProf.peakElevation,
-          0.38
+          0.38,
+          {
+            suppressStartAbutmentHeadwall,
+            suppressEndAbutmentHeadwall,
+            minElevatedDeckY,
+          }
         );
         if (substructureGeo) {
           resourceManager.registerGeometry(substructureGeo);
@@ -2274,6 +2437,11 @@ export function buildRailwayGroupInternal(
   const totalBuildTimeMs = Number((performance.now() - tStart).toFixed(2));
   const spatialChunkCount = Math.max(1, activeChunkKeys.size);
 
+  gradeTransitionDiagnostics.bridgeAndTunnelBuildTimeMs = Number(
+    bridgeAndTunnelTimeMs.toFixed(2)
+  );
+  railwaysGroup.userData.gradeTransitionDiagnostics = gradeTransitionDiagnostics;
+
   return {
     railwaysGroup,
     resources: resourceManager,
@@ -2354,6 +2522,7 @@ export function buildRailwayGroupInternal(
       ballastComponentCount: surfaceFirstBallastResult?.stats.componentCount,
       ballastBooleanUnionCount: surfaceFirstBallastResult?.stats.booleanUnionCount,
       ballastTriangles: surfaceFirstBallastResult?.stats.ballastTriangles,
+      gradeTransitionDiagnostics,
     },
     updateTheme: (newTheme: MapStyleTheme) => {
       if (ballastMat) ballastMat.color.set(newTheme.railwayColors.ballast);

@@ -8,4 +8,4 @@
 
 > `const` **MIN\_RAMPED\_BRIDGE\_SPAN\_METERS**: `5` = `5.0`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:25
+Defined in: world/BridgeAndTunnelBuilder.ts:31

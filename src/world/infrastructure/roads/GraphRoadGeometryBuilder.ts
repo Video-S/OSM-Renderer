@@ -2387,6 +2387,9 @@ export function buildGraphAtGradeRoadGeometries(
   // 1. Filter at-grade buildable road edges and initialize endpoint trim states
   const buildableEdges: RoadEdgeRenderDescriptor[] = [];
   const trimmedEndpoints = new Map<string, EdgeTrimState>();
+  const gradeTransitionsById = new Map(
+    descriptors.gradeTransitions.map((gt) => [gt.id, gt])
+  );
 
   for (const edge of descriptors.roadEdges) {
     if (!edge.isAtGradeBuildable) continue;
@@ -2411,10 +2414,21 @@ export function buildGraphAtGradeRoadGeometries(
     const endNode = descriptors.roadNodesById.get(edge.toNodeId);
     const isPath = edge.tier === 'path' || isNonVehicularRoadClass(edge.roadClass);
 
-    // Authoritative graph-backed grade-transition cap suppression:
+    // Authoritative graph-backed grade-transition cap suppression and portal snapping:
     // Only suppress an endpoint cap when the edge or its topological node has an explicit
     // grade transition or connects to a non-at-grade (bridge/tunnel) road edge at that node.
     // Nearby but unconnected road endpoints near a bridge or tunnel keep their dead-end caps.
+    const startGt = edge.startGradeTransitionId
+      ? gradeTransitionsById.get(edge.startGradeTransitionId)
+      : startNode && startNode.gradeTransitionIds.length === 1
+        ? gradeTransitionsById.get(startNode.gradeTransitionIds[0])
+        : undefined;
+    const endGt = edge.endGradeTransitionId
+      ? gradeTransitionsById.get(edge.endGradeTransitionId)
+      : endNode && endNode.gradeTransitionIds.length === 1
+        ? gradeTransitionsById.get(endNode.gradeTransitionIds[0])
+        : undefined;
+
     const touchesGradeTransitionStart =
       Boolean(edge.startGradeTransitionId) ||
       Boolean(startNode && startNode.gradeTransitionIds.length > 0) ||
@@ -2466,6 +2480,8 @@ export function buildGraphAtGradeRoadGeometries(
       (isPath && Boolean(endNode?.isCrossTier));
 
     trimmedEndpoints.set(edge.id, {
+      start: startGt ? [startGt.position[0], startGt.position[1]] : undefined,
+      end: endGt ? [endGt.position[0], endGt.position[1]] : undefined,
       startTrimDist: 0,
       endTrimDist: 0,
       hasCapStart: !suppressCapStart,

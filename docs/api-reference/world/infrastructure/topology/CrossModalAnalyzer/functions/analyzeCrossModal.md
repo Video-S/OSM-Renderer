@@ -8,7 +8,7 @@
 
 > **analyzeCrossModal**(`input`): [`CrossModalAnalysisResult`](../../types/interfaces/CrossModalAnalysisResult.md)
 
-Defined in: world/infrastructure/topology/CrossModalAnalyzer.ts:1130
+Defined in: world/infrastructure/topology/CrossModalAnalyzer.ts:1164
 
 Pure, deterministic Stage D cross-modal connectivity, level crossing, grade transition,
 and grade-separated crossing analyzer (`ADR-0009`).

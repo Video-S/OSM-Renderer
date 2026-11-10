@@ -6,7 +6,7 @@
 
 # Interface: ProfiledPoint3D
 
-Defined in: world/BridgeAndTunnelBuilder.ts:4
+Defined in: world/BridgeAndTunnelBuilder.ts:10
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:4
 
 > **arcLength**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:8
+Defined in: world/BridgeAndTunnelBuilder.ts:14
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:8
 
 > **x**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:5
+Defined in: world/BridgeAndTunnelBuilder.ts:11
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:5
 
 > **y**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:6
+Defined in: world/BridgeAndTunnelBuilder.ts:12
 
 ***
 
@@ -38,4 +38,4 @@ Defined in: world/BridgeAndTunnelBuilder.ts:6
 
 > **z**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:7
+Defined in: world/BridgeAndTunnelBuilder.ts:13

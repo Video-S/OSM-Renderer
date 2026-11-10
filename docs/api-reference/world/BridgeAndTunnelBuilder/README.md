@@ -9,11 +9,17 @@
 ## Interfaces
 
 - [BridgeProfileOptions](interfaces/BridgeProfileOptions.md)
+- [BridgeStructureGenerationOptions](interfaces/BridgeStructureGenerationOptions.md)
+- [GradeTransitionRenderDiagnostics](interfaces/GradeTransitionRenderDiagnostics.md)
+- [GraphGradeSeparatedResolutionResult](interfaces/GraphGradeSeparatedResolutionResult.md)
 - [ProfiledPoint3D](interfaces/ProfiledPoint3D.md)
+- [ResolvedGradeSeparatedEdgePlan](interfaces/ResolvedGradeSeparatedEdgePlan.md)
+- [TunnelPortalGenerationOptions](interfaces/TunnelPortalGenerationOptions.md)
 
 ## Type Aliases
 
 - [BridgeRampMode](type-aliases/BridgeRampMode.md)
+- [GradeSeparatedEndpointClassification](type-aliases/GradeSeparatedEndpointClassification.md)
 
 ## Variables
 
@@ -29,4 +35,5 @@
 - [generateBridgeStructureGeometries](functions/generateBridgeStructureGeometries.md)
 - [generateProfiledRibbon3D](functions/generateProfiledRibbon3D.md)
 - [generateTunnelPortalAndTraceGeometries](functions/generateTunnelPortalAndTraceGeometries.md)
+- [resolveGraphGradeSeparatedPlans](functions/resolveGraphGradeSeparatedPlans.md)
 - [trimPolylineByArcLength](functions/trimPolylineByArcLength.md)

@@ -6,9 +6,9 @@
 
 # Function: generateTunnelPortalAndTraceGeometries()
 
-> **generateTunnelPortalAndTraceGeometries**(`points`, `width`, `isPedestrianOrCycle?`): `object`
+> **generateTunnelPortalAndTraceGeometries**(`points`, `width`, `isPedestrianOrCycle?`, `options?`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:724
+Defined in: world/BridgeAndTunnelBuilder.ts:934
 
 Generates 3D tunnel portal headwall arches, dark recessed portal entrance mouths,
 and a dashed underground corridor trace for a subterranean road, path, or railway tunnel.
@@ -28,6 +28,10 @@ so surface mesh invariants (y >= 0) and depth-buffer tests are strictly satisfie
 ### isPedestrianOrCycle?
 
 `boolean` = `false`
+
+### options?
+
+[`TunnelPortalGenerationOptions`](../interfaces/TunnelPortalGenerationOptions.md)
 
 ## Returns
 

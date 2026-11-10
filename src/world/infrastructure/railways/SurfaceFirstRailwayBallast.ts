@@ -94,7 +94,8 @@ export function computeMultiPolygonArea(mp: MultiPolygonCoords): number {
  * Elevates only at-grade tracks (`layer === 0 && !isBridge && !isTunnel`).
  */
 export function buildAtGradeBallastFootprints(
-  railways: readonly RailwayFeature[]
+  railways: readonly RailwayFeature[],
+  endpointCapPolicy?: ReadonlyMap<string, { capStart: boolean; capEnd: boolean }>
 ): SurfaceFirstBallastFootprint[] {
   const footprints: SurfaceFirstBallastFootprint[] = [];
 
@@ -116,9 +117,10 @@ export function buildAtGradeBallastFootprints(
 
     const isTram = track.railwayType === 'tram';
     const ballastWidth = track.width || (isTram ? 3.0 : 3.5);
+    const capPolicy = endpointCapPolicy?.get(track.id);
     const geom = bufferSurfaceFirstRoadCenterline(cleanPts, ballastWidth, {
-      capStart: true,
-      capEnd: true,
+      capStart: capPolicy ? capPolicy.capStart : true,
+      capEnd: capPolicy ? capPolicy.capEnd : true,
     });
     if (!geom || geom.length === 0) continue;
 
@@ -257,10 +259,11 @@ export function buildSurfaceFirstRailwayBallastGeometries(
   railways: readonly RailwayFeature[],
   ballastElevationY: number,
   resourceManager: SceneResourceManager,
-  getChunkKey: (x: number, z: number) => string
+  getChunkKey: (x: number, z: number) => string,
+  endpointCapPolicy?: ReadonlyMap<string, { capStart: boolean; capEnd: boolean }>
 ): SurfaceFirstBallastBuildResult {
   const t0 = performance.now();
-  const footprints = buildAtGradeBallastFootprints(railways);
+  const footprints = buildAtGradeBallastFootprints(railways, endpointCapPolicy);
   const components = groupBallastConnectedComponents(footprints);
 
   const ballastItems: Array<{

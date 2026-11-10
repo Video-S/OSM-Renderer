@@ -8,4 +8,4 @@
 
 > `const` **MIN\_CENTRAL\_DECK\_FRACTION**: `0.4` = `0.40`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:26
+Defined in: world/BridgeAndTunnelBuilder.ts:32

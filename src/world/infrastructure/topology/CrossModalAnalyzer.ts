@@ -863,7 +863,19 @@ function analyzeDomainGradeTransitions<
       if (compatibleMatches.length >= 1) {
         const best = compatibleMatches[0];
         const runnerUp = compatibleMatches.length >= 2 ? compatibleMatches[1] : undefined;
-        if (!runnerUp || best.dot - runnerUp.dot >= TIER_1_RUNNER_UP_MARGIN - 1e-9) {
+        const isRailwayTurnoutWinner =
+          Boolean(runnerUp) &&
+          networkKind === 'railway' &&
+          ((best.dot >= 0.98 && best.dot - runnerUp!.dot >= 1e-3) ||
+            ('isSecondaryBranch' in best.entry.edge &&
+              'isSecondaryBranch' in runnerUp!.entry.edge &&
+              (best.entry.edge as unknown as RailwayEdge).isSecondaryBranch === false &&
+              (runnerUp!.entry.edge as unknown as RailwayEdge).isSecondaryBranch === true));
+        if (
+          !runnerUp ||
+          best.dot - runnerUp.dot >= TIER_1_RUNNER_UP_MARGIN - 1e-9 ||
+          isRailwayTurnoutWinner
+        ) {
           const relId = `grade_transition:${networkKind}:${structEdge.id}:${structEntry.endpoint}->${best.entry.edge.id}:${best.entry.endpoint}`;
           gradeTransitions.push({
             id: relId,
@@ -925,7 +937,10 @@ function analyzeDomainGradeTransitions<
       }> = [];
 
       let sawDistinctOsmId = false;
-      let sawNonTerminal = structDegree !== 1;
+      const structIsRailSwitch =
+        networkKind === 'railway' &&
+        (structNode.roles as readonly string[]).includes('switch');
+      let sawNonTerminal = structDegree !== 1 && !structIsRailSwitch;
       let sawIncompatibleClass = false;
       let sawMisalignedTangent = false;
       let bestDiagnosticDot: number | undefined;
@@ -939,6 +954,9 @@ function analyzeDomainGradeTransitions<
         const candEdge = cand.item.edge;
         const candOsmId = stripNodePrefix(candNode.rawOsmNodeId);
         const candDegree = sameScopeHalfEdgeCount.get(candNode.id) ?? candNode.degree;
+        const candIsRailSwitch =
+          networkKind === 'railway' &&
+          (candNode.roles as readonly string[]).includes('switch');
 
         const dot = -(
           cand.item.inwardTangent[0] * structEntry.inwardTangent[0] +
@@ -952,7 +970,7 @@ function analyzeDomainGradeTransitions<
           sawDistinctOsmId = true;
           continue;
         }
-        if (structDegree !== 1 || candDegree !== 1) {
+        if ((structDegree !== 1 && !structIsRailSwitch) || (candDegree !== 1 && !candIsRailSwitch)) {
           sawNonTerminal = true;
           continue;
         }
@@ -972,7 +990,23 @@ function analyzeDomainGradeTransitions<
         });
       }
 
-      if (eligibleTier2.length === 1) {
+      eligibleTier2.sort((a, b) => {
+        if (Math.abs(b.dot - a.dot) > 1e-9) return b.dot - a.dot;
+        return compareStringsCodeUnit(a.entry.edge.id, b.entry.edge.id);
+      });
+
+      const tier2Best = eligibleTier2[0];
+      const tier2RunnerUp = eligibleTier2.length >= 2 ? eligibleTier2[1] : undefined;
+      const tier2IsRailwayTurnoutWinner =
+        Boolean(tier2Best && tier2RunnerUp) &&
+        networkKind === 'railway' &&
+        ((tier2Best.dot >= 0.98 && tier2Best.dot - tier2RunnerUp!.dot >= 1e-3) ||
+          ('isSecondaryBranch' in tier2Best.entry.edge &&
+            'isSecondaryBranch' in tier2RunnerUp!.entry.edge &&
+            (tier2Best.entry.edge as unknown as RailwayEdge).isSecondaryBranch === false &&
+            (tier2RunnerUp!.entry.edge as unknown as RailwayEdge).isSecondaryBranch === true));
+
+      if (eligibleTier2.length === 1 || tier2IsRailwayTurnoutWinner) {
         const chosen = eligibleTier2[0];
         const relId = `grade_transition:${networkKind}:${structEdge.id}:${structEntry.endpoint}->${chosen.entry.edge.id}:${chosen.entry.endpoint}`;
         gradeTransitions.push({

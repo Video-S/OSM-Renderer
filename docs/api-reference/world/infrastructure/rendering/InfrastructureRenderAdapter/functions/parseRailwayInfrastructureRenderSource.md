@@ -8,10 +8,10 @@
 
 > **parseRailwayInfrastructureRenderSource**(`raw`): [`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:103
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:118
 
-Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview'`),
-resolving any absent or unrecognized value (including `'graph'` during Stage E2) safely to `'legacy'`.
+Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph' | 'graph-switches'`),
+resolving any absent or unrecognized value safely to `'legacy'`.
 
 ## Parameters
 

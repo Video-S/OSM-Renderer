@@ -6,7 +6,7 @@
 
 # Interface: RoadEdgeRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:264
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:367
 
 Render-ready descriptor for a topological road edge (Stage E2 & M2.4 handoff contract).
 
@@ -20,7 +20,7 @@ endpoint tangents/roles, complete per-segment provenance, and crossing/portal re
 
 > **clippedAtEnd**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:310
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:413
 
 True if `points[points.length - 1]` was synthesized by region bounding-box clipping.
 
@@ -30,7 +30,7 @@ True if `points[points.length - 1]` was synthesized by region bounding-box clipp
 
 > **clippedAtStart**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:308
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:411
 
 True if `points[0]` was synthesized by region bounding-box clipping.
 
@@ -40,7 +40,7 @@ True if `points[0]` was synthesized by region bounding-box clipping.
 
 > **deduplicatedFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:328
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:431
 
 Canonically sorted list of exact-duplicate feature IDs merged into this edge's segments.
 
@@ -50,7 +50,7 @@ Canonically sorted list of exact-duplicate feature IDs merged into this edge's s
 
 > `optional` **endGradeTransitionId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:336
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:439
 
 Confirmed `GradeTransitionRelation.id` at the `'end'` (`toNodeId`) endpoint, if any.
 
@@ -60,7 +60,7 @@ Confirmed `GradeTransitionRelation.id` at the `'end'` (`toNodeId`) endpoint, if 
 
 > **endInwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:314
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:417
 
 Unit tangent `[dx, dz]` at `points[N-1]` pointing inward along the edge (`toNodeId -> points[N-2]`).
 
@@ -70,7 +70,7 @@ Unit tangent `[dx, dz]` at `points[N-1]` pointing inward along the edge (`toNode
 
 > **endNodeIsCrossTier**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:322
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:425
 
 True if `toNodeId` is a cross-tier node (`vehicular` + `path`).
 
@@ -80,7 +80,7 @@ True if `toNodeId` is a cross-tier node (`vehicular` + `path`).
 
 > **endNodeRoles**: readonly [`RoadNodeRole`](../../../topology/types/type-aliases/RoadNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:318
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:421
 
 Topological roles held by `toNodeId`.
 
@@ -90,7 +90,7 @@ Topological roles held by `toNodeId`.
 
 > **fromNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:268
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:371
 
 Start road node ID (`points[0]`).
 
@@ -100,7 +100,7 @@ Start road node ID (`points[0]`).
 
 > **gradeSeparatedCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:342
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:445
 
 All `GradeSeparatedCrossingRelation.id`s where this road edge is the upper or lower way.
 
@@ -110,7 +110,7 @@ All `GradeSeparatedCrossingRelation.id`s where this road edge is the upper or lo
 
 > **gradeTransitionIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:338
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:441
 
 All confirmed `GradeTransitionRelation.id`s attached to this road edge.
 
@@ -120,7 +120,7 @@ All confirmed `GradeTransitionRelation.id`s attached to this road edge.
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:266
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:369
 
 Canonical road edge ID.
 
@@ -130,7 +130,7 @@ Canonical road edge ID.
 
 > **isAtGradeBuildable**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:304
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:407
 
 True if rendered in the at-grade road surface pass (`(layer === 0 && !isBridge && !isTunnel) || isCulvert`).
 
@@ -140,7 +140,7 @@ True if rendered in the at-grade road surface pass (`(layer === 0 && !isBridge &
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:298
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:401
 
 True if road edge is a bridge structure.
 
@@ -150,7 +150,7 @@ True if road edge is a bridge structure.
 
 > **isClosedLoop**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:306
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:409
 
 True if `fromNodeId === toNodeId`.
 
@@ -160,7 +160,7 @@ True if `fromNodeId === toNodeId`.
 
 > **isCulvert**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:302
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:405
 
 True if road edge is an at-grade culvert crossing.
 
@@ -170,7 +170,7 @@ True if road edge is an at-grade culvert crossing.
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:300
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:403
 
 True if road edge is a tunnel structure.
 
@@ -180,7 +180,7 @@ True if road edge is a tunnel structure.
 
 > `optional` **lanes?**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:286
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:389
 
 Parsed lane count if present in OSM tags.
 
@@ -190,7 +190,7 @@ Parsed lane count if present in OSM tags.
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:296
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:399
 
 Effective vertical OSM layer.
 
@@ -200,7 +200,7 @@ Effective vertical OSM layer.
 
 > **lengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:278
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:381
 
 Cumulative Euclidean arc-length in meters.
 
@@ -210,7 +210,7 @@ Cumulative Euclidean arc-length in meters.
 
 > **levelCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:340
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:443
 
 All confirmed `LevelCrossingRelation.id`s along this road edge, ordered by `roadArcLengthMeters`.
 
@@ -220,7 +220,7 @@ All confirmed `LevelCrossingRelation.id`s along this road edge, ordered by `road
 
 > `optional` **name?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:294
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:397
 
 Road name if present.
 
@@ -230,7 +230,7 @@ Road name if present.
 
 > **normalizedOneway**: [`NormalizedOneWay`](../../../topology/types/type-aliases/NormalizedOneWay.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:288
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:391
 
 Normalized one-way direction relative to `fromNodeId -> toNodeId`.
 
@@ -240,7 +240,7 @@ Normalized one-way direction relative to `fromNodeId -> toNodeId`.
 
 > **parallelIndex**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:272
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:375
 
 Zero-based parallel multi-edge index between `{fromNodeId, toNodeId}`.
 
@@ -250,7 +250,7 @@ Zero-based parallel multi-edge index between `{fromNodeId, toNodeId}`.
 
 > **points**: readonly \[`number`, `number`\][]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:274
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:377
 
 Ordered 2D metric polyline vertices `[x, z][]` in `fromNodeId -> toNodeId` order.
 
@@ -260,7 +260,7 @@ Ordered 2D metric polyline vertices `[x, z][]` in `fromNodeId -> toNodeId` order
 
 > **primaryOsmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:330
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:433
 
 Cloned OSM tags from the primary constituent segment for `InspectableFeatureInfo` construction.
 
@@ -270,7 +270,7 @@ Cloned OSM tags from the primary constituent segment for `InspectableFeatureInfo
 
 > **provenance**: [`EdgeProvenance`](../../../topology/types/interfaces/EdgeProvenance.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:332
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:435
 
 Complete per-segment OSMnx-style provenance covering `[0, lengthMeters]`.
 
@@ -280,7 +280,7 @@ Complete per-segment OSMnx-style provenance covering `[0, lengthMeters]`.
 
 > `optional` **rawOnewayTag?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:290
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:393
 
 Verbatim raw `oneway` tag value from OSM if present.
 
@@ -290,7 +290,7 @@ Verbatim raw `oneway` tag value from OSM if present.
 
 > **roadClass**: [`RoadClass`](../../../../../types/MapFeature/type-aliases/RoadClass.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:280
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:383
 
 Classified OSM road class.
 
@@ -300,7 +300,7 @@ Classified OSM road class.
 
 > **sourceFeatureId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:324
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:427
 
 Primary original OSM source feature ID (`provenance.segments[0].sourceFeatureId`).
 
@@ -310,7 +310,7 @@ Primary original OSM source feature ID (`provenance.segments[0].sourceFeatureId`
 
 > **sourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:326
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:429
 
 Canonically sorted list of all original OSM source feature IDs contributing to this edge.
 
@@ -320,7 +320,7 @@ Canonically sorted list of all original OSM source feature IDs contributing to t
 
 > `optional` **startGradeTransitionId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:334
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:437
 
 Confirmed `GradeTransitionRelation.id` at the `'start'` (`fromNodeId`) endpoint, if any.
 
@@ -330,7 +330,7 @@ Confirmed `GradeTransitionRelation.id` at the `'start'` (`fromNodeId`) endpoint,
 
 > **startInwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:312
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:415
 
 Unit tangent `[dx, dz]` at `points[0]` pointing inward along the edge (`fromNodeId -> points[1]`).
 
@@ -340,7 +340,7 @@ Unit tangent `[dx, dz]` at `points[0]` pointing inward along the edge (`fromNode
 
 > **startNodeIsCrossTier**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:320
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:423
 
 True if `fromNodeId` is a cross-tier node (`vehicular` + `path`).
 
@@ -350,7 +350,7 @@ True if `fromNodeId` is a cross-tier node (`vehicular` + `path`).
 
 > **startNodeRoles**: readonly [`RoadNodeRole`](../../../topology/types/type-aliases/RoadNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:316
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:419
 
 Topological roles held by `fromNodeId`.
 
@@ -360,7 +360,7 @@ Topological roles held by `fromNodeId`.
 
 > `optional` **surface?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:292
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:395
 
 Normalized surface material tag if present (e.g. `'asphalt'`, `'paving_stones'`).
 
@@ -370,7 +370,7 @@ Normalized surface material tag if present (e.g. `'asphalt'`, `'paving_stones'`)
 
 > **tier**: [`RoadTier`](../../../topology/types/type-aliases/RoadTier.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:282
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:385
 
 Road tier (`'vehicular' | 'path'`).
 
@@ -380,7 +380,7 @@ Road tier (`'vehicular' | 'path'`).
 
 > **toNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:270
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:373
 
 End road node ID (`points[points.length - 1]`).
 
@@ -390,7 +390,7 @@ End road node ID (`points[points.length - 1]`).
 
 > **vertexRawOsmNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:276
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:379
 
 Verified raw OSM node IDs aligned 1:1 with `points` (`undefined` where untagged or clipped).
 
@@ -400,6 +400,6 @@ Verified raw OSM node IDs aligned 1:1 with `points` (`undefined` where untagged 
 
 > **width**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:284
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:387
 
 Unscaled road width in meters.

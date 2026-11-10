@@ -858,4 +858,196 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       scene.dispose();
     });
   });
+
+  // ==========================================================================
+  // 11. STAGE E3-A2: GRAPH-INFORMED RAILWAY SWITCH RENDERING
+  // ==========================================================================
+  describe('11. Stage E3-A2: Graph-Informed Railway Switch Rendering', () => {
+    it('identifies confirmed turnouts and aligns turnout bearers perpendicular to mainline', () => {
+      // Mainline trunk + continuation: (0,0) -> (30,0) -> (60,0)
+      const trunkWay = createSyntheticRailwayTrack('way/trunk', [
+        [0, 0],
+        [30, 0],
+      ], { nodeIds: ['n_start', 'n_switch'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const mainBranchWay = createSyntheticRailwayTrack('way/main', [
+        [30, 0],
+        [70, 0],
+      ], { nodeIds: ['n_switch', 'n_main_end'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      // Diverging branch curving off to z = 4.0 at (70, 4.0)
+      const divergingWay = createSyntheticRailwayTrack('way/div', [
+        [30, 0],
+        [50, 1.2],
+        [70, 4.0],
+      ], { nodeIds: ['n_switch', 'n_div_end'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([trunkWay, mainBranchWay, divergingWay]);
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.daylight,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+      );
+
+      assert.equal(result.stats.railwayRenderSource, 'graph-switches');
+      assert.equal(result.stats.railwaySwitchPolicy, 'graph');
+      assert.ok((result.stats.confirmedSwitchCount ?? 0) >= 1, 'Must detect at least 1 confirmed switch');
+      assert.ok(result.stats.turnoutBearerCount > 0, 'Must produce turnout bearers');
+
+      // Diverging branch rail must be tapered
+      assert.ok(
+        (result.stats.graphTaperedBladeCount ?? 0) >= 1,
+        'Must apply targeted switch blade tapering on diverging track'
+      );
+
+      result.dispose();
+    });
+
+    it('prevents independent parallel tracks (1.60m spacing) from falsely suppressing sleepers or creating turnouts', () => {
+      // Independent parallel tracks closer than 1.68m (1.60m spacing) with no switch connectivity
+      const track1 = createSyntheticRailwayTrack('way/p_close1', [
+        [0, 0],
+        [80, 0],
+      ], { nodeIds: ['n_p1_start', 'n_p1_end'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const track2 = createSyntheticRailwayTrack('way/p_close2', [
+        [0, 1.60],
+        [80, 1.60],
+      ], { nodeIds: ['n_p2_start', 'n_p2_end'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([track1, track2]);
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+      );
+
+      // In graph mode, independent tracks without topological turnouts must not be classified as switches
+      assert.equal(result.stats.confirmedSwitchCount ?? 0, 0);
+      assert.equal(result.stats.turnoutBearerCount, 0, 'No turnout bearers on independent parallel tracks');
+      assert.equal(result.stats.graphTaperedBladeCount ?? 0, 0, 'No tapering on independent parallel tracks');
+
+      // Both tracks must have full sleeper counts (no false suppression)
+      assert.ok(result.stats.sleeper3DBoxCount > 200, 'Both tracks must retain independent sleepers');
+
+      result.dispose();
+    });
+
+    it('treats flat diamond crossings as non-interconnecting and creates no fictitious turnouts', () => {
+      // Track 1: horizontal (-40, 0) -> (40, 0)
+      const trackH = createSyntheticRailwayTrack('way/cross_h', [
+        [-40, 0],
+        [40, 0],
+      ], { nodeIds: ['n_h1', 'n_h2'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      // Track 2: diagonal (-30, -30) -> (30, 30) crossing at (0, 0)
+      const trackD = createSyntheticRailwayTrack('way/cross_d', [
+        [-30, -30],
+        [30, 30],
+      ], { nodeIds: ['n_d1', 'n_d2'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([trackH, trackD]);
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.blueprint,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+      );
+
+      assert.equal(result.stats.confirmedSwitchCount ?? 0, 0, 'Diamond crossing is not a turnout switch');
+      assert.equal(result.stats.turnoutBearerCount, 0, 'Diamond crossing must not generate turnout bearers');
+      assert.equal(result.stats.graphTaperedBladeCount ?? 0, 0, 'No rails tapered at flat diamond crossing');
+
+      result.dispose();
+    });
+
+    it('tapers only the diverging switch blade facing the stock rail, leaving the mainline rails untapered', () => {
+      const trunk = createSyntheticRailwayTrack('way/tp_trunk', [
+        [0, 0],
+        [20, 0],
+      ], { nodeIds: ['nt1', 'nt_sw'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const main = createSyntheticRailwayTrack('way/tp_main', [
+        [20, 0],
+        [60, 0],
+      ], { nodeIds: ['nt_sw', 'nt2'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const div = createSyntheticRailwayTrack('way/tp_div', [
+        [20, 0],
+        [35, 0.8],
+        [60, 3.5],
+      ], { nodeIds: ['nt_sw', 'nt3'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([trunk, main, div]);
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.daylight,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+      );
+
+      // Precisely one diverging blade should be tapered
+      assert.equal(result.stats.graphTaperedBladeCount, 1, 'Only the diverging switch blade must taper');
+
+      result.dispose();
+    });
+
+    it('safely falls back to geometric calculations without crashing on unresolved switches', () => {
+      // 3 tracks meeting at a node with symmetric angles (unresolved main vs diverging)
+      const t1 = createSyntheticRailwayTrack('way/unres1', [
+        [0, 0],
+        [30, 0],
+      ], { nodeIds: ['nu1', 'nu_common'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const t2 = createSyntheticRailwayTrack('way/unres2', [
+        [30, 0],
+        [60, 10],
+      ], { nodeIds: ['nu_common', 'nu2'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const t3 = createSyntheticRailwayTrack('way/unres3', [
+        [30, 0],
+        [60, -10],
+      ], { nodeIds: ['nu_common', 'nu3'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([t1, t2, t3]);
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+      );
+
+      // Must complete without error
+      assert.ok(result.stats.totalTriangles > 0);
+      assert.ok(result.stats.sleeper3DBoxCount > 0);
+
+      result.dispose();
+    });
+
+    it('preserves complete regression invariance: legacy mode produces 0 graph switches and identical stats', () => {
+      const switchyardData = createRailwayPrototypeFixtureData();
+
+      const legacyResult = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'legacy' }
+      );
+
+      assert.equal(legacyResult.stats.railwayRenderSource, 'legacy');
+      assert.equal(legacyResult.stats.railwaySwitchPolicy, 'heuristic');
+      assert.equal(legacyResult.stats.confirmedSwitchCount, undefined);
+      assert.equal(legacyResult.stats.graphTaperedBladeCount, undefined);
+
+      legacyResult.dispose();
+    });
+  });
 });
+

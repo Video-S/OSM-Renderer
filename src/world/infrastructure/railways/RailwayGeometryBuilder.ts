@@ -70,6 +70,8 @@ export interface BuildRailwayPrototypeOptions {
   descriptors?: InfrastructureRenderDescriptorBundle | null;
   /** Optional diagnostics container to record fallback events */
   diagnostics?: MapFeatureDiagnostics;
+  /** Switch policy governing turnout bearer sharing and blade tapering (Stage E3-A2). Defaults to 'heuristic'. */
+  switchPolicy?: 'heuristic' | 'graph';
 }
 
 export interface RailwayBuildProfile {
@@ -140,6 +142,14 @@ export interface RailwayPrototypeStats {
   graphEdgeCount?: number;
   /** Total raw source railway feature count in mapData.railways */
   sourceRailwayCount?: number;
+  /** Active railway switch policy ('heuristic' | 'graph') (Stage E3-A2) */
+  railwaySwitchPolicy?: 'heuristic' | 'graph';
+  /** Number of confirmed switch turnouts in graph mode */
+  confirmedSwitchCount?: number;
+  /** Number of unresolved switch candidates */
+  unresolvedSwitchCount?: number;
+  /** Number of switch blades tapered via verified graph topology */
+  graphTaperedBladeCount?: number;
 }
 
 export interface RailwayPrototypeResult {
@@ -586,20 +596,31 @@ export function buildRailwayGroupInternal(
   let activeDescriptors: InfrastructureRenderDescriptorBundle | null = options?.descriptors ?? null;
   let graphEdgeCount: number | undefined;
 
+  const isGraphRequested = requestedSource === 'graph' || requestedSource === 'graph-switches';
+  const requestedSwitchPolicy: 'heuristic' | 'graph' =
+    options?.switchPolicy ??
+    (requestedSource === 'graph-switches' ? 'graph' : 'heuristic');
+  let effectiveSwitchPolicy: 'heuristic' | 'graph' = 'heuristic';
+
   let sourceFeatures: RailwayFeature[];
 
-  if (requestedSource === 'graph') {
+  if (isGraphRequested) {
     if (!activeDescriptors && options?.descriptors === undefined) {
-      const preview = prepareInfrastructureRenderPreview(data, { railways: 'graph' });
+      const preview = prepareInfrastructureRenderPreview(data, {
+        railways: requestedSource,
+        railwaySwitchPolicy: requestedSwitchPolicy,
+      });
       activeDescriptors = preview.descriptors;
     }
 
     if (activeDescriptors?.railwayEdges && activeDescriptors.railwayEdges.length > 0) {
       graphEdgeCount = activeDescriptors.railwayEdges.length;
       sourceFeatures = adaptRailwayEdgeDescriptorsToFeatures(activeDescriptors.railwayEdges);
+      effectiveSwitchPolicy = requestedSwitchPolicy;
     } else {
       // Graceful fallback to legacy
       effectiveSource = 'legacy';
+      effectiveSwitchPolicy = 'heuristic';
       graphFallbackOccurred = true;
       graphFallbackReason = 'missing_or_empty_descriptors';
       sourceFeatures = data.railways || [];
@@ -609,10 +630,90 @@ export function buildRailwayGroupInternal(
     }
   } else {
     sourceFeatures = data.railways || [];
+    effectiveSwitchPolicy = 'heuristic';
+  }
+
+  interface GraphConfirmedTurnoutInfo {
+    nodeId: string;
+    nodePoint: [number, number];
+    trunkEdgeId: string;
+    mainBranchEdgeId: string;
+    divergingBranchEdgeId: string;
+    turnoutSide: 'left' | 'right';
+    divergenceAngleRad: number;
+  }
+
+  const confirmedTurnoutsByNodeId = new Map<string, GraphConfirmedTurnoutInfo>();
+  const turnoutsByDivergingEdgeId = new Map<string, GraphConfirmedTurnoutInfo>();
+  const turnoutsByMainEdgeId = new Map<string, GraphConfirmedTurnoutInfo[]>();
+  const turnoutsByTrunkEdgeId = new Map<string, GraphConfirmedTurnoutInfo[]>();
+  const turnoutPairKeys = new Set<string>();
+  const unresolvedPairKeys = new Set<string>();
+  const divergingEdgeIdSet = new Set<string>();
+  let confirmedTurnoutCount = 0;
+  let unresolvedTurnoutCount = 0;
+  let totalGraphTaperedCount = 0;
+
+  if (effectiveSwitchPolicy === 'graph' && activeDescriptors?.railwayNodes) {
+    for (const node of activeDescriptors.railwayNodes) {
+      if (
+        node.isConfirmedSwitch &&
+        node.turnoutTopology &&
+        node.turnoutTopology.status === 'confirmed'
+      ) {
+        const tt = node.turnoutTopology;
+        if (tt.trunkEdgeId && tt.mainBranchEdgeId && tt.divergingBranchEdgeId) {
+          confirmedTurnoutCount++;
+          const info: GraphConfirmedTurnoutInfo = {
+            nodeId: node.id,
+            nodePoint: [node.position[0], node.position[1]],
+            trunkEdgeId: tt.trunkEdgeId,
+            mainBranchEdgeId: tt.mainBranchEdgeId,
+            divergingBranchEdgeId: tt.divergingBranchEdgeId,
+            turnoutSide: tt.turnoutSide || 'right',
+            divergenceAngleRad: tt.divergenceAngleRad || 0.15,
+          };
+          confirmedTurnoutsByNodeId.set(node.id, info);
+          turnoutsByDivergingEdgeId.set(tt.divergingBranchEdgeId, info);
+          divergingEdgeIdSet.add(tt.divergingBranchEdgeId);
+
+          let mainList = turnoutsByMainEdgeId.get(tt.mainBranchEdgeId);
+          if (!mainList) {
+            mainList = [];
+            turnoutsByMainEdgeId.set(tt.mainBranchEdgeId, mainList);
+          }
+          mainList.push(info);
+
+          let trunkList = turnoutsByTrunkEdgeId.get(tt.trunkEdgeId);
+          if (!trunkList) {
+            trunkList = [];
+            turnoutsByTrunkEdgeId.set(tt.trunkEdgeId, trunkList);
+          }
+          trunkList.push(info);
+
+          turnoutPairKeys.add(`${tt.mainBranchEdgeId}:${tt.divergingBranchEdgeId}`);
+          turnoutPairKeys.add(`${tt.divergingBranchEdgeId}:${tt.mainBranchEdgeId}`);
+          turnoutPairKeys.add(`${tt.trunkEdgeId}:${tt.divergingBranchEdgeId}`);
+          turnoutPairKeys.add(`${tt.divergingBranchEdgeId}:${tt.trunkEdgeId}`);
+        }
+      } else if (node.isUnresolvedSwitch && node.turnoutTopology?.candidateEdgeIds) {
+        unresolvedTurnoutCount++;
+        const cands = node.turnoutTopology.candidateEdgeIds;
+        for (let i = 0; i < cands.length; i++) {
+          for (let j = i + 1; j < cands.length; j++) {
+            unresolvedPairKeys.add(`${cands[i]}:${cands[j]}`);
+            unresolvedPairKeys.add(`${cands[j]}:${cands[i]}`);
+          }
+        }
+      }
+    }
   }
 
   const tPhase0 = performance.now();
-  const activeRailways = sortRailwaysMainlineFirst(sourceFeatures);
+  const activeRailways = sortRailwaysMainlineFirst(
+    sourceFeatures,
+    effectiveSwitchPolicy === 'graph' ? divergingEdgeIdSet : undefined
+  );
   const trackPhaseMap = computeContinuousTrackPhases(activeRailways);
 
   const hostIndexByScope = new Map<string, HostTrackSpatialIndex>();
@@ -977,23 +1078,58 @@ export function buildRailwayGroupInternal(
     const [endProbeX, endProbeZ] = sampleRailProfileAt(
       Math.max(totalTrackLen - 0.45, totalTrackLen * 0.6)
     );
-    const taperStart =
-      totalTrackLen >= 1.5 &&
-      currentHostIdx.hasHostTrackStrictlyAlongside(startProbeX, startProbeZ, r.id, 1.8);
-    const taperEnd =
-      totalTrackLen >= 1.5 &&
-      currentHostIdx.hasHostTrackStrictlyAlongside(endProbeX, endProbeZ, r.id, 1.8);
+    let taperStart = false;
+    let taperEnd = false;
+    let taperedSideSign: 1 | -1 | 0 = 0;
+
+    if (effectiveSwitchPolicy === 'graph') {
+      const turnout = turnoutsByDivergingEdgeId.get(r.id);
+      if (turnout && totalTrackLen >= 1.5) {
+        const distToStart = Math.hypot(
+          profile3D[0].x - turnout.nodePoint[0],
+          profile3D[0].z - turnout.nodePoint[1]
+        );
+        const distToEnd = Math.hypot(
+          profile3D[profile3D.length - 1].x - turnout.nodePoint[0],
+          profile3D[profile3D.length - 1].z - turnout.nodePoint[1]
+        );
+        if (distToStart <= 0.6) {
+          taperStart = true;
+          taperedSideSign = turnout.turnoutSide === 'right' ? 1 : -1;
+          totalGraphTaperedCount++;
+        } else if (distToEnd <= 0.6) {
+          taperEnd = true;
+          taperedSideSign = turnout.turnoutSide === 'right' ? 1 : -1;
+          totalGraphTaperedCount++;
+        }
+      }
+    } else {
+      taperStart =
+        totalTrackLen >= 1.5 &&
+        currentHostIdx.hasHostTrackStrictlyAlongside(startProbeX, startProbeZ, r.id, 1.8);
+      taperEnd =
+        totalTrackLen >= 1.5 &&
+        currentHostIdx.hasHostTrackStrictlyAlongside(endProbeX, endProbeZ, r.id, 1.8);
+    }
     const taperLen = Math.min(
       RAILWAY_DIMENSION_SPEC.switchBladeTaperLengthMeters,
       Math.max(0.5, totalTrackLen * 0.45)
     );
 
     for (const sideSign of [1, -1] as const) {
+      const shouldTaperRail =
+        effectiveSwitchPolicy === 'graph'
+          ? (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign)
+          : (taperStart || taperEnd);
+
       const railRibbonGeo = buildUvRibbonGeometry3D(railProfile3D, {
         width: railWidth,
         startPhaseU,
         lateralCenterOffset: sideSign * gaugeOffsetHalf,
         evaluateSwitchAttributes: (vx, vz, arcS, totalLen, cx, cz) => {
+          if (!shouldTaperRail) {
+            return [999, 1];
+          }
           const rx = cx ?? vx;
           const rz = cz ?? vz;
           let distFromToe = 999;
@@ -1036,7 +1172,14 @@ export function buildRailwayGroupInternal(
       const trackSleeperBoxes: SleeperBearerBox3D[] = [];
 
       const rawFirstS = (sleeperPeriod - (startPhaseU % sleeperPeriod)) % sleeperPeriod;
-      const firstS = rawFirstS < 0.03 ? sleeperPeriod * 0.5 : rawFirstS;
+      const firstS =
+        effectiveSwitchPolicy === 'graph'
+          ? rawFirstS < 0.005
+            ? sleeperPeriod
+            : rawFirstS
+          : rawFirstS < 0.03
+            ? sleeperPeriod * 0.5
+            : rawFirstS;
 
       const queryNearbyPlacedBoxes = (qx: number, qz: number): SleeperBearerBox3D[] => {
         const gx = Math.floor(qx / 6);
@@ -1094,18 +1237,37 @@ export function buildRailwayGroupInternal(
         );
         const turnoutPairFlags = new Map<string, boolean>();
         for (const nb of allNeighbors) {
-          if (nb.cosAngle > 0.86 && nb.absDist <= 2.28) {
-            const isPair = isTurnoutThroatPair(
-              subdivPts,
-              scopePtsMap?.get(nb.trackId),
-              cx,
-              cz,
-              nb.absDist
-            );
-            turnoutPairFlags.set(nb.trackId, isPair);
+          let isPair = false;
+          if (effectiveSwitchPolicy === 'graph') {
+            const pairKey = `${r.id}:${nb.trackId}`;
+            if (turnoutPairKeys.has(pairKey)) {
+              isPair = nb.absDist <= 2.28 && nb.cosAngle > 0.72;
+            } else if (unresolvedPairKeys.has(pairKey)) {
+              isPair =
+                nb.cosAngle > 0.86 &&
+                nb.absDist <= 2.28 &&
+                isTurnoutThroatPair(
+                  subdivPts,
+                  scopePtsMap?.get(nb.trackId),
+                  cx,
+                  cz,
+                  nb.absDist
+                );
+            } else {
+              isPair = false;
+            }
           } else {
-            turnoutPairFlags.set(nb.trackId, false);
+            if (nb.cosAngle > 0.86 && nb.absDist <= 2.28) {
+              isPair = isTurnoutThroatPair(
+                subdivPts,
+                scopePtsMap?.get(nb.trackId),
+                cx,
+                cz,
+                nb.absDist
+              );
+            }
           }
+          turnoutPairFlags.set(nb.trackId, isPair);
         }
 
         const sharedPartnerTargets: Array<{
@@ -1116,12 +1278,22 @@ export function buildRailwayGroupInternal(
 
         for (const nb of allNeighbors) {
           const isTurnout = turnoutPairFlags.get(nb.trackId) ?? false;
-          if (nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
-            sharedPartnerTargets.push({
-              trackId: nb.trackId,
-              signedV: nb.signedV,
-              gaugeCenterOffset: nb.gaugeCenterOffset,
-            });
+          if (effectiveSwitchPolicy === 'graph') {
+            if (isTurnout && nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
+              sharedPartnerTargets.push({
+                trackId: nb.trackId,
+                signedV: nb.signedV,
+                gaugeCenterOffset: nb.gaugeCenterOffset,
+              });
+            }
+          } else {
+            if (nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
+              sharedPartnerTargets.push({
+                trackId: nb.trackId,
+                signedV: nb.signedV,
+                gaugeCenterOffset: nb.gaugeCenterOffset,
+              });
+            }
           }
           if (!hostTrackSet.has(nb.trackId) && isTurnout) {
             let reach = Math.min(sleeperHalfW + 2.35, nb.absDist + nb.gaugeCenterOffset + 0.38);
@@ -1206,7 +1378,10 @@ export function buildRailwayGroupInternal(
           if (minDAlong <= sleeperPeriod * 0.62) {
             let hostMinV = Infinity;
             let hostMaxV = -Infinity;
-            let isSharedHost = hm.absDist <= 1.68;
+            let isSharedHost =
+              effectiveSwitchPolicy === 'graph'
+                ? turnoutPairKeys.has(`${r.id}:${hm.trackId}`)
+                : hm.absDist <= 1.68;
 
             for (const box of nearbyBoxes) {
               if (
@@ -1608,12 +1783,20 @@ export function buildRailwayGroupInternal(
 
       const tRail3D0 = performance.now();
       for (const sideSign of [1, -1] as const) {
+        const shouldTaperRail =
+          effectiveSwitchPolicy === 'graph'
+            ? (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign)
+            : (taperStart || taperEnd);
+
         const rail3DGeo = buildExtrudedRail3DGeometry(
           railProfile3D,
           sideSign * gaugeOffsetHalf,
           railWidth,
           RAILWAY_DIMENSION_SPEC.candidateB3DRailHeightMeters,
           (px, pz, arcS, totalLen) => {
+            if (!shouldTaperRail) {
+              return 1;
+            }
             let distFromToe = 999;
             if (taperStart && arcS < taperLen) distFromToe = Math.min(distFromToe, arcS);
             if (taperEnd && totalLen - arcS < taperLen) {
@@ -2106,6 +2289,13 @@ export function buildRailwayGroupInternal(
       graphFallbackReason,
       graphEdgeCount,
       sourceRailwayCount: (data.railways || []).length,
+      railwaySwitchPolicy: effectiveSwitchPolicy,
+      confirmedSwitchCount:
+        effectiveSwitchPolicy === 'graph' ? confirmedTurnoutCount : undefined,
+      unresolvedSwitchCount:
+        effectiveSwitchPolicy === 'graph' ? unresolvedTurnoutCount : undefined,
+      graphTaperedBladeCount:
+        effectiveSwitchPolicy === 'graph' ? totalGraphTaperedCount : undefined,
     },
     updateTheme: (newTheme: MapStyleTheme) => {
       if (ballastMat) ballastMat.color.set(newTheme.railwayColors.ballast);
@@ -2188,5 +2378,6 @@ export function buildRailwayInfrastructure(
     renderSource: options?.renderSource,
     descriptors: options?.descriptors,
     diagnostics: options?.diagnostics,
+    switchPolicy: options?.switchPolicy,
   });
 }

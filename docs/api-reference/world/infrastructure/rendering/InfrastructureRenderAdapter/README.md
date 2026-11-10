@@ -28,6 +28,7 @@
 
 - [InfrastructureRenderSource](type-aliases/InfrastructureRenderSource.md)
 - [RailwayInfrastructureRenderSource](type-aliases/RailwayInfrastructureRenderSource.md)
+- [RailwaySwitchPolicy](type-aliases/RailwaySwitchPolicy.md)
 - [RoadInfrastructureRenderSource](type-aliases/RoadInfrastructureRenderSource.md)
 
 ## Variables
@@ -37,12 +38,14 @@
 
 ## Functions
 
+- [adaptRailwayEdgeDescriptorsToFeatures](functions/adaptRailwayEdgeDescriptorsToFeatures.md)
 - [buildInfrastructureRenderDescriptors](functions/buildInfrastructureRenderDescriptors.md)
 - [cloneDescriptorOsmTags](functions/cloneDescriptorOsmTags.md)
 - [normalizeInfrastructureRenderOptions](functions/normalizeInfrastructureRenderOptions.md)
 - [parseInfrastructureRenderOptionsFromSearch](functions/parseInfrastructureRenderOptionsFromSearch.md)
 - [parseInfrastructureRenderSource](functions/parseInfrastructureRenderSource.md)
 - [parseRailwayInfrastructureRenderSource](functions/parseRailwayInfrastructureRenderSource.md)
+- [parseRailwaySwitchPolicy](functions/parseRailwaySwitchPolicy.md)
 - [parseRoadInfrastructureRenderSource](functions/parseRoadInfrastructureRenderSource.md)
 - [prepareInfrastructureRenderPreview](functions/prepareInfrastructureRenderPreview.md)
 - [requiresInfrastructureGraphPreview](functions/requiresInfrastructureGraphPreview.md)

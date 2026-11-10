@@ -6,13 +6,15 @@
 
 # Type Alias: RailwayInfrastructureRenderSource
 
-> **RailwayInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"`
+> **RailwayInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"` \| `"graph"` \| `"graph-switches"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:60
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:63
 
-Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E2.
+Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E3.
 
 - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.railways`.
 - `'graph-preview'`: Builds and validates railway render descriptors alongside the legacy railway renderer.
-  (Graph-driven railway rendering `'graph'` remains deferred to Stage E3; setting `topologyRailways=graph`
-  in Stage E2 resolves safely to `'legacy'`.)
+- `'graph'`: Stage E3-A1 graph-driven railway rendering mode. Adapts `RailwayEdgeRenderDescriptor`s
+  into Candidate B inputs preserving baseline heuristic switch geometry.
+- `'graph-switches'`: Stage E3-A2 graph-informed switch rendering mode. Uses verified
+  `turnoutTopology` descriptors to govern bearer sharing, sleeper support, and blade tapering.

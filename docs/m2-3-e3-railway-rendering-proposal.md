@@ -206,13 +206,16 @@ Unlike roads—which feature distinct material classes (`primary` asphalt vs. `c
   - Verifies continuity, gauge, sleeper support, bridge/tunnel profiles, and provenance.
   - Initial baseline timing and geometry counters.
 
-### Stage E3-A2: Graph-Informed Switch Semantics (Requires Separate Authorization)
-- **Objective**: Replace proximity-based switch detection (`isTurnoutThroatPair`) with confirmed graph topology from `RailwayNodeRenderDescriptor.turnoutTopology`.
+### Stage E3-A2: Graph-Informed Switch Semantics (Complete & Closed — TKT-011)
+- **Objective**: Replace heuristic proximity-based switch detection (`isTurnoutThroatPair`) with confirmed graph topology from `RailwayNodeRenderDescriptor.turnoutTopology` under opt-in `topologyRailways='graph-switches'` and `railwaySwitchPolicy: 'graph'`.
 - **Key Concepts**:
   - `hasConfirmedSwitchAtStart/End` only identifies a confirmed switch node; `turnoutTopology` identifies which edge is the diverging branch versus main branch.
-  - Taper only the diverging branch blade ($0.32\text{ m} \to 1.0\text{ m}$ over $3.2\text{ m}$).
-  - Define conservative fallback for unresolved nodes (`unresolved_main_vs_diverging`, `unresolved_throat`).
-- **Verification**: Switch-specific unit and integration tests.
+  - Guaranteed mainline-first sorting ensures turnout bearers are placed perpendicular to the mainline through track and record explicit host support for the diverging branch.
+  - Independent parallel tracks ($< 1.68\text{ m}$) and flat diamond crossings are protected against false turnout pairing, recovering legitimate sleeper candidates without suppression.
+  - Taper only the diverging branch blade ($0.32\text{ m} \to 1.0\text{ m}$ over $3.2\text{ m}$) facing the stock rail.
+  - Conservative fallback for unresolved nodes (`unresolved_main_vs_diverging`, `unresolved_throat`).
+- **Deferred Item for Stage E4**: Railway bridges terminating at abrupt vertical cliffs was investigated: when bridge endpoints lack 1:1 node coincidence or are clipped at dataset boundaries, `connectsEndAtGrade` returns false and the approach ramp length collapses to $0\text{ m}$. Bridge geometry was left untouched, and this reproduction item is documented for resolution in Stage E4.
+- **Verification**: Switch-specific unit and integration tests (23/23 passing in `GraphRailwayRendering.test.ts`).
 
 ### Stage E3-B: Experimental Surface-First Ballast (R+) (Requires Separate Authorization)
 - **Objective**: Implement continuous consolidated ballast footprint generation for at-grade tracks under `topologyRailways='graph-R+'`.
@@ -240,8 +243,9 @@ Extend `RailwayInfrastructureRenderSource` in `src/world/infrastructure/renderin
 ```typescript
 export type RailwayInfrastructureRenderSource =
   | 'legacy'          // Production default: unsimplified data.railways via Candidate B
-  | 'graph-preview'  // Stage E1: build descriptors alongside legacy renderer
-  | 'graph'          // Stage E3-A1: graph-driven rails/sleepers + ribbon ballast
+  | 'graph-preview'   // Stage E1: build descriptors alongside legacy renderer
+  | 'graph'           // Stage E3-A1: graph-driven rails/sleepers + heuristic switch rules
+  | 'graph-switches'  // Stage E3-A2: graph-informed switch semantics & bearer sharing
   | 'graph-R+';       // Stage E3-B experimental: graph-driven rails/sleepers + surface-first ballast
 ```
 
@@ -249,10 +253,11 @@ URL parameters and DevTools options:
 - `?topologyRailways=legacy`
 - `?topologyRailways=graph-preview`
 - `?topologyRailways=graph`
+- `?topologyRailways=graph-switches`
 - `?topologyRailways=graph-R+`
 
 ### Safe Fallback Contract
-If graph descriptors are missing, corrupted, or empty when `topologyRailways='graph'` is selected:
+If graph descriptors are missing, corrupted, or empty when `topologyRailways='graph'` or `'graph-switches'` is selected:
 1. Fall back gracefully to Candidate B with unsimplified `data.railways`.
 2. Populate `diagnostics.railwayRendererFallback = 'legacy_due_to_missing_descriptors'`.
 3. Never crash or silently leave an empty railway scene.
@@ -262,8 +267,8 @@ If graph descriptors are missing, corrupted, or empty when `topologyRailways='gr
 
 ## 6. Ticket Breakdown
 
-1. **`TKT-010` (Stage E3-A1): Railway Graph Descriptor Integration** (Active)
-2. **`TKT-011` (Stage E3-A2): Graph-Informed Switch Semantics** (Planned)
+1. **`TKT-010` (Stage E3-A1): Railway Graph Descriptor Integration** (Closed)
+2. **`TKT-011` (Stage E3-A2): Graph-Informed Switch Semantics** (Closed)
 3. **`TKT-012` (Stage E3-B): Experimental Surface-First Ballast Footprints (R+)** (Planned)
 4. **`TKT-013` (Stage E3-C): Comprehensive Railway Validation & Benchmarks** (Planned)
 5. **`TKT-014` (Stage E3-D): Railway Renderer Review & Promotion Gate** (Planned)

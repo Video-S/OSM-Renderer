@@ -415,7 +415,10 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                   type="button"
                   onClick={() => {
                     onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({ railways: 'legacy' });
+                    onChangeInfrastructureRenderOptions({
+                      railways: 'legacy',
+                      railwaySwitchPolicy: 'heuristic',
+                    });
                   }}
                   className={`p-2 rounded-lg border text-left transition cursor-pointer ${
                     railwayPrototypeMode === 'production' && infrastructureRenderOptions.railways === 'legacy'
@@ -431,16 +434,46 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                   type="button"
                   onClick={() => {
                     onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({ railways: 'graph' });
+                    onChangeInfrastructureRenderOptions({
+                      railways: 'graph',
+                      railwaySwitchPolicy: 'heuristic',
+                    });
                   }}
                   className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'production' && infrastructureRenderOptions.railways === 'graph'
+                    railwayPrototypeMode === 'production' &&
+                    infrastructureRenderOptions.railways === 'graph' &&
+                    infrastructureRenderOptions.railwaySwitchPolicy !== 'graph'
                       ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <div className="text-xs">Graph-Driven (E3-A1)</div>
                   <div className="text-[10px] text-slate-400 mt-0.5">Candidate B via graph descriptors</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeRailwayPrototypeMode('production');
+                    onChangeInfrastructureRenderOptions({
+                      railways: 'graph-switches',
+                      railwaySwitchPolicy: 'graph',
+                    });
+                  }}
+                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                    railwayPrototypeMode === 'production' &&
+                    (infrastructureRenderOptions.railways === 'graph-switches' ||
+                      (infrastructureRenderOptions.railways === 'graph' &&
+                        infrastructureRenderOptions.railwaySwitchPolicy === 'graph'))
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-bold'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-xs flex items-center justify-between">
+                    <span>Graph + Switches (E3-A2)</span>
+                    <span className="text-[9px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 rounded">New</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Verified bearer sharing & blade taper</div>
                 </button>
 
                 <button

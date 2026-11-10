@@ -6,8 +6,6 @@
 
 # Type Alias: InfrastructureRenderSource
 
-> **InfrastructureRenderSource** = [`RoadInfrastructureRenderSource`](RoadInfrastructureRenderSource.md)
+> **InfrastructureRenderSource** = [`RoadInfrastructureRenderSource`](RoadInfrastructureRenderSource.md) \| [`RailwayInfrastructureRenderSource`](RailwayInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:65
-
-Union of supported infrastructure render source modes across road and railway domains.
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:77

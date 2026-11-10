@@ -8,7 +8,7 @@
 
 > `const` **adaptInfrastructureGraphToRenderDescriptors**: (`graph`, `options?`) => [`InfrastructureRenderDescriptorBundle`](../interfaces/InfrastructureRenderDescriptorBundle.md) = `buildInfrastructureRenderDescriptors`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1523
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1626
 
 Alias for `buildInfrastructureRenderDescriptors`.
 

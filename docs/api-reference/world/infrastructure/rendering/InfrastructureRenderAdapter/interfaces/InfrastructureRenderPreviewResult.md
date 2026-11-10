@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderPreviewResult
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:680
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:783
 
 Result returned by `prepareInfrastructureRenderPreview`.
 When both `options.roads` and `options.railways` are `'legacy'`, `graph`, `descriptors`, and `validation` are `null`.
@@ -17,7 +17,7 @@ When both `options.roads` and `options.railways` are `'legacy'`, `graph`, `descr
 
 > **descriptors**: [`InfrastructureRenderDescriptorBundle`](InfrastructureRenderDescriptorBundle.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:683
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:786
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:683
 
 > **graph**: [`InfrastructureGraph`](../../../topology/types/interfaces/InfrastructureGraph.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:682
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:785
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:682
 
 > **options**: [`InfrastructureRenderOptions`](InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:681
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:784
 
 ***
 
@@ -41,7 +41,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:681
 
 > **timing**: [`InfrastructureRenderPreviewTiming`](InfrastructureRenderPreviewTiming.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:685
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:788
 
 ***
 
@@ -49,4 +49,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:685
 
 > **validation**: [`InfrastructureRenderValidationReport`](InfrastructureRenderValidationReport.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:684
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:787

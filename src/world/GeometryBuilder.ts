@@ -2674,9 +2674,12 @@ export class GeometryBuilder {
     // 5. RAILWAYS & AERIALWAYS (Delegated to Hybrid Candidate B RailwayGeometryBuilder)
     // ==========================================================================
     let railwayInfrastructureResult: RailwayPrototypeResult | null = null;
+    const isGraphRailway =
+      infrastructureRenderOptions.railways === 'graph' ||
+      infrastructureRenderOptions.railways === 'graph-switches';
     const hasRailways =
       (data.railways && data.railways.length > 0) ||
-      (infrastructureRenderOptions.railways === 'graph' &&
+      (isGraphRailway &&
         infrastructureRenderPreview?.descriptors?.railwayEdges &&
         infrastructureRenderPreview.descriptors.railwayEdges.length > 0);
 
@@ -2691,6 +2694,7 @@ export class GeometryBuilder {
           renderSource: infrastructureRenderOptions.railways,
           descriptors: infrastructureRenderPreview?.descriptors,
           diagnostics: data.diagnostics,
+          switchPolicy: infrastructureRenderOptions.railwaySwitchPolicy,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {

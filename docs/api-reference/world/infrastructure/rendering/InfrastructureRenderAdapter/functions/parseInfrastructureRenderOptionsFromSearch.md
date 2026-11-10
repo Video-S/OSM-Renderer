@@ -8,7 +8,7 @@
 
 > **parseInfrastructureRenderOptionsFromSearch**(`search`): [`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:149
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:246
 
 Parses independent `topologyRoads` and `topologyRailways` developer switches
 from a URL query string (e.g. `?topologyRoads=graph&topologyRailways=legacy`)

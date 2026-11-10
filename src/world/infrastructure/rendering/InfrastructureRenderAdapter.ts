@@ -56,14 +56,27 @@ export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph
  * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.railways`.
  * - `'graph-preview'`: Builds and validates railway render descriptors alongside the legacy railway renderer.
  * - `'graph'`: Stage E3-A1 graph-driven railway rendering mode. Adapts `RailwayEdgeRenderDescriptor`s
- *   into Candidate B inputs without altering physical geometry generation rules.
+ *   into Candidate B inputs preserving baseline heuristic switch geometry.
+ * - `'graph-switches'`: Stage E3-A2 graph-informed switch rendering mode. Uses verified
+ *   `turnoutTopology` descriptors to govern bearer sharing, sleeper support, and blade tapering.
  */
-export type RailwayInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph';
+export type RailwayInfrastructureRenderSource =
+  | 'legacy'
+  | 'graph-preview'
+  | 'graph'
+  | 'graph-switches';
 
 /**
- * Union of supported infrastructure render source modes across road and railway domains.
+ * Switch policy governing railway turnout bearer sharing and blade tapering (Stage E3-A2).
+ *
+ * - `'heuristic'`: Historical Candidate B behavior using `isTurnoutThroatPair` proximity detection.
+ * - `'graph'`: Graph-informed behavior consuming `RailwayNodeRenderDescriptor.turnoutTopology`.
  */
-export type InfrastructureRenderSource = RoadInfrastructureRenderSource;
+export type RailwaySwitchPolicy = 'heuristic' | 'graph';
+
+export type InfrastructureRenderSource =
+  | RoadInfrastructureRenderSource
+  | RailwayInfrastructureRenderSource;
 
 /**
  * Independent developer configuration switches for road and railway topology-to-renderer modes.
@@ -71,6 +84,7 @@ export type InfrastructureRenderSource = RoadInfrastructureRenderSource;
 export interface InfrastructureRenderOptions {
   roads: RoadInfrastructureRenderSource;
   railways: RailwayInfrastructureRenderSource;
+  railwaySwitchPolicy?: RailwaySwitchPolicy;
 }
 
 /**
@@ -98,7 +112,7 @@ export function parseRoadInfrastructureRenderSource(
 }
 
 /**
- * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
+ * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph' | 'graph-switches'`),
  * resolving any absent or unrecognized value safely to `'legacy'`.
  */
 export function parseRailwayInfrastructureRenderSource(
@@ -106,10 +120,32 @@ export function parseRailwayInfrastructureRenderSource(
 ): RailwayInfrastructureRenderSource {
   if (typeof raw !== 'string') return 'legacy';
   const normalized = raw.trim();
-  if (normalized === 'graph-preview' || normalized === 'graph') {
+  if (
+    normalized === 'graph-preview' ||
+    normalized === 'graph' ||
+    normalized === 'graph-switches'
+  ) {
     return normalized;
   }
   return 'legacy';
+}
+
+/**
+ * Parses a raw string value into a valid `RailwaySwitchPolicy` (`'heuristic' | 'graph'`).
+ */
+export function parseRailwaySwitchPolicy(
+  raw: string | null | undefined,
+  renderSource?: RailwayInfrastructureRenderSource
+): RailwaySwitchPolicy {
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'graph') return 'graph';
+    if (normalized === 'heuristic' || normalized === 'legacy') return 'heuristic';
+  }
+  if (renderSource === 'graph-switches') {
+    return 'graph';
+  }
+  return 'heuristic';
 }
 
 /**
@@ -179,7 +215,11 @@ export function parseInfrastructureRenderSource(
  * `'legacy' | 'graph-preview' | 'graph'` and `railways` is guaranteed to be `'legacy' | 'graph-preview'`.
  */
 export function normalizeInfrastructureRenderOptions(
-  options?: { roads?: string | null; railways?: string | null } | null
+  options?: {
+    roads?: string | null;
+    railways?: string | null;
+    railwaySwitchPolicy?: string | null;
+  } | null
 ): InfrastructureRenderOptions {
   if (!options) {
     return {
@@ -187,10 +227,15 @@ export function normalizeInfrastructureRenderOptions(
       railways: DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.railways,
     };
   }
-  return {
+  const railways = parseRailwayInfrastructureRenderSource(options.railways);
+  const result: InfrastructureRenderOptions = {
     roads: parseRoadInfrastructureRenderSource(options.roads),
-    railways: parseRailwayInfrastructureRenderSource(options.railways),
+    railways,
   };
+  if (options.railwaySwitchPolicy !== undefined || railways === 'graph-switches') {
+    result.railwaySwitchPolicy = parseRailwaySwitchPolicy(options.railwaySwitchPolicy, railways);
+  }
+  return result;
 }
 
 /**
@@ -211,10 +256,16 @@ export function parseInfrastructureRenderOptionsFromSearch(
     typeof search === 'string'
       ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
       : search;
-  return {
+  const railways = parseRailwayInfrastructureRenderSource(params.get('topologyRailways'));
+  const rawPolicy = params.get('railwaySwitchPolicy') ?? params.get('railwaySwitches');
+  const result: InfrastructureRenderOptions = {
     roads: parseRoadInfrastructureRenderSource(params.get('topologyRoads')),
-    railways: parseRailwayInfrastructureRenderSource(params.get('topologyRailways')),
+    railways,
   };
+  if (rawPolicy !== null || railways === 'graph-switches') {
+    result.railwaySwitchPolicy = parseRailwaySwitchPolicy(rawPolicy, railways);
+  }
+  return result;
 }
 
 /**

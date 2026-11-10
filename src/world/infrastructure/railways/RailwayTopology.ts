@@ -483,13 +483,17 @@ export function isTurnoutThroatPair(
  * Sorts railway features deterministically so primary mainlines are processed before
  * sidings, yards, spurs, and crossovers.
  */
-export function sortRailwaysMainlineFirst(railways: RailwayFeature[]): RailwayFeature[] {
+export function sortRailwaysMainlineFirst(
+  railways: RailwayFeature[],
+  divergingEdgeIds?: ReadonlySet<string>
+): RailwayFeature[] {
   const ranked = railways.map((feature) => {
     const svc = String(feature.osmTags?.service || '').toLowerCase();
     const serviceRank =
       svc === 'crossover' ? 2 : svc === 'siding' || svc === 'spur' || svc === 'yard' ? 1 : 0;
     const usage = String(feature.osmTags?.usage || '').toLowerCase();
     const usageRank = usage === 'main' ? 0 : usage === 'branch' ? 2 : 1;
+    const divergingRank = divergingEdgeIds?.has(feature.id) ? 1 : 0;
     let len = 0;
     if (feature.points) {
       for (let i = 0; i < feature.points.length - 1; i++) {
@@ -499,16 +503,19 @@ export function sortRailwaysMainlineFirst(railways: RailwayFeature[]): RailwayFe
         );
       }
     }
-    return { feature, serviceRank, usageRank, len };
+    return { feature, serviceRank, usageRank, divergingRank, len };
   });
 
-  ranked.sort((a, b) =>
-    a.serviceRank === b.serviceRank
+  ranked.sort((a, b) => {
+    if (a.divergingRank !== b.divergingRank) {
+      return a.divergingRank - b.divergingRank; // Mainline (0) before diverging branch (1)
+    }
+    return a.serviceRank === b.serviceRank
       ? a.usageRank === b.usageRank
         ? b.len - a.len
         : a.usageRank - b.usageRank
-      : a.serviceRank - b.serviceRank
-  );
+      : a.serviceRank - b.serviceRank;
+  });
   return ranked.map((r) => r.feature);
 }
 

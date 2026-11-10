@@ -2676,7 +2676,8 @@ export class GeometryBuilder {
     let railwayInfrastructureResult: RailwayPrototypeResult | null = null;
     const isGraphRailway =
       infrastructureRenderOptions.railways === 'graph' ||
-      infrastructureRenderOptions.railways === 'graph-switches';
+      infrastructureRenderOptions.railways === 'graph-switches' ||
+      infrastructureRenderOptions.railways === 'graph-R+';
     const hasRailways =
       (data.railways && data.railways.length > 0) ||
       (isGraphRailway &&
@@ -2695,6 +2696,7 @@ export class GeometryBuilder {
           descriptors: infrastructureRenderPreview?.descriptors,
           diagnostics: data.diagnostics,
           switchPolicy: infrastructureRenderOptions.railwaySwitchPolicy,
+          ballastStrategy: infrastructureRenderOptions.railwayBallastStrategy,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {

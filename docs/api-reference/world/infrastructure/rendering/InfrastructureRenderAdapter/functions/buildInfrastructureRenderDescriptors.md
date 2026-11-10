@@ -8,7 +8,7 @@
 
 > **buildInfrastructureRenderDescriptors**(`graph`, `options?`): [`InfrastructureRenderDescriptorBundle`](../interfaces/InfrastructureRenderDescriptorBundle.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1032
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1083
 
 Pure, deterministic Graph-to-Renderer Adapter (`ADR-0009`, Milestone 2.3 Stage E1).
 

@@ -27,6 +27,7 @@
 ## Type Aliases
 
 - [InfrastructureRenderSource](type-aliases/InfrastructureRenderSource.md)
+- [RailwayBallastStrategy](type-aliases/RailwayBallastStrategy.md)
 - [RailwayInfrastructureRenderSource](type-aliases/RailwayInfrastructureRenderSource.md)
 - [RailwaySwitchPolicy](type-aliases/RailwaySwitchPolicy.md)
 - [RoadInfrastructureRenderSource](type-aliases/RoadInfrastructureRenderSource.md)
@@ -44,6 +45,7 @@
 - [normalizeInfrastructureRenderOptions](functions/normalizeInfrastructureRenderOptions.md)
 - [parseInfrastructureRenderOptionsFromSearch](functions/parseInfrastructureRenderOptionsFromSearch.md)
 - [parseInfrastructureRenderSource](functions/parseInfrastructureRenderSource.md)
+- [parseRailwayBallastStrategy](functions/parseRailwayBallastStrategy.md)
 - [parseRailwayInfrastructureRenderSource](functions/parseRailwayInfrastructureRenderSource.md)
 - [parseRailwaySwitchPolicy](functions/parseRailwaySwitchPolicy.md)
 - [parseRoadInfrastructureRenderSource](functions/parseRoadInfrastructureRenderSource.md)

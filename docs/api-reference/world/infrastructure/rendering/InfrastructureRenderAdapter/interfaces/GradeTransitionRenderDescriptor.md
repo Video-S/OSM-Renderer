@@ -6,7 +6,7 @@
 
 # Interface: GradeTransitionRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:636
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:687
 
 Render-ready descriptor for a confirmed same-domain grade transition (`bridge_approach` or `tunnel_portal`, Stage E4 handoff).
 
@@ -16,7 +16,7 @@ Render-ready descriptor for a confirmed same-domain grade transition (`bridge_ap
 
 > **atGradeEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:643
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:694
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:643
 
 > **atGradeEndpoint**: `"end"` \| `"start"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:695
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
 
 > **atGradeNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:642
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:693
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:642
 
 > **atGradeOutwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:651
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:702
 
 Unit tangent exiting the at-grade edge toward the portal (`-inwardTangent(atGrade)`).
 
@@ -50,7 +50,7 @@ Unit tangent exiting the at-grade edge toward the portal (`-inwardTangent(atGrad
 
 > **atGradeSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:645
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:696
 
 ***
 
@@ -58,7 +58,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:645
 
 > **atGradeToStructureDirection**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:655
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:706
 
 Unit vector pointing in the continuous traversal direction from the at-grade way into the bridge/tunnel structure.
 
@@ -68,7 +68,7 @@ Unit vector pointing in the continuous traversal direction from the at-grade way
 
 > **confidence**: `"explicit_osm_node"` \| `"coordinate_fallback_confirmed"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:658
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:709
 
 ***
 
@@ -76,7 +76,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:658
 
 > **continuousTraversalDot**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:657
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:708
 
 Cosine of continuous traversal alignment (`dot(atGradeOutwardTangent, gradeSeparatedInwardTangent)`).
 
@@ -86,7 +86,7 @@ Cosine of continuous traversal alignment (`dot(atGradeOutwardTangent, gradeSepar
 
 > **gradeSeparatedEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:647
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:698
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:647
 
 > **gradeSeparatedEndpoint**: `"end"` \| `"start"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:648
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:699
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:648
 
 > **gradeSeparatedInwardTangent**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:653
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:704
 
 Unit tangent entering the bridge/tunnel edge from the portal (`+inwardTangent(gradeSeparated)`).
 
@@ -112,7 +112,7 @@ Unit tangent entering the bridge/tunnel edge from the portal (`+inwardTangent(gr
 
 > **gradeSeparatedNodeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:646
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:697
 
 ***
 
@@ -120,7 +120,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:646
 
 > **gradeSeparatedSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:649
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:700
 
 ***
 
@@ -128,7 +128,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:649
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:637
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:688
 
 ***
 
@@ -136,7 +136,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:637
 
 > **network**: [`InfrastructureNetworkKind`](../../../topology/types/type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:638
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:689
 
 ***
 
@@ -144,7 +144,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:638
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:640
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:691
 
 ***
 
@@ -152,7 +152,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:640
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:641
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:692
 
 ***
 
@@ -160,4 +160,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:641
 
 > **transitionType**: `"bridge_approach"` \| `"tunnel_portal"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:639
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:690

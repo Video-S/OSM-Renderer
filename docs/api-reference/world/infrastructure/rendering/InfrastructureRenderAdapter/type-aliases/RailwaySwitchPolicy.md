@@ -8,7 +8,7 @@
 
 > **RailwaySwitchPolicy** = `"heuristic"` \| `"graph"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:75
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:78
 
 Switch policy governing railway turnout bearer sharing and blade tapering (Stage E3-A2).
 

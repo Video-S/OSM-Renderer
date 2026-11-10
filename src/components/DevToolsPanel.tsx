@@ -480,6 +480,31 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                   type="button"
                   onClick={() => {
                     onChangeRailwayPrototypeMode('production');
+                    onChangeInfrastructureRenderOptions({
+                      railways: 'graph-R+',
+                      railwaySwitchPolicy: 'graph',
+                      railwayBallastStrategy: 'surface-first',
+                    });
+                  }}
+                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                    railwayPrototypeMode === 'production' &&
+                    (infrastructureRenderOptions.railways === 'graph-R+' ||
+                      infrastructureRenderOptions.railwayBallastStrategy === 'surface-first')
+                      ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-xs flex items-center justify-between">
+                    <span>Graph + R+ (E3-B)</span>
+                    <span className="text-[9px] px-1 py-0.2 bg-purple-500/20 text-purple-300 rounded">R+</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Surface-first unified ballast</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeRailwayPrototypeMode('production');
                     onChangeInfrastructureRenderOptions({ railways: 'graph-preview' });
                   }}
                   className={`p-2 rounded-lg border text-left transition cursor-pointer ${

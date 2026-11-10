@@ -8,7 +8,7 @@
 
 > **requiresInfrastructureGraphPreview**(`options?`): `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:276
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:327
 
 Returns `true` if at least one domain (`roads` or `railways`) requires `InfrastructureGraph`
 and `InfrastructureRenderDescriptorBundle` construction (i.e. `'graph-preview'` or `'graph'`).

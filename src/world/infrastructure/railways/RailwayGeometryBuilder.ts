@@ -32,8 +32,13 @@ import {
   adaptRailwayEdgeDescriptorsToFeatures,
   InfrastructureRenderDescriptorBundle,
   prepareInfrastructureRenderPreview,
+  RailwayBallastStrategy,
   RailwayInfrastructureRenderSource,
 } from '../rendering/InfrastructureRenderAdapter';
+import {
+  buildSurfaceFirstRailwayBallastGeometries,
+  SurfaceFirstBallastBuildResult,
+} from './SurfaceFirstRailwayBallast';
 import {
   computeContinuousTrackPhases,
   HostTrackSpatialIndex,
@@ -72,6 +77,8 @@ export interface BuildRailwayPrototypeOptions {
   diagnostics?: MapFeatureDiagnostics;
   /** Switch policy governing turnout bearer sharing and blade tapering (Stage E3-A2). Defaults to 'heuristic'. */
   switchPolicy?: 'heuristic' | 'graph';
+  /** Ballast rendering strategy ('ribbon' | 'surface-first') (Stage E3-B). Defaults to 'ribbon'. */
+  ballastStrategy?: RailwayBallastStrategy;
 }
 
 export interface RailwayBuildProfile {
@@ -150,6 +157,16 @@ export interface RailwayPrototypeStats {
   unresolvedSwitchCount?: number;
   /** Number of switch blades tapered via verified graph topology */
   graphTaperedBladeCount?: number;
+  /** Active railway ballast strategy ('ribbon' | 'surface-first') (Stage E3-B) */
+  railwayBallastStrategy?: RailwayBallastStrategy;
+  /** Number of at-grade ballast footprints generated in R+ mode */
+  ballastFootprintCount?: number;
+  /** Number of disjoint connected ballast components formed in R+ mode */
+  ballastComponentCount?: number;
+  /** Number of multi-track Boolean union operations performed in R+ mode */
+  ballastBooleanUnionCount?: number;
+  /** Total triangles in the ballast layer */
+  ballastTriangles?: number;
 }
 
 export interface RailwayPrototypeResult {
@@ -596,11 +613,21 @@ export function buildRailwayGroupInternal(
   let activeDescriptors: InfrastructureRenderDescriptorBundle | null = options?.descriptors ?? null;
   let graphEdgeCount: number | undefined;
 
-  const isGraphRequested = requestedSource === 'graph' || requestedSource === 'graph-switches';
+  const isGraphRequested =
+    requestedSource === 'graph' ||
+    requestedSource === 'graph-switches' ||
+    requestedSource === 'graph-R+';
   const requestedSwitchPolicy: 'heuristic' | 'graph' =
     options?.switchPolicy ??
-    (requestedSource === 'graph-switches' ? 'graph' : 'heuristic');
+    (requestedSource === 'graph-switches' || requestedSource === 'graph-R+'
+      ? 'graph'
+      : 'heuristic');
   let effectiveSwitchPolicy: 'heuristic' | 'graph' = 'heuristic';
+
+  const requestedBallastStrategy: RailwayBallastStrategy =
+    options?.ballastStrategy ??
+    (requestedSource === 'graph-R+' ? 'surface-first' : 'ribbon');
+  let effectiveBallastStrategy: RailwayBallastStrategy = requestedBallastStrategy;
 
   let sourceFeatures: RailwayFeature[];
 
@@ -780,6 +807,27 @@ export function buildRailwayGroupInternal(
   let renderedRailwaysCount = 0;
   const closeZoomSleeperPeriodMeters =
     options?.closeZoomSleeperPeriodMeters ?? RAILWAY_DIMENSION_SPEC.candidateBCloseSleeperPeriodMeters;
+
+  let surfaceFirstBallastResult: SurfaceFirstBallastBuildResult | null = null;
+  if (effectiveBallastStrategy === 'surface-first') {
+    const tBallast0 = performance.now();
+    const atGradeElev = getRailwayElevations(0, false, false).ballast;
+    surfaceFirstBallastResult = buildSurfaceFirstRailwayBallastGeometries(
+      activeRailways,
+      atGradeElev,
+      resourceManager,
+      getChunkKey
+    );
+    if (surfaceFirstBallastResult.ballastItems.length > 0) {
+      for (const item of surfaceFirstBallastResult.ballastItems) {
+        ballastItems.push(item);
+      }
+    } else {
+      // Fallback to ribbon ballast if 0 geometries generated
+      effectiveBallastStrategy = 'ribbon';
+    }
+    uvRibbonAndSwitchTimeMs += performance.now() - tBallast0;
+  }
 
   for (const r of activeRailways) {
     if (!r.points || r.points.length < 2) continue;
@@ -1020,13 +1068,18 @@ export function buildRailwayGroupInternal(
     const startPhaseU = trackPhaseMap.get(r.id) || 0;
     const tRib0 = performance.now();
 
-    const ballastGeo = buildUvRibbonGeometry3D(profile3D, {
-      width: ballastWidth,
-      startPhaseU,
-    });
-    if (ballastGeo) {
-      resourceManager.registerGeometry(ballastGeo);
-      ballastItems.push({ geom: ballastGeo, info: railInfo, chunkKey });
+    const isAtGrade = !isBridge && !r.isTunnel && r.layer === 0;
+    const skipRibbonBallast = effectiveBallastStrategy === 'surface-first' && isAtGrade;
+
+    if (!skipRibbonBallast) {
+      const ballastGeo = buildUvRibbonGeometry3D(profile3D, {
+        width: ballastWidth,
+        startPhaseU,
+      });
+      if (ballastGeo) {
+        resourceManager.registerGeometry(ballastGeo);
+        ballastItems.push({ geom: ballastGeo, info: railInfo, chunkKey });
+      }
     }
 
     const sleeperProfile3D = profile3D.map((p) => ({
@@ -2296,6 +2349,11 @@ export function buildRailwayGroupInternal(
         effectiveSwitchPolicy === 'graph' ? unresolvedTurnoutCount : undefined,
       graphTaperedBladeCount:
         effectiveSwitchPolicy === 'graph' ? totalGraphTaperedCount : undefined,
+      railwayBallastStrategy: effectiveBallastStrategy,
+      ballastFootprintCount: surfaceFirstBallastResult?.stats.footprintCount,
+      ballastComponentCount: surfaceFirstBallastResult?.stats.componentCount,
+      ballastBooleanUnionCount: surfaceFirstBallastResult?.stats.booleanUnionCount,
+      ballastTriangles: surfaceFirstBallastResult?.stats.ballastTriangles,
     },
     updateTheme: (newTheme: MapStyleTheme) => {
       if (ballastMat) ballastMat.color.set(newTheme.railwayColors.ballast);
@@ -2379,5 +2437,6 @@ export function buildRailwayInfrastructure(
     descriptors: options?.descriptors,
     diagnostics: options?.diagnostics,
     switchPolicy: options?.switchPolicy,
+    ballastStrategy: options?.ballastStrategy,
   });
 }

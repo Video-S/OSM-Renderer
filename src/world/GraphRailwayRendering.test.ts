@@ -21,10 +21,17 @@ import {
   adaptRailwayEdgeDescriptorsToFeatures,
   normalizeInfrastructureRenderOptions,
   parseInfrastructureRenderOptionsFromSearch,
+  parseRailwayBallastStrategy,
   parseRailwayInfrastructureRenderSource,
   prepareInfrastructureRenderPreview,
   RailwayEdgeRenderDescriptor,
 } from './infrastructure/rendering/InfrastructureRenderAdapter';
+import {
+  buildAtGradeBallastFootprints,
+  groupBallastConnectedComponents,
+  buildSurfaceFirstRailwayBallastGeometries,
+  computeMultiPolygonArea,
+} from './infrastructure/railways/SurfaceFirstRailwayBallast';
 import {
   buildRailwayNetwork,
 } from './infrastructure/topology/RailwayNetworkBuilder';
@@ -1047,6 +1054,287 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       assert.equal(legacyResult.stats.graphTaperedBladeCount, undefined);
 
       legacyResult.dispose();
+    });
+  });
+
+  describe('Stage E3-B: Experimental Surface-First Railway Ballast (R+)', () => {
+    it('parses graph-R+ render source and surface-first ballast strategy while keeping legacy default', () => {
+      assert.equal(parseRailwayInfrastructureRenderSource(null), 'legacy');
+      assert.equal(parseRailwayInfrastructureRenderSource('graph-r+'), 'graph-R+');
+      assert.equal(parseRailwayInfrastructureRenderSource('graph-R+'), 'graph-R+');
+
+      assert.equal(parseRailwayBallastStrategy(null), 'ribbon');
+      assert.equal(parseRailwayBallastStrategy('surface-first'), 'surface-first');
+      assert.equal(parseRailwayBallastStrategy('r+'), 'surface-first');
+      assert.equal(parseRailwayBallastStrategy(null, 'graph-R+'), 'surface-first');
+
+      const options = parseInfrastructureRenderOptionsFromSearch('?topologyRailways=graph-R+');
+      assert.equal(options.railways, 'graph-R+');
+      assert.equal(options.railwayBallastStrategy, 'surface-first');
+      assert.equal(options.railwaySwitchPolicy, 'graph');
+
+      const defaultOptions = normalizeInfrastructureRenderOptions(null);
+      assert.equal(defaultOptions.railways, 'legacy');
+      assert.equal(defaultOptions.railwayBallastStrategy, undefined);
+    });
+
+    it('consolidates overlapping at-grade tracks at switches and crossovers into unified components', () => {
+      const trunk = createSyntheticRailwayTrack('way/r_trunk', [
+        [0, 0],
+        [20, 0],
+      ], { nodeIds: ['n1', 'n_sw'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const main = createSyntheticRailwayTrack('way/r_main', [
+        [20, 0],
+        [60, 0],
+      ], { nodeIds: ['n_sw', 'n2'], osmTags: { usage: 'main' }, railwayType: 'rail' });
+
+      const div = createSyntheticRailwayTrack('way/r_div', [
+        [20, 0],
+        [40, 2],
+        [60, 4.5],
+      ], { nodeIds: ['n_sw', 'n3'], osmTags: { usage: 'branch' }, railwayType: 'rail' });
+
+      const data = createBaseProcessedMapData([trunk, main, div]);
+
+      // 1. Build footprints and components directly
+      const footprints = buildAtGradeBallastFootprints(data.railways);
+      assert.equal(footprints.length, 3, 'All 3 tracks are at-grade');
+
+      const components = groupBallastConnectedComponents(footprints);
+      assert.equal(components.length, 1, 'All 3 tracks overlap at switch throat and must form 1 component');
+      assert.equal(components[0].footprintIds.length, 3);
+      assert.equal(components[0].sourceFeatureIds.length, 3);
+
+      const individualArea = footprints.reduce((acc, f) => acc + computeMultiPolygonArea(f.geometry), 0);
+      const unifiedArea = computeMultiPolygonArea(components[0].unionGeometry);
+      assert.ok(unifiedArea < individualArea, 'Consolidated area must be less than sum due to eliminated overlap');
+      assert.ok(individualArea - unifiedArea > 10.0, 'Substantial overlap removed at diverging throat');
+
+      // 2. Build via RailwayGeometryBuilder with graph-R+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph-R+', ballastStrategy: 'surface-first' }
+      );
+
+      assert.equal(result.stats.railwayBallastStrategy, 'surface-first');
+      assert.equal(result.stats.ballastFootprintCount, 3);
+      assert.equal(result.stats.ballastComponentCount, 1);
+      assert.equal(result.stats.ballastBooleanUnionCount, 1);
+      assert.ok((result.stats.ballastTriangles ?? 0) > 0);
+
+      result.dispose();
+    });
+
+    it('strictly isolates bridges and tunnels from at-grade ballast consolidation', () => {
+      const atGradeTrack = createSyntheticRailwayTrack('way/track_ground', [
+        [0, 0],
+        [50, 0],
+      ], { layer: 0, isBridge: false, isTunnel: false });
+
+      const bridgeTrack = createSyntheticRailwayTrack('way/track_bridge', [
+        [0, 1.0],
+        [50, 1.0],
+      ], { layer: 1, isBridge: true, isTunnel: false });
+
+      const tunnelTrack = createSyntheticRailwayTrack('way/track_tunnel', [
+        [0, -1.0],
+        [50, -1.0],
+      ], { layer: -1, isBridge: false, isTunnel: true });
+
+      const data = createBaseProcessedMapData([atGradeTrack, bridgeTrack, tunnelTrack]);
+
+      const footprints = buildAtGradeBallastFootprints(data.railways);
+      assert.equal(footprints.length, 1, 'Only at-grade ground track gets surface-first footprint');
+      assert.equal(footprints[0].id, 'way/track_ground');
+
+      const result = buildRailwayInfrastructure(
+        data,
+        MAP_THEMES.daylight,
+        1.0,
+        { renderSource: 'graph-R+', ballastStrategy: 'surface-first' }
+      );
+
+      assert.equal(result.stats.ballastFootprintCount, 1);
+      assert.equal(result.stats.ballastComponentCount, 1);
+      assert.equal(result.stats.ballastBooleanUnionCount, 0);
+
+      result.dispose();
+    });
+
+    it('leaves rails, 3D sleepers, turnout switch geometry, and blade tapering identical between ribbon and R+', () => {
+      const switchyardData = createRailwayPrototypeFixtureData();
+
+      const ribbonResult = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph-switches', switchPolicy: 'graph', ballastStrategy: 'ribbon' }
+      );
+
+      const surfaceFirstResult = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph-R+', switchPolicy: 'graph', ballastStrategy: 'surface-first' }
+      );
+
+      // Rails and 3D sleepers MUST be completely identical
+      assert.equal(
+        surfaceFirstResult.stats.sleeper3DBoxCount,
+        ribbonResult.stats.sleeper3DBoxCount,
+        '3D sleeper box count must be identical'
+      );
+      assert.equal(
+        surfaceFirstResult.stats.turnoutBearerCount,
+        ribbonResult.stats.turnoutBearerCount,
+        'Turnout bearer count must be identical'
+      );
+      assert.equal(
+        surfaceFirstResult.stats.splitMultiSegmentStationsCount,
+        ribbonResult.stats.splitMultiSegmentStationsCount,
+        'Split sleeper station count must be identical'
+      );
+      assert.equal(
+        surfaceFirstResult.stats.confirmedSwitchCount,
+        ribbonResult.stats.confirmedSwitchCount,
+        'Confirmed switch count must be identical'
+      );
+      assert.equal(
+        surfaceFirstResult.stats.graphTaperedBladeCount,
+        ribbonResult.stats.graphTaperedBladeCount,
+        'Graph tapered blade count must be identical'
+      );
+
+      // Ballast triangles are reduced due to consolidation of overlapping ribbons
+      assert.ok(
+        (surfaceFirstResult.stats.ballastTriangles ?? 0) < 1154,
+        'R+ ballast triangles should be reduced compared to ribbon ballast (1,154 in switchyard)'
+      );
+
+      ribbonResult.dispose();
+      surfaceFirstResult.dispose();
+    });
+
+    it('ensures all generated R+ ballast meshes have valid upward normals, non-NaN positions, and valid triangles', () => {
+      const switchyardData = createRailwayPrototypeFixtureData();
+
+      const resManager = new SceneResourceManager();
+      const getChunkKey = () => 'global';
+      const atGradeElev = 0.060;
+
+      const rPlusResult = buildSurfaceFirstRailwayBallastGeometries(
+        switchyardData.railways,
+        atGradeElev,
+        resManager,
+        getChunkKey
+      );
+
+      assert.ok(rPlusResult.ballastItems.length > 0);
+      assert.ok(rPlusResult.stats.ballastTriangles > 0);
+
+      for (const item of rPlusResult.ballastItems) {
+        const geo = item.geom;
+        const pos = geo.attributes.position;
+        const norm = geo.attributes.normal;
+
+        assert.ok(pos && pos.count >= 3);
+        assert.ok(norm && norm.count === pos.count);
+
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i);
+          const y = pos.getY(i);
+          const z = pos.getZ(i);
+
+          assert.ok(Number.isFinite(x), 'x must be finite');
+          assert.ok(Number.isFinite(y), 'y must be finite');
+          assert.ok(Number.isFinite(z), 'z must be finite');
+          assert.ok(Math.abs(y - atGradeElev) < 1e-4, 'y must match at-grade ballast elevation');
+
+          const nx = norm.getX(i);
+          const ny = norm.getY(i);
+          const nz = norm.getZ(i);
+          assert.ok(Math.abs(nx) < 1e-4 && Math.abs(ny - 1.0) < 1e-4 && Math.abs(nz) < 1e-4, 'Normal must point up [0,1,0]');
+        }
+
+        assert.ok(item.info.sourceFeatureIds.length > 0, 'Every ballast item must have sourceFeatureIds');
+      }
+
+      resManager.dispose();
+    });
+
+    it('supports theme updates and resource disposal cleanly without memory leaks', () => {
+      const switchyardData = createRailwayPrototypeFixtureData();
+
+      const result = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.daylight,
+        1.0,
+        { renderSource: 'graph-R+', ballastStrategy: 'surface-first' }
+      );
+
+      // Verify theme update runs without error
+      assert.doesNotThrow(() => {
+        result.updateTheme(MAP_THEMES.tactical);
+      });
+      assert.doesNotThrow(() => {
+        result.updateTheme(MAP_THEMES.blueprint);
+      });
+
+      // Verify disposal cleans up cleanly
+      assert.doesNotThrow(() => {
+        result.dispose();
+      });
+    });
+
+    it('produces deterministic output under feature reordering', () => {
+      const t1 = createSyntheticRailwayTrack('way/t1', [[0, 0], [40, 0]], { layer: 0 });
+      const t2 = createSyntheticRailwayTrack('way/t2', [[20, 0], [40, 2]], { layer: 0 });
+      const t3 = createSyntheticRailwayTrack('way/t3', [[40, 0], [80, 0]], { layer: 0 });
+
+      const dataA = createBaseProcessedMapData([t1, t2, t3]);
+      const dataB = createBaseProcessedMapData([t3, t2, t1]);
+
+      const resManagerA = new SceneResourceManager();
+      const resManagerB = new SceneResourceManager();
+
+      const resultA = buildSurfaceFirstRailwayBallastGeometries(dataA.railways, 0.060, resManagerA, () => 'global');
+      const resultB = buildSurfaceFirstRailwayBallastGeometries(dataB.railways, 0.060, resManagerB, () => 'global');
+
+      assert.equal(resultA.stats.componentCount, resultB.stats.componentCount);
+      assert.equal(resultA.stats.booleanUnionCount, resultB.stats.booleanUnionCount);
+      assert.equal(resultA.stats.ballastTriangles, resultB.stats.ballastTriangles);
+
+      resManagerA.dispose();
+      resManagerB.dispose();
+    });
+
+    it('preserves complete regression invariance: legacy and standard graph modes remain ribbon ballast by default', () => {
+      const switchyardData = createRailwayPrototypeFixtureData();
+
+      const legacyResult = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'legacy' }
+      );
+      assert.equal(legacyResult.stats.railwayBallastStrategy, 'ribbon');
+      assert.equal(legacyResult.stats.ballastFootprintCount, undefined);
+      assert.equal(legacyResult.stats.ballastComponentCount, undefined);
+
+      const graphResult = buildRailwayInfrastructure(
+        switchyardData,
+        MAP_THEMES.tactical,
+        1.0,
+        { renderSource: 'graph' }
+      );
+      assert.equal(graphResult.stats.railwayBallastStrategy, 'ribbon');
+      assert.equal(graphResult.stats.ballastFootprintCount, undefined);
+
+      legacyResult.dispose();
+      graphResult.dispose();
     });
   });
 });

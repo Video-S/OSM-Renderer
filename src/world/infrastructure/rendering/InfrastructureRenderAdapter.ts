@@ -59,12 +59,15 @@ export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph
  *   into Candidate B inputs preserving baseline heuristic switch geometry.
  * - `'graph-switches'`: Stage E3-A2 graph-informed switch rendering mode. Uses verified
  *   `turnoutTopology` descriptors to govern bearer sharing, sleeper support, and blade tapering.
+ * - `'graph-R+'`: Stage E3-B experimental surface-first railway ballast mode. Uses consolidated 2D
+ *   ballast footprints while preserving graph-informed rails, sleepers, and switch semantics.
  */
 export type RailwayInfrastructureRenderSource =
   | 'legacy'
   | 'graph-preview'
   | 'graph'
-  | 'graph-switches';
+  | 'graph-switches'
+  | 'graph-R+';
 
 /**
  * Switch policy governing railway turnout bearer sharing and blade tapering (Stage E3-A2).
@@ -73,6 +76,14 @@ export type RailwayInfrastructureRenderSource =
  * - `'graph'`: Graph-informed behavior consuming `RailwayNodeRenderDescriptor.turnoutTopology`.
  */
 export type RailwaySwitchPolicy = 'heuristic' | 'graph';
+
+/**
+ * Strategy governing at-grade railway ballast surface construction (Stage E3-B).
+ *
+ * - `'ribbon'`: Candidate B continuous track-aligned UV ribbons with overlapping parallel/switch footprints.
+ * - `'surface-first'`: Stage E3-B consolidated 2D polygonal ballast footprints unioned per connected component.
+ */
+export type RailwayBallastStrategy = 'ribbon' | 'surface-first';
 
 export type InfrastructureRenderSource =
   | RoadInfrastructureRenderSource
@@ -85,6 +96,7 @@ export interface InfrastructureRenderOptions {
   roads: RoadInfrastructureRenderSource;
   railways: RailwayInfrastructureRenderSource;
   railwaySwitchPolicy?: RailwaySwitchPolicy;
+  railwayBallastStrategy?: RailwayBallastStrategy;
 }
 
 /**
@@ -119,14 +131,12 @@ export function parseRailwayInfrastructureRenderSource(
   raw: string | null | undefined
 ): RailwayInfrastructureRenderSource {
   if (typeof raw !== 'string') return 'legacy';
-  const normalized = raw.trim();
-  if (
-    normalized === 'graph-preview' ||
-    normalized === 'graph' ||
-    normalized === 'graph-switches'
-  ) {
-    return normalized;
-  }
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'graph-preview') return 'graph-preview';
+  if (lower === 'graph') return 'graph';
+  if (lower === 'graph-switches') return 'graph-switches';
+  if (lower === 'graph-r+' || lower === 'graph-r ' || lower === 'graph-r') return 'graph-R+';
   return 'legacy';
 }
 
@@ -142,10 +152,36 @@ export function parseRailwaySwitchPolicy(
     if (normalized === 'graph') return 'graph';
     if (normalized === 'heuristic' || normalized === 'legacy') return 'heuristic';
   }
-  if (renderSource === 'graph-switches') {
+  if (renderSource === 'graph-switches' || renderSource === 'graph-R+') {
     return 'graph';
   }
   return 'heuristic';
+}
+
+/**
+ * Parses a raw string value into a valid `RailwayBallastStrategy` (`'ribbon' | 'surface-first'`).
+ */
+export function parseRailwayBallastStrategy(
+  raw: string | null | undefined,
+  renderSource?: RailwayInfrastructureRenderSource
+): RailwayBallastStrategy {
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (
+      normalized === 'surface-first' ||
+      normalized === 'surface' ||
+      normalized === 'r+' ||
+      normalized === 'r ' ||
+      normalized === 'r'
+    ) {
+      return 'surface-first';
+    }
+    if (normalized === 'ribbon' || normalized === 'legacy') return 'ribbon';
+  }
+  if (renderSource === 'graph-R+') {
+    return 'surface-first';
+  }
+  return 'ribbon';
 }
 
 /**
@@ -219,6 +255,7 @@ export function normalizeInfrastructureRenderOptions(
     roads?: string | null;
     railways?: string | null;
     railwaySwitchPolicy?: string | null;
+    railwayBallastStrategy?: string | null;
   } | null
 ): InfrastructureRenderOptions {
   if (!options) {
@@ -232,8 +269,18 @@ export function normalizeInfrastructureRenderOptions(
     roads: parseRoadInfrastructureRenderSource(options.roads),
     railways,
   };
-  if (options.railwaySwitchPolicy !== undefined || railways === 'graph-switches') {
+  if (
+    options.railwaySwitchPolicy !== undefined ||
+    railways === 'graph-switches' ||
+    railways === 'graph-R+'
+  ) {
     result.railwaySwitchPolicy = parseRailwaySwitchPolicy(options.railwaySwitchPolicy, railways);
+  }
+  if (options.railwayBallastStrategy !== undefined || railways === 'graph-R+') {
+    result.railwayBallastStrategy = parseRailwayBallastStrategy(
+      options.railwayBallastStrategy,
+      railways
+    );
   }
   return result;
 }
@@ -258,12 +305,16 @@ export function parseInfrastructureRenderOptionsFromSearch(
       : search;
   const railways = parseRailwayInfrastructureRenderSource(params.get('topologyRailways'));
   const rawPolicy = params.get('railwaySwitchPolicy') ?? params.get('railwaySwitches');
+  const rawBallast = params.get('railwayBallastStrategy') ?? params.get('railwayBallast');
   const result: InfrastructureRenderOptions = {
     roads: parseRoadInfrastructureRenderSource(params.get('topologyRoads')),
     railways,
   };
-  if (rawPolicy !== null || railways === 'graph-switches') {
+  if (rawPolicy !== null || railways === 'graph-switches' || railways === 'graph-R+') {
     result.railwaySwitchPolicy = parseRailwaySwitchPolicy(rawPolicy, railways);
+  }
+  if (rawBallast !== null || railways === 'graph-R+') {
+    result.railwayBallastStrategy = parseRailwayBallastStrategy(rawBallast, railways);
   }
   return result;
 }

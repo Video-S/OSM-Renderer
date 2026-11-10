@@ -8,7 +8,7 @@
 
 > **parseRoadInfrastructureRenderSource**(`raw`): [`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:103
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:115
 
 Parses a raw string value into a valid `RoadInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
 resolving any absent or unrecognized value safely to `'legacy'`.

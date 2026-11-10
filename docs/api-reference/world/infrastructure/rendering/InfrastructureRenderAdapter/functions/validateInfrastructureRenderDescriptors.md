@@ -8,7 +8,7 @@
 
 > **validateInfrastructureRenderDescriptors**(`bundle`, `graph?`): [`InfrastructureRenderValidationReport`](../interfaces/InfrastructureRenderValidationReport.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1631
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:1682
 
 Validates structural and semantic invariants of an `InfrastructureRenderDescriptorBundle`.
 

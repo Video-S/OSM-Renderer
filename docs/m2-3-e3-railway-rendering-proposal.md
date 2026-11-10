@@ -269,6 +269,6 @@ If graph descriptors are missing, corrupted, or empty when `topologyRailways='gr
 
 1. **`TKT-010` (Stage E3-A1): Railway Graph Descriptor Integration** (Closed)
 2. **`TKT-011` (Stage E3-A2): Graph-Informed Switch Semantics** (Closed)
-3. **`TKT-012` (Stage E3-B): Experimental Surface-First Ballast Footprints (R+)** (Planned)
+3. **`TKT-012` (Stage E3-B): Experimental Surface-First Ballast Footprints (R+)** (Closed / Evaluated — Outcome D Recommended)
 4. **`TKT-013` (Stage E3-C): Comprehensive Railway Validation & Benchmarks** (Planned)
 5. **`TKT-014` (Stage E3-D): Railway Renderer Review & Promotion Gate** (Planned)

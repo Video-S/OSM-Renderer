@@ -209,6 +209,8 @@ export interface BridgeStructureGenerationOptions {
 export interface TunnelPortalGenerationOptions {
   emitStartPortal?: boolean;
   emitEndPortal?: boolean;
+  /** Diagnostic-only dashed underground alignment; not allocated in normal rendering. */
+  emitUndergroundTrace?: boolean;
   /** Optional explicit maxheight in meters (`maxheight=*`) to scale portal vertical clearance (M2.3-E4-T). */
   maxheightMeters?: number;
   /** Optional railway type (`'rail'`, `'subway'`, `'light_rail'`, `'tram'`) for railway portal scaling (M2.3-E4-T). */
@@ -1507,7 +1509,7 @@ export function generateTunnelPortalAndTraceGeometries(
   }
 
   // 6. Optional Diagnostic Dashed Underground Alignment Trace between the two portals
-  const totalLen = computePolylineLength(cleanPts);
+  const totalLen = options?.emitUndergroundTrace ? computePolylineLength(cleanPts) : 0;
   if (totalLen >= 8.0) {
     const dashLen = 1.5;
     const dashSpacing = 5.2;

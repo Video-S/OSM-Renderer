@@ -84,6 +84,16 @@ describe('Unified surface visibility policy', () => {
     assert.deepEqual(decisions.forFeature(tunnel), { start: true, end: false });
   });
 
+  it('keeps endpoint decisions stable when a graph renderer snaps or reverses working points', () => {
+    const tunnel = road('snap-tun', [0, 0], [20, 0], { tunnel: 'yes' }, [2, 3]);
+    const west = road('snap-west', [-20, 0], [0, 0], {}, [1, 2]);
+    const decisions = new VerifiedTunnelEntrances([west, tunnel], []);
+    tunnel.points = [[25, 0], [5, 0]];
+    assert.equal(decisions.forEndpoint(['snap-tun'], [0, 0], 'start'), true);
+    assert.equal(decisions.forEndpoint(['snap-tun'], [20, 0], 'end'), false);
+    assert.equal(decisions.forEndpoint(['snap-tun'], [10, 0], 'start'), false);
+  });
+
   it('does not join coincident endpoints with contradictory explicit OSM node IDs', () => {
     const tunnel = road('tun', [0, 0], [20, 0], { tunnel: 'yes' }, [2, 3]);
     const unrelated = road('other', [-20, 0], [0, 0], {}, [10, 11]);

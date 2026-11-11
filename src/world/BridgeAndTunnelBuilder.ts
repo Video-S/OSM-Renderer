@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ELEVATION_POLICY } from './ElevationPolicy';
+import { resolveSurfaceVisibility } from './SurfaceVisibilityPolicy';
 import type {
   GradeTransitionRenderDescriptor,
   InfrastructureRenderDescriptorBundle,
@@ -1543,7 +1544,13 @@ export function resolveGraphGradeSeparatedPlans(
   const isGroundEdge = (e: AnyEdge): boolean => {
     if (e.placementClassification?.hasConflict) return false;
     if (e.placementClassification) {
-      return e.placementClassification.rendersOnSurface;
+      return resolveSurfaceVisibility({
+        osmTags: e.primaryOsmTags,
+        placementClassification: e.placementClassification,
+        isBridge: e.isBridge,
+        isTunnel: e.isTunnel,
+        layer: e.layer,
+      }) === 'surface';
     }
     if (network === 'road') {
       return (e as RoadEdgeRenderDescriptor).isAtGradeBuildable;
@@ -1564,7 +1571,11 @@ export function resolveGraphGradeSeparatedPlans(
     if (e.placementClassification?.hasConflict) return false;
     if (isGroundEdge(e) || isTunnelEdge(e)) return false;
     if (e.placementClassification) {
-      return e.placementClassification.isElevatedBridge;
+      return resolveSurfaceVisibility({
+        osmTags: e.primaryOsmTags,
+        placementClassification: e.placementClassification,
+        layer: e.layer,
+      }) === 'elevated';
     }
     return Boolean(e.isBridge || e.layer > 0);
   };

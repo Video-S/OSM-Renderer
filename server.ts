@@ -119,7 +119,7 @@ app.get('/api/geocode', async (req, res) => {
 app.get('/api/osm-data', async (req, res) => {
   const lat = parseFloat(req.query.lat as string);
   const lon = parseFloat(req.query.lon as string);
-  const radiusMeters = Math.min(Math.max(parseFloat(req.query.radius as string) || 350, 200), 600);
+  const radiusMeters = Math.min(Math.max(parseFloat(req.query.radius as string) || 350, 200), 5000);
   const locationName = (req.query.name as string) || 'Location';
 
   if (isNaN(lat) || isNaN(lon)) {
@@ -147,8 +147,12 @@ app.get('/api/osm-data', async (req, res) => {
 
     let geojson: any = null;
 
-    // Primary read-only Overpass API query with fallback to OSM 0.6 map endpoint
-    const overpassQuery = `[out:json][timeout:25];(node(${minLat},${minLon},${maxLat},${maxLon});way(${minLat},${minLon},${maxLat},${maxLon});relation(${minLat},${minLon},${maxLat},${maxLon}););out body;>;out skel qt;`;
+    // Primary read-only Overpass API query with targeted feature selection for large radii
+    const isLargeRadius = radiusMeters > 600;
+    const overpassQuery = isLargeRadius
+      ? `[out:json][timeout:60];(way["highway"](${minLat},${minLon},${maxLat},${maxLon});way["railway"](${minLat},${minLon},${maxLat},${maxLon});way["building"](${minLat},${minLon},${maxLat},${maxLon});way["waterway"](${minLat},${minLon},${maxLat},${maxLon});way["natural"](${minLat},${minLon},${maxLat},${maxLon});way["landuse"](${minLat},${minLon},${maxLat},${maxLon});way["leisure"](${minLat},${minLon},${maxLat},${maxLon});relation["highway"](${minLat},${minLon},${maxLat},${maxLon});relation["railway"](${minLat},${minLon},${maxLat},${maxLon}););out body;>;out skel qt;`
+      : `[out:json][timeout:30];(node(${minLat},${minLon},${maxLat},${maxLon});way(${minLat},${minLon},${maxLat},${maxLon});relation(${minLat},${minLon},${maxLat},${maxLon}););out body;>;out skel qt;`;
+
     try {
       const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
@@ -163,11 +167,12 @@ app.get('/api/osm-data', async (req, res) => {
         geojson = osmtogeojson(overpassJson);
         enrichGeoJsonWithOverpassNodeIds(geojson, overpassJson);
       }
-    } catch {
-      // Fall back to OSM 0.6 XML map endpoint if Overpass is unreachable
+    } catch (err) {
+      console.warn('Overpass fetch exception:', err);
     }
 
-    if (!geojson) {
+    // Fall back to OSM 0.6 XML map endpoint only for smaller radii (<= 600m)
+    if (!geojson && radiusMeters <= 600) {
       const osmUrl = `https://api.openstreetmap.org/api/0.6/map?bbox=${bbox}`;
       const osmRes = await fetch(osmUrl, {
         headers: {
@@ -186,6 +191,10 @@ app.get('/api/osm-data', async (req, res) => {
       const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
       geojson = osmtogeojson(xmlDoc);
       enrichGeoJsonWithOsmXmlNodeIds(geojson, xmlDoc);
+    }
+
+    if (!geojson || !geojson.features || geojson.features.length === 0) {
+      throw new Error('Requested area returned no features or Overpass API is busy. Please try a slightly smaller radius.');
     }
 
     // Attach metadata

@@ -6,7 +6,7 @@
 
 # Interface: BaseInfrastructureNode\<TRole\>
 
-Defined in: world/infrastructure/topology/types.ts:215
+Defined in: world/infrastructure/topology/types.ts:220
 
 ## Extended by
 
@@ -25,7 +25,7 @@ Defined in: world/infrastructure/topology/types.ts:215
 
 > **degree**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:240
+Defined in: world/infrastructure/topology/types.ts:245
 
 Topological degree: exact count of attached edge endpoints (`incidentHalfEdges.length`).
 An ordinary incident edge contributes +1; a closed self-loop edge attaches both endpoints and contributes +2.
@@ -36,7 +36,7 @@ An ordinary incident edge contributes +1; a closed self-loop edge attaches both 
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:217
+Defined in: world/infrastructure/topology/types.ts:222
 
 Deterministic domain-and-scope canonical node ID (e.g. "road_node:0|0|0:osm_5001" or "road_node:0|0|0:fb_1").
 
@@ -46,7 +46,7 @@ Deterministic domain-and-scope canonical node ID (e.g. "road_node:0|0|0:osm_5001
 
 > **incidentEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:252
+Defined in: world/infrastructure/topology/types.ts:257
 
 Deduplicated, canonically sorted list of unique incident edge IDs.
 A closed self-loop edge appears once in `incidentEdgeIds` and twice in `incidentHalfEdges`.
@@ -57,7 +57,7 @@ A closed self-loop edge appears once in `incidentEdgeIds` and twice in `incident
 
 > **incidentHalfEdges**: readonly [`IncidentHalfEdge`](IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:254
+Defined in: world/infrastructure/topology/types.ts:259
 
 All attached half-edges (`incidentHalfEdges.length === degree`).
 
@@ -67,7 +67,7 @@ All attached half-edges (`incidentHalfEdges.length === degree`).
 
 > **isBoundaryClipped**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:235
+Defined in: world/infrastructure/topology/types.ts:240
 
 True if synthesized by region bounding-box clipping (`nodeIdOrigin === 'boundary_clip'`).
 
@@ -77,7 +77,7 @@ True if synthesized by region bounding-box clipping (`nodeIdOrigin === 'boundary
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:231
+Defined in: world/infrastructure/topology/types.ts:236
 
 True if node belongs to a bridge structure scope.
 
@@ -87,7 +87,7 @@ True if node belongs to a bridge structure scope.
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:233
+Defined in: world/infrastructure/topology/types.ts:238
 
 True if node belongs to a tunnel/underpass structure scope.
 
@@ -97,7 +97,7 @@ True if node belongs to a tunnel/underpass structure scope.
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:229
+Defined in: world/infrastructure/topology/types.ts:234
 
 Effective vertical OSM layer tag (default 0).
 
@@ -107,7 +107,7 @@ Effective vertical OSM layer tag (default 0).
 
 > **network**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:219
+Defined in: world/infrastructure/topology/types.ts:224
 
 Network domain ('road' | 'railway').
 
@@ -117,7 +117,7 @@ Network domain ('road' | 'railway').
 
 > **nodeIdOrigin**: [`NodeIdOrigin`](../type-aliases/NodeIdOrigin.md)
 
-Defined in: world/infrastructure/topology/types.ts:223
+Defined in: world/infrastructure/topology/types.ts:228
 
 Explicit provenance of how this node's identity was established.
 
@@ -127,7 +127,7 @@ Explicit provenance of how this node's identity was established.
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:256
+Defined in: world/infrastructure/topology/types.ts:261
 
 Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matched this node (Stage D).
 
@@ -137,7 +137,7 @@ Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matche
 
 > **primaryRole**: `TRole`
 
-Defined in: world/infrastructure/topology/types.ts:242
+Defined in: world/infrastructure/topology/types.ts:247
 
 Primary role selected by deterministic precedence rules for summary inspection.
 
@@ -147,7 +147,7 @@ Primary role selected by deterministic precedence rules for summary inspection.
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:221
+Defined in: world/infrastructure/topology/types.ts:226
 
 Explicit raw unprefixed OSM node ID if grounded in OSM data (e.g. "5001"); `undefined` for coordinate fallback or boundary clip.
 
@@ -157,7 +157,7 @@ Explicit raw unprefixed OSM node ID if grounded in OSM data (e.g. "5001"); `unde
 
 > **roles**: readonly `TRole`[]
 
-Defined in: world/infrastructure/topology/types.ts:247
+Defined in: world/infrastructure/topology/types.ts:252
 
 Non-exclusive, canonically sorted list of all topological roles held by this node
 (e.g. `['junction', 'level_crossing']` or `['attribute_break', 'grade_transition']`).
@@ -168,7 +168,7 @@ Non-exclusive, canonically sorted list of all topological roles held by this nod
 
 > **x**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:225
+Defined in: world/infrastructure/topology/types.ts:230
 
 Local East-West world coordinate in meters (+X East).
 
@@ -178,6 +178,6 @@ Local East-West world coordinate in meters (+X East).
 
 > **z**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:227
+Defined in: world/infrastructure/topology/types.ts:232
 
 Local North-South world coordinate in meters (+Z South).

@@ -8,7 +8,7 @@
 
 > **queryActiveWebGLDepthBits**(`gl?`): `number`
 
-Defined in: world/ZFightingValidator.ts:343
+Defined in: world/ZFightingValidator.ts:346
 
 Queries the active depth buffer bit-depth from a WebGLRenderingContext when available,
 defaulting to testing both 16-bit (WebGL minimum guarantee) and 24-bit fixed-point depth buffers.

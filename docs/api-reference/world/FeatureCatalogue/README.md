@@ -30,3 +30,10 @@
 ## Functions
 
 - [classifyGeoJsonFeature](functions/classifyGeoJsonFeature.md)
+- [classifyInfrastructurePlacement](functions/classifyInfrastructurePlacement.md)
+
+## References
+
+### InfrastructurePlacementClassification
+
+Re-exports [InfrastructurePlacementClassification](../../types/MapFeature/interfaces/InfrastructurePlacementClassification.md)

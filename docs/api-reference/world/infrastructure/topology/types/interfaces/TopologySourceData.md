@@ -6,7 +6,7 @@
 
 # Interface: TopologySourceData
 
-Defined in: world/infrastructure/topology/types.ts:151
+Defined in: world/infrastructure/topology/types.ts:156
 
 Non-destructive topology input attached to `ProcessedMapData.topologySource`,
 captured prior to heuristic road deduplication and prior to road chaining.
@@ -17,7 +17,7 @@ captured prior to heuristic road deduplication and prior to road chaining.
 
 > **infrastructurePoints**: readonly [`InfrastructurePointMetadata`](InfrastructurePointMetadata.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:154
+Defined in: world/infrastructure/topology/types.ts:159
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: world/infrastructure/topology/types.ts:154
 
 > **railwayParts**: readonly [`UnchainedRailwayPart`](UnchainedRailwayPart.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:153
+Defined in: world/infrastructure/topology/types.ts:158
 
 ***
 
@@ -33,4 +33,4 @@ Defined in: world/infrastructure/topology/types.ts:153
 
 > **roadParts**: readonly [`UnchainedRoadPart`](UnchainedRoadPart.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:152
+Defined in: world/infrastructure/topology/types.ts:157

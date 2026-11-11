@@ -6,7 +6,7 @@
 
 # Interface: ParkFeature
 
-Defined in: types/MapFeature.ts:336
+Defined in: types/MapFeature.ts:360
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:336
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:345
+Defined in: types/MapFeature.ts:369
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:345
 
 > `optional` **has3DFoliage?**: `boolean`
 
-Defined in: types/MapFeature.ts:343
+Defined in: types/MapFeature.ts:367
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:343
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:337
+Defined in: types/MapFeature.ts:361
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:337
 
 > `optional` **leafType?**: `"broadleaved"` \| `"needleleaved"` \| `"mixed"` \| `"leafless"`
 
-Defined in: types/MapFeature.ts:344
+Defined in: types/MapFeature.ts:368
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:344
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:340
+Defined in: types/MapFeature.ts:364
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:340
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:347
+Defined in: types/MapFeature.ts:371
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:347
 
 > **polygon**: \[`number`, `number`\][][]
 
-Defined in: types/MapFeature.ts:341
+Defined in: types/MapFeature.ts:365
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:341
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:346
+Defined in: types/MapFeature.ts:370
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:346
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:338
+Defined in: types/MapFeature.ts:362
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:338
 
 > **subtype**: `string`
 
-Defined in: types/MapFeature.ts:342
+Defined in: types/MapFeature.ts:366
 
 ***
 
@@ -94,4 +94,4 @@ Defined in: types/MapFeature.ts:342
 
 > **type**: `"park"`
 
-Defined in: types/MapFeature.ts:339
+Defined in: types/MapFeature.ts:363

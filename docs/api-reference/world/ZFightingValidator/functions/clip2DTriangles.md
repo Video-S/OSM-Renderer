@@ -8,7 +8,7 @@
 
 > **clip2DTriangles**(`triA`, `triB`): \[`number`, `number`\][]
 
-Defined in: world/ZFightingValidator.ts:242
+Defined in: world/ZFightingValidator.ts:245
 
 Exact 2D convex polygon clipping (Sutherland-Hodgman) for two 2D triangles.
 Since every triangle is convex, clipping triangle A against the 3 half-planes of triangle B

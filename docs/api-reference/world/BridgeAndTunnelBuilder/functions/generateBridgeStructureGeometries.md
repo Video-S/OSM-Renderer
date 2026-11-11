@@ -8,7 +8,7 @@
 
 > **generateBridgeStructureGeometries**(`profile`, `width`, `peakElevation`, `deckThickness?`, `options?`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:625
+Defined in: world/BridgeAndTunnelBuilder.ts:774
 
 Generates 3D bridge deck substructure (side fascia walls, soffit underside, and solid ramp abutment walls
 reaching down to ground level under the sloped approach ramps), plus side safety parapets and support piers.

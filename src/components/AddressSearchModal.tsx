@@ -166,8 +166,8 @@ export const AddressSearchModal: React.FC<AddressSearchModalProps> = ({
             <input
               type="range"
               min="250"
-              max="550"
-              step="25"
+              max="5000"
+              step="250"
               value={radius}
               onChange={(e) => setRadius(parseInt(e.target.value, 10))}
               className="w-36 accent-cyan-400 cursor-pointer"

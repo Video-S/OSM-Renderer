@@ -6,7 +6,7 @@
 
 # Interface: RailwayNodeRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:506
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:510
 
 Render-ready descriptor for a topological railway node (Stage E3 handoff contract).
 
@@ -20,7 +20,7 @@ and non-interchanging flat crossings (`roles.includes('railway_crossing')`).
 
 > **degree**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:524
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:528
 
 Total attached half-edge count (`incidentHalfEdges.length`).
 
@@ -30,7 +30,7 @@ Total attached half-edge count (`incidentHalfEdges.length`).
 
 > **flatCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:544
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:548
 
 Confirmed `RailwayFlatCrossingRelation.id`s associated with this node.
 
@@ -40,7 +40,7 @@ Confirmed `RailwayFlatCrossingRelation.id`s associated with this node.
 
 > **gradeTransitionIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:546
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:550
 
 Confirmed `GradeTransitionRelation.id`s anchored at this railway node.
 
@@ -50,7 +50,7 @@ Confirmed `GradeTransitionRelation.id`s anchored at this railway node.
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:508
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:512
 
 Canonical railway node ID.
 
@@ -60,7 +60,7 @@ Canonical railway node ID.
 
 > **incidentEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:530
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:534
 
 Deduplicated, canonically sorted unique incident railway edge IDs.
 
@@ -70,7 +70,7 @@ Deduplicated, canonically sorted unique incident railway edge IDs.
 
 > **incidentHalfEdges**: readonly [`IncidentHalfEdge`](../../../topology/types/interfaces/IncidentHalfEdge.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:532
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:536
 
 All attached railway half-edges (`incidentHalfEdges.length === degree`).
 
@@ -80,7 +80,7 @@ All attached railway half-edges (`incidentHalfEdges.length === degree`).
 
 > **isBoundaryClipped**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:522
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:526
 
 True if synthesized at the loaded region clipping boundary.
 
@@ -90,7 +90,7 @@ True if synthesized at the loaded region clipping boundary.
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:518
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:522
 
 True if node belongs to a bridge vertical scope.
 
@@ -100,7 +100,7 @@ True if node belongs to a bridge vertical scope.
 
 > **isConfirmedSwitch**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:536
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:540
 
 True iff `turnoutStatus === 'confirmed'`.
 
@@ -110,7 +110,7 @@ True iff `turnoutStatus === 'confirmed'`.
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:520
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:524
 
 True if node belongs to a tunnel vertical scope.
 
@@ -120,7 +120,7 @@ True if node belongs to a tunnel vertical scope.
 
 > **isUnresolvedSwitch**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:538
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:542
 
 True iff `turnoutStatus === 'unresolved_main_vs_diverging' || turnoutStatus === 'unresolved_throat'`.
 
@@ -130,7 +130,7 @@ True iff `turnoutStatus === 'unresolved_main_vs_diverging' || turnoutStatus === 
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:516
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:520
 
 Effective vertical OSM layer.
 
@@ -140,7 +140,7 @@ Effective vertical OSM layer.
 
 > **levelCrossingIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:548
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:552
 
 Confirmed `LevelCrossingRelation.id`s anchored at this railway node.
 
@@ -150,7 +150,7 @@ Confirmed `LevelCrossingRelation.id`s anchored at this railway node.
 
 > **nodeIdOrigin**: [`NodeIdOrigin`](../../../topology/types/type-aliases/NodeIdOrigin.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:512
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:516
 
 Provenance of node identity (`'explicit_osm' | 'coordinate_fallback' | 'boundary_clip'`).
 
@@ -160,7 +160,7 @@ Provenance of node identity (`'explicit_osm' | 'coordinate_fallback' | 'boundary
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:542
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:546
 
 Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matched this node.
 
@@ -170,7 +170,7 @@ Point-level OSM tags if an ingested `InfrastructurePointMetadata` feature matche
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:514
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:518
 
 World coordinates `[x, z]` in local meters.
 
@@ -180,7 +180,7 @@ World coordinates `[x, z]` in local meters.
 
 > **primaryRole**: [`RailwayNodeRole`](../../../topology/types/type-aliases/RailwayNodeRole.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:526
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:530
 
 Primary topological role selected by precedence.
 
@@ -190,7 +190,7 @@ Primary topological role selected by precedence.
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:510
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:514
 
 Verified raw unprefixed OSM node ID if grounded in explicit OSM data.
 
@@ -200,7 +200,7 @@ Verified raw unprefixed OSM node ID if grounded in explicit OSM data.
 
 > **roles**: readonly [`RailwayNodeRole`](../../../topology/types/type-aliases/RailwayNodeRole.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:528
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:532
 
 Non-exclusive canonically sorted list of all topological roles on this node.
 
@@ -210,7 +210,7 @@ Non-exclusive canonically sorted list of all topological roles on this node.
 
 > **turnoutStatus**: [`TurnoutClassificationStatus`](../../../topology/types/type-aliases/TurnoutClassificationStatus.md) \| `"none"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:534
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:538
 
 Turnout classification status (`'none'` when node is not a candidate switch).
 
@@ -220,6 +220,6 @@ Turnout classification status (`'none'` when node is not a candidate switch).
 
 > `optional` **turnoutTopology?**: [`TurnoutTopologySpec`](../../../topology/types/interfaces/TurnoutTopologySpec.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:540
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:544
 
 Full turnout branch specification when `turnoutTopology` is present on the graph node.

@@ -6,7 +6,7 @@
 
 # Interface: UnchainedRoadPart
 
-Defined in: world/infrastructure/topology/types.ts:87
+Defined in: world/infrastructure/topology/types.ts:88
 
 Non-destructive, pre-deduplication and pre-chaining road way part captured immediately
 after bounding-box clipping (`clipPolylineToBox`) and culvert/layer classification,
@@ -18,7 +18,7 @@ BEFORE `seenRoadSegments` heuristic deduplication and BEFORE `chainContiguousRoa
 
 > **clippedAtEnd**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:109
+Defined in: world/infrastructure/topology/types.ts:110
 
 True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box clipping.
 
@@ -28,7 +28,7 @@ True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box
 
 > **clippedAtStart**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:107
+Defined in: world/infrastructure/topology/types.ts:108
 
 True if `points[0]` was synthesized by Liang-Barsky bounding-box clipping.
 
@@ -38,7 +38,7 @@ True if `points[0]` was synthesized by Liang-Barsky bounding-box clipping.
 
 > **hasExplicitSourceId**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:96
+Defined in: world/infrastructure/topology/types.ts:97
 
 True when `sourceFeatureId` came from an explicit ID in the input GeoJSON (`f.id`, `props.id`, or `props['@id']`);
 false when synthesized as `feat-${featureIndex}`.
@@ -49,7 +49,7 @@ false when synthesized as `feat-${featureIndex}`.
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:89
+Defined in: world/infrastructure/topology/types.ts:90
 
 Unique part ID (e.g. "way/100-0").
 
@@ -59,7 +59,7 @@ Unique part ID (e.g. "way/100-0").
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:113
+Defined in: world/infrastructure/topology/types.ts:114
 
 ***
 
@@ -67,7 +67,7 @@ Defined in: world/infrastructure/topology/types.ts:113
 
 > **isCulvert**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:115
+Defined in: world/infrastructure/topology/types.ts:116
 
 ***
 
@@ -75,7 +75,7 @@ Defined in: world/infrastructure/topology/types.ts:115
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:114
+Defined in: world/infrastructure/topology/types.ts:115
 
 ***
 
@@ -83,7 +83,7 @@ Defined in: world/infrastructure/topology/types.ts:114
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:112
+Defined in: world/infrastructure/topology/types.ts:113
 
 ***
 
@@ -91,7 +91,7 @@ Defined in: world/infrastructure/topology/types.ts:112
 
 > `optional` **name?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:116
+Defined in: world/infrastructure/topology/types.ts:117
 
 ***
 
@@ -99,7 +99,7 @@ Defined in: world/infrastructure/topology/types.ts:116
 
 > **osmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:118
+Defined in: world/infrastructure/topology/types.ts:119
 
 Original unmodified OSM tags for this specific way.
 
@@ -109,9 +109,19 @@ Original unmodified OSM tags for this specific way.
 
 > **partIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:98
+Defined in: world/infrastructure/topology/types.ts:99
 
 Zero-based index of this clipped/multi-line part within `sourceFeatureId`.
+
+***
+
+### placementClassification?
+
+> `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](../../../../../types/MapFeature/interfaces/InfrastructurePlacementClassification.md)
+
+Defined in: world/infrastructure/topology/types.ts:121
+
+Semantic vertical/enclosure placement classification (M2.3-E4-T).
 
 ***
 
@@ -119,7 +129,7 @@ Zero-based index of this clipped/multi-line part within `sourceFeatureId`.
 
 > **points**: readonly \[`number`, `number`\][]
 
-Defined in: world/infrastructure/topology/types.ts:100
+Defined in: world/infrastructure/topology/types.ts:101
 
 Ordered 2D metric vertices [x, z][] in original digitized way orientation.
 
@@ -129,7 +139,7 @@ Ordered 2D metric vertices [x, z][] in original digitized way orientation.
 
 > **rawOsmNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:105
+Defined in: world/infrastructure/topology/types.ts:106
 
 Raw unprefixed OSM node IDs aligned 1:1 with `points` where verified,
 or `undefined` at vertices lacking an explicit OSM node ID (including boundary cuts).
@@ -140,7 +150,7 @@ or `undefined` at vertices lacking an explicit OSM node ID (including boundary c
 
 > **roadClass**: [`RoadClass`](../../../../../types/MapFeature/type-aliases/RoadClass.md)
 
-Defined in: world/infrastructure/topology/types.ts:110
+Defined in: world/infrastructure/topology/types.ts:111
 
 ***
 
@@ -148,7 +158,7 @@ Defined in: world/infrastructure/topology/types.ts:110
 
 > **sourceFeatureId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:91
+Defined in: world/infrastructure/topology/types.ts:92
 
 Original unsplit feature ID (e.g. "way/100", or synthetic "feat-1" when the input feature lacked an ID).
 
@@ -158,4 +168,4 @@ Original unsplit feature ID (e.g. "way/100", or synthetic "feat-1" when the inpu
 
 > **width**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:111
+Defined in: world/infrastructure/topology/types.ts:112

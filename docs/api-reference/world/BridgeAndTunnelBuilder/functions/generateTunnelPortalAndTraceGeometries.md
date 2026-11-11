@@ -8,7 +8,7 @@
 
 > **generateTunnelPortalAndTraceGeometries**(`points`, `width`, `isPedestrianOrCycle?`, `options?`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:934
+Defined in: world/BridgeAndTunnelBuilder.ts:1083
 
 Generates 3D tunnel portal headwall arches, dark recessed portal entrance mouths,
 and a dashed underground corridor trace for a subterranean road, path, or railway tunnel.

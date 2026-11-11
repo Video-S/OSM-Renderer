@@ -31,6 +31,7 @@ import { TopologicalNodeIndex } from './TopologicalNodeIndex';
 import { SceneResourceManager } from './SceneResourceManager';
 import {
   buildBridgeProfile3D,
+  buildTunnelUndergroundProfile3D,
   computePolylineLength,
   generateBridgeStructureGeometries,
   generateProfiledRibbon3D,
@@ -39,6 +40,7 @@ import {
   resolveGraphGradeSeparatedPlans,
   trimPolylineByArcLength,
 } from './BridgeAndTunnelBuilder';
+import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
 import {
   COORDINATE_SNAP_QUANTUM,
   MultiPolygonCoords,
@@ -2720,6 +2722,7 @@ export class GeometryBuilder {
     const tunnelPortalItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
     const tunnelMouthItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
     const tunnelTraceItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
+    const tunnelUndergroundRoadItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
 
     // ==========================================================================
     // 6. ROADS, JUNCTION-NODE MESHING, 3D BRIDGE RAMPS & 3D TUNNEL PORTALS
@@ -2729,17 +2732,31 @@ export class GeometryBuilder {
     const atGradeRoadEndpoints: [number, number][] = [];
     const bridgeRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
     const gradeTransitionCoords: [number, number][] = [];
+    let skippedRoadConflicts = 0;
 
     for (const r of data.roads) {
       if (!r.points || r.points.length < 2) continue;
-      const isExplicitCulvert = Boolean(
-        r.osmTags?.culvert === 'yes' ||
-          r.osmTags?.tunnel === 'culvert' ||
-          r.osmTags?.bridge === 'culvert' ||
-          r.osmTags?.man_made === 'culvert' ||
-          r.osmTags?.bridge === 'low_water_crossing'
-      );
-      if ((r.layer === 0 && !r.isBridge && !r.isTunnel) || isExplicitCulvert) {
+      const placement =
+        r.placementClassification ??
+        classifyInfrastructurePlacement(r.osmTags, {
+          isBridge: r.isBridge,
+          isTunnel: r.isTunnel,
+          layer: r.layer,
+          featureDomain: 'road',
+        });
+      r.placementClassification = placement;
+
+      if (placement.hasConflict) {
+        skippedRoadConflicts++;
+        continue;
+      }
+
+      if (placement.rendersOnSurface) {
+        // Covered passages, open cuttings, culverts, and negative-layer surface ways render on surface
+        if (r.isTunnel || r.isBridge) {
+          r.isTunnel = false;
+          r.isBridge = false;
+        }
         rawAtGradeRoads.push(r);
         if (infrastructureRenderOptions.roads !== 'graph' && infrastructureRenderOptions.roads !== 'graph-surface') {
           for (const pt of r.points) {
@@ -2751,7 +2768,7 @@ export class GeometryBuilder {
         const p0 = r.points[0];
         const pn = r.points[r.points.length - 1];
         gradeTransitionCoords.push(p0, pn);
-        if (!r.isTunnel && (r.isBridge || r.layer > 0)) {
+        if (placement.isElevatedBridge) {
           bridgeRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
         }
       }
@@ -3780,11 +3797,17 @@ export class GeometryBuilder {
             (edge) => {
               const roadEdge = infrastructureRenderPreview.descriptors!.roadEdgesById.get(edge.id);
               const roadClass = roadEdge?.roadClass ?? 'residential';
+              const isBridge = edge.placementClassification
+                ? edge.placementClassification.isElevatedBridge
+                : edge.isBridge;
+              const isTunnel = edge.placementClassification
+                ? edge.placementClassification.isSubterraneanTunnel
+                : edge.isTunnel;
               return getRoadElevation(
                 roadClass,
                 edge.layer,
-                edge.isBridge,
-                edge.isTunnel,
+                isBridge,
+                isTunnel,
                 edge.sourceFeatureIds[0] || edge.id
               );
             }
@@ -3792,7 +3815,13 @@ export class GeometryBuilder {
         : null;
     const roadGradeTransitionDiagnostics: GradeTransitionRenderDiagnostics =
       roadGradeSeparatedPlans
-        ? { ...roadGradeSeparatedPlans.diagnostics }
+        ? {
+            ...roadGradeSeparatedPlans.diagnostics,
+            tunnelPortalsEmittedCount: 0,
+            undergroundRoadGeometryCount: 0,
+            undergroundRailwayGeometryCount: 0,
+            conflictingPlacementSkippedCount: 0,
+          }
         : {
             mode: 'legacy',
             confirmedTransitionsConsumed: 0,
@@ -3803,11 +3832,20 @@ export class GeometryBuilder {
             legacyFallbacksCount: gradeSeparatedRoads.length,
             correctedPortalDiscontinuitiesCount: 0,
             bridgeAndTunnelBuildTimeMs: 0,
+            tunnelPortalsEmittedCount: 0,
+            undergroundRoadGeometryCount: 0,
+            undergroundRailwayGeometryCount: 0,
+            conflictingPlacementSkippedCount: skippedRoadConflicts,
           };
 
     if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
       const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
       for (const edge of infrastructureRenderPreview.descriptors.roadEdges) {
+        if (edge.placementClassification?.hasConflict) {
+          roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount =
+            (roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount ?? 0) + 1;
+          continue;
+        }
         if (edge.isAtGradeBuildable || edge.isCulvert) continue;
         try {
           const plan = roadGradeSeparatedPlans.plansByEdgeId.get(edge.id);
@@ -3840,7 +3878,12 @@ export class GeometryBuilder {
             }
           };
 
-          if (edge.isTunnel || edge.layer < 0) {
+          const isSubterraneanTunnel = edge.placementClassification
+            ? edge.placementClassification.isSubterraneanTunnel
+            : edge.isTunnel;
+
+          if (isSubterraneanTunnel) {
+            const targetTunnelElev = getRoadElevation(edge.roadClass, edge.layer, false, true);
             const tunnelInfo: InspectableFeatureInfo = {
               id: edge.id,
               sourceFeatureId: sids[0],
@@ -3851,34 +3894,42 @@ export class GeometryBuilder {
               primaryTag: `highway=${edge.roadClass} + tunnel=yes`,
               subtype: edge.roadClass,
               width: Number(width.toFixed(1)),
-              elevation: getRoadElevation(edge.roadClass, edge.layer, false, true),
+              elevation: targetTunnelElev,
               layer: edge.layer,
               isBridge: false,
               isTunnel: true,
+              placementClassification: edge.placementClassification,
               osmTags: sanitizeOsmTags(rawTags),
             };
 
-            const tunnelOptions = plan
-              ? {
-                  emitStartPortal:
-                    plan.startClassification !== 'confirmed_elevated_continuation' &&
-                    plan.startClassification !== 'boundary_clipped_continuation',
-                  emitEndPortal:
-                    plan.endClassification !== 'confirmed_elevated_continuation' &&
-                    plan.endClassification !== 'boundary_clipped_continuation',
-                }
-              : undefined;
+            const emitStartPortal = plan
+              ? plan.startClassification === 'confirmed_transition' ||
+                plan.startClassification === 'intentionally_standalone'
+              : true;
+            const emitEndPortal = plan
+              ? plan.endClassification === 'confirmed_transition' ||
+                plan.endClassification === 'intentionally_standalone'
+              : true;
 
             const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
               generateTunnelPortalAndTraceGeometries(
                 pts,
                 width,
                 isNonVehicularRoadClass(edge.roadClass),
-                tunnelOptions
+                {
+                  emitStartPortal,
+                  emitEndPortal,
+                  maxheightMeters: edge.placementClassification?.supportingEvidence.maxheightMeters,
+                  surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+                }
               );
             if (portalStructureGeo) {
               resourceManager.registerGeometry(portalStructureGeo);
               tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
+              roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount =
+                (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) +
+                (emitStartPortal ? 1 : 0) +
+                (emitEndPortal ? 1 : 0);
             }
             if (portalMouthGeo) {
               resourceManager.registerGeometry(portalMouthGeo);
@@ -3887,6 +3938,28 @@ export class GeometryBuilder {
             if (undergroundTraceGeo) {
               resourceManager.registerGeometry(undergroundTraceGeo);
               tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            }
+
+            const canGenerateUnderground = edge.placementClassification
+              ? edge.placementClassification.canGenerateUndergroundGeometry
+              : true;
+            if (canGenerateUnderground) {
+              const undergroundProf = buildTunnelUndergroundProfile3D({
+                points: pts,
+                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+                targetTunnelElevation: targetTunnelElev,
+                emitStartPortal,
+                emitEndPortal,
+              });
+              if (undergroundProf.profile.length >= 2) {
+                const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
+                if (ugRoadGeo) {
+                  resourceManager.registerGeometry(ugRoadGeo);
+                  tunnelUndergroundRoadItems.push({ geom: ugRoadGeo, info: tunnelInfo });
+                  roadGradeTransitionDiagnostics.undergroundRoadGeometryCount =
+                    (roadGradeTransitionDiagnostics.undergroundRoadGeometryCount ?? 0) + 1;
+                }
+              }
             }
 
             markEdgeRendered();
@@ -4021,7 +4094,12 @@ export class GeometryBuilder {
                 ? [road.sourceFeatureId]
                 : [road.id];
 
-          if (road.isTunnel || road.layer < 0) {
+          const isSubterraneanTunnel = road.placementClassification
+            ? road.placementClassification.isSubterraneanTunnel
+            : road.isTunnel;
+
+          if (isSubterraneanTunnel) {
+            const targetTunnelElev = getRoadElevation(road.roadClass, road.layer, false, true);
             const tunnelInfo: InspectableFeatureInfo = {
               id: road.id,
               sourceFeatureId: sids[0],
@@ -4032,10 +4110,11 @@ export class GeometryBuilder {
               primaryTag: road.primaryTag || `highway=${road.roadClass} + tunnel=yes`,
               subtype: road.roadClass,
               width: Number(width.toFixed(1)),
-              elevation: getRoadElevation(road.roadClass, road.layer, false, true),
+              elevation: targetTunnelElev,
               layer: road.layer,
               isBridge: false,
               isTunnel: true,
+              placementClassification: road.placementClassification,
               osmTags: sanitizeOsmTags(road.osmTags),
             };
 
@@ -4043,11 +4122,17 @@ export class GeometryBuilder {
               generateTunnelPortalAndTraceGeometries(
                 road.points,
                 width,
-                isNonVehicularRoadClass(road.roadClass)
+                isNonVehicularRoadClass(road.roadClass),
+                {
+                  maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
+                  surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+                }
               );
             if (portalStructureGeo) {
               resourceManager.registerGeometry(portalStructureGeo);
               tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
+              roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount =
+                (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) + 2;
             }
             if (portalMouthGeo) {
               resourceManager.registerGeometry(portalMouthGeo);
@@ -4056,6 +4141,28 @@ export class GeometryBuilder {
             if (undergroundTraceGeo) {
               resourceManager.registerGeometry(undergroundTraceGeo);
               tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            }
+
+            const canGenerateUnderground = road.placementClassification
+              ? road.placementClassification.canGenerateUndergroundGeometry
+              : true;
+            if (canGenerateUnderground) {
+              const undergroundProf = buildTunnelUndergroundProfile3D({
+                points: road.points,
+                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+                targetTunnelElevation: targetTunnelElev,
+                emitStartPortal: true,
+                emitEndPortal: true,
+              });
+              if (undergroundProf.profile.length >= 2) {
+                const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
+                if (ugRoadGeo) {
+                  resourceManager.registerGeometry(ugRoadGeo);
+                  tunnelUndergroundRoadItems.push({ geom: ugRoadGeo, info: tunnelInfo });
+                  roadGradeTransitionDiagnostics.undergroundRoadGeometryCount =
+                    (roadGradeTransitionDiagnostics.undergroundRoadGeometryCount ?? 0) + 1;
+                }
+              }
             }
 
             for (const sid of sids) renderedSourceIds.add(sid);
@@ -4235,12 +4342,13 @@ export class GeometryBuilder {
       }
     });
 
-    // Instantiate 3D Bridge Substructure, Side Parapets, Support Piers, and 3D Tunnel Portals / Traces
+    // Instantiate 3D Bridge Substructure, Side Parapets, Support Piers, and 3D Tunnel Portals / Traces / Underground Roads
     let bridgeStructureMat: THREE.MeshStandardMaterial | undefined;
     let bridgeParapetMat: THREE.MeshStandardMaterial | undefined;
     let tunnelPortalMat: THREE.MeshStandardMaterial | undefined;
     let tunnelMouthMat: THREE.MeshStandardMaterial | undefined;
     let tunnelTraceMat: THREE.MeshStandardMaterial | undefined;
+    let tunnelUndergroundRoadMat: THREE.MeshStandardMaterial | undefined;
 
     if (bridgeSubstructureItems.length > 0 || bridgePierItems.length > 0) {
       bridgeStructureMat = resourceManager.registerMaterial(
@@ -4384,6 +4492,43 @@ export class GeometryBuilder {
         mesh.receiveShadow = false;
         mesh.renderOrder = 15;
         mesh.userData = { faceRanges };
+        roadsGroup.add(mesh);
+        drawCalls++;
+        totalVertices += merged.attributes.position.count;
+        totalTriangles += getTriangleCount(merged);
+      }
+    }
+
+    if (tunnelUndergroundRoadItems.length > 0) {
+      const { merged, faceRanges } = mergeWithFaceRanges(
+        tunnelUndergroundRoadItems,
+        resourceManager
+      );
+      if (merged) {
+        resourceManager.registerGeometry(merged);
+        tunnelUndergroundRoadMat = resourceManager.registerMaterial(
+          new THREE.MeshStandardMaterial({
+            color:
+              theme.id === 'daylight'
+                ? '#475569'
+                : theme.id === 'blueprint'
+                  ? '#0077b6'
+                  : '#334155',
+            roughness: 0.85,
+            metalness: 0.1,
+            side: THREE.DoubleSide,
+            ...DEPTH_OFFSET_CONFIG.roads,
+          })
+        );
+        const mesh = new THREE.Mesh(merged, tunnelUndergroundRoadMat);
+        mesh.name = 'Tunnel_Underground_Roads';
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 3;
+        mesh.userData = {
+          faceRanges,
+          isStructural3D: true,
+          isUndergroundTunnelGeometry: true,
+        };
         roadsGroup.add(mesh);
         drawCalls++;
         totalVertices += merged.attributes.position.count;
@@ -5070,7 +5215,8 @@ export class GeometryBuilder {
         bridgePierItems.length +
         tunnelPortalItems.length +
         tunnelMouthItems.length +
-        tunnelTraceItems.length;
+        tunnelTraceItems.length +
+        tunnelUndergroundRoadItems.length;
       roadsByClass.forEach((items) => {
         roadParts += items.length;
       });
@@ -5180,6 +5326,11 @@ export class GeometryBuilder {
       if (tunnelTraceMat) {
         tunnelTraceMat.color.set(
           newTheme.id === 'daylight' ? '#475569' : newTheme.id === 'blueprint' ? '#00b4d8' : '#38bdf8'
+        );
+      }
+      if (tunnelUndergroundRoadMat) {
+        tunnelUndergroundRoadMat.color.set(
+          newTheme.id === 'daylight' ? '#475569' : newTheme.id === 'blueprint' ? '#0077b6' : '#334155'
         );
       }
 

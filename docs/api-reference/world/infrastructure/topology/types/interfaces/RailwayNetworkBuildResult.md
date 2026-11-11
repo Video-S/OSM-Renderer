@@ -6,7 +6,7 @@
 
 # Interface: RailwayNetworkBuildResult
 
-Defined in: world/infrastructure/topology/types.ts:535
+Defined in: world/infrastructure/topology/types.ts:544
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:535
 
 > **diagnostics**: [`RailwayNetworkDiagnostics`](RailwayNetworkDiagnostics.md)
 
-Defined in: world/infrastructure/topology/types.ts:538
+Defined in: world/infrastructure/topology/types.ts:547
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:538
 
 > **railwayFlatCrossings**: readonly [`RailwayFlatCrossingRelation`](RailwayFlatCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:537
+Defined in: world/infrastructure/topology/types.ts:546
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: world/infrastructure/topology/types.ts:537
 
 > **railways**: [`RailwayNetwork`](../type-aliases/RailwayNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:536
+Defined in: world/infrastructure/topology/types.ts:545

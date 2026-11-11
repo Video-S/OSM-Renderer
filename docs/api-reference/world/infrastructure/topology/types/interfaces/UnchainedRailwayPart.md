@@ -6,7 +6,7 @@
 
 # Interface: UnchainedRailwayPart
 
-Defined in: world/infrastructure/topology/types.ts:124
+Defined in: world/infrastructure/topology/types.ts:127
 
 Non-destructive railway way part captured immediately after bounding-box clipping (Stage C).
 
@@ -16,7 +16,7 @@ Non-destructive railway way part captured immediately after bounding-box clippin
 
 > **clippedAtEnd**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:132
+Defined in: world/infrastructure/topology/types.ts:135
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/topology/types.ts:132
 
 > **clippedAtStart**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:131
+Defined in: world/infrastructure/topology/types.ts:134
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/topology/types.ts:131
 
 > `optional` **electrified?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:140
+Defined in: world/infrastructure/topology/types.ts:143
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/topology/types.ts:140
 
 > `optional` **gauge?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:139
+Defined in: world/infrastructure/topology/types.ts:142
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: world/infrastructure/topology/types.ts:139
 
 > **hasExplicitSourceId**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:127
+Defined in: world/infrastructure/topology/types.ts:130
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: world/infrastructure/topology/types.ts:127
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:125
+Defined in: world/infrastructure/topology/types.ts:128
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: world/infrastructure/topology/types.ts:125
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:136
+Defined in: world/infrastructure/topology/types.ts:139
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: world/infrastructure/topology/types.ts:136
 
 > **isSecondaryBranch**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:143
+Defined in: world/infrastructure/topology/types.ts:146
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: world/infrastructure/topology/types.ts:143
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:137
+Defined in: world/infrastructure/topology/types.ts:140
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/infrastructure/topology/types.ts:137
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:135
+Defined in: world/infrastructure/topology/types.ts:138
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: world/infrastructure/topology/types.ts:135
 
 > `optional` **name?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:138
+Defined in: world/infrastructure/topology/types.ts:141
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: world/infrastructure/topology/types.ts:138
 
 > **osmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:144
+Defined in: world/infrastructure/topology/types.ts:147
 
 ***
 
@@ -112,7 +112,17 @@ Defined in: world/infrastructure/topology/types.ts:144
 
 > **partIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:128
+Defined in: world/infrastructure/topology/types.ts:131
+
+***
+
+### placementClassification?
+
+> `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](../../../../../types/MapFeature/interfaces/InfrastructurePlacementClassification.md)
+
+Defined in: world/infrastructure/topology/types.ts:149
+
+Semantic vertical/enclosure placement classification (M2.3-E4-T).
 
 ***
 
@@ -120,7 +130,7 @@ Defined in: world/infrastructure/topology/types.ts:128
 
 > **points**: readonly \[`number`, `number`\][]
 
-Defined in: world/infrastructure/topology/types.ts:129
+Defined in: world/infrastructure/topology/types.ts:132
 
 ***
 
@@ -128,7 +138,7 @@ Defined in: world/infrastructure/topology/types.ts:129
 
 > **railwayType**: [`RailwayType`](../../../../../types/MapFeature/type-aliases/RailwayType.md)
 
-Defined in: world/infrastructure/topology/types.ts:133
+Defined in: world/infrastructure/topology/types.ts:136
 
 ***
 
@@ -136,7 +146,7 @@ Defined in: world/infrastructure/topology/types.ts:133
 
 > **rawOsmNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:130
+Defined in: world/infrastructure/topology/types.ts:133
 
 ***
 
@@ -144,7 +154,7 @@ Defined in: world/infrastructure/topology/types.ts:130
 
 > `optional` **service?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:141
+Defined in: world/infrastructure/topology/types.ts:144
 
 ***
 
@@ -152,7 +162,7 @@ Defined in: world/infrastructure/topology/types.ts:141
 
 > **sourceFeatureId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:126
+Defined in: world/infrastructure/topology/types.ts:129
 
 ***
 
@@ -160,7 +170,7 @@ Defined in: world/infrastructure/topology/types.ts:126
 
 > `optional` **usage?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:142
+Defined in: world/infrastructure/topology/types.ts:145
 
 ***
 
@@ -168,4 +178,4 @@ Defined in: world/infrastructure/topology/types.ts:142
 
 > **width**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:134
+Defined in: world/infrastructure/topology/types.ts:137

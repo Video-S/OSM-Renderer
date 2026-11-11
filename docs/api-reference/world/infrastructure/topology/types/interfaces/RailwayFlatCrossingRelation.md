@@ -6,7 +6,7 @@
 
 # Interface: RailwayFlatCrossingRelation
 
-Defined in: world/infrastructure/topology/types.ts:456
+Defined in: world/infrastructure/topology/types.ts:465
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:456
 
 > **confidence**: `"explicit_railway_crossing_tag"` \| `"shared_osm_node_flat_crossing"`
 
-Defined in: world/infrastructure/topology/types.ts:465
+Defined in: world/infrastructure/topology/types.ts:474
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:465
 
 > **crossingAngleRad**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:464
+Defined in: world/infrastructure/topology/types.ts:473
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:464
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:457
+Defined in: world/infrastructure/topology/types.ts:466
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:457
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:466
+Defined in: world/infrastructure/topology/types.ts:475
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:466
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:458
+Defined in: world/infrastructure/topology/types.ts:467
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:458
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:459
+Defined in: world/infrastructure/topology/types.ts:468
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:459
 
 > **trackAArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:461
+Defined in: world/infrastructure/topology/types.ts:470
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/infrastructure/topology/types.ts:461
 
 > **trackAEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:460
+Defined in: world/infrastructure/topology/types.ts:469
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/infrastructure/topology/types.ts:460
 
 > **trackBArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:463
+Defined in: world/infrastructure/topology/types.ts:472
 
 ***
 
@@ -86,4 +86,4 @@ Defined in: world/infrastructure/topology/types.ts:463
 
 > **trackBEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:462
+Defined in: world/infrastructure/topology/types.ts:471

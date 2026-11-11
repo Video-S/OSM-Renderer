@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_PARK\_LEISURE**: `Set`\<`string`\>
 
-Defined in: world/FeatureCatalogue.ts:128
+Defined in: world/FeatureCatalogue.ts:138

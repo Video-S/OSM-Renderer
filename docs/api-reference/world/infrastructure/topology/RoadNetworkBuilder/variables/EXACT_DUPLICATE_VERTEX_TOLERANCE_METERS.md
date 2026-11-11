@@ -8,4 +8,4 @@
 
 > `const` **EXACT\_DUPLICATE\_VERTEX\_TOLERANCE\_METERS**: `0.001` = `1e-3`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:31
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:33

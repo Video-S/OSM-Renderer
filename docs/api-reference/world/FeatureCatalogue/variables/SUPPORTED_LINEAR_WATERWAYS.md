@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_LINEAR\_WATERWAYS**: `Record`\<`string`, \{ `defaultWidth`: `number`; `label`: `string`; `type`: [`WaterwayType`](../../../types/MapFeature/type-aliases/WaterwayType.md); \}\>
 
-Defined in: world/FeatureCatalogue.ts:73
+Defined in: world/FeatureCatalogue.ts:83

@@ -8,7 +8,7 @@
 
 > **resolveGraphGradeSeparatedPlans**(`descriptors`, `network`, `getTargetDeckElevation`): [`GraphGradeSeparatedResolutionResult`](../interfaces/GraphGradeSeparatedResolutionResult.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:1242
+Defined in: world/BridgeAndTunnelBuilder.ts:1431
 
 Authoritative Stage E4-A graph-driven grade-transition and continuation resolver for road and railway
 bridges and tunnels.

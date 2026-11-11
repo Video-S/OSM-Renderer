@@ -8,7 +8,7 @@
 
 > **createShapeFromRings**(`rings`): `Shape`
 
-Defined in: world/GeometryBuilder.ts:643
+Defined in: world/GeometryBuilder.ts:645
 
 Creates a THREE.Shape from polygon rings (outer ring + holes) in the XZ plane.
 Normalizes outer ring to counter-clockwise (CCW) and hole rings to clockwise (CW)

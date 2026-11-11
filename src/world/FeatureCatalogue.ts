@@ -8,6 +8,15 @@ import {
   BarrierType,
   LandmarkType,
 } from '../types/MapFeature';
+import {
+  classifyInfrastructurePlacement,
+  type InfrastructurePlacementClassification,
+} from './InfrastructurePlacementClassifier';
+
+export {
+  classifyInfrastructurePlacement,
+  type InfrastructurePlacementClassification,
+};
 
 export type ClassifiedCategory =
   | 'building'
@@ -35,6 +44,7 @@ export interface ClassificationResult {
   isBridge: boolean;
   isTunnel: boolean;
   layer: number;
+  placementClassification?: InfrastructurePlacementClassification;
 }
 
 // 1. Explicit Railway & Aerialway Matcher
@@ -279,22 +289,29 @@ export function classifyGeoJsonFeature(
   props: RawGeoJsonProperties,
   geometryType: string
 ): ClassificationResult {
+  const placementClassification = classifyInfrastructurePlacement(props);
+  const res = classifyGeoJsonFeatureInner(props, geometryType, placementClassification);
+  return {
+    ...res,
+    placementClassification,
+  };
+}
+
+function classifyGeoJsonFeatureInner(
+  props: RawGeoJsonProperties,
+  geometryType: string,
+  placementClassification: InfrastructurePlacementClassification
+): ClassificationResult {
   const isPolygon = geometryType === 'Polygon' || geometryType === 'MultiPolygon';
   const isLine = geometryType === 'LineString' || geometryType === 'MultiLineString';
   const isPoint = geometryType === 'Point' || geometryType === 'MultiPoint';
 
-  const layer =
-    typeof props.layer === 'number'
-      ? props.layer
-      : parseInt(String(props.layer || '0'), 10) || 0;
-  const isBridge = Boolean(props.bridge && props.bridge !== 'no');
-  const isTunnel = Boolean(
-    (props.tunnel && props.tunnel !== 'no') ||
-    (props.covered && props.covered !== 'no') ||
-    props.culvert === 'yes' ||
-    props.waterway === 'culvert' ||
-    layer < 0
-  );
+  const layer = placementClassification.layer;
+  const isBridge =
+    Boolean(props.bridge && !['no', 'false', '0'].includes(String(props.bridge).trim().toLowerCase())) &&
+    !placementClassification.hasConflict &&
+    !placementClassification.isCulvert;
+  const isTunnel = placementClassification.isSubterraneanTunnel;
 
   // Skip linear OSM collection relations (e.g. type=waterway, type=route) whose constituent
   // member ways are already present as individual LineString features with accurate per-segment tags.

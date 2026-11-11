@@ -8,7 +8,7 @@
 
 > **normalizeOnewayTag**(`rawOnewayTag?`): [`NormalizedOneWay`](../../types/type-aliases/NormalizedOneWay.md)
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:67
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:69
 
 Normalizes a raw `oneway` tag value into `'forward' | 'reverse' | 'bidirectional' | 'unknown'`
 without fabricating traversal rules for unusual values.

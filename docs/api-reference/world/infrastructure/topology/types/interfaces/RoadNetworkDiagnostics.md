@@ -6,7 +6,7 @@
 
 # Interface: RoadNetworkDiagnostics
 
-Defined in: world/infrastructure/topology/types.ts:373
+Defined in: world/infrastructure/topology/types.ts:382
 
 Diagnostics produced by Stage B road network graph construction.
 
@@ -16,7 +16,7 @@ Diagnostics produced by Stage B road network graph construction.
 
 > **boundaryClippedNodeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:381
+Defined in: world/infrastructure/topology/types.ts:390
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/topology/types.ts:381
 
 > **closedLoopEdgeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:383
+Defined in: world/infrastructure/topology/types.ts:392
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/topology/types.ts:383
 
 > **crossTierNodeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:382
+Defined in: world/infrastructure/topology/types.ts:391
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/topology/types.ts:382
 
 > **exactDeduplicatedCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:375
+Defined in: world/infrastructure/topology/types.ts:384
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: world/infrastructure/topology/types.ts:375
 
 > **inputPartCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:374
+Defined in: world/infrastructure/topology/types.ts:383
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: world/infrastructure/topology/types.ts:374
 
 > **roadEdgeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:377
+Defined in: world/infrastructure/topology/types.ts:386
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: world/infrastructure/topology/types.ts:377
 
 > **roadInteriorSplitCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:379
+Defined in: world/infrastructure/topology/types.ts:388
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: world/infrastructure/topology/types.ts:379
 
 > **roadNodeCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:376
+Defined in: world/infrastructure/topology/types.ts:385
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: world/infrastructure/topology/types.ts:376
 
 > **roadParallelEdgePairCount**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:380
+Defined in: world/infrastructure/topology/types.ts:389
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/infrastructure/topology/types.ts:380
 
 > **roadSimplifiedDegree2Count**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:378
+Defined in: world/infrastructure/topology/types.ts:387
 
 ***
 
@@ -96,4 +96,4 @@ Defined in: world/infrastructure/topology/types.ts:378
 
 > `optional` **unresolvedInfrastructurePoints?**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:384
+Defined in: world/infrastructure/topology/types.ts:393

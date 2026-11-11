@@ -8,4 +8,4 @@
 
 > **LanduseType** = `"residential"` \| `"commercial"` \| `"industrial"` \| `"retail"` \| `"construction"` \| `"brownfield"` \| `"landfill"` \| `"cemetery"` \| `"allotments"` \| `"institutional"` \| `"education"` \| `"healthcare"` \| `"civic"` \| `"religious"` \| `"military"` \| `"farmland"` \| `"farmyard"` \| `"orchard"` \| `"vineyard"` \| `"plant_nursery"` \| `"quarry"` \| `"railway"` \| `"garages"` \| `"parking"` \| `"parking_space"` \| `"apron"` \| `"aerodrome"` \| `"platform_area"` \| `"pedestrian_area"` \| `"power"` \| `"water_works"` \| `"leisure_Select"` \| `"tourism_area"` \| `"landuse"`
 
-Defined in: types/MapFeature.ts:100
+Defined in: types/MapFeature.ts:120

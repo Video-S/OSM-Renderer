@@ -112,13 +112,24 @@ Bridges are constructed via `src/world/BridgeAndTunnelBuilder.ts`:
 
 ---
 
-## 6. Subterranean Tunnels & 3D Portals
+## 6. Subterranean Tunnels, Semantic Placement Classification & 3D Portals (`M2.3-E4-T` / `TKT-014`)
 
-Tunnels descend below grade via `generateTunnelPortalAndTraceGeometries`:
-- **Subterranean Depth**: Floor sits at `TUNNEL_DEPTH = -2.000 m` ($-1.0\text{ m}$ per negative layer).
-- **3D Entrance Portals**: Horseshoe/trapezoidal masonry arch portals placed at the entrance and exit endpoints.
-- **Recessed Dark Approach Ramps**: Sloped transition cutting from ground level into the portal opening.
-- **Surface Traces**: Dashed, translucent surface indicator lines showing underground route continuity.
+Semantic vertical placement and enclosure are classified by `classifyInfrastructurePlacement` (`src/world/InfrastructurePlacementClassifier.ts`) independently of 3D mesh generation:
+- **Semantic Placement Categories (`InfrastructurePlacementKind`)**:
+  - `surface_open`: Ordinary open-air surface ways (`layer = 0`, `tunnel=no`, culverts on roads/railways, `railway=subway` without underground tags, and `layer < 0` ways without physical tunnel/underground tags, where `verticalRelation = 'relative_layer_only'`).
+  - `elevated`: Bridges, viaducts, and positive-layer elevated structures (`bridge=*` or `layer > 0`).
+  - `open_cutting`: Open depressed excavations (`cutting=yes|left|right|both`, `embankment=cutting`), rendered as open surface infrastructure.
+  - `covered_passage`: Covered surface ways (`covered=yes|arcade|colonnade|booth`, `tunnel=building_passage|passage|corridor|avalanche_protector|covered|gallery`), rendered at-grade on the surface rather than subterranean.
+  - `underground_tunnel`: Confirmed subterranean tunnels (`tunnel=yes|railway|underpass|subway` or `location=underground|underwater`).
+  - `unknown_or_conflicting`: Contradictory vertical tags (`bridge=yes` + `tunnel=yes`, `tunnel=yes` + `layer > 0`, `bridge=yes` + `layer < 0`, `tunnel=no` + `location=underground`, or unrecognized `tunnel=*` values), which never generate speculative underground geometry or portals.
+- **Subterranean Depth**: Floor sits at `TUNNEL_DEPTH = -2.000 m` ($-1.0\text{ m}$ per additional negative layer below $-1$).
+- **Scaled 3D Entrance Portals (`generateTunnelPortalAndTraceGeometries`)**:
+  - Portal opening width, arch clearance height, lintel/pillar thickness, coping collar, and splayed wing walls scale with road width, railway type (`rail`, `subway`, `light_rail`, `tram`, vehicular road, footway/cycleway), and `maxheight=*` when tagged.
+  - In graph mode, portals are emitted only at confirmed grade transitions (`confirmed_transition`) or valid unclipped standalone entrances (`intentionally_standalone`), and suppressed at internal multi-segment tunnel continuations (`confirmed_elevated_continuation`), clipped tile boundaries (`boundary_clipped_continuation`), and unresolved endpoints (`unresolved_connection`).
+- **Short Portal Entrance Transitions & Continuous 3D Underground Geometry (`buildTunnelUndergroundProfile3D`)**:
+  - At justified portal entrances, a short threshold transition slopes from surface elevation (`+0.050 m` road / `+0.060 m` railway ballast) inside the portal opening down to subterranean depth (`-2.000 m`), remaining strictly within the mapped tunnel segment.
+  - Continuous 3D underground road ribbons (`Tunnel_Underground_Roads`) and 3D underground railway ballast, sleepers, and twin steel rails (`Tunnel_Underground_Railway_Ballast`, `Tunnel_Underground_Railway_Sleepers`, `Tunnel_Underground_Railway_Rails`) are generated along the subterranean profile while preserving continuous planar surface ground-cover overhead.
+- **Surface Traces**: Dashed, translucent surface indicator lines (`Tunnel_Underground_Trace` / `Railway_Tunnel_Traces`) indicate underground route alignment.
 
 ---
 

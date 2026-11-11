@@ -6,7 +6,7 @@
 
 # Interface: LevelCrossingRelation
 
-Defined in: world/infrastructure/topology/types.ts:469
+Defined in: world/infrastructure/topology/types.ts:478
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:469
 
 > **confidence**: `"explicit_osm_crossing_tag"` \| `"shared_explicit_osm_node"`
 
-Defined in: world/infrastructure/topology/types.ts:481
+Defined in: world/infrastructure/topology/types.ts:490
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:481
 
 > **crossingAngleRad**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:480
+Defined in: world/infrastructure/topology/types.ts:489
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:480
 
 > **crossingKind**: `"road_rail_level_crossing"` \| `"pedestrian_rail_crossing"`
 
-Defined in: world/infrastructure/topology/types.ts:471
+Defined in: world/infrastructure/topology/types.ts:480
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:471
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:470
+Defined in: world/infrastructure/topology/types.ts:479
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:470
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:482
+Defined in: world/infrastructure/topology/types.ts:491
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:482
 
 > **position**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:472
+Defined in: world/infrastructure/topology/types.ts:481
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:472
 
 > **railwayArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:479
+Defined in: world/infrastructure/topology/types.ts:488
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/infrastructure/topology/types.ts:479
 
 > **railwayEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:477
+Defined in: world/infrastructure/topology/types.ts:486
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/infrastructure/topology/types.ts:477
 
 > `optional` **railwayNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:478
+Defined in: world/infrastructure/topology/types.ts:487
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: world/infrastructure/topology/types.ts:478
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:473
+Defined in: world/infrastructure/topology/types.ts:482
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/infrastructure/topology/types.ts:473
 
 > **roadArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:476
+Defined in: world/infrastructure/topology/types.ts:485
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/infrastructure/topology/types.ts:476
 
 > **roadEdgeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:474
+Defined in: world/infrastructure/topology/types.ts:483
 
 ***
 
@@ -110,4 +110,4 @@ Defined in: world/infrastructure/topology/types.ts:474
 
 > `optional` **roadNodeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:475
+Defined in: world/infrastructure/topology/types.ts:484

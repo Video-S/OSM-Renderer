@@ -6,7 +6,7 @@
 
 # Interface: TurnoutTopologySpec
 
-Defined in: world/infrastructure/topology/types.ts:270
+Defined in: world/infrastructure/topology/types.ts:275
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:270
 
 > **candidateEdgeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:277
+Defined in: world/infrastructure/topology/types.ts:282
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:277
 
 > `optional` **divergenceAngleRad?**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:276
+Defined in: world/infrastructure/topology/types.ts:281
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:276
 
 > `optional` **divergingBranchEdgeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:274
+Defined in: world/infrastructure/topology/types.ts:279
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:274
 
 > `optional` **mainBranchEdgeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:273
+Defined in: world/infrastructure/topology/types.ts:278
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:273
 
 > **status**: [`TurnoutClassificationStatus`](../type-aliases/TurnoutClassificationStatus.md)
 
-Defined in: world/infrastructure/topology/types.ts:271
+Defined in: world/infrastructure/topology/types.ts:276
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:271
 
 > `optional` **trunkEdgeId?**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:272
+Defined in: world/infrastructure/topology/types.ts:277
 
 ***
 
@@ -62,4 +62,4 @@ Defined in: world/infrastructure/topology/types.ts:272
 
 > `optional` **turnoutSide?**: `"left"` \| `"right"`
 
-Defined in: world/infrastructure/topology/types.ts:275
+Defined in: world/infrastructure/topology/types.ts:280

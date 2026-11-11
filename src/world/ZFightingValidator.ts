@@ -167,14 +167,17 @@ export function extractUpwardSceneTriangles(scene: BuiltSceneGeometry): Extracte
         mesh.name === 'Railways_Tunnel_Underground_Trace';
 
       const isStructural3D =
+        Boolean(mesh.userData?.isUndergroundTunnelGeometry) ||
         mesh.name === 'Bridge_Substructure' ||
         mesh.name === 'Bridge_Parapets' ||
         mesh.name === 'Bridge_Piers' ||
         mesh.name === 'Tunnel_Portals' ||
+        mesh.name === 'Tunnel_Underground_Roads' ||
         mesh.name === 'Railways_Bridge_Substructure' ||
         mesh.name === 'Railways_Bridge_Parapets' ||
         mesh.name === 'Railways_Bridge_Piers' ||
-        mesh.name === 'Railways_Tunnel_Portals';
+        mesh.name === 'Railways_Tunnel_Portals' ||
+        mesh.name.startsWith('Tunnel_Underground_Railway_');
 
       const isSurfaceFill =
         !isDecal &&

@@ -8,7 +8,7 @@
 
 > **evaluateSampleWinnerAtCameraPose**(`triangles`, `bounds`, `worldX`, `worldZ`, `tiltRadians`, `azimuthRadians`, `viewScaleMeters?`): `object`
 
-Defined in: world/ZFightingValidator.ts:438
+Defined in: world/ZFightingValidator.ts:441
 
 Evaluates which feature/mesh wins at a given 3D world sample point (worldX, worldZ)
 under an OrthographicCamera configured at the specified tilt, azimuth, and view scale.

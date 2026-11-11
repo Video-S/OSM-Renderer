@@ -8,7 +8,7 @@
 
 > **compute2DPolygonArea**(`pts`): `number`
 
-Defined in: world/ZFightingValidator.ts:288
+Defined in: world/ZFightingValidator.ts:291
 
 ## Parameters
 

@@ -1,4 +1,5 @@
 import {
+  InfrastructurePlacementClassification,
   RawGeoJsonProperties,
   RoadClass,
   RailwayType,
@@ -116,6 +117,8 @@ export interface UnchainedRoadPart {
   name?: string;
   /** Original unmodified OSM tags for this specific way. */
   osmTags: RawGeoJsonProperties;
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
 }
 
 /**
@@ -142,6 +145,8 @@ export interface UnchainedRailwayPart {
   usage?: string;
   isSecondaryBranch: boolean;
   osmTags: RawGeoJsonProperties;
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
 }
 
 /**
@@ -341,6 +346,8 @@ export interface RoadEdge extends BaseInfrastructureEdge {
   name?: string;
   surface?: string;
   isCulvert: boolean;
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
 }
 
 export interface RailwayEdge extends BaseInfrastructureEdge {
@@ -353,6 +360,8 @@ export interface RailwayEdge extends BaseInfrastructureEdge {
   usage?: string;
   isSecondaryBranch: boolean;
   name?: string;
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
 }
 
 export interface InfrastructureNetwork<TNode, TEdge> {

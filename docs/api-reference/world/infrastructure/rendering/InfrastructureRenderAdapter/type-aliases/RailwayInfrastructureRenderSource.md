@@ -8,7 +8,7 @@
 
 > **RailwayInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"` \| `"graph"` \| `"graph-switches"` \| `"graph-R+"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:65
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:66
 
 Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E3.
 

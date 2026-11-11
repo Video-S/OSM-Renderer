@@ -8,4 +8,4 @@
 
 > **InfrastructureRenderSource** = [`RoadInfrastructureRenderSource`](RoadInfrastructureRenderSource.md) \| [`RailwayInfrastructureRenderSource`](RailwayInfrastructureRenderSource.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:88
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:89

@@ -8,4 +8,4 @@
 
 > `const` **ROAD\_CLASS\_WIDTHS**: `Record`\<[`RoadClass`](../../../types/MapFeature/type-aliases/RoadClass.md), `number`\>
 
-Defined in: world/FeatureCatalogue.ts:198
+Defined in: world/FeatureCatalogue.ts:208

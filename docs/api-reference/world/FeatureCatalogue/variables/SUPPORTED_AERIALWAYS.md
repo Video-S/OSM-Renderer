@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_AERIALWAYS**: `Record`\<`string`, \{ `defaultWidth`: `number`; `label`: `string`; \}\>
 
-Defined in: world/FeatureCatalogue.ts:57
+Defined in: world/FeatureCatalogue.ts:67

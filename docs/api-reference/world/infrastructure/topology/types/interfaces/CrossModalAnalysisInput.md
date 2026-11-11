@@ -6,7 +6,7 @@
 
 # Interface: CrossModalAnalysisInput
 
-Defined in: world/infrastructure/topology/types.ts:554
+Defined in: world/infrastructure/topology/types.ts:563
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:554
 
 > `optional` **infrastructurePoints?**: readonly [`InfrastructurePointMetadata`](InfrastructurePointMetadata.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:557
+Defined in: world/infrastructure/topology/types.ts:566
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:557
 
 > `optional` **railwayFlatCrossings?**: readonly [`RailwayFlatCrossingRelation`](RailwayFlatCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:558
+Defined in: world/infrastructure/topology/types.ts:567
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:558
 
 > **railways**: [`RailwayNetwork`](../type-aliases/RailwayNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:556
+Defined in: world/infrastructure/topology/types.ts:565
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:556
 
 > `optional` **railwayUnresolvedCrossings?**: readonly [`UnresolvedCrossingCandidate`](UnresolvedCrossingCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:559
+Defined in: world/infrastructure/topology/types.ts:568
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:559
 
 > `optional` **railwayUnresolvedInfrastructurePoints?**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:561
+Defined in: world/infrastructure/topology/types.ts:570
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:561
 
 > **roads**: [`RoadNetwork`](../type-aliases/RoadNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:555
+Defined in: world/infrastructure/topology/types.ts:564
 
 ***
 
@@ -62,4 +62,4 @@ Defined in: world/infrastructure/topology/types.ts:555
 
 > `optional` **roadUnresolvedInfrastructurePoints?**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:560
+Defined in: world/infrastructure/topology/types.ts:569

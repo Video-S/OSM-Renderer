@@ -83,6 +83,14 @@ export interface GradeTransitionRenderDiagnostics {
   legacyFallbacksCount: number;
   correctedPortalDiscontinuitiesCount: number;
   bridgeAndTunnelBuildTimeMs: number;
+  /** Number of individual tunnel portal structures emitted at confirmed/standalone entrances (M2.3-E4-T). */
+  tunnelPortalsEmittedCount?: number;
+  /** Number of subterranean tunnel road features rendered with continuous 3D underground road geometry (M2.3-E4-T). */
+  undergroundRoadGeometryCount?: number;
+  /** Number of subterranean tunnel railway features rendered with continuous 3D underground track geometry (M2.3-E4-T). */
+  undergroundRailwayGeometryCount?: number;
+  /** Number of features skipped from grade-separated/surface rendering due to contradictory vertical/enclosure tags (M2.3-E4-T). */
+  conflictingPlacementSkippedCount?: number;
 }
 
 export interface GraphGradeSeparatedResolutionResult {
@@ -192,6 +200,147 @@ export interface BridgeStructureGenerationOptions {
 export interface TunnelPortalGenerationOptions {
   emitStartPortal?: boolean;
   emitEndPortal?: boolean;
+  /** Optional explicit maxheight in meters (`maxheight=*`) to scale portal vertical clearance (M2.3-E4-T). */
+  maxheightMeters?: number;
+  /** Optional railway type (`'rail'`, `'subway'`, `'light_rail'`, `'tram'`) for railway portal scaling (M2.3-E4-T). */
+  railwayType?: string;
+  /** Surface base elevation at portal entrance (defaults to `ELEVATION_POLICY.ROAD_SURFACE = 0.050`). */
+  surfaceElevation?: number;
+}
+
+export const DEFAULT_TUNNEL_PORTAL_RAMP_MAX_LENGTH_METERS = 10.0;
+export const DEFAULT_TUNNEL_PORTAL_RAMP_MAX_FRACTION = 0.35;
+
+export interface TunnelUndergroundProfileOptions {
+  points: [number, number][];
+  surfaceElevation: number;
+  targetTunnelElevation: number;
+  emitStartPortal: boolean;
+  emitEndPortal: boolean;
+  maxSampleStep?: number;
+}
+
+/**
+ * Constructs a continuous 3D vertical profile `ProfiledPoint3D[]` along a subterranean tunnel alignment (M2.3-E4-T).
+ * - At justified external portal entrances (`emitStartPortal` / `emitEndPortal`), starts at `surfaceElevation`
+ *   and slopes smoothly down through a short local entrance ramp (`min(10.0 m, 35% of span)`) to `targetTunnelElevation`
+ *   (`ELEVATION_POLICY.TUNNEL_DEPTH = -2.0 m` for layer -1), staying strictly inside the mapped tunnel span.
+ * - At internal multi-segment tunnel joints (`confirmed_elevated_continuation`), boundary-clipped ends
+ *   (`boundary_clipped_continuation`), or unresolved ends (`unresolved_connection`), stays continuously at
+ *   `targetTunnelElevation` with zero vertical step.
+ */
+export function buildTunnelUndergroundProfile3D(
+  options: TunnelUndergroundProfileOptions
+): {
+  profile: ProfiledPoint3D[];
+  minElevation: number;
+  maxElevation: number;
+  rampStartLength: number;
+  rampEndLength: number;
+} {
+  const {
+    points,
+    surfaceElevation,
+    targetTunnelElevation,
+    emitStartPortal,
+    emitEndPortal,
+    maxSampleStep = 2.0,
+  } = options;
+
+  const cleanPts: [number, number][] = [];
+  for (const pt of points) {
+    if (
+      cleanPts.length === 0 ||
+      Math.hypot(
+        pt[0] - cleanPts[cleanPts.length - 1][0],
+        pt[1] - cleanPts[cleanPts.length - 1][1]
+      ) > 0.02
+    ) {
+      cleanPts.push([pt[0], pt[1]]);
+    }
+  }
+
+  if (cleanPts.length < 2) {
+    return {
+      profile: [],
+      minElevation: targetTunnelElevation,
+      maxElevation: targetTunnelElevation,
+      rampStartLength: 0,
+      rampEndLength: 0,
+    };
+  }
+
+  const totalLength = computePolylineLength(cleanPts);
+  const nominalRamp = Math.min(
+    DEFAULT_TUNNEL_PORTAL_RAMP_MAX_LENGTH_METERS,
+    totalLength * DEFAULT_TUNNEL_PORTAL_RAMP_MAX_FRACTION
+  );
+
+  let rampStartLength = emitStartPortal ? nominalRamp : 0;
+  let rampEndLength = emitEndPortal ? nominalRamp : 0;
+  const maxCombinedRamp = totalLength * 0.7;
+  if (rampStartLength + rampEndLength > maxCombinedRamp && rampStartLength + rampEndLength > 1e-6) {
+    const scale = maxCombinedRamp / (rampStartLength + rampEndLength);
+    rampStartLength *= scale;
+    rampEndLength *= scale;
+  }
+
+  const smoothstep = (u: number): number => {
+    const c = Math.max(0, Math.min(1, u));
+    return c * c * (3 - 2 * c);
+  };
+
+  const evaluateY = (s: number): number => {
+    if (rampStartLength > 1e-3 && s < rampStartLength) {
+      const t = smoothstep(s / rampStartLength);
+      return surfaceElevation + (targetTunnelElevation - surfaceElevation) * t;
+    }
+    if (rampEndLength > 1e-3 && s > totalLength - rampEndLength) {
+      const rem = Math.max(0, totalLength - s);
+      const t = smoothstep(rem / rampEndLength);
+      return surfaceElevation + (targetTunnelElevation - surfaceElevation) * t;
+    }
+    return targetTunnelElevation;
+  };
+
+  const profile: ProfiledPoint3D[] = [];
+  let accumS = 0;
+  let minElevation = Infinity;
+  let maxElevation = -Infinity;
+
+  const pushSample = (x: number, z: number, s: number) => {
+    const y = evaluateY(s);
+    if (y < minElevation) minElevation = y;
+    if (y > maxElevation) maxElevation = y;
+    profile.push({ x, y, z, arcLength: s });
+  };
+
+  pushSample(cleanPts[0][0], cleanPts[0][1], 0);
+
+  for (let i = 0; i < cleanPts.length - 1; i++) {
+    const p0 = cleanPts[i];
+    const p1 = cleanPts[i + 1];
+    const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+    if (segLen < 1e-5) continue;
+
+    const steps = Math.max(1, Math.ceil(segLen / maxSampleStep));
+    for (let k = 1; k <= steps; k++) {
+      const frac = k / steps;
+      const sx = p0[0] + (p1[0] - p0[0]) * frac;
+      const sz = p0[1] + (p1[1] - p0[1]) * frac;
+      const s = accumS + segLen * frac;
+      pushSample(sx, sz, s);
+    }
+    accumS += segLen;
+  }
+
+  return {
+    profile,
+    minElevation: Number.isFinite(minElevation) ? minElevation : targetTunnelElevation,
+    maxElevation: Number.isFinite(maxElevation) ? maxElevation : targetTunnelElevation,
+    rampStartLength,
+    rampEndLength,
+  };
 }
 
 /**
@@ -1034,13 +1183,38 @@ export function generateTunnelPortalAndTraceGeometries(
     const nx = -inTz;
     const nz = inTx;
 
-    const baseY = ELEVATION_POLICY.ROAD_SURFACE;
-    const portalHeight = isPedestrianOrCycle ? 2.15 : 3.1;
-    const lintelHeight = isPedestrianOrCycle ? 0.52 : 0.72;
-    const pillarWidth = isPedestrianOrCycle ? 0.42 : 0.58;
-    const hoodDepth = isPedestrianOrCycle ? 1.8 : 2.5;
-    const wingLen = isPedestrianOrCycle ? 1.6 : 2.2;
-    const openW = Math.max(width + 0.25, isPedestrianOrCycle ? 2.2 : 3.8);
+    const baseY = options?.surfaceElevation ?? ELEVATION_POLICY.ROAD_SURFACE;
+    const isRailwayPortal = Boolean(options?.railwayType);
+    const customMaxH =
+      typeof options?.maxheightMeters === 'number' &&
+      Number.isFinite(options.maxheightMeters) &&
+      options.maxheightMeters > 1.5
+        ? Math.min(Math.max(options.maxheightMeters, 2.0), 6.5)
+        : undefined;
+
+    const clearanceHeight =
+      customMaxH ??
+      (isRailwayPortal
+        ? options?.railwayType === 'subway'
+          ? 3.2
+          : options?.railwayType === 'tram' || options?.railwayType === 'light_rail'
+            ? 3.05
+            : 3.55
+        : isPedestrianOrCycle
+          ? 1.95
+          : width >= 9.0
+            ? 3.1
+            : 2.55);
+
+    const lintelHeight = isPedestrianOrCycle ? 0.52 : isRailwayPortal ? 0.78 : 0.72;
+    const portalHeight = clearanceHeight + lintelHeight;
+    const pillarWidth = isPedestrianOrCycle ? 0.42 : isRailwayPortal ? 0.64 : 0.58;
+    const hoodDepth = isPedestrianOrCycle ? 1.8 : isRailwayPortal ? 2.8 : 2.5;
+    const wingLen = isPedestrianOrCycle ? 1.6 : isRailwayPortal ? 2.4 : 2.2;
+    const openW = Math.max(
+      width + 0.25,
+      isPedestrianOrCycle ? 2.2 : isRailwayPortal ? 3.6 : 3.8
+    );
     const halfOpen = openW * 0.5;
 
     // 1. Left & Right Portal Retaining Pillars (hooded entrance frame)
@@ -1070,7 +1244,7 @@ export function generateTunnelPortalAndTraceGeometries(
       baseY + portalHeight
     );
 
-    // 2. Overhead Portal Arch / Headwall Lintel Beam
+    // 2. Overhead Portal Arch / Headwall Lintel Beam + Coping Collar
     portalV = appendBox(
       portalPos, portalNorm, portalIdx, portalV,
       hoodCenterX,
@@ -1080,6 +1254,20 @@ export function generateTunnelPortalAndTraceGeometries(
       openW + pillarWidth * 2,
       baseY + portalHeight - lintelHeight,
       baseY + portalHeight
+    );
+
+    const copingDepth = Math.min(0.45, hoodDepth * 0.25);
+    const copingCenterX = px + inTx * (copingDepth * 0.5);
+    const copingCenterZ = pz + inTz * (copingDepth * 0.5);
+    portalV = appendBox(
+      portalPos, portalNorm, portalIdx, portalV,
+      copingCenterX,
+      copingCenterZ,
+      inTx, inTz,
+      copingDepth,
+      openW + pillarWidth * 2.25,
+      baseY + portalHeight,
+      baseY + portalHeight + (isPedestrianOrCycle ? 0.14 : 0.22)
     );
 
     // 3. Approach Retaining Wing Walls flanking the entrance ramp
@@ -1109,20 +1297,21 @@ export function generateTunnelPortalAndTraceGeometries(
       baseY + wingWallH
     );
 
-    // 4. Dark Recessed Tunnel Mouth Mat & Shadow Backwall inside the portal arch
-    const mouthY = ELEVATION_POLICY.ROAD_SURFACE + 0.002;
+    // 4. Dark Recessed Tunnel Mouth Threshold Ramp & Shadow Backwall inside the portal arch
+    const mouthStartY = baseY + 0.002;
+    const mouthEndY = Math.max(ELEVATION_POLICY.GROUND_COVER_SURFACE, baseY - 0.015);
     const mStartX = px - inTx * 0.25;
     const mStartZ = pz - inTz * 0.25;
     const mEndX = px + inTx * (hoodDepth * 0.92);
     const mEndZ = pz + inTz * (hoodDepth * 0.92);
     const mHalfW = halfOpen * 0.96;
 
-    // Horizontal dark ramp threshold mat (CCW from above)
+    // Sloped dark entrance ramp threshold mat (CCW from above)
     mouthPos.push(
-      mStartX + nx * mHalfW, mouthY, mStartZ + nz * mHalfW,
-      mEndX + nx * mHalfW, mouthY, mEndZ + nz * mHalfW,
-      mEndX - nx * mHalfW, mouthY, mEndZ - nz * mHalfW,
-      mStartX - nx * mHalfW, mouthY, mStartZ - nz * mHalfW
+      mStartX + nx * mHalfW, mouthStartY, mStartZ + nz * mHalfW,
+      mEndX + nx * mHalfW, mouthEndY, mEndZ + nz * mHalfW,
+      mEndX - nx * mHalfW, mouthEndY, mEndZ - nz * mHalfW,
+      mStartX - nx * mHalfW, mouthStartY, mStartZ - nz * mHalfW
     );
     for (let k = 0; k < 4; k++) mouthNorm.push(0, 1, 0);
     mouthIdx.push(mouthV, mouthV + 1, mouthV + 2, mouthV, mouthV + 2, mouthV + 3);
@@ -1133,8 +1322,8 @@ export function generateTunnelPortalAndTraceGeometries(
     const curtainZ = pz + inTz * (hoodDepth * 0.72);
     const curtainTop = baseY + portalHeight - lintelHeight;
     mouthPos.push(
-      curtainX - nx * mHalfW, mouthY, curtainZ - nz * mHalfW,
-      curtainX + nx * mHalfW, mouthY, curtainZ + nz * mHalfW,
+      curtainX - nx * mHalfW, mouthEndY, curtainZ - nz * mHalfW,
+      curtainX + nx * mHalfW, mouthEndY, curtainZ + nz * mHalfW,
       curtainX + nx * mHalfW, curtainTop, curtainZ + nz * mHalfW,
       curtainX - nx * mHalfW, curtainTop, curtainZ - nz * mHalfW
     );
@@ -1255,6 +1444,10 @@ export function resolveGraphGradeSeparatedPlans(
     network === 'road' ? descriptors.roadEdges : descriptors.railwayEdges;
 
   const isGroundEdge = (e: AnyEdge): boolean => {
+    if (e.placementClassification?.hasConflict) return false;
+    if (e.placementClassification) {
+      return e.placementClassification.rendersOnSurface;
+    }
     if (network === 'road') {
       return (e as RoadEdgeRenderDescriptor).isAtGradeBuildable;
     }
@@ -1262,12 +1455,20 @@ export function resolveGraphGradeSeparatedPlans(
   };
 
   const isTunnelEdge = (e: AnyEdge): boolean => {
+    if (e.placementClassification?.hasConflict) return false;
     if (isGroundEdge(e)) return false;
-    return Boolean(e.isTunnel || e.layer < 0);
+    if (e.placementClassification) {
+      return e.placementClassification.isSubterraneanTunnel;
+    }
+    return Boolean(e.isTunnel);
   };
 
   const isBridgeEdge = (e: AnyEdge): boolean => {
+    if (e.placementClassification?.hasConflict) return false;
     if (isGroundEdge(e) || isTunnelEdge(e)) return false;
+    if (e.placementClassification) {
+      return e.placementClassification.isElevatedBridge;
+    }
     return Boolean(e.isBridge || e.layer > 0);
   };
 

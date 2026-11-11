@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderValidationReport
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:806
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:814
 
 Contract validation report produced by `validateInfrastructureRenderDescriptors`.
 
@@ -16,7 +16,7 @@ Contract validation report produced by `validateInfrastructureRenderDescriptors`
 
 > **confirmedSwitchCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:813
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:821
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:813
 
 > **errors**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:808
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:816
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:808
 
 > **flatCrossingCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:814
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:822
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:814
 
 > **gradeSeparatedCrossingCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:817
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:825
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:817
 
 > **gradeTransitionCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:816
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:824
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:816
 
 > **isValid**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:807
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:815
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:807
 
 > **levelCrossingCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:815
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:823
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:815
 
 > **railwayEdgeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:811
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:819
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:811
 
 > **railwayNodeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:812
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:820
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:812
 
 > **roadEdgeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:809
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:817
 
 ***
 
@@ -96,4 +96,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:809
 
 > **roadNodeCount**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:810
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:818

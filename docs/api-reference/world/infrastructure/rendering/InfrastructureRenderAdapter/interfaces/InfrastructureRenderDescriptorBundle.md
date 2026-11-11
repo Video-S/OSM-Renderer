@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderDescriptorBundle
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:758
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:766
 
 Complete immutable bundle of render-ready domain descriptors produced from an `InfrastructureGraph`.
 
@@ -16,7 +16,7 @@ Complete immutable bundle of render-ready domain descriptors produced from an `I
 
 > **gradeSeparatedCrossings**: readonly [`GradeSeparatedCrossingRenderDescriptor`](GradeSeparatedCrossingRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:784
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:792
 
 Canonically ordered grade-separated overpass/underpass crossings (for E4).
 
@@ -26,7 +26,7 @@ Canonically ordered grade-separated overpass/underpass crossings (for E4).
 
 > **gradeTransitions**: readonly [`GradeTransitionRenderDescriptor`](GradeTransitionRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:782
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:790
 
 Canonically ordered confirmed same-domain road and railway grade transitions (for E4).
 
@@ -36,7 +36,7 @@ Canonically ordered confirmed same-domain road and railway grade transitions (fo
 
 > **levelCrossings**: readonly [`LevelCrossingRenderDescriptor`](LevelCrossingRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:780
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:788
 
 Canonically ordered confirmed road/rail and pedestrian/rail level crossings (for E4).
 
@@ -46,7 +46,7 @@ Canonically ordered confirmed road/rail and pedestrian/rail level crossings (for
 
 > **options**: [`InfrastructureRenderOptions`](InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:760
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:768
 
 Normalized render source options active when this bundle was prepared.
 
@@ -56,7 +56,7 @@ Normalized render source options active when this bundle was prepared.
 
 > **railwayEdges**: readonly [`RailwayEdgeRenderDescriptor`](RailwayEdgeRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:770
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:778
 
 Canonically ordered railway edge descriptors (for E3).
 
@@ -66,7 +66,7 @@ Canonically ordered railway edge descriptors (for E3).
 
 > **railwayEdgesById**: `ReadonlyMap`\<`string`, [`RailwayEdgeRenderDescriptor`](RailwayEdgeRenderDescriptor.md)\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:774
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:782
 
 Fast lookup map from canonical `RailwayEdge.id` to `RailwayEdgeRenderDescriptor`.
 
@@ -76,7 +76,7 @@ Fast lookup map from canonical `RailwayEdge.id` to `RailwayEdgeRenderDescriptor`
 
 > **railwayFeatureLineage**: [`InfrastructureFeatureLineageSummary`](InfrastructureFeatureLineageSummary.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:798
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:806
 
 Pre-computed railway feature lineage summary (`chainingMap` and `deduplicatedMap`).
 
@@ -86,7 +86,7 @@ Pre-computed railway feature lineage summary (`chainingMap` and `deduplicatedMap
 
 > **railwayFlatCrossings**: readonly [`RailwayFlatCrossingRenderDescriptor`](RailwayFlatCrossingRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:778
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:786
 
 Canonically ordered confirmed flat railway diamond crossings (for E3).
 
@@ -96,7 +96,7 @@ Canonically ordered confirmed flat railway diamond crossings (for E3).
 
 > **railwayNodes**: readonly [`RailwayNodeRenderDescriptor`](RailwayNodeRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:772
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:780
 
 Canonically ordered railway node descriptors (for E3).
 
@@ -106,7 +106,7 @@ Canonically ordered railway node descriptors (for E3).
 
 > **railwayNodesById**: `ReadonlyMap`\<`string`, [`RailwayNodeRenderDescriptor`](RailwayNodeRenderDescriptor.md)\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:776
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:784
 
 Fast lookup map from canonical `RailwayNode.id` to `RailwayNodeRenderDescriptor`.
 
@@ -116,7 +116,7 @@ Fast lookup map from canonical `RailwayNode.id` to `RailwayNodeRenderDescriptor`
 
 > **roadEdges**: readonly [`RoadEdgeRenderDescriptor`](RoadEdgeRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:762
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:770
 
 Canonically ordered road edge descriptors (for E2).
 
@@ -126,7 +126,7 @@ Canonically ordered road edge descriptors (for E2).
 
 > **roadEdgesById**: `ReadonlyMap`\<`string`, [`RoadEdgeRenderDescriptor`](RoadEdgeRenderDescriptor.md)\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:766
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:774
 
 Fast lookup map from canonical `RoadEdge.id` to `RoadEdgeRenderDescriptor`.
 
@@ -136,7 +136,7 @@ Fast lookup map from canonical `RoadEdge.id` to `RoadEdgeRenderDescriptor`.
 
 > **roadFeatureLineage**: [`InfrastructureFeatureLineageSummary`](InfrastructureFeatureLineageSummary.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:796
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:804
 
 Pre-computed road feature lineage summary (`chainingMap` and `deduplicatedMap`).
 
@@ -146,7 +146,7 @@ Pre-computed road feature lineage summary (`chainingMap` and `deduplicatedMap`).
 
 > **roadNodes**: readonly [`RoadNodeRenderDescriptor`](RoadNodeRenderDescriptor.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:764
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:772
 
 Canonically ordered road node descriptors (for E2).
 
@@ -156,7 +156,7 @@ Canonically ordered road node descriptors (for E2).
 
 > **roadNodesById**: `ReadonlyMap`\<`string`, [`RoadNodeRenderDescriptor`](RoadNodeRenderDescriptor.md)\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:768
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:776
 
 Fast lookup map from canonical `RoadNode.id` to `RoadNodeRenderDescriptor`.
 
@@ -166,7 +166,7 @@ Fast lookup map from canonical `RoadNode.id` to `RoadNodeRenderDescriptor`.
 
 > **sourceFeatureToRailwayEdgeIds**: `ReadonlyMap`\<`string`, readonly `string`[]\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:794
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:802
 
 Maps every original OSM railway `sourceFeatureId`, exact-duplicate `deduplicatedFeatureId`,
 and unchained `partId` back to the canonically sorted `RailwayEdgeRenderDescriptor.id`s containing it.
@@ -177,7 +177,7 @@ and unchained `partId` back to the canonically sorted `RailwayEdgeRenderDescript
 
 > **sourceFeatureToRoadEdgeIds**: `ReadonlyMap`\<`string`, readonly `string`[]\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:789
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:797
 
 Maps every original OSM road `sourceFeatureId`, exact-duplicate `deduplicatedFeatureId`,
 and unchained `partId` back to the canonically sorted `RoadEdgeRenderDescriptor.id`s containing it.
@@ -188,6 +188,6 @@ and unchained `partId` back to the canonically sorted `RoadEdgeRenderDescriptor.
 
 > **unresolvedDiagnostics**: [`InfrastructureRenderUnresolvedDiagnostics`](InfrastructureRenderUnresolvedDiagnostics.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:800
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:808
 
 Unresolved candidates and diagnostics kept strictly separate from confirmed descriptors.

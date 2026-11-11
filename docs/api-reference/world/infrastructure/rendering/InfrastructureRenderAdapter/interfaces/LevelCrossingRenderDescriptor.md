@@ -6,7 +6,7 @@
 
 # Interface: LevelCrossingRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:663
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:671
 
 Render-ready descriptor for a confirmed road/rail or pedestrian/rail level crossing (Stage E4 handoff).
 
@@ -16,7 +16,7 @@ Render-ready descriptor for a confirmed road/rail or pedestrian/rail level cross
 
 > **confidence**: `"explicit_osm_crossing_tag"` \| `"shared_explicit_osm_node"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:680
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:688
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:680
 
 > **crossingAngleRad**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:679
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:687
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:679
 
 > **crossingKind**: `"road_rail_level_crossing"` \| `"pedestrian_rail_crossing"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:665
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:673
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:665
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:664
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:672
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:664
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:681
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:689
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:681
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:666
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:674
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:666
 
 > **railwayArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:676
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:684
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:676
 
 > **railwayEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:674
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:682
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:674
 
 > `optional` **railwayNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:675
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:683
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:675
 
 > **railwaySourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:678
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:686
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:678
 
 > **railwayType**: [`RailwayType`](../../../../../types/MapFeature/type-aliases/RailwayType.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:677
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:685
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:677
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:667
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:675
 
 ***
 
@@ -112,7 +112,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:667
 
 > **roadArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:670
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:678
 
 ***
 
@@ -120,7 +120,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:670
 
 > **roadClass**: [`RoadClass`](../../../../../types/MapFeature/type-aliases/RoadClass.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:671
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:679
 
 ***
 
@@ -128,7 +128,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:671
 
 > **roadEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:668
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:676
 
 ***
 
@@ -136,7 +136,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:668
 
 > `optional` **roadNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:669
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:677
 
 ***
 
@@ -144,7 +144,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:669
 
 > **roadSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:673
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:681
 
 ***
 
@@ -152,4 +152,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:673
 
 > **roadTier**: [`RoadTier`](../../../topology/types/type-aliases/RoadTier.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:672
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:680

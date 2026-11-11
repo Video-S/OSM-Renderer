@@ -8,7 +8,7 @@
 
 > **computeCumulativeLengths**(`points`): `number`[]
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:125
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:127
 
 ## Parameters
 

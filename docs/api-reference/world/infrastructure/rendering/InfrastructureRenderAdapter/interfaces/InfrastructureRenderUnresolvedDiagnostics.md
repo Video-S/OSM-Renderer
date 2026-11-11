@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureRenderUnresolvedDiagnostics
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:733
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:741
 
 Unresolved candidates and diagnostic records preserved strictly separate from confirmed render descriptors.
 
@@ -16,7 +16,7 @@ Unresolved candidates and diagnostic records preserved strictly separate from co
 
 > **topologyDiagnostics**: [`TopologyDiagnostics`](../../../topology/types/interfaces/TopologyDiagnostics.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:742
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:750
 
 Cloned aggregate topology diagnostics from `InfrastructureGraph.diagnostics`.
 
@@ -26,7 +26,7 @@ Cloned aggregate topology diagnostics from `InfrastructureGraph.diagnostics`.
 
 > **unresolvedCrossings**: readonly [`UnresolvedCrossingCandidate`](../../../topology/types/interfaces/UnresolvedCrossingCandidate.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:734
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:742
 
 ***
 
@@ -34,7 +34,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:734
 
 > **unresolvedGradeTransitions**: readonly [`UnresolvedGradeTransitionCandidate`](../../../topology/types/interfaces/UnresolvedGradeTransitionCandidate.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:735
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:743
 
 ***
 
@@ -42,7 +42,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:735
 
 > **unresolvedInfrastructurePoints**: readonly [`UnresolvedInfrastructurePointCandidate`](../../../topology/types/interfaces/UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:736
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:744
 
 ***
 
@@ -50,7 +50,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:736
 
 > **unresolvedRailwayJunctionNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:740
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:748
 
 Canonical IDs of `RailwayNode`s holding `'junction'` role without confirmed `'switch'` or `'railway_crossing'` classification.
 
@@ -60,6 +60,6 @@ Canonical IDs of `RailwayNode`s holding `'junction'` role without confirmed `'sw
 
 > **unresolvedRailwaySwitchNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:738
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:746
 
 Canonical IDs of `RailwayNode`s whose turnout classification is `'unresolved_main_vs_diverging'` or `'unresolved_throat'`.

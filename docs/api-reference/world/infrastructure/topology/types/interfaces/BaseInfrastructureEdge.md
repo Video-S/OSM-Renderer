@@ -6,7 +6,7 @@
 
 # Interface: BaseInfrastructureEdge
 
-Defined in: world/infrastructure/topology/types.ts:285
+Defined in: world/infrastructure/topology/types.ts:290
 
 ## Extended by
 
@@ -19,7 +19,7 @@ Defined in: world/infrastructure/topology/types.ts:285
 
 > **clippedAtEnd**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:318
+Defined in: world/infrastructure/topology/types.ts:323
 
 True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box clipping.
 
@@ -29,7 +29,7 @@ True if `points[points.length - 1]` was synthesized by Liang-Barsky bounding-box
 
 > **clippedAtStart**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:316
+Defined in: world/infrastructure/topology/types.ts:321
 
 True if `points[0]` was synthesized by region bounding-box clipping.
 
@@ -39,7 +39,7 @@ True if `points[0]` was synthesized by region bounding-box clipping.
 
 > **endInwardTangent**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:326
+Defined in: world/infrastructure/topology/types.ts:331
 
 Unit tangent [dx, dz] at `points[N-1]` pointing INWARD along the edge (`toNodeId -> points[N-2]`).
 
@@ -49,7 +49,7 @@ Unit tangent [dx, dz] at `points[N-1]` pointing INWARD along the edge (`toNodeId
 
 > **fromNodeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:291
+Defined in: world/infrastructure/topology/types.ts:296
 
 Start topological node ID (`points[0]`).
 
@@ -59,7 +59,7 @@ Start topological node ID (`points[0]`).
 
 > **id**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:287
+Defined in: world/infrastructure/topology/types.ts:292
 
 Deterministic canonical edge ID.
 
@@ -69,7 +69,7 @@ Deterministic canonical edge ID.
 
 > **isBridge**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:310
+Defined in: world/infrastructure/topology/types.ts:315
 
 True if edge is a bridge structure.
 
@@ -79,7 +79,7 @@ True if edge is a bridge structure.
 
 > **isClosedLoop**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:314
+Defined in: world/infrastructure/topology/types.ts:319
 
 True if `fromNodeId === toNodeId`.
 
@@ -89,7 +89,7 @@ True if `fromNodeId === toNodeId`.
 
 > **isTunnel**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:312
+Defined in: world/infrastructure/topology/types.ts:317
 
 True if edge is a tunnel structure.
 
@@ -99,7 +99,7 @@ True if edge is a tunnel structure.
 
 > **layer**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:308
+Defined in: world/infrastructure/topology/types.ts:313
 
 Effective OSM vertical layer.
 
@@ -109,7 +109,7 @@ Effective OSM vertical layer.
 
 > **lengthMeters**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:306
+Defined in: world/infrastructure/topology/types.ts:311
 
 Cumulative Euclidean arc-length in meters.
 
@@ -119,7 +119,7 @@ Cumulative Euclidean arc-length in meters.
 
 > **network**: [`InfrastructureNetworkKind`](../type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/topology/types.ts:289
+Defined in: world/infrastructure/topology/types.ts:294
 
 Network domain ('road' | 'railway').
 
@@ -129,7 +129,7 @@ Network domain ('road' | 'railway').
 
 > **parallelIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:298
+Defined in: world/infrastructure/topology/types.ts:303
 
 Zero-based parallel multi-edge index among all edges sharing the unordered node pair `{fromNodeId, toNodeId}`
 (`0` when unique, `0..k-1` when multiple distinct parallel edges connect the same two nodes).
@@ -140,7 +140,7 @@ Zero-based parallel multi-edge index among all edges sharing the unordered node 
 
 > **points**: readonly \[`number`, `number`\][]
 
-Defined in: world/infrastructure/topology/types.ts:300
+Defined in: world/infrastructure/topology/types.ts:305
 
 Full 2D metric polyline geometry [x, z][] preserving all intermediate curve/shape vertices.
 
@@ -150,7 +150,7 @@ Full 2D metric polyline geometry [x, z][] preserving all intermediate curve/shap
 
 > **provenance**: [`EdgeProvenance`](EdgeProvenance.md)
 
-Defined in: world/infrastructure/topology/types.ts:328
+Defined in: world/infrastructure/topology/types.ts:333
 
 Complete per-segment OSM provenance and arc-length mapping.
 
@@ -160,7 +160,7 @@ Complete per-segment OSM provenance and arc-length mapping.
 
 > **startInwardTangent**: \[`number`, `number`\]
 
-Defined in: world/infrastructure/topology/types.ts:322
+Defined in: world/infrastructure/topology/types.ts:327
 
 Unit tangent [dx, dz] at `points[0]` pointing INWARD along the edge (`fromNodeId -> points[1]`).
 
@@ -170,7 +170,7 @@ Unit tangent [dx, dz] at `points[0]` pointing INWARD along the edge (`fromNodeId
 
 > **toNodeId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:293
+Defined in: world/infrastructure/topology/types.ts:298
 
 End topological node ID (`points[points.length - 1]`).
 
@@ -180,6 +180,6 @@ End topological node ID (`points[points.length - 1]`).
 
 > **vertexRawOsmNodeIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:304
+Defined in: world/infrastructure/topology/types.ts:309
 
 Raw unprefixed OSM node IDs aligned 1:1 with `points` (`undefined` where a vertex had no explicit OSM node ID).

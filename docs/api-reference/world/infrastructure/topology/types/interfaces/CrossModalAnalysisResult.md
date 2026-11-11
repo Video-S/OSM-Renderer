@@ -6,7 +6,7 @@
 
 # Interface: CrossModalAnalysisResult
 
-Defined in: world/infrastructure/topology/types.ts:564
+Defined in: world/infrastructure/topology/types.ts:573
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:564
 
 > **confirmedRailwayLevelCrossingNodeTags**: `ReadonlyMap`\<`string`, [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)\>
 
-Defined in: world/infrastructure/topology/types.ts:572
+Defined in: world/infrastructure/topology/types.ts:581
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:572
 
 > **confirmedRoadLevelCrossingNodeTags**: `ReadonlyMap`\<`string`, [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)\>
 
-Defined in: world/infrastructure/topology/types.ts:571
+Defined in: world/infrastructure/topology/types.ts:580
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:571
 
 > **gradeSeparatedCrossings**: readonly [`GradeSeparatedCrossingRelation`](GradeSeparatedCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:567
+Defined in: world/infrastructure/topology/types.ts:576
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:567
 
 > **gradeTransitions**: readonly [`GradeTransitionRelation`](GradeTransitionRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:566
+Defined in: world/infrastructure/topology/types.ts:575
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:566
 
 > **levelCrossings**: readonly [`LevelCrossingRelation`](LevelCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:565
+Defined in: world/infrastructure/topology/types.ts:574
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:565
 
 > **unresolvedCrossings**: readonly [`UnresolvedCrossingCandidate`](UnresolvedCrossingCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:568
+Defined in: world/infrastructure/topology/types.ts:577
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/infrastructure/topology/types.ts:568
 
 > **unresolvedGradeTransitions**: readonly [`UnresolvedGradeTransitionCandidate`](UnresolvedGradeTransitionCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:569
+Defined in: world/infrastructure/topology/types.ts:578
 
 ***
 
@@ -70,4 +70,4 @@ Defined in: world/infrastructure/topology/types.ts:569
 
 > **unresolvedInfrastructurePoints**: readonly [`UnresolvedInfrastructurePointCandidate`](UnresolvedInfrastructurePointCandidate.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:570
+Defined in: world/infrastructure/topology/types.ts:579

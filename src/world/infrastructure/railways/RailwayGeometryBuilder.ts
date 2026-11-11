@@ -14,13 +14,16 @@ import {
 } from '../../ElevationPolicy';
 import {
   buildBridgeProfile3D,
+  buildTunnelUndergroundProfile3D,
   generateBridgeStructureGeometries,
+  generateProfiledRibbon3D,
   generateTunnelPortalAndTraceGeometries,
   GradeTransitionRenderDiagnostics,
   GraphGradeSeparatedResolutionResult,
   ProfiledPoint3D,
   resolveGraphGradeSeparatedPlans,
 } from '../../BridgeAndTunnelBuilder';
+import { classifyInfrastructurePlacement } from '../../InfrastructurePlacementClassifier';
 import { SceneResourceManager } from '../../SceneResourceManager';
 import {
   buildUvRibbonGeometry3D,
@@ -609,6 +612,9 @@ export function buildRailwayGroupInternal(
   const tunnelPortalItems: ChunkedGeoItem[] = [];
   const tunnelMouthItems: ChunkedGeoItem[] = [];
   const tunnelTraceItems: ChunkedGeoItem[] = [];
+  const tunnelUndergroundBallastItems: ChunkedGeoItem[] = [];
+  const tunnelUndergroundSleeperItems: ChunkedGeoItem[] = [];
+  const tunnelUndergroundRailItems: ChunkedGeoItem[] = [];
 
   const requestedSource: RailwayInfrastructureRenderSource =
     options?.renderSource ?? 'legacy';
@@ -664,6 +670,31 @@ export function buildRailwayGroupInternal(
     sourceFeatures = data.railways || [];
     effectiveSwitchPolicy = 'heuristic';
   }
+
+  let skippedRailwayConflicts = 0;
+  const validatedSourceFeatures: RailwayFeature[] = [];
+  for (const origFeature of sourceFeatures) {
+    const placement =
+      origFeature.placementClassification ??
+      classifyInfrastructurePlacement(origFeature.osmTags, {
+        isBridge: origFeature.isBridge,
+        isTunnel: origFeature.isTunnel,
+        layer: origFeature.layer,
+        featureDomain: 'railway',
+      });
+    if (placement.hasConflict) {
+      skippedRailwayConflicts++;
+      continue;
+    }
+    const f: RailwayFeature = {
+      ...origFeature,
+      placementClassification: placement,
+      isTunnel: placement.isSubterraneanTunnel,
+      isBridge: placement.rendersOnSurface ? false : origFeature.isBridge,
+    };
+    validatedSourceFeatures.push(f);
+  }
+  sourceFeatures = validatedSourceFeatures;
 
   interface GraphConfirmedTurnoutInfo {
     nodeId: string;
@@ -752,6 +783,10 @@ export function buildRailwayGroupInternal(
     legacyFallbacksCount: 0,
     correctedPortalDiscontinuitiesCount: 0,
     bridgeAndTunnelBuildTimeMs: 0,
+    tunnelPortalsEmittedCount: 0,
+    undergroundRoadGeometryCount: 0,
+    undergroundRailwayGeometryCount: 0,
+    conflictingPlacementSkippedCount: skippedRailwayConflicts,
   };
   const railwayEndpointCapPolicy = new Map<string, { capStart: boolean; capEnd: boolean }>();
 
@@ -759,9 +794,20 @@ export function buildRailwayGroupInternal(
     graphGradeSeparatedPlans = resolveGraphGradeSeparatedPlans(
       activeDescriptors,
       'railway',
-      (e) => getRailwayElevations(e.layer, e.isBridge, e.isTunnel).ballast
+      (e) =>
+        getRailwayElevations(
+          e.layer,
+          e.placementClassification ? e.placementClassification.isElevatedBridge : e.isBridge,
+          e.placementClassification ? e.placementClassification.isSubterraneanTunnel : e.isTunnel
+        ).ballast
     );
-    Object.assign(gradeTransitionDiagnostics, graphGradeSeparatedPlans.diagnostics);
+    Object.assign(gradeTransitionDiagnostics, {
+      ...graphGradeSeparatedPlans.diagnostics,
+      tunnelPortalsEmittedCount: 0,
+      undergroundRoadGeometryCount: 0,
+      undergroundRailwayGeometryCount: 0,
+      conflictingPlacementSkippedCount: skippedRailwayConflicts,
+    });
     if (graphFallbackOccurred) {
       gradeTransitionDiagnostics.legacyFallbacksCount++;
     }
@@ -789,7 +835,10 @@ export function buildRailwayGroupInternal(
         f.points = pts;
       }
 
-      if (f.layer === 0 && !f.isBridge && !f.isTunnel) {
+      const isSurfaceTrack = f.placementClassification
+        ? f.placementClassification.rendersOnSurface
+        : f.layer === 0 && !f.isBridge && !f.isTunnel;
+      if (isSurfaceTrack) {
         const edgeDesc = edgeById.get(f.id);
         if (edgeDesc) {
           const startNode = nodeById.get(edgeDesc.fromNodeId);
@@ -836,9 +885,15 @@ export function buildRailwayGroupInternal(
 
   for (const r of activeRailways) {
     if (!r.points || r.points.length < 2) continue;
-    if (!r.isTunnel && r.layer === 0 && !r.isBridge) {
+    const isSubterraneanTunnel = r.placementClassification
+      ? r.placementClassification.isSubterraneanTunnel
+      : r.isTunnel;
+    const isElevatedBridge = r.placementClassification
+      ? r.placementClassification.isElevatedBridge
+      : Boolean(r.isBridge || r.layer > 0);
+    if (!isSubterraneanTunnel && !isElevatedBridge) {
       atGradeRailEndpoints.push(r.points[0], r.points[r.points.length - 1]);
-    } else if (!r.isTunnel && (r.isBridge || r.layer > 0)) {
+    } else if (isElevatedBridge) {
       bridgeRailEndpoints.push(
         { id: r.id, pt: r.points[0] },
         { id: r.id, pt: r.points[r.points.length - 1] }
@@ -847,14 +902,20 @@ export function buildRailwayGroupInternal(
   }
 
   for (const r of activeRailways) {
-    if (!r.points || r.points.length < 2 || r.isTunnel || r.layer < 0) continue;
+    const isSubterraneanTunnel = r.placementClassification
+      ? r.placementClassification.isSubterraneanTunnel
+      : r.isTunnel;
+    if (!r.points || r.points.length < 2 || isSubterraneanTunnel) continue;
     const isTram = r.railwayType === 'tram';
     const gaugeOffsetHalf =
       (isTram
         ? RAILWAY_DIMENSION_SPEC.visualTramCenterToCenterGaugeMeters
         : RAILWAY_DIMENSION_SPEC.visualCenterToCenterGaugeMeters) * 0.5;
-    const isBridge = Boolean(r.isBridge || r.layer > 0);
-    const scope = `${r.layer}|${isBridge}|${isTram ? 'tram' : 'rail'}`;
+    const isBridge = r.placementClassification
+      ? r.placementClassification.isElevatedBridge
+      : Boolean(r.isBridge || r.layer > 0);
+    const scopeLayer = isBridge ? r.layer : 0;
+    const scope = `${scopeLayer}|${isBridge}|${isTram ? 'tram' : 'rail'}`;
 
     let allIdx = allTracksIndexByScope.get(scope);
     if (!allIdx) {
@@ -924,7 +985,13 @@ export function buildRailwayGroupInternal(
           : [r.id];
     const midPt = r.points[Math.floor(r.points.length / 2)];
     const chunkKey = getChunkKey(midPt[0], midPt[1]);
-    const elevs = getRailwayElevations(r.layer, r.isBridge, r.isTunnel);
+    const isSubterraneanTunnel = r.placementClassification
+      ? r.placementClassification.isSubterraneanTunnel
+      : r.isTunnel;
+    const isBridge = r.placementClassification
+      ? r.placementClassification.isElevatedBridge
+      : Boolean(r.isBridge || r.layer > 0);
+    const elevs = getRailwayElevations(r.layer, isBridge, isSubterraneanTunnel);
 
     const railInfo: InspectableFeatureInfo = {
       id: r.id,
@@ -939,36 +1006,46 @@ export function buildRailwayGroupInternal(
       elevation: elevs.ballast,
       layer: r.layer,
       isBridge: r.isBridge,
-      isTunnel: r.isTunnel,
+      isTunnel: isSubterraneanTunnel,
+      placementClassification: r.placementClassification,
       osmTags: (r.osmTags || {}) as Record<string, string | number | boolean>,
     };
 
-    if (r.isTunnel || r.layer < 0) {
+    if (isSubterraneanTunnel) {
       const tTun0 = performance.now();
       const tunnelPlan = graphGradeSeparatedPlans?.plansByEdgeId.get(r.id);
       if (!tunnelPlan && effectiveSource === 'legacy') {
         gradeTransitionDiagnostics.legacyFallbacksCount++;
       }
-      const tunnelOptions = tunnelPlan
-        ? {
-            emitStartPortal:
-              tunnelPlan.startClassification !== 'confirmed_elevated_continuation' &&
-              tunnelPlan.startClassification !== 'boundary_clipped_continuation',
-            emitEndPortal:
-              tunnelPlan.endClassification !== 'confirmed_elevated_continuation' &&
-              tunnelPlan.endClassification !== 'boundary_clipped_continuation',
-          }
-        : undefined;
+      const emitStartPortal = tunnelPlan
+        ? tunnelPlan.startClassification === 'confirmed_transition' ||
+          tunnelPlan.startClassification === 'intentionally_standalone'
+        : true;
+      const emitEndPortal = tunnelPlan
+        ? tunnelPlan.endClassification === 'confirmed_transition' ||
+          tunnelPlan.endClassification === 'intentionally_standalone'
+        : true;
+      const tunnelPts = tunnelPlan ? tunnelPlan.points : r.points;
       const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
         generateTunnelPortalAndTraceGeometries(
-          tunnelPlan ? tunnelPlan.points : r.points,
+          tunnelPts,
           r.width || 4.8,
           false,
-          tunnelOptions
+          {
+            emitStartPortal,
+            emitEndPortal,
+            maxheightMeters: r.placementClassification?.supportingEvidence.maxheightMeters,
+            railwayType: r.railwayType,
+            surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
+          }
         );
       if (portalStructureGeo) {
         resourceManager.registerGeometry(portalStructureGeo);
         tunnelPortalItems.push({ geom: portalStructureGeo, info: railInfo, chunkKey });
+        gradeTransitionDiagnostics.tunnelPortalsEmittedCount =
+          (gradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) +
+          (emitStartPortal ? 1 : 0) +
+          (emitEndPortal ? 1 : 0);
       }
       if (portalMouthGeo) {
         resourceManager.registerGeometry(portalMouthGeo);
@@ -978,6 +1055,82 @@ export function buildRailwayGroupInternal(
         resourceManager.registerGeometry(undergroundTraceGeo);
         tunnelTraceItems.push({ geom: undergroundTraceGeo, info: railInfo, chunkKey });
       }
+
+      const canGenerateUnderground = r.placementClassification
+        ? r.placementClassification.canGenerateUndergroundGeometry
+        : true;
+      if (canGenerateUnderground) {
+        const undergroundProf = buildTunnelUndergroundProfile3D({
+          points: tunnelPts,
+          surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
+          targetTunnelElevation: elevs.ballast,
+          emitStartPortal,
+          emitEndPortal,
+        });
+        if (undergroundProf.profile.length >= 2) {
+          const isTramTun = r.railwayType === 'tram';
+          const tunBallastW = isTramTun
+            ? RAILWAY_DIMENSION_SPEC.tramBallastWidthMeters
+            : RAILWAY_DIMENSION_SPEC.ballastWidthMeters;
+          const tunSleeperW = isTramTun
+            ? RAILWAY_DIMENSION_SPEC.tramSleeperWidthMeters
+            : RAILWAY_DIMENSION_SPEC.sleeperWidthMeters;
+          const tunRailW = isTramTun
+            ? RAILWAY_DIMENSION_SPEC.visualTramRailWidthMeters
+            : RAILWAY_DIMENSION_SPEC.visualRailWidthMeters;
+          const tunGaugeHalf =
+            (isTramTun
+              ? RAILWAY_DIMENSION_SPEC.visualTramCenterToCenterGaugeMeters
+              : RAILWAY_DIMENSION_SPEC.visualCenterToCenterGaugeMeters) * 0.5;
+
+          const ugBallastGeo = generateProfiledRibbon3D(undergroundProf.profile, tunBallastW);
+          if (ugBallastGeo) {
+            resourceManager.registerGeometry(ugBallastGeo);
+            tunnelUndergroundBallastItems.push({ geom: ugBallastGeo, info: railInfo, chunkKey });
+          }
+
+          const ugSleeperProfile = undergroundProf.profile.map((p) => ({
+            x: p.x,
+            y: p.y + RAILWAY_DIMENSION_SPEC.sleeperStepHeightMeters,
+            z: p.z,
+            arcLength: p.arcLength,
+          }));
+          const ugSleeperGeo = buildUvRibbonGeometry3D(ugSleeperProfile, {
+            width: tunSleeperW,
+            startPhaseU: trackPhaseMap.get(r.id) || 0,
+          });
+          if (ugSleeperGeo) {
+            resourceManager.registerGeometry(ugSleeperGeo);
+            tunnelUndergroundSleeperItems.push({ geom: ugSleeperGeo, info: railInfo, chunkKey });
+          }
+
+          const ugRailProfile = undergroundProf.profile.map((p) => ({
+            x: p.x,
+            y:
+              p.y +
+              RAILWAY_DIMENSION_SPEC.sleeperStepHeightMeters +
+              RAILWAY_DIMENSION_SPEC.railStepHeightMeters,
+            z: p.z,
+            arcLength: p.arcLength,
+          }));
+          for (const sideSign of [1, -1] as const) {
+            const ugRailGeo = buildExtrudedRail3DGeometry(
+              ugRailProfile,
+              sideSign * tunGaugeHalf,
+              tunRailW,
+              RAILWAY_DIMENSION_SPEC.candidateB3DRailHeightMeters
+            );
+            if (ugRailGeo) {
+              resourceManager.registerGeometry(ugRailGeo);
+              tunnelUndergroundRailItems.push({ geom: ugRailGeo, info: railInfo, chunkKey });
+            }
+          }
+
+          gradeTransitionDiagnostics.undergroundRailwayGeometryCount =
+            (gradeTransitionDiagnostics.undergroundRailwayGeometryCount ?? 0) + 1;
+        }
+      }
+
       bridgeAndTunnelTimeMs += performance.now() - tTun0;
       renderedRailwaysCount++;
       for (const sid of sids) renderedSourceIds.add(sid);
@@ -1010,8 +1163,8 @@ export function buildRailwayGroupInternal(
       (isTram
         ? RAILWAY_DIMENSION_SPEC.visualTramCenterToCenterGaugeMeters
         : RAILWAY_DIMENSION_SPEC.visualCenterToCenterGaugeMeters) * 0.5;
-    const isBridge = Boolean(r.isBridge || r.layer > 0);
-    const scope = `${r.layer}|${isBridge}|${isTram ? 'tram' : 'rail'}`;
+    const scopeLayer = isBridge ? r.layer : 0;
+    const scope = `${scopeLayer}|${isBridge}|${isTram ? 'tram' : 'rail'}`;
 
     let hostIndex = hostIndexByScope.get(scope);
     if (!hostIndex) {
@@ -1231,7 +1384,9 @@ export function buildRailwayGroupInternal(
     const startPhaseU = trackPhaseMap.get(r.id) || 0;
     const tRib0 = performance.now();
 
-    const isAtGrade = !isBridge && !r.isTunnel && r.layer === 0;
+    const isAtGrade = r.placementClassification
+      ? r.placementClassification.rendersOnSurface
+      : !isBridge && !isSubterraneanTunnel && r.layer === 0;
     const skipRibbonBallast = effectiveBallastStrategy === 'surface-first' && isAtGrade;
 
     if (!skipRibbonBallast) {
@@ -2390,6 +2545,76 @@ export function buildRailwayGroupInternal(
     });
   }
 
+  let tunnelUgBallastMat: THREE.MeshStandardMaterial | null = null;
+  let tunnelUgSleeperMat: THREE.MeshStandardMaterial | null = null;
+  let tunnelUgRailMat: THREE.MeshStandardMaterial | null = null;
+
+  if (tunnelUndergroundBallastItems.length > 0) {
+    tunnelUgBallastMat = resourceManager.registerMaterial(
+      new THREE.MeshStandardMaterial({
+        color: theme.railwayColors.ballast,
+        roughness: 0.92,
+        metalness: 0.08,
+        side: THREE.DoubleSide,
+      })
+    );
+    buildLayerTarget(
+      'Tunnel_Underground_Railway_Ballast',
+      tunnelUndergroundBallastItems,
+      tunnelUgBallastMat,
+      (m) => {
+        m.receiveShadow = true;
+        m.renderOrder = 3;
+        m.userData.isStructural3D = true;
+        m.userData.isUndergroundTunnelGeometry = true;
+      }
+    );
+  }
+
+  if (tunnelUndergroundSleeperItems.length > 0) {
+    tunnelUgSleeperMat = resourceManager.registerMaterial(
+      new THREE.MeshStandardMaterial({
+        color: theme.railwayColors.sleeper || '#64748b',
+        roughness: 0.88,
+        metalness: 0.08,
+        side: THREE.DoubleSide,
+      })
+    );
+    buildLayerTarget(
+      'Tunnel_Underground_Railway_Sleepers',
+      tunnelUndergroundSleeperItems,
+      tunnelUgSleeperMat,
+      (m) => {
+        m.receiveShadow = true;
+        m.renderOrder = 4;
+        m.userData.isStructural3D = true;
+        m.userData.isUndergroundTunnelGeometry = true;
+      }
+    );
+  }
+
+  if (tunnelUndergroundRailItems.length > 0) {
+    tunnelUgRailMat = resourceManager.registerMaterial(
+      new THREE.MeshStandardMaterial({
+        color: theme.railwayColors.rail,
+        roughness: 0.65,
+        metalness: 0.28,
+        side: THREE.DoubleSide,
+      })
+    );
+    buildLayerTarget(
+      'Tunnel_Underground_Railway_Rails',
+      tunnelUndergroundRailItems,
+      tunnelUgRailMat,
+      (m) => {
+        m.receiveShadow = true;
+        m.renderOrder = 5;
+        m.userData.isStructural3D = true;
+        m.userData.isUndergroundTunnelGeometry = true;
+      }
+    );
+  }
+
   const geometryMergeAndChunkTimeMs = performance.now() - tMerge0;
 
   let currentCameraZoom = -1;
@@ -2565,6 +2790,15 @@ export function buildRailwayGroupInternal(
               ? '#00b4d8'
               : '#38bdf8'
         );
+      }
+      if (tunnelUgBallastMat) {
+        tunnelUgBallastMat.color.set(newTheme.railwayColors.ballast);
+      }
+      if (tunnelUgSleeperMat) {
+        tunnelUgSleeperMat.color.set(newTheme.railwayColors.sleeper || '#64748b');
+      }
+      if (tunnelUgRailMat) {
+        tunnelUgRailMat.color.set(newTheme.railwayColors.rail);
       }
     },
     updateCameraZoom,

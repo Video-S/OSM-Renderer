@@ -6,7 +6,7 @@
 
 # Interface: RailwayNetworkBuildOptions
 
-Defined in: world/infrastructure/topology/types.ts:412
+Defined in: world/infrastructure/topology/types.ts:421
 
 Optional configuration for `buildRailwayNetwork` (Stage C/D point ingestion & cross-modal node protection).
 
@@ -16,7 +16,7 @@ Optional configuration for `buildRailwayNetwork` (Stage C/D point ingestion & cr
 
 > `optional` **additionalNodeRolesByOsmId?**: `ReadonlyMap`\<`string`, readonly [`RailwayNodeRole`](../type-aliases/RailwayNodeRole.md)[]\>
 
-Defined in: world/infrastructure/topology/types.ts:420
+Defined in: world/infrastructure/topology/types.ts:429
 
 Additional topological roles to attach to retained railway nodes keyed by `rawOsmNodeId`.
 
@@ -26,7 +26,7 @@ Additional topological roles to attach to retained railway nodes keyed by `rawOs
 
 > `optional` **infrastructurePoints?**: readonly [`InfrastructurePointMetadata`](InfrastructurePointMetadata.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:414
+Defined in: world/infrastructure/topology/types.ts:423
 
 Point-level infrastructure metadata (`railway=switch`, `railway=railway_crossing`, etc.).
 
@@ -36,7 +36,7 @@ Point-level infrastructure metadata (`railway=switch`, `railway=railway_crossing
 
 > `optional` **protectedPartVertices?**: `ReadonlyMap`\<`string`, `ReadonlySet`\<`number`\>\>
 
-Defined in: world/infrastructure/topology/types.ts:418
+Defined in: world/infrastructure/topology/types.ts:427
 
 Specific `(partId, vertexIndex)` pairs that must be split at interior vertices and never contracted at degree 2.
 
@@ -46,6 +46,6 @@ Specific `(partId, vertexIndex)` pairs that must be split at interior vertices a
 
 > `optional` **protectedRawOsmNodeIds?**: `ReadonlySet`\<`string`\>
 
-Defined in: world/infrastructure/topology/types.ts:416
+Defined in: world/infrastructure/topology/types.ts:425
 
 Explicit raw OSM node IDs (`rawOsmNodeId`) that must be preserved as topological nodes and never contracted at degree 2.

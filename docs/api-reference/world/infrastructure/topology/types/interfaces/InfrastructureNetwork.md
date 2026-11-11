@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureNetwork\<TNode, TEdge\>
 
-Defined in: world/infrastructure/topology/types.ts:358
+Defined in: world/infrastructure/topology/types.ts:367
 
 ## Type Parameters
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/topology/types.ts:358
 
 > **edges**: `ReadonlyMap`\<`string`, `TEdge`\>
 
-Defined in: world/infrastructure/topology/types.ts:362
+Defined in: world/infrastructure/topology/types.ts:371
 
 Map from canonical edge ID to edge record.
 
@@ -34,7 +34,7 @@ Map from canonical edge ID to edge record.
 
 > **featureToEdgeIds**: `ReadonlyMap`\<`string`, readonly `string`[]\>
 
-Defined in: world/infrastructure/topology/types.ts:364
+Defined in: world/infrastructure/topology/types.ts:373
 
 Map from original `sourceFeatureId` (or unchained part ID) to the simplified edge ID(s) containing it.
 
@@ -44,6 +44,6 @@ Map from original `sourceFeatureId` (or unchained part ID) to the simplified edg
 
 > **nodes**: `ReadonlyMap`\<`string`, `TNode`\>
 
-Defined in: world/infrastructure/topology/types.ts:360
+Defined in: world/infrastructure/topology/types.ts:369
 
 Map from canonical node ID to node record.

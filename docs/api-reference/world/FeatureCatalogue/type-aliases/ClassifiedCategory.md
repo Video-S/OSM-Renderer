@@ -8,4 +8,4 @@
 
 > **ClassifiedCategory** = `"building"` \| `"road"` \| `"railway"` \| `"water_polygon"` \| `"water_line"` \| `"park"` \| `"landuse"` \| `"barrier"` \| `"landmark"` \| `"unsupported"`
 
-Defined in: world/FeatureCatalogue.ts:12
+Defined in: world/FeatureCatalogue.ts:21

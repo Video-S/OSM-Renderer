@@ -1,8 +1,10 @@
 import {
+  InfrastructurePlacementClassification,
   ProcessedMapData,
   RawGeoJsonProperties,
   RoadClass,
 } from '../../../types/MapFeature';
+import { classifyInfrastructurePlacement } from '../../InfrastructurePlacementClassifier';
 import {
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
   TopologicalNodeIndex,
@@ -182,9 +184,10 @@ function extractInputRoadParts(
           layer: r.layer ?? 0,
           isBridge: Boolean(r.isBridge),
           isTunnel: Boolean(r.isTunnel),
-          isCulvert: false,
+          isCulvert: Boolean(r.placementClassification?.isCulvert),
           name: r.name,
           osmTags: cloneOsmTags(r.osmTags),
+          placementClassification: r.placementClassification,
         };
       });
     }
@@ -207,11 +210,26 @@ function extractInputRoadParts(
       if (p.clippedAtEnd && rawNodes.length > 0) {
         rawNodes[rawNodes.length - 1] = undefined;
       }
+      const clonedTags = cloneOsmTags(p.osmTags);
+      const placementClassification =
+        p.placementClassification ??
+        classifyInfrastructurePlacement(clonedTags, {
+          isBridge: p.isBridge,
+          isTunnel: p.isTunnel,
+          isCulvert: p.isCulvert,
+          layer: p.layer,
+          featureDomain: 'road',
+        });
       return {
         ...p,
         points: pts,
         rawOsmNodeIds: rawNodes,
-        osmTags: cloneOsmTags(p.osmTags),
+        isTunnel: placementClassification.hasConflict
+          ? Boolean(p.isTunnel)
+          : placementClassification.isSubterraneanTunnel,
+        isCulvert: p.isCulvert || placementClassification.isCulvert,
+        osmTags: clonedTags,
+        placementClassification,
       };
     });
 }
@@ -543,6 +561,7 @@ interface DraftRoadEdge {
   name?: string;
   surface?: string;
   isCulvert: boolean;
+  placementClassification?: InfrastructurePlacementClassification;
   segments: EdgeSegmentProvenance[];
 }
 
@@ -666,6 +685,8 @@ function haveCompatibleRoadAttributesAndFlow(
     e1.tier !== e2.tier ||
     Math.round(e1.width * 10) !== Math.round(e2.width * 10) ||
     e1.isCulvert !== e2.isCulvert ||
+    e1.placementClassification?.placement !== e2.placementClassification?.placement ||
+    e1.placementClassification?.hasConflict !== e2.placementClassification?.hasConflict ||
     (e1.name ?? '').trim().toLowerCase() !== (e2.name ?? '').trim().toLowerCase() ||
     e1.lanes !== e2.lanes ||
     (e1.surface ?? '').trim().toLowerCase() !== (e2.surface ?? '').trim().toLowerCase()
@@ -1308,6 +1329,7 @@ export function buildRoadNetwork(
         name: part.name,
         surface,
         isCulvert: part.isCulvert,
+        placementClassification: part.placementClassification,
         segments: [initialSegment],
       });
     }
@@ -1604,6 +1626,7 @@ export function buildRoadNetwork(
         name: d.name,
         surface: d.surface,
         isCulvert: d.isCulvert,
+        placementClassification: d.placementClassification,
       });
     }
   }

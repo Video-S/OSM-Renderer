@@ -8,4 +8,4 @@
 
 > **RoadNetwork** = [`InfrastructureNetwork`](../interfaces/InfrastructureNetwork.md)\<[`RoadNode`](../interfaces/RoadNode.md), [`RoadEdge`](../interfaces/RoadEdge.md)\>
 
-Defined in: world/infrastructure/topology/types.ts:367
+Defined in: world/infrastructure/topology/types.ts:376

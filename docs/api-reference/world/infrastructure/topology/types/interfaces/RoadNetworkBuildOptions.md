@@ -6,7 +6,7 @@
 
 # Interface: RoadNetworkBuildOptions
 
-Defined in: world/infrastructure/topology/types.ts:390
+Defined in: world/infrastructure/topology/types.ts:399
 
 Optional configuration for `buildRoadNetwork` (Stage D cross-modal node protection & highway_crossing ingestion).
 
@@ -16,7 +16,7 @@ Optional configuration for `buildRoadNetwork` (Stage D cross-modal node protecti
 
 > `optional` **additionalNodeRolesByOsmId?**: `ReadonlyMap`\<`string`, readonly [`RoadNodeRole`](../type-aliases/RoadNodeRole.md)[]\>
 
-Defined in: world/infrastructure/topology/types.ts:398
+Defined in: world/infrastructure/topology/types.ts:407
 
 Additional topological roles to attach to retained road nodes keyed by `rawOsmNodeId`.
 
@@ -26,7 +26,7 @@ Additional topological roles to attach to retained road nodes keyed by `rawOsmNo
 
 > `optional` **infrastructurePoints?**: readonly [`InfrastructurePointMetadata`](InfrastructurePointMetadata.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:392
+Defined in: world/infrastructure/topology/types.ts:401
 
 Point-level infrastructure metadata (`highway=crossing`, etc.) to match against road nodes.
 
@@ -36,7 +36,7 @@ Point-level infrastructure metadata (`highway=crossing`, etc.) to match against 
 
 > `optional` **protectedPartVertices?**: `ReadonlyMap`\<`string`, `ReadonlySet`\<`number`\>\>
 
-Defined in: world/infrastructure/topology/types.ts:396
+Defined in: world/infrastructure/topology/types.ts:405
 
 Specific `(partId, vertexIndex)` pairs that must be split at interior vertices and never contracted at degree 2.
 
@@ -46,6 +46,6 @@ Specific `(partId, vertexIndex)` pairs that must be split at interior vertices a
 
 > `optional` **protectedRawOsmNodeIds?**: `ReadonlySet`\<`string`\>
 
-Defined in: world/infrastructure/topology/types.ts:394
+Defined in: world/infrastructure/topology/types.ts:403
 
 Explicit raw OSM node IDs (`rawOsmNodeId`) that must be preserved as topological nodes and never contracted at degree 2.

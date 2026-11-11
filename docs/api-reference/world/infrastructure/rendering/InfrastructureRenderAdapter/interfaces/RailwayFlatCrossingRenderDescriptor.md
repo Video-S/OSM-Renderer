@@ -6,7 +6,7 @@
 
 # Interface: RailwayFlatCrossingRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:643
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:651
 
 Render-ready descriptor for a confirmed rail-over-rail flat diamond crossing (`railway=railway_crossing`, Stage E3 handoff).
 
@@ -19,7 +19,7 @@ with a turnout switch or slip switch.
 
 > **allowsBranchInterchange**: `false`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:656
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:664
 
 Always `false`: flat diamond crossings do not permit branch switching between `trackA` and `trackB`.
 
@@ -29,7 +29,7 @@ Always `false`: flat diamond crossings do not permit branch switching between `t
 
 > **confidence**: `"explicit_railway_crossing_tag"` \| `"shared_osm_node_flat_crossing"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:654
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:662
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:654
 
 > **crossingAngleRad**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:653
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:661
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:653
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:652
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
 
 > `optional` **pointOsmTags?**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:657
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:665
 
 ***
 
@@ -61,7 +61,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:657
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:645
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:653
 
 ***
 
@@ -69,7 +69,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:645
 
 > `optional` **rawOsmNodeId?**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:646
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:654
 
 ***
 
@@ -77,7 +77,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:646
 
 > **trackAArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:648
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:656
 
 ***
 
@@ -85,7 +85,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:648
 
 > **trackAEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:647
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:655
 
 ***
 
@@ -93,7 +93,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:647
 
 > **trackASourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:649
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:657
 
 ***
 
@@ -101,7 +101,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:649
 
 > **trackBArcLengthMeters**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:651
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:659
 
 ***
 
@@ -109,7 +109,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:651
 
 > **trackBEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:650
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:658
 
 ***
 
@@ -117,4 +117,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:650
 
 > **trackBSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:652
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:660

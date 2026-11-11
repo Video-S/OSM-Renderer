@@ -6,7 +6,7 @@
 
 # Interface: EdgeProvenance
 
-Defined in: world/infrastructure/topology/types.ts:204
+Defined in: world/infrastructure/topology/types.ts:209
 
 Complete OSMnx-style lineage for a simplified graph edge.
 
@@ -16,7 +16,7 @@ Complete OSMnx-style lineage for a simplified graph edge.
 
 > **mergedPartIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:208
+Defined in: world/infrastructure/topology/types.ts:213
 
 Ordered list of unchained part IDs along `fromNodeId -> toNodeId`.
 
@@ -26,7 +26,7 @@ Ordered list of unchained part IDs along `fromNodeId -> toNodeId`.
 
 > **primaryPartId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:206
+Defined in: world/infrastructure/topology/types.ts:211
 
 Deterministic primary part ID (`segments[0].partId`).
 
@@ -36,7 +36,7 @@ Deterministic primary part ID (`segments[0].partId`).
 
 > **segments**: readonly [`EdgeSegmentProvenance`](EdgeSegmentProvenance.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:212
+Defined in: world/infrastructure/topology/types.ts:217
 
 Contiguous, non-overlapping segment intervals covering `[0, lengthMeters]` in parent edge traversal order.
 
@@ -46,6 +46,6 @@ Contiguous, non-overlapping segment intervals covering `[0, lengthMeters]` in pa
 
 > **sourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:210
+Defined in: world/infrastructure/topology/types.ts:215
 
 Deduplicated, canonically sorted list of all raw OSM `sourceFeatureId`s (including exact duplicates).

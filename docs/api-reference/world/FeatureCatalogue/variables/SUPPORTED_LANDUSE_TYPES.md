@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_LANDUSE\_TYPES**: `Record`\<`string`, \{ `label`: `string`; `type`: [`LanduseType`](../../../types/MapFeature/type-aliases/LanduseType.md); \}\>
 
-Defined in: world/FeatureCatalogue.ts:172
+Defined in: world/FeatureCatalogue.ts:182

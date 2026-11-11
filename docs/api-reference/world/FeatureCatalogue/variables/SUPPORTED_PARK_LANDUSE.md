@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_PARK\_LANDUSE**: `Set`\<`string`\>
 
-Defined in: world/FeatureCatalogue.ts:158
+Defined in: world/FeatureCatalogue.ts:168

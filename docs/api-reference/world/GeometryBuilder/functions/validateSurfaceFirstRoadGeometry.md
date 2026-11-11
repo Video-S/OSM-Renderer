@@ -8,7 +8,7 @@
 
 > **validateSurfaceFirstRoadGeometry**(`scene`, `data`, `options?`): [`SurfaceFirstRoadValidationReport`](../interfaces/SurfaceFirstRoadValidationReport.md)
 
-Defined in: world/infrastructure/roads/SurfaceFirstRoadValidator.ts:501
+Defined in: world/infrastructure/roads/SurfaceFirstRoadValidator.ts:502
 
 Performs comprehensive automated geometry correctness validation on a built scene (`Task A`):
 - `A1`: Surface coverage, continuity, hole detection, and legitimate ownership accounting

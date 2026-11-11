@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_WATER\_POLYGONS**: `Set`\<`string`\>
 
-Defined in: world/FeatureCatalogue.ts:86
+Defined in: world/FeatureCatalogue.ts:96

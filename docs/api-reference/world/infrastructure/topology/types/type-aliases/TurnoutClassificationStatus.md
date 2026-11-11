@@ -8,4 +8,4 @@
 
 > **TurnoutClassificationStatus** = `"confirmed"` \| `"unresolved_main_vs_diverging"` \| `"unresolved_throat"`
 
-Defined in: world/infrastructure/topology/types.ts:265
+Defined in: world/infrastructure/topology/types.ts:270

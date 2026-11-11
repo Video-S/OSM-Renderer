@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_RAILWAYS**: `Record`\<`string`, \{ `defaultWidth`: `number`; `label`: `string`; `type`: [`RailwayType`](../../../types/MapFeature/type-aliases/RailwayType.md); \}\>
 
-Defined in: world/FeatureCatalogue.ts:41
+Defined in: world/FeatureCatalogue.ts:51

@@ -8,6 +8,6 @@
 
 > **NodeIdOrigin** = `"explicit_osm"` \| `"coordinate_fallback"` \| `"boundary_clip"`
 
-Defined in: world/infrastructure/topology/types.ts:23
+Defined in: world/infrastructure/topology/types.ts:24
 
 Origin of a graph node's identity.

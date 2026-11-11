@@ -8,4 +8,4 @@
 
 > **InfrastructureNetworkKind** = `"road"` \| `"railway"`
 
-Defined in: world/infrastructure/topology/types.ts:7
+Defined in: world/infrastructure/topology/types.ts:8

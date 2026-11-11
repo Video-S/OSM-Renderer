@@ -1,4 +1,5 @@
 import {
+  InfrastructurePlacementClassification,
   ProcessedMapData,
   RailwayFeature,
   RailwayType,
@@ -228,6 +229,7 @@ export function adaptRailwayEdgeDescriptorsToFeatures(
         ...(edge.gauge ? { gauge: edge.gauge } : {}),
         ...(edge.electrified ? { electrified: edge.electrified } : {}),
       },
+      placementClassification: edge.placementClassification,
     };
   });
 }
@@ -454,7 +456,9 @@ export interface RoadEdgeRenderDescriptor {
   isTunnel: boolean;
   /** True if road edge is an at-grade culvert crossing. */
   isCulvert: boolean;
-  /** True if rendered in the at-grade road surface pass (`(layer === 0 && !isBridge && !isTunnel) || isCulvert`). */
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
+  /** True if rendered in the at-grade road surface pass. */
   isAtGradeBuildable: boolean;
   /** True if `fromNodeId === toNodeId`. */
   isClosedLoop: boolean;
@@ -588,6 +592,10 @@ export interface RailwayEdgeRenderDescriptor {
   isBridge: boolean;
   /** True if railway edge is a tunnel structure. */
   isTunnel: boolean;
+  /** Semantic vertical/enclosure placement classification (M2.3-E4-T). */
+  placementClassification?: InfrastructurePlacementClassification;
+  /** True if rendered in the at-grade railway surface pass. */
+  isAtGradeBuildable?: boolean;
   /** True if `fromNodeId === toNodeId`. */
   isClosedLoop: boolean;
   /** True if `points[0]` was synthesized by region bounding-box clipping. */
@@ -1313,7 +1321,10 @@ export function buildInfrastructureRenderDescriptors(
       isBridge: edge.isBridge,
       isTunnel: edge.isTunnel,
       isCulvert: edge.isCulvert,
-      isAtGradeBuildable: (edge.layer === 0 && !edge.isBridge && !edge.isTunnel) || edge.isCulvert,
+      placementClassification: edge.placementClassification,
+      isAtGradeBuildable: edge.placementClassification
+        ? edge.placementClassification.rendersOnSurface
+        : (edge.layer === 0 && !edge.isBridge && !edge.isTunnel) || edge.isCulvert,
       isClosedLoop: edge.isClosedLoop,
       clippedAtStart: edge.clippedAtStart,
       clippedAtEnd: edge.clippedAtEnd,
@@ -1451,6 +1462,10 @@ export function buildInfrastructureRenderDescriptors(
       layer: edge.layer,
       isBridge: edge.isBridge,
       isTunnel: edge.isTunnel,
+      placementClassification: edge.placementClassification,
+      isAtGradeBuildable: edge.placementClassification
+        ? edge.placementClassification.rendersOnSurface
+        : edge.layer === 0 && !edge.isBridge && !edge.isTunnel,
       isClosedLoop: edge.isClosedLoop,
       clippedAtStart: edge.clippedAtStart,
       clippedAtEnd: edge.clippedAtEnd,

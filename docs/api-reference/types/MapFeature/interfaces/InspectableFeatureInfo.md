@@ -6,7 +6,7 @@
 
 # Interface: InspectableFeatureInfo
 
-Defined in: types/MapFeature.ts:223
+Defined in: types/MapFeature.ts:243
 
 Rich metadata attached to every 3D geometry range / mesh / instance for universal hover & click inspection.
 
@@ -16,7 +16,7 @@ Rich metadata attached to every 3D geometry range / mesh / instance for universa
 
 > `optional` **amenity?**: `string`
 
-Defined in: types/MapFeature.ts:242
+Defined in: types/MapFeature.ts:263
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: types/MapFeature.ts:242
 
 > **cartoLabel**: `string`
 
-Defined in: types/MapFeature.ts:230
+Defined in: types/MapFeature.ts:250
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: types/MapFeature.ts:230
 
 > **category**: `string`
 
-Defined in: types/MapFeature.ts:229
+Defined in: types/MapFeature.ts:249
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: types/MapFeature.ts:229
 
 > `optional` **elevation?**: `number`
 
-Defined in: types/MapFeature.ts:237
+Defined in: types/MapFeature.ts:257
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: types/MapFeature.ts:237
 
 > `optional` **height?**: `number`
 
-Defined in: types/MapFeature.ts:233
+Defined in: types/MapFeature.ts:253
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: types/MapFeature.ts:233
 
 > `optional` **heightFormatted?**: `string`
 
-Defined in: types/MapFeature.ts:234
+Defined in: types/MapFeature.ts:254
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: types/MapFeature.ts:234
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:224
+Defined in: types/MapFeature.ts:244
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: types/MapFeature.ts:224
 
 > `optional` **isBridge?**: `boolean`
 
-Defined in: types/MapFeature.ts:239
+Defined in: types/MapFeature.ts:259
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: types/MapFeature.ts:239
 
 > `optional` **isTunnel?**: `boolean`
 
-Defined in: types/MapFeature.ts:240
+Defined in: types/MapFeature.ts:260
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: types/MapFeature.ts:240
 
 > `optional` **layer?**: `number`
 
-Defined in: types/MapFeature.ts:238
+Defined in: types/MapFeature.ts:258
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: types/MapFeature.ts:238
 
 > `optional` **levels?**: `number`
 
-Defined in: types/MapFeature.ts:235
+Defined in: types/MapFeature.ts:255
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: types/MapFeature.ts:235
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:228
+Defined in: types/MapFeature.ts:248
 
 ***
 
@@ -112,7 +112,15 @@ Defined in: types/MapFeature.ts:228
 
 > **osmTags**: `Record`\<`string`, `string` \| `number` \| `boolean`\>
 
-Defined in: types/MapFeature.ts:243
+Defined in: types/MapFeature.ts:264
+
+***
+
+### placementClassification?
+
+> `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](InfrastructurePlacementClassification.md)
+
+Defined in: types/MapFeature.ts:261
 
 ***
 
@@ -120,7 +128,7 @@ Defined in: types/MapFeature.ts:243
 
 > `optional` **portalConnections?**: [`RoadPortalConnectionSpec`](RoadPortalConnectionSpec.md)[]
 
-Defined in: types/MapFeature.ts:227
+Defined in: types/MapFeature.ts:247
 
 ***
 
@@ -128,7 +136,7 @@ Defined in: types/MapFeature.ts:227
 
 > **primaryTag**: `string`
 
-Defined in: types/MapFeature.ts:231
+Defined in: types/MapFeature.ts:251
 
 ***
 
@@ -136,7 +144,7 @@ Defined in: types/MapFeature.ts:231
 
 > **sourceFeatureId**: `string`
 
-Defined in: types/MapFeature.ts:225
+Defined in: types/MapFeature.ts:245
 
 ***
 
@@ -144,7 +152,7 @@ Defined in: types/MapFeature.ts:225
 
 > `optional` **sourceFeatureIds?**: `string`[]
 
-Defined in: types/MapFeature.ts:226
+Defined in: types/MapFeature.ts:246
 
 ***
 
@@ -152,7 +160,7 @@ Defined in: types/MapFeature.ts:226
 
 > **subtype**: `string`
 
-Defined in: types/MapFeature.ts:232
+Defined in: types/MapFeature.ts:252
 
 ***
 
@@ -160,7 +168,7 @@ Defined in: types/MapFeature.ts:232
 
 > `optional` **type?**: `string`
 
-Defined in: types/MapFeature.ts:241
+Defined in: types/MapFeature.ts:262
 
 ***
 
@@ -168,4 +176,4 @@ Defined in: types/MapFeature.ts:241
 
 > `optional` **width?**: `number`
 
-Defined in: types/MapFeature.ts:236
+Defined in: types/MapFeature.ts:256

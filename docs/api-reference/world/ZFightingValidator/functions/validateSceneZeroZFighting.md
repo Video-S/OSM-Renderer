@@ -8,7 +8,7 @@
 
 > **validateSceneZeroZFighting**(`scene`, `bounds`, `samplePoints?`): [`ZFightingValidationReport`](../interfaces/ZFightingValidationReport.md)
 
-Defined in: world/ZFightingValidator.ts:539
+Defined in: world/ZFightingValidator.ts:542
 
 Runs the comprehensive Two-Layer Z-Fighting Validation Engine on a built 3D scene:
 1. Audits resolved surface-fill triangles (`landuseGroup`, `parksGroup`, `waterGroup`) for

@@ -8,4 +8,4 @@
 
 > **RoadTier** = `"vehicular"` \| `"path"`
 
-Defined in: world/infrastructure/topology/types.ts:9
+Defined in: world/infrastructure/topology/types.ts:10

@@ -8,7 +8,7 @@
 
 > **adaptRailwayEdgeDescriptorsToFeatures**(`edges`): [`RailwayFeature`](../../../../../types/MapFeature/interfaces/RailwayFeature.md)[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:198
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:199
 
 Adapts Stage E1/E3 railway edge render descriptors into `RailwayFeature` records
 consumed by Candidate B (`RailwayGeometryBuilder.ts`) in Milestone 2.3 Stage E3-A1.

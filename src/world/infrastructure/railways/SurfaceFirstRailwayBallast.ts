@@ -100,7 +100,10 @@ export function buildAtGradeBallastFootprints(
   const footprints: SurfaceFirstBallastFootprint[] = [];
 
   for (const track of railways) {
-    if (track.layer !== 0 || track.isBridge || track.isTunnel) {
+    const isSurfaceTrack = track.placementClassification
+      ? track.placementClassification.rendersOnSurface
+      : track.layer === 0 && !track.isBridge && !track.isTunnel;
+    if (!isSurfaceTrack) {
       continue;
     }
     const cleanPts: Point[] = [];

@@ -6,7 +6,7 @@
 
 # Interface: EdgeSegmentProvenance
 
-Defined in: world/infrastructure/topology/types.ts:173
+Defined in: world/infrastructure/topology/types.ts:178
 
 Provenance for a single constituent unchained source part inside a simplified graph edge.
 
@@ -16,7 +16,7 @@ Provenance for a single constituent unchained source part inside a simplified gr
 
 > **deduplicatedFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/topology/types.ts:179
+Defined in: world/infrastructure/topology/types.ts:184
 
 Additional duplicate feature IDs merged into this segment during strict 1 mm exact deduplication.
 
@@ -26,7 +26,7 @@ Additional duplicate feature IDs merged into this segment during strict 1 mm exa
 
 > **endArcLength**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:183
+Defined in: world/infrastructure/topology/types.ts:188
 
 End arc-length (meters) along the parent simplified edge in `fromNodeId -> toNodeId` order.
 
@@ -36,7 +36,7 @@ End arc-length (meters) along the parent simplified edge in `fromNodeId -> toNod
 
 > **endVertexIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:187
+Defined in: world/infrastructure/topology/types.ts:192
 
 End vertex index (inclusive) in the parent simplified edge's `points` array (`startVertexIndex < endVertexIndex`).
 
@@ -46,7 +46,7 @@ End vertex index (inclusive) in the parent simplified edge's `points` array (`st
 
 > **osmTags**: [`RawGeoJsonProperties`](../../../../../types/MapFeature/interfaces/RawGeoJsonProperties.md)
 
-Defined in: world/infrastructure/topology/types.ts:198
+Defined in: world/infrastructure/topology/types.ts:203
 
 Original unmodified OSM tags for this constituent way segment.
 
@@ -56,7 +56,7 @@ Original unmodified OSM tags for this constituent way segment.
 
 > **partId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:175
+Defined in: world/infrastructure/topology/types.ts:180
 
 Unchained part ID (e.g. "way/100-0").
 
@@ -66,7 +66,7 @@ Unchained part ID (e.g. "way/100-0").
 
 > **reversedRelativeToSource**: `boolean`
 
-Defined in: world/infrastructure/topology/types.ts:196
+Defined in: world/infrastructure/topology/types.ts:201
 
 True if this constituent part's traversal along the parent edge (`fromNodeId -> toNodeId`)
 runs opposite to its original digitized point order (`sourceStartVertexIndex > sourceEndVertexIndex`).
@@ -77,7 +77,7 @@ runs opposite to its original digitized point order (`sourceStartVertexIndex > s
 
 > **sourceEndVertexIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:191
+Defined in: world/infrastructure/topology/types.ts:196
 
 Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailwayPart` at `endVertexIndex`.
 
@@ -87,7 +87,7 @@ Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailw
 
 > **sourceFeatureId**: `string`
 
-Defined in: world/infrastructure/topology/types.ts:177
+Defined in: world/infrastructure/topology/types.ts:182
 
 Original OSM feature ID (e.g. "way/100").
 
@@ -97,7 +97,7 @@ Original OSM feature ID (e.g. "way/100").
 
 > **sourceStartVertexIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:189
+Defined in: world/infrastructure/topology/types.ts:194
 
 Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailwayPart` at `startVertexIndex`.
 
@@ -107,7 +107,7 @@ Corresponding vertex index in the original `UnchainedRoadPart` / `UnchainedRailw
 
 > **startArcLength**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:181
+Defined in: world/infrastructure/topology/types.ts:186
 
 Start arc-length (meters) along the parent simplified edge in `fromNodeId -> toNodeId` order.
 
@@ -117,6 +117,6 @@ Start arc-length (meters) along the parent simplified edge in `fromNodeId -> toN
 
 > **startVertexIndex**: `number`
 
-Defined in: world/infrastructure/topology/types.ts:185
+Defined in: world/infrastructure/topology/types.ts:190
 
 Start vertex index (inclusive) in the parent simplified edge's `points` array.

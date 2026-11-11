@@ -6,7 +6,7 @@
 
 # Interface: ClassificationResult
 
-Defined in: world/FeatureCatalogue.ts:24
+Defined in: world/FeatureCatalogue.ts:33
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/FeatureCatalogue.ts:24
 
 > `optional` **buildingArchetype?**: `"residential"` \| `"commercial"` \| `"industrial"` \| `"civic"` \| `"religious"` \| `"transit"` \| `"historic"`
 
-Defined in: world/FeatureCatalogue.ts:33
+Defined in: world/FeatureCatalogue.ts:42
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/FeatureCatalogue.ts:33
 
 > **cartoLabel**: `string`
 
-Defined in: world/FeatureCatalogue.ts:27
+Defined in: world/FeatureCatalogue.ts:36
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/FeatureCatalogue.ts:27
 
 > **category**: [`ClassifiedCategory`](../type-aliases/ClassifiedCategory.md)
 
-Defined in: world/FeatureCatalogue.ts:25
+Defined in: world/FeatureCatalogue.ts:34
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/FeatureCatalogue.ts:25
 
 > `optional` **defaultHeight?**: `number`
 
-Defined in: world/FeatureCatalogue.ts:30
+Defined in: world/FeatureCatalogue.ts:39
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/FeatureCatalogue.ts:30
 
 > `optional` **defaultWidth?**: `number`
 
-Defined in: world/FeatureCatalogue.ts:29
+Defined in: world/FeatureCatalogue.ts:38
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/FeatureCatalogue.ts:29
 
 > `optional` **has3DFoliage?**: `boolean`
 
-Defined in: world/FeatureCatalogue.ts:31
+Defined in: world/FeatureCatalogue.ts:40
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/FeatureCatalogue.ts:31
 
 > **isBridge**: `boolean`
 
-Defined in: world/FeatureCatalogue.ts:35
+Defined in: world/FeatureCatalogue.ts:44
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/FeatureCatalogue.ts:35
 
 > `optional` **isRoofOnly?**: `boolean`
 
-Defined in: world/FeatureCatalogue.ts:34
+Defined in: world/FeatureCatalogue.ts:43
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/FeatureCatalogue.ts:34
 
 > **isTunnel**: `boolean`
 
-Defined in: world/FeatureCatalogue.ts:36
+Defined in: world/FeatureCatalogue.ts:45
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: world/FeatureCatalogue.ts:36
 
 > **layer**: `number`
 
-Defined in: world/FeatureCatalogue.ts:37
+Defined in: world/FeatureCatalogue.ts:46
 
 ***
 
@@ -94,7 +94,15 @@ Defined in: world/FeatureCatalogue.ts:37
 
 > `optional` **leafType?**: `"broadleaved"` \| `"needleleaved"` \| `"mixed"` \| `"leafless"`
 
-Defined in: world/FeatureCatalogue.ts:32
+Defined in: world/FeatureCatalogue.ts:41
+
+***
+
+### placementClassification?
+
+> `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](../../../types/MapFeature/interfaces/InfrastructurePlacementClassification.md)
+
+Defined in: world/FeatureCatalogue.ts:47
 
 ***
 
@@ -102,7 +110,7 @@ Defined in: world/FeatureCatalogue.ts:32
 
 > **primaryTag**: `string`
 
-Defined in: world/FeatureCatalogue.ts:26
+Defined in: world/FeatureCatalogue.ts:35
 
 ***
 
@@ -110,4 +118,4 @@ Defined in: world/FeatureCatalogue.ts:26
 
 > `optional` **subtype?**: `string`
 
-Defined in: world/FeatureCatalogue.ts:28
+Defined in: world/FeatureCatalogue.ts:37

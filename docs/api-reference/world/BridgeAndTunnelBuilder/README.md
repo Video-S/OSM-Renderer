@@ -15,6 +15,7 @@
 - [ProfiledPoint3D](interfaces/ProfiledPoint3D.md)
 - [ResolvedGradeSeparatedEdgePlan](interfaces/ResolvedGradeSeparatedEdgePlan.md)
 - [TunnelPortalGenerationOptions](interfaces/TunnelPortalGenerationOptions.md)
+- [TunnelUndergroundProfileOptions](interfaces/TunnelUndergroundProfileOptions.md)
 
 ## Type Aliases
 
@@ -25,12 +26,15 @@
 
 - [DEFAULT\_BRIDGE\_RAMP\_MAX\_FRACTION](variables/DEFAULT_BRIDGE_RAMP_MAX_FRACTION.md)
 - [DEFAULT\_BRIDGE\_RAMP\_MAX\_LENGTH\_METERS](variables/DEFAULT_BRIDGE_RAMP_MAX_LENGTH_METERS.md)
+- [DEFAULT\_TUNNEL\_PORTAL\_RAMP\_MAX\_FRACTION](variables/DEFAULT_TUNNEL_PORTAL_RAMP_MAX_FRACTION.md)
+- [DEFAULT\_TUNNEL\_PORTAL\_RAMP\_MAX\_LENGTH\_METERS](variables/DEFAULT_TUNNEL_PORTAL_RAMP_MAX_LENGTH_METERS.md)
 - [MIN\_CENTRAL\_DECK\_FRACTION](variables/MIN_CENTRAL_DECK_FRACTION.md)
 - [MIN\_RAMPED\_BRIDGE\_SPAN\_METERS](variables/MIN_RAMPED_BRIDGE_SPAN_METERS.md)
 
 ## Functions
 
 - [buildBridgeProfile3D](functions/buildBridgeProfile3D.md)
+- [buildTunnelUndergroundProfile3D](functions/buildTunnelUndergroundProfile3D.md)
 - [computePolylineLength](functions/computePolylineLength.md)
 - [generateBridgeStructureGeometries](functions/generateBridgeStructureGeometries.md)
 - [generateProfiledRibbon3D](functions/generateProfiledRibbon3D.md)

@@ -8,7 +8,7 @@
 
 > **validateRoadNetworkGeometry**(`scene`, `preExtractedTriangles?`): [`RoadNetworkValidationReport`](../interfaces/RoadNetworkValidationReport.md)
 
-Defined in: world/ZFightingValidator.ts:860
+Defined in: world/ZFightingValidator.ts:863
 
 Validates all at-grade road ribbons and junction polygons in `scene.roadsGroup` at `Y ≈ 0.050 m`
 for:

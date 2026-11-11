@@ -8,7 +8,7 @@
 
 > **RoadInfrastructureRenderSource** = `"legacy"` \| `"graph-preview"` \| `"graph"` \| `"graph-surface"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:51
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:52
 
 Selects the data source mode for road infrastructure rendering in Milestone 2.3 Stage E2.
 

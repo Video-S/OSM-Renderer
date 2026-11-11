@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureGraph
 
-Defined in: world/infrastructure/topology/types.ts:600
+Defined in: world/infrastructure/topology/types.ts:609
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/infrastructure/topology/types.ts:600
 
 > **diagnostics**: [`TopologyDiagnostics`](TopologyDiagnostics.md)
 
-Defined in: world/infrastructure/topology/types.ts:607
+Defined in: world/infrastructure/topology/types.ts:616
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/infrastructure/topology/types.ts:607
 
 > **gradeSeparatedCrossings**: readonly [`GradeSeparatedCrossingRelation`](GradeSeparatedCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:606
+Defined in: world/infrastructure/topology/types.ts:615
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/infrastructure/topology/types.ts:606
 
 > **gradeTransitions**: readonly [`GradeTransitionRelation`](GradeTransitionRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:603
+Defined in: world/infrastructure/topology/types.ts:612
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/infrastructure/topology/types.ts:603
 
 > **levelCrossings**: readonly [`LevelCrossingRelation`](LevelCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:605
+Defined in: world/infrastructure/topology/types.ts:614
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/infrastructure/topology/types.ts:605
 
 > **railwayFlatCrossings**: readonly [`RailwayFlatCrossingRelation`](RailwayFlatCrossingRelation.md)[]
 
-Defined in: world/infrastructure/topology/types.ts:604
+Defined in: world/infrastructure/topology/types.ts:613
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/infrastructure/topology/types.ts:604
 
 > **railways**: [`RailwayNetwork`](../type-aliases/RailwayNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:602
+Defined in: world/infrastructure/topology/types.ts:611
 
 ***
 
@@ -62,4 +62,4 @@ Defined in: world/infrastructure/topology/types.ts:602
 
 > **roads**: [`RoadNetwork`](../type-aliases/RoadNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:601
+Defined in: world/infrastructure/topology/types.ts:610

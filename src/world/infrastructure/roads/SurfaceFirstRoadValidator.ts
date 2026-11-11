@@ -239,6 +239,7 @@ const STRUCTURAL_ROAD_MESH_NAMES = new Set<string>([
   'Tunnel_Portals',
   'Tunnel_Entrances',
   'Tunnel_Underground_Trace',
+  'Tunnel_Underground_Roads',
 ]);
 
 /**

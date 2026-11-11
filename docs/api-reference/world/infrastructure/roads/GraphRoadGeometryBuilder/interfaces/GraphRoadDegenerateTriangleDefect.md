@@ -6,7 +6,7 @@
 
 # Interface: GraphRoadDegenerateTriangleDefect
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:143
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:144
 
 Detailed attribution for a zero-area or near-zero-area degenerate triangle detected in a road mesh.
 
@@ -16,7 +16,7 @@ Detailed attribution for a zero-area or near-zero-area degenerate triangle detec
 
 > **area**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:159
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:160
 
 Geometric area of the triangle in square meters (`<= 1e-6 m²`).
 
@@ -26,7 +26,7 @@ Geometric area of the triangle in square meters (`<= 1e-6 m²`).
 
 > **faceIndex**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:147
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:148
 
 Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry.
 
@@ -36,7 +36,7 @@ Zero-based triangle face index (`indexOffset / 3`) within the mesh geometry.
 
 > `optional` **featureId?**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:149
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:150
 
 Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRanges`.
 
@@ -46,7 +46,7 @@ Graph edge, sub-segment, or junction feature ID resolved from `userData.faceRang
 
 > **meshName**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:145
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:146
 
 Name of the Three.js `Mesh` containing the degenerate triangle.
 
@@ -56,7 +56,7 @@ Name of the Three.js `Mesh` containing the degenerate triangle.
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:151
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:152
 
 Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`.
 
@@ -66,6 +66,6 @@ Upstream source feature ID (`way/...`) resolved from `userData.faceRanges`.
 
 > **vertices**: \[\[`number`, `number`, `number`\], \[`number`, `number`, `number`\], \[`number`, `number`, `number`\]\]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:153
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:154
 
 World-space triangle vertex coordinates `[v0, v1, v2]`.

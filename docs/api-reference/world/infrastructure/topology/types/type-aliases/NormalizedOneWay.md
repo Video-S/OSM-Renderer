@@ -8,7 +8,7 @@
 
 > **NormalizedOneWay** = `"forward"` \| `"reverse"` \| `"bidirectional"` \| `"unknown"`
 
-Defined in: world/infrastructure/topology/types.ts:18
+Defined in: world/infrastructure/topology/types.ts:19
 
 Normalized directionality relative to an edge's `fromNodeId -> toNodeId` vertex order.
 - 'forward': one-way traversal permitted in `fromNodeId -> toNodeId` direction (`oneway=yes|1|true`)

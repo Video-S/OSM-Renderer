@@ -1,8 +1,10 @@
 import {
+  InfrastructurePlacementClassification,
   ProcessedMapData,
   RawGeoJsonProperties,
   RailwayType,
 } from '../../../types/MapFeature';
+import { classifyInfrastructurePlacement } from '../../InfrastructurePlacementClassifier';
 import {
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
   TopologicalNodeIndex,
@@ -153,6 +155,7 @@ function extractInputRailwayParts(
           usage,
           isSecondaryBranch: isSecondaryRailwayBranch(service, usage),
           osmTags: tags,
+          placementClassification: rw.placementClassification,
         };
       });
     }
@@ -184,17 +187,29 @@ function extractInputRailwayParts(
         typeof p.isSecondaryBranch === 'boolean'
           ? p.isSecondaryBranch
           : isSecondaryRailwayBranch(service, usage);
+      const placementClassification =
+        p.placementClassification ??
+        classifyInfrastructurePlacement(tags, {
+          isBridge: p.isBridge,
+          isTunnel: p.isTunnel,
+          layer: p.layer,
+          featureDomain: 'railway',
+        });
 
       return {
         ...p,
         points: pts,
         rawOsmNodeIds: rawNodes,
+        isTunnel: placementClassification.hasConflict
+          ? Boolean(p.isTunnel)
+          : placementClassification.isSubterraneanTunnel,
         gauge,
         electrified,
         service,
         usage,
         isSecondaryBranch: isSecondary,
         osmTags: tags,
+        placementClassification,
       };
     });
 }
@@ -363,6 +378,7 @@ interface DraftRailwayEdge {
   usage?: string;
   isSecondaryBranch: boolean;
   name?: string;
+  placementClassification?: InfrastructurePlacementClassification;
   segments: EdgeSegmentProvenance[];
 }
 
@@ -458,6 +474,8 @@ function haveIdenticalRailwayAttributes(e1: DraftRailwayEdge, e2: DraftRailwayEd
     (e1.service ?? '').trim().toLowerCase() === (e2.service ?? '').trim().toLowerCase() &&
     (e1.usage ?? '').trim().toLowerCase() === (e2.usage ?? '').trim().toLowerCase() &&
     e1.isSecondaryBranch === e2.isSecondaryBranch &&
+    e1.placementClassification?.placement === e2.placementClassification?.placement &&
+    e1.placementClassification?.hasConflict === e2.placementClassification?.hasConflict &&
     (e1.name ?? '').trim().toLowerCase() === (e2.name ?? '').trim().toLowerCase()
   );
 }
@@ -1837,6 +1855,7 @@ export function buildRailwayNetwork(
         usage: part.usage,
         isSecondaryBranch: part.isSecondaryBranch,
         name: part.name,
+        placementClassification: part.placementClassification,
         segments: [initialSegment],
       });
     }
@@ -2119,6 +2138,7 @@ export function buildRailwayNetwork(
         usage: d.usage,
         isSecondaryBranch: d.isSecondaryBranch,
         name: d.name,
+        placementClassification: d.placementClassification,
       });
 
       for (const partId of mergedPartIds) {

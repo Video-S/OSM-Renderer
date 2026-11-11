@@ -8,7 +8,7 @@
 
 > **normalizeInfrastructureRenderOptions**(`options?`): [`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:253
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:255
 
 Normalizes partial or undefined `InfrastructureRenderOptions` so `roads` is guaranteed to be
 `'legacy' | 'graph-preview' | 'graph'` and `railways` is guaranteed to be `'legacy' | 'graph-preview'`.

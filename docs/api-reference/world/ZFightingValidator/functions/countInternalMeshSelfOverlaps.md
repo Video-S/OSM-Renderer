@@ -8,7 +8,7 @@
 
 > **countInternalMeshSelfOverlaps**(`triangles`, `meshName`, `areaToleranceSqMeters?`): `number`
 
-Defined in: world/ZFightingValidator.ts:302
+Defined in: world/ZFightingValidator.ts:305
 
 Counts self-overlapping triangle pairs within a single mesh (such as `Parking_Markings` or `Pitch_Markings`).
 

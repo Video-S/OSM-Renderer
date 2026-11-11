@@ -31,6 +31,11 @@ import { MapDataProvider, MapRegionQuery } from './MapDataProvider';
 import { classifyGeoJsonFeature, ROAD_CLASS_WIDTHS } from './FeatureCatalogue';
 import { isNonVehicularRoadClass } from './ElevationPolicy';
 import {
+  classifyInfrastructurePlacement,
+  createEmptyPlacementDiagnostics,
+  recordPlacementInDiagnostics,
+} from './InfrastructurePlacementClassifier';
+import {
   TopologicalNodeIndex,
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
 } from './TopologicalNodeIndex';
@@ -1025,6 +1030,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         GeometryCollection: 0,
         Unknown: 0,
       },
+      placementDiagnostics: createEmptyPlacementDiagnostics(),
       // Backward compatibility aliases:
       totalFeaturesReceived: rawFeatures.length,
       totalFeaturesRendered: 0,
@@ -1400,6 +1406,13 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             }
             if (totalLen < 0.2) continue;
 
+            if (diagnostics.placementDiagnostics && classification.placementClassification) {
+              recordPlacementInDiagnostics(
+                diagnostics.placementDiagnostics,
+                classification.placementClassification
+              );
+            }
+
             topologyRailwayParts.push({
               id: `${id}-${partIdx}`,
               sourceFeatureId: id,
@@ -1427,6 +1440,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               usage: rawUsage,
               isSecondaryBranch,
               osmTags: cloneRawGeoJsonProperties(props),
+              placementClassification: classification.placementClassification,
             });
 
             const nodeIds = topoNodeIndex.resolveWayNodeIds(
@@ -1452,6 +1466,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
               osmTags: cleanLegacyOsmTags(props),
+              placementClassification: classification.placementClassification,
             });
             diagnostics.parsedFeatureParts!.byCategory.railways++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1504,6 +1519,12 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         for (let partIdx = 0; partIdx < lines.length; partIdx++) {
           const line = lines[partIdx];
           if (line.length >= 2) {
+            if (diagnostics.placementDiagnostics && classification.placementClassification) {
+              recordPlacementInDiagnostics(
+                diagnostics.placementDiagnostics,
+                classification.placementClassification
+              );
+            }
             linearWaterways.push({
               id: `${id}-${partIdx}`,
               sourceFeatureId: id,
@@ -1519,6 +1540,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
               osmTags: cleanLegacyOsmTags(props),
+              placementClassification: classification.placementClassification,
             });
             diagnostics.parsedFeatureParts!.byCategory.linearWaterways++;
             diagnostics.parsedFeatureParts!.total++;
@@ -1882,6 +1904,19 @@ export class LocalGeoJsonProvider implements MapDataProvider {
             const effectiveIsBridge = isShortCulvert ? false : classification.isBridge;
             const effectiveIsTunnel = isShortCulvert ? false : classification.isTunnel;
             const effectiveLayer = isShortCulvert ? 0 : classification.layer;
+            const partPlacement =
+              isShortCulvert && !classification.placementClassification?.isCulvert
+                ? classifyInfrastructurePlacement(props, {
+                    isBridge: false,
+                    isTunnel: false,
+                    isCulvert: true,
+                    layer: 0,
+                    featureDomain: 'road',
+                  })
+                : classification.placementClassification;
+            if (diagnostics.placementDiagnostics && partPlacement) {
+              recordPlacementInDiagnostics(diagnostics.placementDiagnostics, partPlacement);
+            }
             const partGradeScope = `${effectiveLayer}|${effectiveIsBridge}|${effectiveIsTunnel}`;
 
             // Capture unchained, undeduplicated road part for M2.3 topology construction
@@ -1909,6 +1944,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               isCulvert: isShortCulvert,
               layer: effectiveLayer,
               osmTags: cloneRawGeoJsonProperties(props),
+              placementClassification: partPlacement,
             });
 
             const nodeIds = topoNodeIndex.resolveWayNodeIds(
@@ -1963,6 +1999,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
               osmTags: cleanLegacyOsmTags(props),
+              placementClassification: partPlacement,
             });
             diagnostics.parsedFeatureParts!.byCategory.roads++;
             diagnostics.parsedFeatureParts!.total++;
@@ -2582,7 +2619,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     const groups = new Map<string, RoadFeature[]>();
     for (const r of roads) {
       const nameKey = (r.name || '').trim().toLowerCase();
-      const groupKey = `${r.roadClass}|${r.layer}|${r.isBridge}|${r.isTunnel}|${nameKey}|${Math.round(r.width * 10)}`;
+      const placementKey = `${r.placementClassification?.placement ?? ''}|${r.placementClassification?.hasConflict ?? false}`;
+      const groupKey = `${r.roadClass}|${r.layer}|${r.isBridge}|${r.isTunnel}|${nameKey}|${Math.round(r.width * 10)}|${placementKey}`;
       let grp = groups.get(groupKey);
       if (!grp) {
         grp = [];

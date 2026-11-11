@@ -8,4 +8,4 @@
 
 > `const` **SUPPORTED\_NATURE\_TERRAIN**: `Record`\<`string`, \{ `has3DFoliage?`: `boolean`; `label`: `string`; `subtype`: `string`; \}\>
 
-Defined in: world/FeatureCatalogue.ts:107
+Defined in: world/FeatureCatalogue.ts:117

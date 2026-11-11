@@ -102,7 +102,7 @@ export function computeProjectedBoundsFraming(
   const zoomV = viewportHeight / spanV;
   const zoom = Math.max(0.15, Math.min(zoomU, zoomV, 8.0));
 
-  const dist = Math.min(Math.max(spanU, spanV) * 1.5, 6000);
+  const dist = Math.min(Math.max(spanU, spanV) * 1.5, 25000);
   const camX = cx + dist * Math.sin(fixedTiltAngle) * sinAz;
   const camY = dist * Math.cos(fixedTiltAngle);
   const camZ = cz + dist * Math.sin(fixedTiltAngle) * cosAz;

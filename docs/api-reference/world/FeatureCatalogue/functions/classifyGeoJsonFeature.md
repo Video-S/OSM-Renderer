@@ -8,7 +8,7 @@
 
 > **classifyGeoJsonFeature**(`props`, `geometryType`): [`ClassificationResult`](../interfaces/ClassificationResult.md)
 
-Defined in: world/FeatureCatalogue.ts:278
+Defined in: world/FeatureCatalogue.ts:288
 
 Classifies any raw GeoJSON feature into an explicit OSM Carto category with rich human-readable descriptions.
 Strictly checks both OSM tags AND geometry type (LineString vs Point vs Polygon)

@@ -6,7 +6,7 @@
 
 # Interface: RoadNetworkBuildResult
 
-Defined in: world/infrastructure/topology/types.ts:404
+Defined in: world/infrastructure/topology/types.ts:413
 
 Stage B result returned by `buildRoadNetwork`.
 
@@ -16,7 +16,7 @@ Stage B result returned by `buildRoadNetwork`.
 
 > **diagnostics**: [`RoadNetworkDiagnostics`](RoadNetworkDiagnostics.md)
 
-Defined in: world/infrastructure/topology/types.ts:406
+Defined in: world/infrastructure/topology/types.ts:415
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: world/infrastructure/topology/types.ts:406
 
 > **roads**: [`RoadNetwork`](../type-aliases/RoadNetwork.md)
 
-Defined in: world/infrastructure/topology/types.ts:405
+Defined in: world/infrastructure/topology/types.ts:414

@@ -8,7 +8,7 @@
 
 > **RailwayBallastStrategy** = `"ribbon"` \| `"surface-first"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:86
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:87
 
 Strategy governing at-grade railway ballast surface construction (Stage E3-B).
 

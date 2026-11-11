@@ -5,11 +5,31 @@ import type {
   UnchainedRailwayPart,
   UnchainedRoadPart,
 } from '../world/infrastructure/topology/types';
+import type {
+  ExplicitPlacementHints,
+  InfrastructureEnclosureKind,
+  InfrastructurePlacementClassification,
+  InfrastructurePlacementConfidence,
+  InfrastructurePlacementDiagnostics,
+  InfrastructurePlacementKind,
+  InfrastructureSupportingVerticalEvidence,
+  InfrastructureVerticalRelation,
+  TunnelConstructionSubtype,
+} from '../world/InfrastructurePlacementClassifier';
 
 export type {
+  ExplicitPlacementHints,
+  InfrastructureEnclosureKind,
+  InfrastructurePlacementClassification,
+  InfrastructurePlacementConfidence,
+  InfrastructurePlacementDiagnostics,
+  InfrastructurePlacementKind,
   InfrastructurePointKind,
   InfrastructurePointMetadata,
+  InfrastructureSupportingVerticalEvidence,
+  InfrastructureVerticalRelation,
   TopologySourceData,
+  TunnelConstructionSubtype,
   UnchainedRailwayPart,
   UnchainedRoadPart,
 };
@@ -238,6 +258,7 @@ export interface InspectableFeatureInfo {
   layer?: number;
   isBridge?: boolean;
   isTunnel?: boolean;
+  placementClassification?: InfrastructurePlacementClassification;
   type?: string; // Backward compatibility for buildingType
   amenity?: string;
   osmTags: Record<string, string | number | boolean>;
@@ -275,6 +296,7 @@ export interface RoadFeature {
   isBridge: boolean;
   isTunnel: boolean;
   layer: number;
+  placementClassification?: InfrastructurePlacementClassification;
   cartoLabel?: string;
   primaryTag?: string;
   osmTags?: RawGeoJsonProperties;
@@ -293,6 +315,7 @@ export interface RailwayFeature {
   isBridge: boolean;
   isTunnel: boolean;
   layer: number;
+  placementClassification?: InfrastructurePlacementClassification;
   gauge?: number;
   electrified?: boolean;
   cartoLabel?: string;
@@ -327,6 +350,7 @@ export interface LinearWaterwayFeature {
   isBridge: boolean;
   isTunnel: boolean;
   layer: number;
+  placementClassification?: InfrastructurePlacementClassification;
   intermittent?: boolean;
   cartoLabel?: string;
   primaryTag?: string;
@@ -536,6 +560,9 @@ export interface MapFeatureDiagnostics {
     minObservedSeparationMeters: number;
     maxStackDepth: number;
   };
+
+  /** Semantic placement classification breakdown (Stage E4-T) */
+  placementDiagnostics?: InfrastructurePlacementDiagnostics;
 }
 
 export interface ProcessedMapData {

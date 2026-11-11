@@ -155,7 +155,7 @@ export function getRoadElevation(
   isTunnel: boolean = false,
   _featureId?: string
 ): number {
-  if (isTunnel || layer < 0) {
+  if (isTunnel) {
     const tunnelLayer = layer < 0 ? Math.abs(layer) : 1;
     return ELEVATION_POLICY.TUNNEL_DEPTH - (tunnelLayer - 1) * ELEVATION_POLICY.TUNNEL_LAYER_STEP;
   }
@@ -180,7 +180,7 @@ export function getRailwayElevations(
   isBridge: boolean = false,
   isTunnel: boolean = false
 ): { ballast: number; sleepers: number; rails: number } {
-  if (isTunnel || layer < 0) {
+  if (isTunnel) {
     const tunnelLayer = layer < 0 ? Math.abs(layer) : 1;
     const depth = ELEVATION_POLICY.TUNNEL_DEPTH - (tunnelLayer - 1) * ELEVATION_POLICY.TUNNEL_LAYER_STEP;
     return { ballast: depth, sleepers: depth + 0.012, rails: depth + 0.025 };

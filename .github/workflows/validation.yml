@@ -40,7 +40,13 @@ jobs:
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '6\. preserves'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
-            pattern: '7\. Primary'
+            pattern: '7\. Primary.*Synthetic M2\.3-E1'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*M2\.1 Switchyard Fixture'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Station Hengelo'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '8\. preserves full railway'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"

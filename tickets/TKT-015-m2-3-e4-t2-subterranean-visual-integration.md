@@ -69,3 +69,46 @@ Parent milestone E4-T (`TKT-014`) established semantic placement classification 
 - TypeScript Lint (`npm run lint` / `tsc --noEmit`): Clean (0 errors).
 - Production Build (`npm run build` / `vite build`): Clean (0 errors, 4.30s).
 - API Documentation (`npm run docs:api` / `typedoc`): 114 pages generated cleanly (0 errors).
+
+## Follow-up architectural correction — unified surface visibility (2026-11-11)
+
+The original TKT-015 implementation was functionally useful but left three gaps:
+standalone tunnel ends produced speculative entrances, landuse cutouts were
+generated before validating entrances, and individual renderers applied their
+own visibility rules. This follow-up supersedes those portions of the
+implementation plan above without changing the source OSM graph.
+
+- **Canonical outdoor visibility:** `SurfaceVisibilityPolicy.ts` resolves a
+  feature into surface, elevated, underground, concealed indoor, or conflicting
+  placement. It reuses semantic placement classification; `layer` denotes
+  relative stacking, `level` denotes a floor within an indoor/structural
+  context, and `ele` represents physical elevation. A negative level only
+  conceals the feature when there is supporting indoor/building context.
+- **Verified entrances:** `VerifiedTunnelEntrances` indexes candidate exposed
+  road/rail endpoints. Portal authorization requires an aligned endpoint
+  connection with compatible transport type and, where present, matching raw
+  OSM node identities. Isolated, internal, clipped, or ambiguous ends are
+  closed. Decisions and source terminal positions are immutable across graph
+  geometry snapping.
+- **One mouth, one cutout:** Road and rail renderers and the ground-cover
+  prepass consume the *same* entrance decisions. The prepass uses the pure
+  `calculateTunnelPortalGroundCutouts` function, which shares physical mouth
+  dimensions with the 3D portal builder and allocates no temporary Three.js
+  geometry.
+- **No buried production meshes:** The normal scene does not build underground
+  road, railway or enclosed barrier meshes. An explicit
+  `showHiddenUndergroundGeometry` inspection option enables geometry for
+  cutaway debugging. Diagnostic tunnel traces are also allocated only when
+  `showUndergroundTunnelTraces` is enabled. Source graph, feature tags and
+  structural context remain available independently of scene meshes.
+- **Regression contract:** Unit and integration fixtures cover negative
+  `layer` versus negative `level`, isolated/deep tunnels, reverse-digitized
+  links, coordinate/node-ID conflicts, modal separation, consistency of
+  cutouts and portals, and debug-mode generation.
+
+**Known limitation:** The entrance policy deliberately requires strong
+evidence and can omit some real tunnel mouths if the OSM extract does not
+include adjacent surface ways or if terminal geometry is unreliable. Its
+strict default is preferable to inventing deep underground infrastructure.
+Physical map correctness still requires project owner review; automated
+tests alone do not establish visual correctness.

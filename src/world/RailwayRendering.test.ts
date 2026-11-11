@@ -815,8 +815,26 @@ test('M2.2 Railway tunnel: underground track elevation profile, portals, mouths,
     'Layer -2 railway tunnel must descend by an additional TUNNEL_LAYER_STEP (-3.0m)'
   );
 
-  const mapData = createBaseMapData([tunnelRailway]);
-  const builder = new GeometryBuilder();
+  // Explicit surface approaches establish actual physical tunnel entrances.
+  const westSurface: RailwayFeature = {
+    ...tunnelRailway,
+    id: 'rail-west-surface',
+    sourceFeatureId: 'way/west-surface',
+    points: [[-120, 20], [-80, 20]],
+    isTunnel: false,
+    layer: 0,
+    osmTags: { railway: 'rail' },
+  };
+  const eastSurface: RailwayFeature = {
+    ...westSurface,
+    id: 'rail-east-surface',
+    sourceFeatureId: 'way/east-surface',
+    points: [[80, 20], [120, 20]],
+  };
+  const mapData = createBaseMapData([westSurface, tunnelRailway, eastSurface]);
+  const builder = new GeometryBuilder({
+    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+  });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
@@ -855,16 +873,10 @@ test('M2.2 Railway tunnel: underground track elevation profile, portals, mouths,
     'Tunnel trace geometry must contain vertices'
   );
 
-  assert.equal(
-    scene.railwaysGroup.children.find((c) => c.name === 'Railway_Ballast'),
-    undefined,
-    'Subterranean tunnel must not emit surface Railway_Ballast ribbon'
-  );
-  assert.equal(
-    scene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Rails')),
-    undefined,
-    'Subterranean tunnel must not emit surface Railway_Rails ribbon or 3D rails'
-  );
+  // Surface tracks remain present on both sides; the buried tunnel contributes
+  // only portal structures, never to the ordinary surface track materials.
+  assert.ok(scene.railwaysGroup.children.find((c) => c.name === 'Railway_Ballast'));
+  assert.ok(scene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Rails')));
 
   // 3. Inspection provenance & subterranean elevation recorded on tunnel feature info
   for (const [label, hit] of [
@@ -927,8 +939,25 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
     osmTags: { railway: 'rail', tunnel: 'yes', layer: '-1' },
   };
 
-  const mapData = createBaseMapData([bridgeRailway, tunnelRailway]);
-  const builder = new GeometryBuilder();
+  const tunnelWestSurface: RailwayFeature = {
+    ...tunnelRailway,
+    id: 'rail-tunnel-west-surface',
+    sourceFeatureId: 'way/tunnel-west-surface',
+    points: [[-80, 30], [-50, 30]],
+    isTunnel: false,
+    layer: 0,
+    osmTags: { railway: 'rail' },
+  };
+  const tunnelEastSurface: RailwayFeature = {
+    ...tunnelWestSurface,
+    id: 'rail-tunnel-east-surface',
+    sourceFeatureId: 'way/tunnel-east-surface',
+    points: [[50, 30], [80, 30]],
+  };
+  const mapData = createBaseMapData([bridgeRailway, tunnelWestSurface, tunnelRailway, tunnelEastSurface]);
+  const builder = new GeometryBuilder({
+    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+  });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>

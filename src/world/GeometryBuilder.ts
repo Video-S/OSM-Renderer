@@ -32,6 +32,7 @@ import { SceneResourceManager } from './SceneResourceManager';
 import {
   buildBridgeProfile3D,
   buildTunnelUndergroundProfile3D,
+  calculateTunnelPortalGroundCutouts,
   computePolylineLength,
   generateBridgeStructureGeometries,
   generateProfiledRibbon3D,
@@ -41,6 +42,7 @@ import {
   trimPolylineByArcLength,
 } from './BridgeAndTunnelBuilder';
 import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
+import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from './SurfaceVisibilityPolicy';
 import {
   generateProfiledBarrierRibbon3D,
   resolveBarrierStructuralContexts,
@@ -2027,6 +2029,8 @@ export class GeometryBuilder {
   buildScene(data: ProcessedMapData, theme: MapStyleTheme): BuiltSceneGeometry {
     const resourceManager = new SceneResourceManager();
     const infrastructureRenderOptions = this.options.infrastructureRenderOptions;
+    // A single immutable entrance decision is shared by terrain cutouts, roads and railways.
+    const tunnelEntrances = new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
     let infrastructureRenderPreview: InfrastructureRenderPreviewResult | null =
       this.options.infrastructureRenderPreview !== undefined
         ? this.options.infrastructureRenderPreview
@@ -2147,13 +2151,14 @@ export class GeometryBuilder {
         minZ: number;
         maxZ: number;
       }> = [];
-      const pushPreCutoutFromTunnel = (pts: readonly [number, number][], width: number, isPath: boolean) => {
-        if (!pts || pts.length < 2) return;
-        const { portalGroundCutoutPolygons } = generateTunnelPortalAndTraceGeometries(
-          pts.map((p) => [p[0], p[1]] as [number, number]),
-          width,
-          isPath,
-          { emitStartPortal: true, emitEndPortal: true }
+      const pushPreCutoutFromTunnel = (
+        pts: readonly [number, number][], width: number, isPath: boolean,
+        entrance: { start: boolean; end: boolean }, railwayType?: string
+      ) => {
+        if (!pts || pts.length < 2 || (!entrance.start && !entrance.end)) return;
+        const portalGroundCutoutPolygons = calculateTunnelPortalGroundCutouts(
+          pts, width, isPath,
+          { emitStartPortal: entrance.start, emitEndPortal: entrance.end, railwayType }
         );
         for (const poly of portalGroundCutoutPolygons) {
           if (!poly[0] || poly[0].length < 3) continue;
@@ -2176,7 +2181,8 @@ export class GeometryBuilder {
           pushPreCutoutFromTunnel(
             r.points,
             r.width * this.options.roadWidthMultiplier,
-            isNonVehicularRoadClass(r.roadClass)
+            isNonVehicularRoadClass(r.roadClass),
+            tunnelEntrances.forFeature(r)
           );
         }
       }
@@ -2185,7 +2191,7 @@ export class GeometryBuilder {
           ? !rl.placementClassification.hasConflict && rl.placementClassification.isSubterraneanTunnel
           : rl.isTunnel;
         if (isTun) {
-          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false);
+          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false, tunnelEntrances.forFeature(rl), rl.railwayType);
         }
       }
 
@@ -2440,7 +2446,7 @@ export class GeometryBuilder {
     const placedWaterMultiPolygons: MultiPolygonCoords = [];
 
     for (const item of data.waterBodies) {
-      if (item.isTunnel || (item.layer !== undefined && item.layer < 0)) continue;
+      if (resolveSurfaceVisibility(item) !== 'surface') continue;
       try {
         const resolved = resolvedPlanarById.get(item.id);
         if (resolved?.isDeduplicatedInto) {
@@ -2821,6 +2827,7 @@ export class GeometryBuilder {
           ballastStrategy: infrastructureRenderOptions.railwayBallastStrategy,
           showUndergroundTunnelTraces: infrastructureRenderOptions.showUndergroundTunnelTraces,
           showHiddenUndergroundGeometry: infrastructureRenderOptions.showHiddenUndergroundGeometry,
+          tunnelEntrances,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {
@@ -2855,7 +2862,6 @@ export class GeometryBuilder {
     const conflictingFallbackRoads: RoadFeature[] = [];
     const atGradeRoadEndpoints: [number, number][] = [];
     const bridgeRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
-    const tunnelRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
     const gradeTransitionCoords: [number, number][] = [];
     let skippedRoadConflicts = 0;
 
@@ -2877,7 +2883,12 @@ export class GeometryBuilder {
         continue;
       }
 
-      if (placement.rendersOnSurface) {
+      const visibility = resolveSurfaceVisibility(r);
+      if (visibility === 'concealed_indoor') {
+        // Indoor basement paths are retained in topology/metadata, never drawn outdoors.
+        continue;
+      }
+      if (visibility === 'surface') {
         // Covered passages, open cuttings, culverts, and negative-layer surface ways render on surface
         if (r.isTunnel || r.isBridge) {
           r.isTunnel = false;
@@ -2896,8 +2907,6 @@ export class GeometryBuilder {
         gradeTransitionCoords.push(p0, pn);
         if (placement.isElevatedBridge) {
           bridgeRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
-        } else if (placement.isSubterraneanTunnel) {
-          tunnelRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
         }
       }
     }
@@ -3997,6 +4006,13 @@ export class GeometryBuilder {
     if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
       const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
       for (const edge of infrastructureRenderPreview.descriptors.roadEdges) {
+        if (resolveSurfaceVisibility({
+          osmTags: edge.primaryOsmTags,
+          placementClassification: edge.placementClassification,
+          layer: edge.layer,
+          isBridge: edge.isBridge,
+          isTunnel: edge.isTunnel,
+        }) === 'concealed_indoor') continue;
         if (edge.placementClassification?.hasConflict) {
           roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount =
             (roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount ?? 0) + 1;
@@ -4121,14 +4137,12 @@ export class GeometryBuilder {
               osmTags: sanitizeOsmTags(rawTags),
             };
 
-            const emitStartPortal = plan
-              ? plan.startClassification === 'confirmed_transition' ||
-                plan.startClassification === 'intentionally_standalone'
-              : true;
-            const emitEndPortal = plan
-              ? plan.endClassification === 'confirmed_transition' ||
-                plan.endClassification === 'intentionally_standalone'
-              : true;
+            const entrance = {
+              start: tunnelEntrances.forEndpoint([edge.id, ...edge.sourceFeatureIds], pts[0], 'start'),
+              end: tunnelEntrances.forEndpoint([edge.id, ...edge.sourceFeatureIds], pts[pts.length - 1], 'end'),
+            };
+            const emitStartPortal = entrance.start;
+            const emitEndPortal = entrance.end;
 
             const {
               portalStructureGeo,
@@ -4142,6 +4156,7 @@ export class GeometryBuilder {
               {
                 emitStartPortal,
                 emitEndPortal,
+                emitUndergroundTrace: Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces),
                 maxheightMeters: edge.placementClassification?.supportingEvidence.maxheightMeters,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
               }
@@ -4172,7 +4187,7 @@ export class GeometryBuilder {
             const canGenerateUnderground = edge.placementClassification
               ? edge.placementClassification.canGenerateUndergroundGeometry
               : true;
-            if (canGenerateUnderground) {
+            if (canGenerateUnderground && infrastructureRenderOptions.showHiddenUndergroundGeometry) {
               const undergroundProf = buildTunnelUndergroundProfile3D({
                 points: pts,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
@@ -4403,16 +4418,9 @@ export class GeometryBuilder {
               osmTags: sanitizeOsmTags(road.osmTags),
             };
 
-            const pStart = road.points[0];
-            const pEnd = road.points[road.points.length - 1];
-            const touchesOtherTunnelStart = tunnelRoadEndpoints.some(
-              (t) => t.id !== road.id && Math.hypot(t.pt[0] - pStart[0], t.pt[1] - pStart[1]) <= 0.8
-            );
-            const touchesOtherTunnelEnd = tunnelRoadEndpoints.some(
-              (t) => t.id !== road.id && Math.hypot(t.pt[0] - pEnd[0], t.pt[1] - pEnd[1]) <= 0.8
-            );
-            const emitStartPortal = !touchesOtherTunnelStart;
-            const emitEndPortal = !touchesOtherTunnelEnd;
+            const entrance = tunnelEntrances.forFeature(road);
+            const emitStartPortal = entrance.start;
+            const emitEndPortal = entrance.end;
 
             const {
               portalStructureGeo,
@@ -4426,6 +4434,7 @@ export class GeometryBuilder {
               {
                 emitStartPortal,
                 emitEndPortal,
+                emitUndergroundTrace: Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces),
                 maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
               }
@@ -4456,7 +4465,7 @@ export class GeometryBuilder {
             const canGenerateUnderground = road.placementClassification
               ? road.placementClassification.canGenerateUndergroundGeometry
               : true;
-            if (canGenerateUnderground) {
+            if (canGenerateUnderground && infrastructureRenderOptions.showHiddenUndergroundGeometry) {
               const undergroundProf = buildTunnelUndergroundProfile3D({
                 points: road.points,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
@@ -4903,6 +4912,13 @@ export class GeometryBuilder {
           placementClassification: bar.placementClassification,
           osmTags: sanitizeOsmTags(bar.osmTags),
         };
+
+        if (resolveSurfaceVisibility(bar) === 'concealed_indoor') continue;
+        if (ctx?.rendersInSubterraneanLayer && !infrastructureRenderOptions.showHiddenUndergroundGeometry) {
+          // No production subterranean mesh; structural metadata is preserved on the feature.
+          if (bar.sourceFeatureId) renderedSourceIds.add(bar.sourceFeatureId);
+          continue;
+        }
 
         // If natural=tree_row, place procedural 3D trees along the polyline
         if (bar.barrierType === 'tree_row') {

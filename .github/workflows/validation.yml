@@ -1,0 +1,83 @@
+name: Validation
+on:
+  pull_request:
+  workflow_dispatch:
+
+# New branch revisions supersede prior checks; avoid runner contention and wasted work.
+concurrency:
+  group: validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - files: "src/world/SurfaceVisibilityPolicy.test.ts src/world/TunnelClassificationAndRendering.test.ts"
+          - files: "src/world/SubterraneanVisualIntegration.test.ts"
+          - files: "src/world/GraphRoadRendering.test.ts"
+          - files: "src/world/GraphRailwayRendering.test.ts src/world/RailwayRendering.test.ts"
+          - files: "src/world/RoadNetworkTopology.test.ts src/world/RailwayNetworkTopology.test.ts src/world/CrossModalTopology.test.ts"
+          - files: "src/world/GeometryBuilder.test.ts src/world/ElevationAndZIndex.test.ts src/world/GradeTransitionRendering.test.ts"
+          - files: "src/world/SurfaceFirstRoadRendering.test.ts src/world/JunctionAndTopology.test.ts"
+          - files: "src/world/PerformanceBaseline.test.ts src/world/WorldCoordinates.test.ts src/world/FeatureCoverage.test.ts"
+          - files: "src/world/AdjacentServiceJunctions.test.ts src/world/BuswayRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts"
+          - files: "src/world/PathJunctionCornerSmoothing.test.ts src/world/DevToolsAndReproduction.test.ts"
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '1\. defaults|2\. produces|3\. maps road|4\. maps railway|5\. maps cross-domain'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '6\. preserves'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Synthetic M2\.3-E1'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*M2\.1 Switchyard Fixture'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Station Hengelo'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 1 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 2 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 3 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 4 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 5 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 6 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 7 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 8 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '8\. preserves full railway'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '9\. measures'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '10\. classifies'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Run focused test suite
+        env:
+          TEST_FILES: ${{ matrix.files }}
+          NAME_PATTERN: ${{ matrix.pattern }}
+        run: |
+          if [[ -n "$NAME_PATTERN" ]]; then
+            bunx tsx --test --test-concurrency=1 --test-name-pattern="$NAME_PATTERN" $TEST_FILES
+          else
+            bunx tsx --test --test-concurrency=1 $TEST_FILES
+          fi

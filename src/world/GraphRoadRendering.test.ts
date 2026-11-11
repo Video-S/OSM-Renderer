@@ -1287,8 +1287,8 @@ describe('Milestone 2.3 Stage E2 — Graph-Driven Road Rendering & Junction Geom
     assert.ok(meshNames.includes('Tunnel_Portals'), 'Tunnel_Portals must be rendered by Stage 6D');
     assert.ok(meshNames.includes('Tunnel_Entrances'), 'Tunnel_Entrances must be rendered by Stage 6D');
     assert.ok(
-      meshNames.includes('Tunnel_Underground_Trace'),
-      'Tunnel_Underground_Trace must be rendered by Stage 6D'
+      !meshNames.includes('Tunnel_Underground_Trace'),
+      'Diagnostic underground traces must not be allocated during normal surface rendering'
     );
 
     // Culvert must be rendered as an at-grade road at ROAD_SURFACE (0.050m)

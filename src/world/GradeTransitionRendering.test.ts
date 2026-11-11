@@ -920,6 +920,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     const res = buildRailwayInfrastructure(data, defaultTheme, 6.0, {
       renderSource: 'graph-switches',
       spatialChunkSizeMeters: 0,
+      showUndergroundTunnelTraces: true,
     });
 
     const diag = res.stats.gradeTransitionDiagnostics!;

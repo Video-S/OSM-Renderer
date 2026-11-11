@@ -59,6 +59,8 @@ function buildSceneFromFeatures(
       railways: options?.railways ?? 'graph-R+',
       railwaySwitchPolicy: 'graph',
       railwayBallastStrategy: 'surface-first',
+      // These geometry tests explicitly inspect buried meshes in cutaway mode.
+      showHiddenUndergroundGeometry: true,
     },
   });
   const scene = builder.buildScene(processed, DEFAULT_THEME);
@@ -288,7 +290,8 @@ describe('Milestone 2.3 Stage E4-T — Tunnel Classification & Rendering (TKT-01
       },
     ]);
 
-    assert.ok(findMeshesByPrefix(scene.railwaysGroup, 'Railway_Tunnel_Portals').length > 0);
+    // An isolated underground subway has no proven surface transition: no portal.
+    assert.equal(findMeshesByPrefix(scene.railwaysGroup, 'Railway_Tunnel_Portals').length, 0);
     assert.ok(
       findMeshesByPrefix(scene.railwaysGroup, 'Tunnel_Underground_Railway_Rails').length > 0
     );
@@ -686,7 +689,8 @@ describe('Milestone 2.3 Stage E4-T — Tunnel Classification & Rendering (TKT-01
     ]);
 
     assert.ok(findMeshByName(scene.roadsGroup, 'Roads_residential'));
-    assert.ok(findMeshByName(scene.roadsGroup, 'Tunnel_Portals'));
+    // A standalone underpass has no verified surface transition: no fabricated portals.
+    assert.equal(findMeshByName(scene.roadsGroup, 'Tunnel_Portals'), null);
     assert.ok(findMeshByName(scene.roadsGroup, 'Tunnel_Underground_Roads'));
     scene.dispose();
   });
@@ -801,6 +805,8 @@ describe('Milestone 2.3 Stage E4-T — Tunnel Classification & Rendering (TKT-01
         railways: 'graph-R+',
         railwaySwitchPolicy: 'graph',
         railwayBallastStrategy: 'surface-first',
+        // Benchmark underground geometry generation explicitly, not normal production.
+        showHiddenUndergroundGeometry: true,
       },
     });
     const t0 = performance.now();

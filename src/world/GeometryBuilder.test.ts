@@ -450,7 +450,9 @@ test('3D Tunnel portals, recessed dark entrance ramps, and dashed underground co
   };
 
   const parsed = provider.parseGeoJson(tunnelFixture);
-  const builder = new GeometryBuilder();
+  const builder = new GeometryBuilder({
+    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+  });
   const scene = builder.buildScene(parsed, MAP_THEMES.dusk);
 
   let tunnelPortals: THREE.Mesh | undefined;

@@ -832,7 +832,9 @@ test('M2.2 Railway tunnel: underground track elevation profile, portals, mouths,
     points: [[80, 20], [120, 20]],
   };
   const mapData = createBaseMapData([westSurface, tunnelRailway, eastSurface]);
-  const builder = new GeometryBuilder();
+  const builder = new GeometryBuilder({
+    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+  });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>
@@ -953,7 +955,9 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
     points: [[50, 30], [80, 30]],
   };
   const mapData = createBaseMapData([bridgeRailway, tunnelWestSurface, tunnelRailway, tunnelEastSurface]);
-  const builder = new GeometryBuilder();
+  const builder = new GeometryBuilder({
+    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+  });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 
   const firstMesh = (obj: THREE.Object3D): THREE.Mesh =>

@@ -717,36 +717,40 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       graphResult.dispose();
     });
 
-    it('synthesizes tunnel portals and underground traces in Graph mode', () => {
-      const tunnelTrack = createSyntheticRailwayTrack(
-        'way/tunnel1',
-        [
-          [0, 0],
-          [80, 0],
-        ],
-        { isTunnel: true, layer: -1 }
-      );
-      const data = createBaseProcessedMapData([tunnelTrack]);
+    it('creates verified tunnel portals and emits underground traces only in diagnostic mode', () => {
+      const tunnelTrack = createSyntheticRailwayTrack('way/tunnel1', [[0, 0], [80, 0]], {
+        isTunnel: true, layer: -1,
+      });
+      const surfaceWest = createSyntheticRailwayTrack('way/surface-west', [[-40, 0], [0, 0]]);
+      const surfaceEast = createSyntheticRailwayTrack('way/surface-east', [[80, 0], [120, 0]]);
+      const data = createBaseProcessedMapData([surfaceWest, tunnelTrack, surfaceEast]);
 
       const graphResult = buildRailwayInfrastructure(
-        data,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'graph' }
+        data, MAP_THEMES.tactical, 1.0, { renderSource: 'graph' }
       );
 
       assert.equal(graphResult.stats.railwayRenderSource, 'graph');
       assert.ok(graphResult.renderedSourceIds.has('way/tunnel1'));
-
-      let hasTunnelMesh = false;
+      let hasPortal = false;
+      let hasTrace = false;
       graphResult.railwaysGroup.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          hasTunnelMesh = true;
-        }
+        if (obj.name.startsWith('Railway_Tunnel_Portals')) hasPortal = true;
+        if (obj.name.startsWith('Railway_Tunnel_Traces')) hasTrace = true;
       });
-      assert.ok(hasTunnelMesh, 'Tunnel must generate portal/trace mesh geometry');
-
+      assert.ok(hasPortal, 'A connected surface-to-tunnel transition should create a portal');
+      assert.equal(hasTrace, false, 'Normal surface rendering must not allocate diagnostic traces');
       graphResult.dispose();
+
+      const debugResult = buildRailwayInfrastructure(
+        data, MAP_THEMES.tactical, 1.0,
+        { renderSource: 'graph', showUndergroundTunnelTraces: true }
+      );
+      let debugHasTrace = false;
+      debugResult.railwaysGroup.traverse((obj) => {
+        if (obj.name.startsWith('Railway_Tunnel_Traces')) debugHasTrace = true;
+      });
+      assert.equal(debugHasTrace, true);
+      debugResult.dispose();
     });
   });
 

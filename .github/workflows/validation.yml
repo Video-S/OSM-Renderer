@@ -38,7 +38,11 @@ jobs:
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '1\. defaults|2\. produces|3\. maps road|4\. maps railway|5\. maps cross-domain'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
-            pattern: '6\. preserves|7\. Primary|8\. preserves full railway'
+            pattern: '6\. preserves'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '8\. preserves full railway'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '9\. measures'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"

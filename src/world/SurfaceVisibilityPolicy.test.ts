@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { RoadFeature, RailwayFeature, RawGeoJsonProperties } from '../types/MapFeature';
 import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
 import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from './SurfaceVisibilityPolicy';
+import { calculateTunnelPortalGroundCutouts, generateTunnelPortalAndTraceGeometries } from './BridgeAndTunnelBuilder';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { GeometryBuilder } from './GeometryBuilder';
 import { MAP_THEMES } from '../styles/mapThemes';
@@ -146,4 +147,25 @@ describe('Unified surface visibility policy', () => {
     assert.equal(hasUndergroundMesh, false);
     scene.dispose();
   });
+  it('uses identical cutout geometry in terrain prepass and portal builders, including railway widths', () => {
+    const pts: [number, number][] = [[0, 0], [10, 0], [20, 0]];
+    for (const options of [
+      { isPath: false, width: 8, railwayType: undefined, start: true, end: false },
+      { isPath: true, width: 2.2, railwayType: undefined, start: true, end: true },
+      { isPath: false, width: 4.8, railwayType: 'rail', start: false, end: true },
+    ]) {
+      const props = {
+        emitStartPortal: options.start,
+        emitEndPortal: options.end,
+        railwayType: options.railwayType,
+      };
+      const pure = calculateTunnelPortalGroundCutouts(pts, options.width, options.isPath, props);
+      const rendered = generateTunnelPortalAndTraceGeometries(pts, options.width, options.isPath, props);
+      assert.deepEqual(pure, rendered.portalGroundCutoutPolygons);
+      rendered.portalStructureGeo?.dispose();
+      rendered.portalMouthGeo?.dispose();
+      rendered.undergroundTraceGeo?.dispose();
+    }
+  });
+
 });

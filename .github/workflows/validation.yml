@@ -1,10 +1,7 @@
 name: Validation
 on:
-  push:
-    branches:
-      - main
-      - fix/tkt-015-unified-surface-visibility
   pull_request:
+  workflow_dispatch:
 
 jobs:
   typecheck-and-build:
@@ -20,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         files:
           - "src/world/SurfaceVisibilityPolicy.test.ts src/world/TunnelClassificationAndRendering.test.ts"

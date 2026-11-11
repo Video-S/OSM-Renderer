@@ -32,6 +32,7 @@ import { SceneResourceManager } from './SceneResourceManager';
 import {
   buildBridgeProfile3D,
   buildTunnelUndergroundProfile3D,
+  calculateTunnelPortalGroundCutouts,
   computePolylineLength,
   generateBridgeStructureGeometries,
   generateProfiledRibbon3D,
@@ -2152,14 +2153,12 @@ export class GeometryBuilder {
       }> = [];
       const pushPreCutoutFromTunnel = (
         pts: readonly [number, number][], width: number, isPath: boolean,
-        entrance: { start: boolean; end: boolean }
+        entrance: { start: boolean; end: boolean }, railwayType?: string
       ) => {
-        if (!pts || pts.length < 2) return;
-        const { portalGroundCutoutPolygons } = generateTunnelPortalAndTraceGeometries(
-          pts.map((p) => [p[0], p[1]] as [number, number]),
-          width,
-          isPath,
-          { emitStartPortal: entrance.start, emitEndPortal: entrance.end }
+        if (!pts || pts.length < 2 || (!entrance.start && !entrance.end)) return;
+        const portalGroundCutoutPolygons = calculateTunnelPortalGroundCutouts(
+          pts, width, isPath,
+          { emitStartPortal: entrance.start, emitEndPortal: entrance.end, railwayType }
         );
         for (const poly of portalGroundCutoutPolygons) {
           if (!poly[0] || poly[0].length < 3) continue;
@@ -2192,7 +2191,7 @@ export class GeometryBuilder {
           ? !rl.placementClassification.hasConflict && rl.placementClassification.isSubterraneanTunnel
           : rl.isTunnel;
         if (isTun) {
-          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false, tunnelEntrances.forFeature(rl));
+          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false, tunnelEntrances.forFeature(rl), rl.railwayType);
         }
       }
 

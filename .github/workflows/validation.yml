@@ -7,12 +7,34 @@ on:
   pull_request:
 
 jobs:
-  check:
+  typecheck-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
-      - run: bun run test
       - run: bun run build
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        files:
+          - "src/world/SurfaceVisibilityPolicy.test.ts src/world/TunnelClassificationAndRendering.test.ts"
+          - "src/world/SubterraneanVisualIntegration.test.ts"
+          - "src/world/GraphRoadRendering.test.ts"
+          - "src/world/GraphRailwayRendering.test.ts src/world/RailwayRendering.test.ts"
+          - "src/world/InfrastructureRenderAdapter.test.ts"
+          - "src/world/RoadNetworkTopology.test.ts src/world/RailwayNetworkTopology.test.ts src/world/CrossModalTopology.test.ts"
+          - "src/world/GeometryBuilder.test.ts src/world/ElevationAndZIndex.test.ts src/world/GradeTransitionRendering.test.ts"
+          - "src/world/SurfaceFirstRoadRendering.test.ts src/world/JunctionAndTopology.test.ts"
+          - "src/world/PerformanceBaseline.test.ts src/world/WorldCoordinates.test.ts src/world/FeatureCoverage.test.ts"
+          - "src/world/AdjacentServiceJunctions.test.ts src/world/BuswayRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts"
+          - "src/world/PathJunctionCornerSmoothing.test.ts src/world/DevToolsAndReproduction.test.ts"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsx --test --test-concurrency=1 ${{ matrix.files }}

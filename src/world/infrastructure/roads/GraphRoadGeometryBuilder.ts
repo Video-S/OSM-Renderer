@@ -26,6 +26,7 @@ import {
   filterDegenerateBooleanArtifacts,
 } from '../../PlanarLayerValidator';
 import { SceneResourceManager } from '../../SceneResourceManager';
+import { resolveSurfaceVisibility } from '../../SurfaceVisibilityPolicy';
 import {
   buildRoadRibbonOutlineRing,
   buildSafeExteriorSubPolylines,
@@ -2385,6 +2386,15 @@ export function buildGraphAtGradeRoadGeometries(
   // A source can still have visible geometry elsewhere, so finalize after all edges.
   const e2PlusOccludedSourceCandidates = new Set<string>();
 
+  const isEligibleSurfaceEdge = (edge: RoadEdgeRenderDescriptor): boolean =>
+    edge.isAtGradeBuildable && resolveSurfaceVisibility({
+      osmTags: edge.primaryOsmTags,
+      placementClassification: edge.placementClassification,
+      layer: edge.layer,
+      isBridge: edge.isBridge,
+      isTunnel: edge.isTunnel,
+    }) === 'surface';
+
   // 1. Filter at-grade buildable road edges and initialize endpoint trim states
   const buildableEdges: RoadEdgeRenderDescriptor[] = [];
   const trimmedEndpoints = new Map<string, EdgeTrimState>();
@@ -2393,7 +2403,7 @@ export function buildGraphAtGradeRoadGeometries(
   );
 
   for (const edge of descriptors.roadEdges) {
-    if (!edge.isAtGradeBuildable) continue;
+    if (!isEligibleSurfaceEdge(edge)) continue;
     stats.atGradeRoadEdgeCount++;
 
     if (!edge.points || edge.points.length < 2) {
@@ -2437,7 +2447,7 @@ export function buildGraphAtGradeRoadGeometries(
         startNode &&
           startNode.incidentEdgeIds.some((id) => {
             const other = descriptors.roadEdgesById.get(id);
-            return Boolean(other && !other.isAtGradeBuildable);
+            return Boolean(other && !isEligibleSurfaceEdge(other));
           })
       );
 
@@ -2448,7 +2458,7 @@ export function buildGraphAtGradeRoadGeometries(
         endNode &&
           endNode.incidentEdgeIds.some((id) => {
             const other = descriptors.roadEdgesById.get(id);
-            return Boolean(other && !other.isAtGradeBuildable);
+            return Boolean(other && !isEligibleSurfaceEdge(other));
           })
       );
 
@@ -2504,7 +2514,7 @@ export function buildGraphAtGradeRoadGeometries(
       seenHalfEdges.add(heKey);
 
       const edge = descriptors.roadEdgesById.get(he.edgeId);
-      if (!edge || !edge.isAtGradeBuildable || !trimmedEndpoints.has(edge.id)) continue;
+      if (!edge || !isEligibleSurfaceEdge(edge) || !trimmedEndpoints.has(edge.id)) continue;
       const totalPolyLen = computePolylineLength(edge.points as [number, number][]);
       if (totalPolyLen < 0.05) continue;
       const dir = computeEdgeInwardTangent(edge, he.endpoint, he.inwardTangent);
@@ -3153,14 +3163,14 @@ export function buildGraphAtGradeRoadGeometries(
         edge.startGradeTransitionId ||
           startNode?.gradeTransitionIds.length ||
           startNode?.incidentEdgeIds.some(
-            (id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable
+            (id) => !descriptors.roadEdgesById.get(id) || !isEligibleSurfaceEdge(descriptors.roadEdgesById.get(id)!)
           )
       );
       const hasGradeEnd = Boolean(
         edge.endGradeTransitionId ||
           endNode?.gradeTransitionIds.length ||
           endNode?.incidentEdgeIds.some(
-            (id) => !descriptors.roadEdgesById.get(id)?.isAtGradeBuildable
+            (id) => !descriptors.roadEdgesById.get(id) || !isEligibleSurfaceEdge(descriptors.roadEdgesById.get(id)!)
           )
       );
       surfaceFirstSubCaps = subSegments.map((_, idx) => ({

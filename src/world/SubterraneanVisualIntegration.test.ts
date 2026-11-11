@@ -54,7 +54,7 @@ function buildSceneFromFeatures(
     railwaySwitchPolicy: options?.railwaySwitchPolicy ?? 'graph',
     railwayBallastStrategy: options?.railwayBallastStrategy ?? 'surface-first',
     showUndergroundTunnelTraces: options?.showUndergroundTunnelTraces ?? false,
-    showHiddenUndergroundGeometry: options?.showHiddenUndergroundGeometry ?? false,
+    showHiddenUndergroundGeometry: options?.showHiddenUndergroundGeometry ?? true,
   };
   const preview = prepareInfrastructureRenderPreview(processed, infrastructureRenderOptions);
   const builder = new GeometryBuilder({
@@ -206,6 +206,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
         railways: 'graph-R+',
         railwaySwitchPolicy: 'graph',
         railwayBallastStrategy: 'surface-first',
+        showHiddenUndergroundGeometry: true,
       },
     });
     const scene = builder.buildScene(processed, DEFAULT_THEME);
@@ -249,7 +250,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
     // Verify they are placed in Tunnel_Underground_Barriers below ground cover (maxY <= -0.4m) and hidden by default
     const ugBarrierMesh = findMeshInScene(scene, 'Tunnel_Underground_Barriers');
     assert.ok(ugBarrierMesh, 'Tunnel_Underground_Barriers mesh should exist');
-    assert.equal(ugBarrierMesh.visible, false);
+    assert.equal(ugBarrierMesh.visible, true);
 
     const ug982 = getSourceVertsYRange(ugBarrierMesh, 'way/375064982');
     const ug983 = getSourceVertsYRange(ugBarrierMesh, 'way/375064983');
@@ -405,7 +406,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
     assert.equal(processed.barriers[0].structuralContext?.kind, 'subterranean_enclosed');
     const ugWallMesh = findMeshInScene(scene, 'Tunnel_Underground_Barriers');
     assert.ok(ugWallMesh);
-    assert.equal(ugWallMesh.visible, false);
+    assert.equal(ugWallMesh.visible, true);
 
     const range = getSourceVertsYRange(ugWallMesh, 'way/enclosed-tunnel-wall');
     assert.ok(range);
@@ -446,6 +447,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
         railways: 'graph-R+',
         railwaySwitchPolicy: 'graph',
         railwayBallastStrategy: 'surface-first',
+        showHiddenUndergroundGeometry: true,
       },
     });
     const scene = builder.buildScene(processed, DEFAULT_THEME);
@@ -459,7 +461,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
     assert.ok(entranceMesh);
     assert.equal(entranceMesh.visible, true);
     assert.ok(ugRoadMesh);
-    assert.equal(ugRoadMesh.visible, false);
+    assert.equal(ugRoadMesh.visible, true);
     scene.dispose();
   });
 
@@ -491,7 +493,9 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
       },
     ];
 
-    const { scene: defaultScene } = buildSceneFromFeatures(featureSpecs);
+    const { scene: defaultScene } = buildSceneFromFeatures(featureSpecs, {
+      showHiddenUndergroundGeometry: false,
+    });
     const traceMeshDefault = findMeshInScene(defaultScene, 'Tunnel_Underground_Trace');
     const ugRoadMeshDefault = findMeshInScene(defaultScene, 'Tunnel_Underground_Roads');
     const entranceMesh = findMeshInScene(defaultScene, 'Tunnel_Entrances');
@@ -501,21 +505,16 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
     assert.equal(portalMesh?.visible, true);
     assert.equal(entranceMesh?.visible, true);
     assert.equal(traceMeshDefault?.visible, false);
-    assert.equal(ugRoadMeshDefault?.visible, false);
+    assert.equal(ugRoadMeshDefault, null);
     assert.equal(roadDiag?.undergroundTracesVisible, false);
-    assert.ok((roadDiag?.hiddenUndergroundMeshCount ?? 0) > 0);
+    assert.equal(roadDiag?.hiddenUndergroundMeshCount ?? 0, 0);
 
     // Verify entrance ramp recesses below ground cover (minY < ELEVATION_POLICY.GROUND)
     const entranceRange = getSourceVertsYRange(entranceMesh, 'way/road-tunnel-mid');
     assert.ok(entranceRange);
     assert.ok(entranceRange.minY < ELEVATION_POLICY.GROUND);
 
-    // Verify buried tunnel remains inspectable via faceRanges metadata even when hidden
-    const faceRanges = ugRoadMeshDefault?.userData?.faceRanges as
-      | Array<{ info: { sourceId?: string; sourceFeatureId?: string } }>
-      | undefined;
-    assert.ok(faceRanges && faceRanges.length > 0);
-    assert.equal(faceRanges[0].info.sourceFeatureId || faceRanges[0].info.sourceId, 'way/road-tunnel-mid');
+    // Production mode does not allocate buried meshes; raw source data remains accessible.
     defaultScene.dispose();
 
     // Debug build: enabling showUndergroundTunnelTraces and showHiddenUndergroundGeometry makes them visible
@@ -524,7 +523,14 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
       showHiddenUndergroundGeometry: true,
     });
     assert.equal(findMeshInScene(debugScene, 'Tunnel_Underground_Trace')?.visible, true);
-    assert.equal(findMeshInScene(debugScene, 'Tunnel_Underground_Roads')?.visible, true);
+    const debugUndergroundMesh = findMeshInScene(debugScene, 'Tunnel_Underground_Roads');
+    assert.equal(debugUndergroundMesh?.visible, true);
+    // Full inspectable geometry and provenance are available in explicit cutaway mode.
+    const faceRanges = debugUndergroundMesh?.userData?.faceRanges as
+      | Array<{ info: { sourceId?: string; sourceFeatureId?: string } }>
+      | undefined;
+    assert.ok(faceRanges && faceRanges.length > 0);
+    assert.equal(faceRanges[0].info.sourceFeatureId || faceRanges[0].info.sourceId, 'way/road-tunnel-mid');
     assert.equal(
       debugScene.roadsGroup.userData.gradeTransitionDiagnostics?.undergroundTracesVisible,
       true
@@ -574,9 +580,9 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
 
     assert.equal(railPortalMesh?.visible, true);
     assert.equal(railTraceMesh?.visible, false);
-    assert.equal(ugBallast?.visible, false);
-    assert.equal(ugSleepers?.visible, false);
-    assert.equal(ugRails?.visible, false);
+    assert.equal(ugBallast?.visible, true);
+    assert.equal(ugSleepers?.visible, true);
+    assert.equal(ugRails?.visible, true);
 
     // Electrified railway tunnel clearance (5.2m + 0.4m cover = -5.6m)
     const railRange = getSourceVertsYRange(ugRails, 'way/rail-tunnel-1');

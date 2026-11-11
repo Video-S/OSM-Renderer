@@ -1163,8 +1163,9 @@ export function generateTunnelPortalAndTraceGeometries(
     };
   }
 
-  const emitStartPortal = options?.emitStartPortal ?? true;
-  const emitEndPortal = options?.emitEndPortal ?? true;
+  // Fail closed: callers must provide verified transition decisions.
+  const emitStartPortal = options?.emitStartPortal === true;
+  const emitEndPortal = options?.emitEndPortal === true;
 
   const portalPos: number[] = [];
   const portalNorm: number[] = [];

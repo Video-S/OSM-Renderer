@@ -290,7 +290,8 @@ describe('Milestone 2.3 Stage E4-T — Tunnel Classification & Rendering (TKT-01
       },
     ]);
 
-    assert.ok(findMeshesByPrefix(scene.railwaysGroup, 'Railway_Tunnel_Portals').length > 0);
+    // An isolated underground subway has no proven surface transition: no portal.
+    assert.equal(findMeshesByPrefix(scene.railwaysGroup, 'Railway_Tunnel_Portals').length, 0);
     assert.ok(
       findMeshesByPrefix(scene.railwaysGroup, 'Tunnel_Underground_Railway_Rails').length > 0
     );

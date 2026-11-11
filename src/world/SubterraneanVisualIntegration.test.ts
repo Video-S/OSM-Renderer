@@ -504,7 +504,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
 
     assert.equal(portalMesh?.visible, true);
     assert.equal(entranceMesh?.visible, true);
-    assert.equal(traceMeshDefault?.visible, false);
+    assert.equal(traceMeshDefault, null);
     assert.equal(ugRoadMeshDefault, null);
     assert.equal(roadDiag?.undergroundTracesVisible, false);
     assert.equal(roadDiag?.hiddenUndergroundMeshCount ?? 0, 0);
@@ -579,7 +579,7 @@ describe('M2.3-E4-T2 Subterranean Visual Integration & Structural Context (TKT-0
     const ugRails = findMeshInScene(scene, 'Tunnel_Underground_Railway_Rails');
 
     assert.equal(railPortalMesh?.visible, true);
-    assert.equal(railTraceMesh?.visible, false);
+    assert.equal(railTraceMesh, null);
     assert.equal(ugBallast?.visible, true);
     assert.equal(ugSleepers?.visible, true);
     assert.equal(ugRails?.visible, true);

@@ -4156,6 +4156,7 @@ export class GeometryBuilder {
               {
                 emitStartPortal,
                 emitEndPortal,
+                emitUndergroundTrace: Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces),
                 maxheightMeters: edge.placementClassification?.supportingEvidence.maxheightMeters,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
               }
@@ -4433,6 +4434,7 @@ export class GeometryBuilder {
               {
                 emitStartPortal,
                 emitEndPortal,
+                emitUndergroundTrace: Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces),
                 maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
               }

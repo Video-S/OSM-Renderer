@@ -1096,6 +1096,7 @@ export function buildRailwayGroupInternal(
         {
           emitStartPortal,
           emitEndPortal,
+          emitUndergroundTrace: showUndergroundTunnelTraces,
           maxheightMeters: r.placementClassification?.supportingEvidence.maxheightMeters,
           railwayType: r.railwayType,
           surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,

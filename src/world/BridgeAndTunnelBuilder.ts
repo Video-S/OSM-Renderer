@@ -217,6 +217,79 @@ export interface TunnelPortalGenerationOptions {
   surfaceElevation?: number;
 }
 
+/**
+ * A tunnel portal and its ground-cover cutout must share exactly the same
+ * 2D dimensions. Keep this geometry-independent so terrain clipping never
+ * needs to allocate and discard THREE.BufferGeometry as a side effect.
+ */
+function portalMouthDimensions(
+  width: number,
+  isPedestrianOrCycle: boolean,
+  isRailwayPortal: boolean
+): { hoodDepth: number; openW: number } {
+  return {
+    hoodDepth: isPedestrianOrCycle ? 1.8 : isRailwayPortal ? 2.8 : 2.5,
+    openW: Math.max(width + 0.25, isPedestrianOrCycle ? 2.2 : isRailwayPortal ? 3.6 : 3.8),
+  };
+}
+
+function portalGroundCutoutPolygon(
+  px: number, pz: number, inTx: number, inTz: number,
+  openW: number, hoodDepth: number
+): [number, number][][] {
+  const nx = -inTz;
+  const nz = inTx;
+  const cutEndX = px + inTx * (hoodDepth * 0.76);
+  const cutEndZ = pz + inTz * (hoodDepth * 0.76);
+  const cutHalfW = openW * 0.5 * 0.94;
+  const ring: [number, number][] = [
+    [Number((px + nx * cutHalfW).toFixed(4)), Number((pz + nz * cutHalfW).toFixed(4))],
+    [Number((cutEndX + nx * cutHalfW).toFixed(4)), Number((cutEndZ + nz * cutHalfW).toFixed(4))],
+    [Number((cutEndX - nx * cutHalfW).toFixed(4)), Number((cutEndZ - nz * cutHalfW).toFixed(4))],
+    [Number((px - nx * cutHalfW).toFixed(4)), Number((pz - nz * cutHalfW).toFixed(4))],
+    [Number((px + nx * cutHalfW).toFixed(4)), Number((pz + nz * cutHalfW).toFixed(4))],
+  ];
+  return [ring];
+}
+
+/**
+ * Pure portal cutout geometry for pre-render ground-cover clipping.
+ * Only explicitly authorized endpoints get holes; no portal mesh is allocated.
+ */
+export function calculateTunnelPortalGroundCutouts(
+  points: readonly [number, number][],
+  width: number,
+  isPedestrianOrCycle: boolean = false,
+  options?: Pick<TunnelPortalGenerationOptions, 'emitStartPortal' | 'emitEndPortal' | 'railwayType'>
+): [number, number][][][] {
+  const cleanPts: [number, number][] = [];
+  for (const pt of points) {
+    if (
+      cleanPts.length === 0 ||
+      Math.hypot(pt[0] - cleanPts[cleanPts.length - 1][0], pt[1] - cleanPts[cleanPts.length - 1][1]) > 0.02
+    ) {
+      cleanPts.push([pt[0], pt[1]]);
+    }
+  }
+  if (cleanPts.length < 2) return [];
+  const { hoodDepth, openW } = portalMouthDimensions(width, isPedestrianOrCycle, Boolean(options?.railwayType));
+  const cutouts: [number, number][][][] = [];
+  if (options?.emitStartPortal === true) {
+    const dx = cleanPts[1][0] - cleanPts[0][0];
+    const dz = cleanPts[1][1] - cleanPts[0][1];
+    const len = Math.hypot(dx, dz) || 1;
+    cutouts.push(portalGroundCutoutPolygon(cleanPts[0][0], cleanPts[0][1], dx / len, dz / len, openW, hoodDepth));
+  }
+  if (options?.emitEndPortal === true) {
+    const n = cleanPts.length;
+    const dx = cleanPts[n - 2][0] - cleanPts[n - 1][0];
+    const dz = cleanPts[n - 2][1] - cleanPts[n - 1][1];
+    const len = Math.hypot(dx, dz) || 1;
+    cutouts.push(portalGroundCutoutPolygon(cleanPts[n - 1][0], cleanPts[n - 1][1], dx / len, dz / len, openW, hoodDepth));
+  }
+  return cutouts;
+}
+
 export const DEFAULT_TUNNEL_PORTAL_RAMP_MAX_LENGTH_METERS = 10.0;
 export const DEFAULT_TUNNEL_PORTAL_RAMP_MAX_FRACTION = 0.35;
 
@@ -1271,12 +1344,8 @@ export function generateTunnelPortalAndTraceGeometries(
     const lintelHeight = isPedestrianOrCycle ? 0.52 : isRailwayPortal ? 0.78 : 0.72;
     const portalHeight = clearanceHeight + lintelHeight;
     const pillarWidth = isPedestrianOrCycle ? 0.42 : isRailwayPortal ? 0.64 : 0.58;
-    const hoodDepth = isPedestrianOrCycle ? 1.8 : isRailwayPortal ? 2.8 : 2.5;
+    const { hoodDepth, openW } = portalMouthDimensions(width, isPedestrianOrCycle, isRailwayPortal);
     const wingLen = isPedestrianOrCycle ? 1.6 : isRailwayPortal ? 2.4 : 2.2;
-    const openW = Math.max(
-      width + 0.25,
-      isPedestrianOrCycle ? 2.2 : isRailwayPortal ? 3.6 : 3.8
-    );
     const halfOpen = openW * 0.5;
 
     // 1. Left & Right Portal Retaining Pillars (hooded entrance frame)
@@ -1414,20 +1483,10 @@ export function generateTunnelPortalAndTraceGeometries(
     mouthIdx.push(mouthV, mouthV + 1, mouthV + 2, mouthV, mouthV + 2, mouthV + 3);
     mouthV += 4;
 
-    // 5. Tightly bounded 2D cutout rectangle for localized ground-cover recession at the portal mouth
-    const cutStartX = px;
-    const cutStartZ = pz;
-    const cutEndX = px + inTx * (hoodDepth * 0.76);
-    const cutEndZ = pz + inTz * (hoodDepth * 0.76);
-    const cutHalfW = halfOpen * 0.94;
-    const cutoutRing: [number, number][] = [
-      [Number((cutStartX + nx * cutHalfW).toFixed(4)), Number((cutStartZ + nz * cutHalfW).toFixed(4))],
-      [Number((cutEndX + nx * cutHalfW).toFixed(4)), Number((cutEndZ + nz * cutHalfW).toFixed(4))],
-      [Number((cutEndX - nx * cutHalfW).toFixed(4)), Number((cutEndZ - nz * cutHalfW).toFixed(4))],
-      [Number((cutStartX - nx * cutHalfW).toFixed(4)), Number((cutStartZ - nz * cutHalfW).toFixed(4))],
-      [Number((cutStartX + nx * cutHalfW).toFixed(4)), Number((cutStartZ + nz * cutHalfW).toFixed(4))],
-    ];
-    portalGroundCutoutPolygons.push([cutoutRing]);
+    // Use the same pure cutout projection as the terrain pre-pass.
+    portalGroundCutoutPolygons.push(
+      portalGroundCutoutPolygon(px, pz, inTx, inTz, openW, hoodDepth)
+    );
   };
 
   // Start portal

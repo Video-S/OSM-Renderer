@@ -46,7 +46,21 @@ jobs:
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '7\. Primary.*Station Hengelo'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
-            pattern: '7\. Primary.*Amsterdam Centraal'
+            pattern: '7\. Primary.*Amsterdam Centraal slice 1 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 2 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 3 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 4 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 5 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 6 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 7 of 8'
+          - files: "src/world/InfrastructureRenderAdapter.test.ts"
+            pattern: '7\. Primary.*Amsterdam Centraal slice 8 of 8'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '8\. preserves full railway'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"

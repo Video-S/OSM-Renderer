@@ -59,7 +59,10 @@ interface IndexedEndpoint {
   rawNodeId?: string;
 }
 interface FeatureDecision {
-  feature: LinearFeature;
+  // Immutable source terminal positions: downstream graph renderers may mutate
+  // their working points for snapped transitions after this index is built.
+  startPoint: readonly [number, number];
+  endPoint: readonly [number, number];
   start: boolean;
   end: boolean;
 }
@@ -117,7 +120,6 @@ function cell(point: readonly [number, number]): readonly [number, number] {
  * graph edge cannot accidentally inherit a portal from the source way's other end.
  */
 export class VerifiedTunnelEntrances {
-  private readonly decisions: FeatureDecision[] = [];
   private readonly byId = new Map<string, FeatureDecision[]>();
 
   constructor(roads: readonly RoadFeature[], railways: readonly RailwayFeature[]) {
@@ -167,12 +169,14 @@ export class VerifiedTunnelEntrances {
 
     for (const feature of features) {
       if (resolveSurfaceVisibility(feature) !== 'underground') continue;
+      const first = feature.points[0];
+      const last = feature.points[feature.points.length - 1];
       const decision: FeatureDecision = {
-        feature,
+        startPoint: [first[0], first[1]],
+        endPoint: [last[0], last[1]],
         start: verified(endpoint(feature, 'start')),
         end: verified(endpoint(feature, 'end')),
       };
-      this.decisions.push(decision);
       for (const id of new Set([feature.id, feature.sourceFeatureId, ...(feature.sourceFeatureIds ?? [])])) {
         if (!id) continue;
         const bucket = this.byId.get(id) ?? [];
@@ -191,15 +195,13 @@ export class VerifiedTunnelEntrances {
     for (const id of ids) {
       if (!id) continue;
       for (const candidate of this.byId.get(id) ?? []) {
-        const original = candidate.feature.points;
-        if (original.length < 2) continue;
-        const originalPoint = original[end === 'start' ? 0 : original.length - 1];
+        const originalPoint = end === 'start' ? candidate.startPoint : candidate.endPoint;
         if (Math.hypot(point[0] - originalPoint[0], point[1] - originalPoint[1]) <= MAX_ENDPOINT_GAP_METERS) {
           return end === 'start' ? candidate.start : candidate.end;
         }
         // Graph edges can reverse their source way orientation. Match the actual
         // endpoint in either direction, but never a non-terminal vertex.
-        const opposite = original[end === 'start' ? original.length - 1 : 0];
+        const opposite = end === 'start' ? candidate.endPoint : candidate.startPoint;
         if (Math.hypot(point[0] - opposite[0], point[1] - opposite[1]) <= MAX_ENDPOINT_GAP_METERS) {
           return end === 'start' ? candidate.end : candidate.start;
         }

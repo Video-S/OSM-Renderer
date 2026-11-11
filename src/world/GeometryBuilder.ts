@@ -4007,6 +4007,13 @@ export class GeometryBuilder {
     if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
       const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
       for (const edge of infrastructureRenderPreview.descriptors.roadEdges) {
+        if (resolveSurfaceVisibility({
+          osmTags: edge.primaryOsmTags,
+          placementClassification: edge.placementClassification,
+          layer: edge.layer,
+          isBridge: edge.isBridge,
+          isTunnel: edge.isTunnel,
+        }) === 'concealed_indoor') continue;
         if (edge.placementClassification?.hasConflict) {
           roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount =
             (roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount ?? 0) + 1;
@@ -4457,7 +4464,7 @@ export class GeometryBuilder {
             const canGenerateUnderground = road.placementClassification
               ? road.placementClassification.canGenerateUndergroundGeometry
               : true;
-            if (canGenerateUnderground) {
+            if (canGenerateUnderground && infrastructureRenderOptions.showHiddenUndergroundGeometry) {
               const undergroundProf = buildTunnelUndergroundProfile3D({
                 points: road.points,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,

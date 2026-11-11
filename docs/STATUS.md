@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, & Stage E4-A `M2.3-E4-A` / `TKT-013` complete & closed; Stage E2 `M2.3-E2` / `TKT-008` & Stage E4-T `M2.3-E4-T` / `TKT-014` implemented & `in_progress` pending project-owner review; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, & Stage E4-A `M2.3-E4-A` / `TKT-013` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -93,16 +93,16 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-11 — Milestone 2.3 Stage E4-T Tunnel Classification & Rendering)
+## Verified Test & Build Results (2026-11-11 — Milestone 2.3 Stage E4-T2 Subterranean Visual Integration & Structural Context)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1–M2.3-E4-T, DevTools & E2+ Tests** | `npm test` | **264 / 264 passed** (30 suites, 0 failures) |
+| **Unit, Integration, M2.1–M2.3-E4-T2, DevTools & E2+ Tests** | `npm test` | **280 / 280 passed** (31 suites, 0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
 
-*(Historical baselines preserved: Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
+*(Historical baselines preserved: Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -121,13 +121,14 @@
 | `GraphRailwayRendering.test.ts` (`M2.3-E3-A1`, `E3-A2` & `E3-B` / `TKT-010`, `TKT-011`, `TKT-012`) | 31 |
 | `GradeTransitionRendering.test.ts` (`M2.3-E4-A` / `TKT-013`) | 11 |
 | `TunnelClassificationAndRendering.test.ts` (`M2.3-E4-T` / `TKT-014`) | 18 |
-| **Total (`it` declarations / total subtests)** | **254 (`264` with suite subtests)** |
+| `SubterraneanVisualIntegration.test.ts` (`M2.3-E4-T2` / `TKT-015`) | 15 |
+| **Total (`it` declarations / total subtests)** | **269 (`280` with suite subtests)** |
 
 ---
 
 ## Active & Planned Milestones
 
-1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage E4-T Implemented, Pending Owner Visual Review`)**:
+1. **Milestone 2.3: Infrastructure Topology and Connectivity (`Active — Stage E4-T & E4-T2 Implemented, Pending Owner Visual Review`)**:
    - **Stage A (`M2.3-A` / `TKT-003` — `closed`)**: Source audit completed and **[ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md)** (`Accepted`) approved by project owner.
    - **Stage B (`M2.3-B` / `TKT-004` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource` road capture, verified per-vertex OSM node ID enrichment (`OsmNodeIdEnricher.ts`), pure-TypeScript `RoadNetworkBuilder` (`src/world/infrastructure/topology/`), and `16` automated tests in `src/world/RoadNetworkTopology.test.ts` (`108 / 108` Stage B baseline).
    - **Stage C (`M2.3-C` / `TKT-005` — `closed`)**: Implemented non-destructive `ProcessedMapData.topologySource.railwayParts` and railway-only `infrastructurePoints`, pure-TypeScript `RailwayNetworkBuilder` (`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`), and `18` automated tests in `src/world/RailwayNetworkTopology.test.ts` (`126 / 126` Stage C baseline).
@@ -139,6 +140,7 @@
    - **Stage E3-B (`M2.3-E3-B` / `TKT-012` — `closed`)**: Experimental surface-first railway ballast (R+) under opt-in `?topologyRailways=graph-R+` (`railwayBallastStrategy: 'surface-first'`), unifying overlapping at-grade ballast footprints into planar 2D polygons while leaving rails, 3D sleepers, switches, and bridge/tunnel profiles completely unchanged. Delivers 42–59% ballast triangle reduction and eliminates all coplanar self-intersections.
    - **Stage E4-A (`M2.3-E4-A` / `TKT-013` — `closed`)**: Graph-driven bridge and tunnel transitions (`resolveGraphGradeSeparatedPlans` in `src/world/BridgeAndTunnelBuilder.ts`), replacing Euclidean `<= 0.8 m` proximity heuristics with authoritative `GradeTransitionRenderDescriptor` and node-level endpoint state resolution (`confirmed_transition`, `confirmed_elevated_continuation`, `boundary_clipped_continuation`, `unresolved_connection`, `intentionally_standalone`), multi-segment and switch-deck component ramp distance solving, cross-layer elevated joint elevation matching, abutment headwall and tunnel portal suppression on internal/clipped endpoints, and `11` automated test suites in `src/world/GradeTransitionRendering.test.ts` (`246 / 246` Stage E4-A baseline). Visually accepted by project owner.
    - **Stage E4-T (`M2.3-E4-T` / `TKT-014` — `in_progress`, pending project-owner review)**: Semantic infrastructure placement classification (`src/world/InfrastructurePlacementClassifier.ts`) and 3D underground tunnel rendering. Decouples `covered=*`, `tunnel=building_passage`, `cutting=*`, `railway=subway` (without underground tags), `tunnel=no`, and bare `layer < 0` from subterranean tunnels; scales tunnel portals to road width, railway type, and `maxheight`; emits portals only at confirmed/justified entrances; constructs continuous 3D underground road (`Tunnel_Underground_Roads`) and railway (`Tunnel_Underground_Railway_Ballast`, `Tunnel_Underground_Railway_Sleepers`, `Tunnel_Underground_Railway_Rails`) geometry at subterranean depth; and adds `18` automated tests in `src/world/TunnelClassificationAndRendering.test.ts` (`264 / 264` Stage E4-T baseline).
+   - **Stage E4-T2 (`M2.3-E4-T2` / `TKT-015` — `in_progress`, pending project-owner review)**: Subterranean visual integration and context-aware retaining wall elevation. Resolves Europatunnel Hengelo bug report (`way/375064982` and `way/375064983`), fixes above-ground retaining wall elevations around underpasses and open cuttings, establishes dynamic vertical clearance depth policy (`resolveTunnelClearanceAndDepth`), separates hidden underground geometry from visible portal entrance recess/ramp geometry, carves localized portal entrance openings in overlapping ground cover, and adds `15` automated tests in `src/world/SubterraneanVisualIntegration.test.ts` (`280 / 280` Stage E4-T2 baseline).
    - **Stage E4-B (`M2.3-E4-B` — Postponed, requires separate explicit approval)**: Level-crossing surface reconstruction (`LevelCrossingRenderDescriptor` / `GradeSeparatedCrossingRenderDescriptor` consumption).
    - **Stage E5 (`M2.3-E5` — Planned, requires separate explicit approval)**: Legacy cleanup and regression hardening.
 2. **Milestone 2.4: Road Surface Markings (`Planned`)**:

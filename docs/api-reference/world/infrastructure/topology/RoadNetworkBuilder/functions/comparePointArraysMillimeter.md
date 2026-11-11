@@ -8,7 +8,7 @@
 
 > **comparePointArraysMillimeter**(`a`, `b`): `number`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:239
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:241
 
 ## Parameters
 

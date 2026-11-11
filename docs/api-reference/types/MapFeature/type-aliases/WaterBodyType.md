@@ -8,4 +8,4 @@
 
 > **WaterBodyType** = `"riverbank"` \| `"lake"` \| `"pond"` \| `"reservoir"` \| `"basin"` \| `"dock"` \| `"canal"` \| `"ocean"` \| `"swimming_pool"` \| `"salt_pond"` \| `"reef"` \| `"wetland"` \| `"water"`
 
-Defined in: types/MapFeature.ts:105
+Defined in: types/MapFeature.ts:115

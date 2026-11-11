@@ -6,7 +6,7 @@
 
 # Interface: ProcessedMapData
 
-Defined in: types/MapFeature.ts:568
+Defined in: types/MapFeature.ts:594
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:568
 
 > **barriers**: [`BarrierFeature`](BarrierFeature.md)[]
 
-Defined in: types/MapFeature.ts:588
+Defined in: types/MapFeature.ts:614
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:588
 
 > **bounds**: `object`
 
-Defined in: types/MapFeature.ts:571
+Defined in: types/MapFeature.ts:597
 
 #### depthMeters
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:571
 
 > **buildings**: [`BuildingFeature`](BuildingFeature.md)[]
 
-Defined in: types/MapFeature.ts:579
+Defined in: types/MapFeature.ts:605
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:579
 
 > **centerLonLat**: \[`number`, `number`\]
 
-Defined in: types/MapFeature.ts:570
+Defined in: types/MapFeature.ts:596
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:570
 
 > **diagnostics**: [`MapFeatureDiagnostics`](MapFeatureDiagnostics.md)
 
-Defined in: types/MapFeature.ts:592
+Defined in: types/MapFeature.ts:618
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:592
 
 > **landmarks**: [`PointLandmarkFeature`](PointLandmarkFeature.md)[]
 
-Defined in: types/MapFeature.ts:589
+Defined in: types/MapFeature.ts:615
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:589
 
 > **landuse**: [`LanduseFeature`](LanduseFeature.md)[]
 
-Defined in: types/MapFeature.ts:587
+Defined in: types/MapFeature.ts:613
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:587
 
 > **linearWaterways**: [`LinearWaterwayFeature`](LinearWaterwayFeature.md)[]
 
-Defined in: types/MapFeature.ts:583
+Defined in: types/MapFeature.ts:609
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:583
 
 > **parks**: [`ParkFeature`](ParkFeature.md)[]
 
-Defined in: types/MapFeature.ts:586
+Defined in: types/MapFeature.ts:612
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: types/MapFeature.ts:586
 
 > **railways**: [`RailwayFeature`](RailwayFeature.md)[]
 
-Defined in: types/MapFeature.ts:581
+Defined in: types/MapFeature.ts:607
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: types/MapFeature.ts:581
 
 > **regionName**: `string`
 
-Defined in: types/MapFeature.ts:569
+Defined in: types/MapFeature.ts:595
 
 ***
 
@@ -126,7 +126,7 @@ Defined in: types/MapFeature.ts:569
 
 > **roads**: [`RoadFeature`](RoadFeature.md)[]
 
-Defined in: types/MapFeature.ts:580
+Defined in: types/MapFeature.ts:606
 
 ***
 
@@ -134,7 +134,7 @@ Defined in: types/MapFeature.ts:580
 
 > **stats**: `object`
 
-Defined in: types/MapFeature.ts:593
+Defined in: types/MapFeature.ts:619
 
 #### areaKm2
 
@@ -190,7 +190,7 @@ Defined in: types/MapFeature.ts:593
 
 > `optional` **topologySource?**: [`TopologySourceData`](../../../world/infrastructure/topology/types/interfaces/TopologySourceData.md)
 
-Defined in: types/MapFeature.ts:591
+Defined in: types/MapFeature.ts:617
 
 Non-destructive pre-deduplication and pre-chaining topology inputs (ADR-0009).
 
@@ -200,7 +200,7 @@ Non-destructive pre-deduplication and pre-chaining topology inputs (ADR-0009).
 
 > **water**: [`WaterBodyFeature`](WaterBodyFeature.md)[]
 
-Defined in: types/MapFeature.ts:585
+Defined in: types/MapFeature.ts:611
 
 ***
 
@@ -208,4 +208,4 @@ Defined in: types/MapFeature.ts:585
 
 > **waterBodies**: [`WaterBodyFeature`](WaterBodyFeature.md)[]
 
-Defined in: types/MapFeature.ts:582
+Defined in: types/MapFeature.ts:608

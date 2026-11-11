@@ -8,4 +8,4 @@
 
 > **FeatureType** = `"building"` \| `"road"` \| `"railway"` \| `"water"` \| `"waterway"` \| `"park"` \| `"landuse"` \| `"barrier"` \| `"landmark"` \| `"ground"` \| `"unknown"`
 
-Defined in: types/MapFeature.ts:37
+Defined in: types/MapFeature.ts:47

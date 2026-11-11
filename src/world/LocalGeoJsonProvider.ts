@@ -2088,19 +2088,68 @@ export class LocalGeoJsonProvider implements MapDataProvider {
           continue;
         }
 
-        const lines: [number, number][][] = [];
+        const barrierGradeScope = `barrier|${classification.layer}|${classification.isBridge}|${classification.isTunnel}`;
+        const candidateLines: Array<{
+          points: [number, number][];
+          topologyOsmNodes?: Array<string | number | undefined>;
+          legacyOsmNodes?: Array<string | number | undefined>;
+        }> = [];
         let wasFeatureClipped = false;
-        for (const rl of rawLines) {
+
+        for (let i = 0; i < rawLines.length; i++) {
+          const partTopologyOsmNodes = extractVerifiedTopologyPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
+          const partLegacyOsmNodes = extractLegacyPartOsmNodeIds(
+            props,
+            i,
+            rawLines.length,
+            rawLines[i].length
+          );
           if (shouldClipToRegion) {
-            const clipped = clipPolylineToBox(rl, -clipExtent, -clipExtent, clipExtent, clipExtent);
+            const clipped = clipPolylineToBox(
+              rawLines[i],
+              -clipExtent,
+              -clipExtent,
+              clipExtent,
+              clipExtent,
+              partTopologyOsmNodes
+            );
             if (clipped.wasClipped) wasFeatureClipped = true;
-            for (const cl of clipped.lines) lines.push(cl.points);
+
+            let legacyClippedNodes: Array<Array<string | number | undefined> | undefined> = [];
+            if (partLegacyOsmNodes) {
+              const legacyClipped = clipPolylineToBox(
+                rawLines[i],
+                -clipExtent,
+                -clipExtent,
+                clipExtent,
+                clipExtent,
+                partLegacyOsmNodes
+              );
+              legacyClippedNodes = legacyClipped.lines.map((l) => l.osmNodes);
+            }
+
+            for (let cIdx = 0; cIdx < clipped.lines.length; cIdx++) {
+              candidateLines.push({
+                points: clipped.lines[cIdx].points,
+                topologyOsmNodes: clipped.lines[cIdx].osmNodes,
+                legacyOsmNodes: legacyClippedNodes[cIdx],
+              });
+            }
           } else {
-            lines.push(rl);
+            candidateLines.push({
+              points: rawLines[i],
+              topologyOsmNodes: partTopologyOsmNodes,
+              legacyOsmNodes: partLegacyOsmNodes,
+            });
           }
         }
 
-        if (shouldClipToRegion && lines.length === 0) {
+        if (shouldClipToRegion && candidateLines.length === 0) {
           recordClipped(id, true);
           continue;
         }
@@ -2108,19 +2157,43 @@ export class LocalGeoJsonProvider implements MapDataProvider {
           recordClipped(id, false);
         }
 
+        const customHeight = props.height ? parseFloat(String(props.height)) : undefined;
+        const resolvedHeight =
+          customHeight && !isNaN(customHeight) && customHeight > 0
+            ? customHeight
+            : classification.defaultHeight || 1.6;
+
         let addedAny = false;
-        for (let partIdx = 0; partIdx < lines.length; partIdx++) {
-          const line = lines[partIdx];
+        for (let partIdx = 0; partIdx < candidateLines.length; partIdx++) {
+          const { points: line, topologyOsmNodes, legacyOsmNodes } = candidateLines[partIdx];
           if (line.length >= 2) {
+            const nodeIds = topoNodeIndex.resolveWayNodeIds(
+              line,
+              barrierGradeScope,
+              legacyOsmNodes as Array<string | number> | undefined
+            );
+            const rawOsmNodeIds = line.map((_, vIdx) =>
+              topologyOsmNodes &&
+              topologyOsmNodes[vIdx] !== undefined &&
+              topologyOsmNodes[vIdx] !== null
+                ? String(topologyOsmNodes[vIdx])
+                : undefined
+            );
             barriers.push({
               id: `${id}-${partIdx}`,
               sourceFeatureId: id,
               type: 'barrier',
               name: props.name,
               points: line,
+              nodeIds,
+              rawOsmNodeIds,
               barrierType: (classification.subtype as BarrierType) || 'wall',
               width: classification.defaultWidth || 0.5,
-              height: classification.defaultHeight || 1.6,
+              height: resolvedHeight,
+              layer: classification.layer,
+              isBridge: classification.isBridge,
+              isTunnel: classification.isTunnel,
+              placementClassification: classification.placementClassification,
               cartoLabel: classification.cartoLabel,
               primaryTag: classification.primaryTag,
               osmTags: cleanLegacyOsmTags(props),
@@ -2204,6 +2277,11 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     for (const rw of railways) {
       if (rw.nodeIds) {
         rw.nodeIds = rw.nodeIds.map((nid) => topoNodeIndex.resolveCanonicalNodeId(String(nid)));
+      }
+    }
+    for (const bar of barriers) {
+      if (bar.nodeIds) {
+        bar.nodeIds = bar.nodeIds.map((nid) => topoNodeIndex.resolveCanonicalNodeId(String(nid)));
       }
     }
 

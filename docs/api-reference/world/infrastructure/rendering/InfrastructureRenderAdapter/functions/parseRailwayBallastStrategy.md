@@ -8,7 +8,7 @@
 
 > **parseRailwayBallastStrategy**(`raw`, `renderSource?`): [`RailwayBallastStrategy`](../type-aliases/RailwayBallastStrategy.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:165
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:177
 
 Parses a raw string value into a valid `RailwayBallastStrategy` (`'ribbon' | 'surface-first'`).
 

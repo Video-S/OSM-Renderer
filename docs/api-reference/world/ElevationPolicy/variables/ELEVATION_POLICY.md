@@ -46,6 +46,10 @@ Architectural Principles:
 
 ## Type Declaration
 
+### BARRIER\_BASE
+
+> **BARRIER\_BASE**: `number` = `0.025`
+
 ### BRIDGE\_BASE\_CLEARANCE
 
 > **BRIDGE\_BASE\_CLEARANCE**: `number` = `2.8`
@@ -81,6 +85,10 @@ Architectural Principles:
 ### MICRO\_TIER\_STEP
 
 > **MICRO\_TIER\_STEP**: `number` = `0.0`
+
+### OPEN\_CUTTING\_DEPTH
+
+> **OPEN\_CUTTING\_DEPTH**: `number` = `-1.8`
 
 ### PARKING\_MARKINGS
 
@@ -130,13 +138,33 @@ Architectural Principles:
 
 > **STEP\_TREAD\_OFFSET**: `number` = `0.006`
 
+### TUNNEL\_CLEARANCE\_FOOT\_CYCLE
+
+> **TUNNEL\_CLEARANCE\_FOOT\_CYCLE**: `number` = `2.6`
+
+### TUNNEL\_CLEARANCE\_RAILWAY
+
+> **TUNNEL\_CLEARANCE\_RAILWAY**: `number` = `4.6`
+
+### TUNNEL\_CLEARANCE\_RAILWAY\_ELECTRIFIED
+
+> **TUNNEL\_CLEARANCE\_RAILWAY\_ELECTRIFIED**: `number` = `5.2`
+
+### TUNNEL\_CLEARANCE\_VEHICULAR
+
+> **TUNNEL\_CLEARANCE\_VEHICULAR**: `number` = `3.8`
+
 ### TUNNEL\_DEPTH
 
-> **TUNNEL\_DEPTH**: `number` = `-2.0`
+> **TUNNEL\_DEPTH**: `number` = `-5.0`
 
 ### TUNNEL\_LAYER\_STEP
 
-> **TUNNEL\_LAYER\_STEP**: `number` = `1.0`
+> **TUNNEL\_LAYER\_STEP**: `number` = `5.0`
+
+### TUNNEL\_ROOF\_COVER\_THICKNESS
+
+> **TUNNEL\_ROOF\_COVER\_THICKNESS**: `number` = `0.4`
 
 ### WATER\_BOTTOM
 

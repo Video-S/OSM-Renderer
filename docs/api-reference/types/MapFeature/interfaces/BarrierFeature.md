@@ -6,7 +6,7 @@
 
 # Interface: BarrierFeature
 
-Defined in: types/MapFeature.ts:387
+Defined in: types/MapFeature.ts:397
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:387
 
 > **barrierType**: [`BarrierType`](../type-aliases/BarrierType.md)
 
-Defined in: types/MapFeature.ts:393
+Defined in: types/MapFeature.ts:405
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:393
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:396
+Defined in: types/MapFeature.ts:413
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:396
 
 > **height**: `number`
 
-Defined in: types/MapFeature.ts:395
+Defined in: types/MapFeature.ts:407
 
 ***
 
@@ -38,7 +38,31 @@ Defined in: types/MapFeature.ts:395
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:388
+Defined in: types/MapFeature.ts:398
+
+***
+
+### isBridge?
+
+> `optional` **isBridge?**: `boolean`
+
+Defined in: types/MapFeature.ts:409
+
+***
+
+### isTunnel?
+
+> `optional` **isTunnel?**: `boolean`
+
+Defined in: types/MapFeature.ts:410
+
+***
+
+### layer?
+
+> `optional` **layer?**: `number`
+
+Defined in: types/MapFeature.ts:408
 
 ***
 
@@ -46,7 +70,15 @@ Defined in: types/MapFeature.ts:388
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:391
+Defined in: types/MapFeature.ts:401
+
+***
+
+### nodeIds?
+
+> `optional` **nodeIds?**: (`string` \| `number`)[]
+
+Defined in: types/MapFeature.ts:403
 
 ***
 
@@ -54,7 +86,15 @@ Defined in: types/MapFeature.ts:391
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:398
+Defined in: types/MapFeature.ts:415
+
+***
+
+### placementClassification?
+
+> `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](InfrastructurePlacementClassification.md)
+
+Defined in: types/MapFeature.ts:411
 
 ***
 
@@ -62,7 +102,7 @@ Defined in: types/MapFeature.ts:398
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: types/MapFeature.ts:392
+Defined in: types/MapFeature.ts:402
 
 ***
 
@@ -70,7 +110,15 @@ Defined in: types/MapFeature.ts:392
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:397
+Defined in: types/MapFeature.ts:414
+
+***
+
+### rawOsmNodeIds?
+
+> `optional` **rawOsmNodeIds?**: `string`[]
+
+Defined in: types/MapFeature.ts:404
 
 ***
 
@@ -78,7 +126,15 @@ Defined in: types/MapFeature.ts:397
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:389
+Defined in: types/MapFeature.ts:399
+
+***
+
+### structuralContext?
+
+> `optional` **structuralContext?**: [`BarrierStructuralContext`](BarrierStructuralContext.md)
+
+Defined in: types/MapFeature.ts:412
 
 ***
 
@@ -86,7 +142,7 @@ Defined in: types/MapFeature.ts:389
 
 > **type**: `"barrier"`
 
-Defined in: types/MapFeature.ts:390
+Defined in: types/MapFeature.ts:400
 
 ***
 
@@ -94,4 +150,4 @@ Defined in: types/MapFeature.ts:390
 
 > **width**: `number`
 
-Defined in: types/MapFeature.ts:394
+Defined in: types/MapFeature.ts:406

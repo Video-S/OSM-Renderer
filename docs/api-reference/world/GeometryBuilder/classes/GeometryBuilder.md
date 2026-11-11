@@ -6,7 +6,7 @@
 
 # Class: GeometryBuilder
 
-Defined in: world/GeometryBuilder.ts:1992
+Defined in: world/GeometryBuilder.ts:2004
 
 ## Constructors
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:1992
 
 > **new GeometryBuilder**(`options?`): `GeometryBuilder`
 
-Defined in: world/GeometryBuilder.ts:2002
+Defined in: world/GeometryBuilder.ts:2014
 
 #### Parameters
 
@@ -32,7 +32,7 @@ Defined in: world/GeometryBuilder.ts:2002
 
 > **buildScene**(`data`, `theme`): [`BuiltSceneGeometry`](../interfaces/BuiltSceneGeometry.md)
 
-Defined in: world/GeometryBuilder.ts:2015
+Defined in: world/GeometryBuilder.ts:2027
 
 #### Parameters
 

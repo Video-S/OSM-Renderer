@@ -85,6 +85,10 @@ export interface BuildRailwayPrototypeOptions {
   switchPolicy?: 'heuristic' | 'graph';
   /** Ballast rendering strategy ('ribbon' | 'surface-first') (Stage E3-B). Defaults to 'ribbon'. */
   ballastStrategy?: RailwayBallastStrategy;
+  /** Whether to display dashed surface tunnel alignment traces (Stage E4-T2). Defaults to false. */
+  showUndergroundTunnelTraces?: boolean;
+  /** Whether to keep buried subterranean tunnel meshes visible in normal camera views (Stage E4-T2). Defaults to false. */
+  showHiddenUndergroundGeometry?: boolean;
 }
 
 export interface RailwayBuildProfile {
@@ -182,6 +186,7 @@ export interface RailwayPrototypeResult {
   resources: SceneResourceManager;
   sleeperBoxes3D: SleeperBearerBox3D[];
   renderedSourceIds: Set<string>;
+  portalGroundCutoutPolygons?: [number, number][][][];
   profile: RailwayBuildProfile;
   stats: RailwayPrototypeStats;
   updateTheme: (newTheme: MapStyleTheme) => void;
@@ -615,6 +620,9 @@ export function buildRailwayGroupInternal(
   const tunnelUndergroundBallastItems: ChunkedGeoItem[] = [];
   const tunnelUndergroundSleeperItems: ChunkedGeoItem[] = [];
   const tunnelUndergroundRailItems: ChunkedGeoItem[] = [];
+  const portalGroundCutoutPolygons: [number, number][][][] = [];
+  const showUndergroundTunnelTraces = Boolean(options?.showUndergroundTunnelTraces);
+  const showHiddenUndergroundGeometry = Boolean(options?.showHiddenUndergroundGeometry);
 
   const requestedSource: RailwayInfrastructureRenderSource =
     options?.renderSource ?? 'legacy';
@@ -672,6 +680,7 @@ export function buildRailwayGroupInternal(
   }
 
   let skippedRailwayConflicts = 0;
+  let conflictingRailwayFallbacks = 0;
   const validatedSourceFeatures: RailwayFeature[] = [];
   for (const origFeature of sourceFeatures) {
     const placement =
@@ -684,6 +693,28 @@ export function buildRailwayGroupInternal(
       });
     if (placement.hasConflict) {
       skippedRailwayConflicts++;
+      conflictingRailwayFallbacks++;
+      const fallbackSid =
+        origFeature.sourceFeatureIds?.[0] || origFeature.sourceFeatureId || origFeature.id;
+      if (options?.diagnostics) {
+        if (!options.diagnostics.conflictingPlacementFallbacks) {
+          options.diagnostics.conflictingPlacementFallbacks = { count: 0, sampleIds: [] };
+        }
+        options.diagnostics.conflictingPlacementFallbacks.count++;
+        if (
+          options.diagnostics.conflictingPlacementFallbacks.sampleIds.length < 15 &&
+          !options.diagnostics.conflictingPlacementFallbacks.sampleIds.includes(fallbackSid)
+        ) {
+          options.diagnostics.conflictingPlacementFallbacks.sampleIds.push(fallbackSid);
+        }
+      }
+      validatedSourceFeatures.push({
+        ...origFeature,
+        placementClassification: placement,
+        layer: 0,
+        isTunnel: false,
+        isBridge: false,
+      });
       continue;
     }
     const f: RailwayFeature = {
@@ -787,6 +818,10 @@ export function buildRailwayGroupInternal(
     undergroundRoadGeometryCount: 0,
     undergroundRailwayGeometryCount: 0,
     conflictingPlacementSkippedCount: skippedRailwayConflicts,
+    conflictingPlacementFallbackCount: conflictingRailwayFallbacks,
+    portalGroundCutoutsCount: 0,
+    hiddenUndergroundMeshCount: 0,
+    undergroundTracesVisible: showUndergroundTunnelTraces,
   };
   const railwayEndpointCapPolicy = new Map<string, { capStart: boolean; capEnd: boolean }>();
 
@@ -794,12 +829,19 @@ export function buildRailwayGroupInternal(
     graphGradeSeparatedPlans = resolveGraphGradeSeparatedPlans(
       activeDescriptors,
       'railway',
-      (e) =>
-        getRailwayElevations(
+      (e) => {
+        const railEdge = activeDescriptors.railwayEdgesById.get(e.id);
+        return getRailwayElevations(
           e.layer,
           e.placementClassification ? e.placementClassification.isElevatedBridge : e.isBridge,
-          e.placementClassification ? e.placementClassification.isSubterraneanTunnel : e.isTunnel
-        ).ballast
+          e.placementClassification ? e.placementClassification.isSubterraneanTunnel : e.isTunnel,
+          {
+            railwayType: railEdge?.railwayType,
+            electrified: railEdge?.electrified,
+            maxheightMeters: e.placementClassification?.supportingEvidence.maxheightMeters,
+          }
+        ).ballast;
+      }
     );
     Object.assign(gradeTransitionDiagnostics, {
       ...graphGradeSeparatedPlans.diagnostics,
@@ -807,6 +849,10 @@ export function buildRailwayGroupInternal(
       undergroundRoadGeometryCount: 0,
       undergroundRailwayGeometryCount: 0,
       conflictingPlacementSkippedCount: skippedRailwayConflicts,
+      conflictingPlacementFallbackCount: conflictingRailwayFallbacks,
+      portalGroundCutoutsCount: 0,
+      hiddenUndergroundMeshCount: 0,
+      undergroundTracesVisible: showUndergroundTunnelTraces,
     });
     if (graphFallbackOccurred) {
       gradeTransitionDiagnostics.legacyFallbacksCount++;
@@ -817,12 +863,18 @@ export function buildRailwayGroupInternal(
 
     for (const f of sourceFeatures) {
       if (!f.points || f.points.length < 2) continue;
-      const plan = graphGradeSeparatedPlans.plansByEdgeId.get(f.id);
+      const plan =
+        graphGradeSeparatedPlans.plansByEdgeId.get(f.id) ??
+        (f.sourceFeatureId ? graphGradeSeparatedPlans.plansByEdgeId.get(f.sourceFeatureId) : undefined);
       if (plan && plan.points.length >= 2) {
         f.points = plan.points.map((pt) => [pt[0], pt[1]] as [number, number]);
       }
 
-      const snap = graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.id);
+      const snap =
+        graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.id) ??
+        (f.sourceFeatureId
+          ? graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.sourceFeatureId)
+          : undefined);
       if (snap) {
         const pts = f.points.map((pt) => [pt[0], pt[1]] as [number, number]);
         if (snap.start) {
@@ -882,19 +934,25 @@ export function buildRailwayGroupInternal(
 
   const atGradeRailEndpoints: [number, number][] = [];
   const bridgeRailEndpoints: Array<{ id: string; pt: [number, number] }> = [];
+  const tunnelRailEndpoints: Array<{ id: string; pt: [number, number] }> = [];
 
   for (const r of activeRailways) {
     if (!r.points || r.points.length < 2) continue;
     const isSubterraneanTunnel = r.placementClassification
-      ? r.placementClassification.isSubterraneanTunnel
+      ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
       : r.isTunnel;
     const isElevatedBridge = r.placementClassification
-      ? r.placementClassification.isElevatedBridge
+      ? !r.placementClassification.hasConflict && r.placementClassification.isElevatedBridge
       : Boolean(r.isBridge || r.layer > 0);
     if (!isSubterraneanTunnel && !isElevatedBridge) {
       atGradeRailEndpoints.push(r.points[0], r.points[r.points.length - 1]);
     } else if (isElevatedBridge) {
       bridgeRailEndpoints.push(
+        { id: r.id, pt: r.points[0] },
+        { id: r.id, pt: r.points[r.points.length - 1] }
+      );
+    } else if (isSubterraneanTunnel) {
+      tunnelRailEndpoints.push(
         { id: r.id, pt: r.points[0] },
         { id: r.id, pt: r.points[r.points.length - 1] }
       );
@@ -986,12 +1044,16 @@ export function buildRailwayGroupInternal(
     const midPt = r.points[Math.floor(r.points.length / 2)];
     const chunkKey = getChunkKey(midPt[0], midPt[1]);
     const isSubterraneanTunnel = r.placementClassification
-      ? r.placementClassification.isSubterraneanTunnel
+      ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
       : r.isTunnel;
     const isBridge = r.placementClassification
-      ? r.placementClassification.isElevatedBridge
+      ? !r.placementClassification.hasConflict && r.placementClassification.isElevatedBridge
       : Boolean(r.isBridge || r.layer > 0);
-    const elevs = getRailwayElevations(r.layer, isBridge, isSubterraneanTunnel);
+    const elevs = getRailwayElevations(r.layer, isBridge, isSubterraneanTunnel, {
+      railwayType: r.railwayType,
+      electrified: r.osmTags?.electrified as string | boolean | undefined,
+      maxheightMeters: r.placementClassification?.supportingEvidence.maxheightMeters,
+    });
 
     const railInfo: InspectableFeatureInfo = {
       id: r.id,
@@ -1013,32 +1075,51 @@ export function buildRailwayGroupInternal(
 
     if (isSubterraneanTunnel) {
       const tTun0 = performance.now();
-      const tunnelPlan = graphGradeSeparatedPlans?.plansByEdgeId.get(r.id);
+      const tunnelPlan =
+        graphGradeSeparatedPlans?.plansByEdgeId.get(r.id) ??
+        (r.sourceFeatureId ? graphGradeSeparatedPlans?.plansByEdgeId.get(r.sourceFeatureId) : undefined);
       if (!tunnelPlan && effectiveSource === 'legacy') {
         gradeTransitionDiagnostics.legacyFallbacksCount++;
       }
+      const tunnelPts = tunnelPlan ? tunnelPlan.points : r.points;
+      const pStart = tunnelPts[0];
+      const pEnd = tunnelPts[tunnelPts.length - 1];
+      const touchesOtherTunnelStart = tunnelRailEndpoints.some(
+        (t) => t.id !== r.id && Math.hypot(t.pt[0] - pStart[0], t.pt[1] - pStart[1]) <= 0.8
+      );
+      const touchesOtherTunnelEnd = tunnelRailEndpoints.some(
+        (t) => t.id !== r.id && Math.hypot(t.pt[0] - pEnd[0], t.pt[1] - pEnd[1]) <= 0.8
+      );
       const emitStartPortal = tunnelPlan
         ? tunnelPlan.startClassification === 'confirmed_transition' ||
           tunnelPlan.startClassification === 'intentionally_standalone'
-        : true;
+        : !touchesOtherTunnelStart;
       const emitEndPortal = tunnelPlan
         ? tunnelPlan.endClassification === 'confirmed_transition' ||
           tunnelPlan.endClassification === 'intentionally_standalone'
-        : true;
-      const tunnelPts = tunnelPlan ? tunnelPlan.points : r.points;
-      const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
-        generateTunnelPortalAndTraceGeometries(
-          tunnelPts,
-          r.width || 4.8,
-          false,
-          {
-            emitStartPortal,
-            emitEndPortal,
-            maxheightMeters: r.placementClassification?.supportingEvidence.maxheightMeters,
-            railwayType: r.railwayType,
-            surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
-          }
-        );
+        : !touchesOtherTunnelEnd;
+      const {
+        portalStructureGeo,
+        portalMouthGeo,
+        undergroundTraceGeo,
+        portalGroundCutoutPolygons: trackPortalCutouts,
+      } = generateTunnelPortalAndTraceGeometries(
+        tunnelPts,
+        r.width || 4.8,
+        false,
+        {
+          emitStartPortal,
+          emitEndPortal,
+          maxheightMeters: r.placementClassification?.supportingEvidence.maxheightMeters,
+          railwayType: r.railwayType,
+          surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,
+        }
+      );
+      if (trackPortalCutouts.length > 0) {
+        portalGroundCutoutPolygons.push(...trackPortalCutouts);
+        gradeTransitionDiagnostics.portalGroundCutoutsCount =
+          (gradeTransitionDiagnostics.portalGroundCutoutsCount ?? 0) + trackPortalCutouts.length;
+      }
       if (portalStructureGeo) {
         resourceManager.registerGeometry(portalStructureGeo);
         tunnelPortalItems.push({ geom: portalStructureGeo, info: railInfo, chunkKey });
@@ -1066,6 +1147,8 @@ export function buildRailwayGroupInternal(
           targetTunnelElevation: elevs.ballast,
           emitStartPortal,
           emitEndPortal,
+          startTargetTunnelElevation: tunnelPlan?.startTargetDeckElevation,
+          endTargetTunnelElevation: tunnelPlan?.endTargetDeckElevation,
         });
         if (undergroundProf.profile.length >= 2) {
           const isTramTun = r.railwayType === 'tram';
@@ -1212,7 +1295,9 @@ export function buildRailwayGroupInternal(
     let profile3D: ProfiledPoint3D[] = [];
     if (isBridge) {
       const tBr0 = performance.now();
-      const bridgePlan = graphGradeSeparatedPlans?.plansByEdgeId.get(r.id);
+      const bridgePlan =
+        graphGradeSeparatedPlans?.plansByEdgeId.get(r.id) ??
+        (r.sourceFeatureId ? graphGradeSeparatedPlans?.plansByEdgeId.get(r.sourceFeatureId) : undefined);
       let bridgeProf;
       let suppressStartAbutmentHeadwall = false;
       let suppressEndAbutmentHeadwall = false;
@@ -2209,7 +2294,8 @@ export function buildRailwayGroupInternal(
     layerName: string,
     items: ChunkedGeoItem[],
     material: THREE.Material,
-    configureMesh: (mesh: THREE.Mesh) => void
+    configureMesh: (mesh: THREE.Mesh) => void,
+    isVisible: boolean = true
   ): THREE.Object3D | null => {
     if (items.length === 0) return null;
     if (spatialChunkSizeMeters <= 0) {
@@ -2218,11 +2304,14 @@ export function buildRailwayGroupInternal(
       resourceManager.registerGeometry(merged);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = layerName;
+      mesh.visible = isVisible;
       mesh.frustumCulled = true;
       configureMesh(mesh);
       mesh.userData = { ...mesh.userData, faceRanges };
       railwaysGroup.add(mesh);
-      drawCalls++;
+      if (mesh.visible) {
+        drawCalls++;
+      }
       totalVertices += merged.attributes.position.count;
       totalTriangles += Math.round(getTriangleCount(merged));
       activeChunkKeys.add('global');
@@ -2242,6 +2331,7 @@ export function buildRailwayGroupInternal(
 
     const layerGroup = new THREE.Group();
     layerGroup.name = layerName;
+    layerGroup.visible = isVisible;
     const aggregatedFaceRanges: FaceRangeEntry[] = [];
     let runningFace = 0;
 
@@ -2251,6 +2341,7 @@ export function buildRailwayGroupInternal(
       resourceManager.registerGeometry(merged);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = `${layerName}_chunk_${cKey}`;
+      mesh.visible = isVisible;
       mesh.frustumCulled = true;
       configureMesh(mesh);
       mesh.userData = { ...mesh.userData, faceRanges, chunkKey: cKey };
@@ -2263,7 +2354,9 @@ export function buildRailwayGroupInternal(
       }
       runningFace += Math.round(getTriangleCount(merged));
       layerGroup.add(mesh);
-      drawCalls++;
+      if (mesh.visible) {
+        drawCalls++;
+      }
       totalVertices += merged.attributes.position.count;
       totalTriangles += Math.round(getTriangleCount(merged));
     }
@@ -2539,10 +2632,17 @@ export function buildRailwayGroupInternal(
         roughness: 0.9,
       })
     );
-    buildLayerTarget('Railway_Tunnel_Traces', tunnelTraceItems, tunnelTraceMat, (m) => {
-      m.receiveShadow = false;
-      m.renderOrder = 15;
-    });
+    buildLayerTarget(
+      'Railway_Tunnel_Traces',
+      tunnelTraceItems,
+      tunnelTraceMat,
+      (m) => {
+        m.receiveShadow = false;
+        m.renderOrder = 15;
+        m.userData.isUndergroundTunnelTrace = true;
+      },
+      showUndergroundTunnelTraces
+    );
   }
 
   let tunnelUgBallastMat: THREE.MeshStandardMaterial | null = null;
@@ -2567,8 +2667,14 @@ export function buildRailwayGroupInternal(
         m.renderOrder = 3;
         m.userData.isStructural3D = true;
         m.userData.isUndergroundTunnelGeometry = true;
-      }
+        m.userData.isHiddenUnderground = !showHiddenUndergroundGeometry;
+      },
+      showHiddenUndergroundGeometry
     );
+    if (!showHiddenUndergroundGeometry) {
+      gradeTransitionDiagnostics.hiddenUndergroundMeshCount =
+        (gradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
+    }
   }
 
   if (tunnelUndergroundSleeperItems.length > 0) {
@@ -2589,8 +2695,14 @@ export function buildRailwayGroupInternal(
         m.renderOrder = 4;
         m.userData.isStructural3D = true;
         m.userData.isUndergroundTunnelGeometry = true;
-      }
+        m.userData.isHiddenUnderground = !showHiddenUndergroundGeometry;
+      },
+      showHiddenUndergroundGeometry
     );
+    if (!showHiddenUndergroundGeometry) {
+      gradeTransitionDiagnostics.hiddenUndergroundMeshCount =
+        (gradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
+    }
   }
 
   if (tunnelUndergroundRailItems.length > 0) {
@@ -2611,8 +2723,14 @@ export function buildRailwayGroupInternal(
         m.renderOrder = 5;
         m.userData.isStructural3D = true;
         m.userData.isUndergroundTunnelGeometry = true;
-      }
+        m.userData.isHiddenUnderground = !showHiddenUndergroundGeometry;
+      },
+      showHiddenUndergroundGeometry
     );
+    if (!showHiddenUndergroundGeometry) {
+      gradeTransitionDiagnostics.hiddenUndergroundMeshCount =
+        (gradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
+    }
   }
 
   const geometryMergeAndChunkTimeMs = performance.now() - tMerge0;
@@ -2672,6 +2790,7 @@ export function buildRailwayGroupInternal(
     resources: resourceManager,
     sleeperBoxes3D,
     renderedSourceIds,
+    portalGroundCutoutPolygons,
     profile: {
       totalBuildTimeMs,
       phaseAndSortTimeMs: Number(phaseAndSortTimeMs.toFixed(2)),
@@ -2841,5 +2960,7 @@ export function buildRailwayInfrastructure(
     diagnostics: options?.diagnostics,
     switchPolicy: options?.switchPolicy,
     ballastStrategy: options?.ballastStrategy,
+    showUndergroundTunnelTraces: options?.showUndergroundTunnelTraces,
+    showHiddenUndergroundGeometry: options?.showHiddenUndergroundGeometry,
   });
 }

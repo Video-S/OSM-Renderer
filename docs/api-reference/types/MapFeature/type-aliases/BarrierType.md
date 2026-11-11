@@ -8,4 +8,4 @@
 
 > **BarrierType** = `"hedge"` \| `"wall"` \| `"fence"` \| `"city_wall"` \| `"retaining_wall"` \| `"guard_rail"` \| `"breakwater"` \| `"groyne"` \| `"embankment"` \| `"cliff"` \| `"tree_row"` \| `"weir"` \| `"dam"`
 
-Defined in: types/MapFeature.ts:156
+Defined in: types/MapFeature.ts:166

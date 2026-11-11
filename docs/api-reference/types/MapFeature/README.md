@@ -9,6 +9,8 @@
 ## Interfaces
 
 - [BarrierFeature](interfaces/BarrierFeature.md)
+- [BarrierProfileVertex3D](interfaces/BarrierProfileVertex3D.md)
+- [BarrierStructuralContext](interfaces/BarrierStructuralContext.md)
 - [BuildingFeature](interfaces/BuildingFeature.md)
 - [ExplicitPlacementHints](interfaces/ExplicitPlacementHints.md)
 - [FeatureDiagnosticBreakdown](interfaces/FeatureDiagnosticBreakdown.md)
@@ -27,10 +29,12 @@
 - [RawGeoJsonProperties](interfaces/RawGeoJsonProperties.md)
 - [RoadFeature](interfaces/RoadFeature.md)
 - [RoadPortalConnectionSpec](interfaces/RoadPortalConnectionSpec.md)
+- [StructuralContextDiagnostics](interfaces/StructuralContextDiagnostics.md)
 - [WaterBodyFeature](interfaces/WaterBodyFeature.md)
 
 ## Type Aliases
 
+- [BarrierStructuralPlacementKind](type-aliases/BarrierStructuralPlacementKind.md)
 - [BarrierType](type-aliases/BarrierType.md)
 - [FeatureType](type-aliases/FeatureType.md)
 - [InfrastructureEnclosureKind](type-aliases/InfrastructureEnclosureKind.md)

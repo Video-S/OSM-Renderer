@@ -91,6 +91,14 @@ export interface GradeTransitionRenderDiagnostics {
   undergroundRailwayGeometryCount?: number;
   /** Number of features skipped from grade-separated/surface rendering due to contradictory vertical/enclosure tags (M2.3-E4-T). */
   conflictingPlacementSkippedCount?: number;
+  /** Number of features with conflicting vertical tags routed to a conservative surface fallback (M2.3-E4-T2). */
+  conflictingPlacementFallbackCount?: number;
+  /** Number of localized portal ground-cover cutouts applied at confirmed tunnel entrances (M2.3-E4-T2). */
+  portalGroundCutoutsCount?: number;
+  /** Number of subterranean meshes hidden from normal surface draw calls (M2.3-E4-T2). */
+  hiddenUndergroundMeshCount?: number;
+  /** True when diagnostic dashed underground traces are enabled in visible presentation (M2.3-E4-T2). */
+  undergroundTracesVisible?: boolean;
 }
 
 export interface GraphGradeSeparatedResolutionResult {
@@ -218,16 +226,19 @@ export interface TunnelUndergroundProfileOptions {
   emitStartPortal: boolean;
   emitEndPortal: boolean;
   maxSampleStep?: number;
+  startTargetTunnelElevation?: number;
+  endTargetTunnelElevation?: number;
 }
 
 /**
- * Constructs a continuous 3D vertical profile `ProfiledPoint3D[]` along a subterranean tunnel alignment (M2.3-E4-T).
+ * Constructs a continuous 3D vertical profile `ProfiledPoint3D[]` along a subterranean tunnel alignment (M2.3-E4-T / E4-T2).
  * - At justified external portal entrances (`emitStartPortal` / `emitEndPortal`), starts at `surfaceElevation`
- *   and slopes smoothly down through a short local entrance ramp (`min(10.0 m, 35% of span)`) to `targetTunnelElevation`
- *   (`ELEVATION_POLICY.TUNNEL_DEPTH = -2.0 m` for layer -1), staying strictly inside the mapped tunnel span.
+ *   and drops below `ELEVATION_POLICY.GROUND` (`-0.08 m`) within the portal hood (`<= 2.2 m`) before sloping
+ *   smoothly down through a local entrance ramp (`min(10.0 m, 35% of span)`) to `targetTunnelElevation`
+ *   (`ELEVATION_POLICY.TUNNEL_DEPTH = -4.2 m` for layer -1), staying strictly inside the mapped tunnel span.
  * - At internal multi-segment tunnel joints (`confirmed_elevated_continuation`), boundary-clipped ends
  *   (`boundary_clipped_continuation`), or unresolved ends (`unresolved_connection`), stays continuously at
- *   `targetTunnelElevation` with zero vertical step.
+ *   `startTargetTunnelElevation` / `endTargetTunnelElevation` with zero vertical step.
  */
 export function buildTunnelUndergroundProfile3D(
   options: TunnelUndergroundProfileOptions
@@ -245,6 +256,8 @@ export function buildTunnelUndergroundProfile3D(
     emitStartPortal,
     emitEndPortal,
     maxSampleStep = 2.0,
+    startTargetTunnelElevation,
+    endTargetTunnelElevation,
   } = options;
 
   const cleanPts: [number, number][] = [];
@@ -260,11 +273,15 @@ export function buildTunnelUndergroundProfile3D(
     }
   }
 
+  const startFloorY = startTargetTunnelElevation ?? targetTunnelElevation;
+  const endFloorY = endTargetTunnelElevation ?? targetTunnelElevation;
+  const deepestFloorY = Math.min(targetTunnelElevation, startFloorY, endFloorY);
+
   if (cleanPts.length < 2) {
     return {
       profile: [],
-      minElevation: targetTunnelElevation,
-      maxElevation: targetTunnelElevation,
+      minElevation: deepestFloorY,
+      maxElevation: deepestFloorY,
       rampStartLength: 0,
       rampEndLength: 0,
     };
@@ -290,17 +307,34 @@ export function buildTunnelUndergroundProfile3D(
     return c * c * (3 - 2 * c);
   };
 
+  // Within the portal hood (<= 1.8m), drop swiftly below ELEVATION_POLICY.GROUND (-0.015m)
+  // so no subterranean ribbon ever pokes above surface ground cover behind the portal curtain.
+  const evaluatePortalRampY = (distFromPortal: number, rampLen: number, targetFloorY: number): number => {
+    const hoodDropLen = Math.min(1.8, rampLen * 0.35);
+    const subGroundThresholdY = Math.min(ELEVATION_POLICY.GROUND - 0.12, targetFloorY * 0.15);
+    if (hoodDropLen > 1e-3 && distFromPortal <= hoodDropLen) {
+      const u = distFromPortal / hoodDropLen;
+      return surfaceElevation + (subGroundThresholdY - surfaceElevation) * u;
+    }
+    const remLen = Math.max(1e-4, rampLen - hoodDropLen);
+    const u = Math.max(0, Math.min(1, (distFromPortal - hoodDropLen) / remLen));
+    const t = smoothstep(u);
+    return subGroundThresholdY + (targetFloorY - subGroundThresholdY) * t;
+  };
+
   const evaluateY = (s: number): number => {
+    const fracEdge = totalLength > 1e-6 ? Math.max(0, Math.min(1, s / totalLength)) : 0;
+    const localFloorY =
+      startFloorY + (endFloorY - startFloorY) * smoothstep(fracEdge);
+
     if (rampStartLength > 1e-3 && s < rampStartLength) {
-      const t = smoothstep(s / rampStartLength);
-      return surfaceElevation + (targetTunnelElevation - surfaceElevation) * t;
+      return evaluatePortalRampY(s, rampStartLength, localFloorY);
     }
     if (rampEndLength > 1e-3 && s > totalLength - rampEndLength) {
       const rem = Math.max(0, totalLength - s);
-      const t = smoothstep(rem / rampEndLength);
-      return surfaceElevation + (targetTunnelElevation - surfaceElevation) * t;
+      return evaluatePortalRampY(rem, rampEndLength, localFloorY);
     }
-    return targetTunnelElevation;
+    return localFloorY;
   };
 
   const profile: ProfiledPoint3D[] = [];
@@ -323,9 +357,26 @@ export function buildTunnelUndergroundProfile3D(
     const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
     if (segLen < 1e-5) continue;
 
-    const steps = Math.max(1, Math.ceil(segLen / maxSampleStep));
+    const effectiveStep = Math.min(maxSampleStep, 1.5);
+    const steps = Math.max(1, Math.ceil(segLen / effectiveStep));
+    const sampleFracs = new Set<number>();
     for (let k = 1; k <= steps; k++) {
-      const frac = k / steps;
+      sampleFracs.add(Number((k / steps).toFixed(6)));
+    }
+    const criticalArcs = [
+      Math.min(1.8, rampStartLength * 0.35),
+      rampStartLength,
+      totalLength - rampEndLength,
+      totalLength - Math.min(1.8, rampEndLength * 0.35),
+    ];
+    for (const ca of criticalArcs) {
+      if (ca > accumS + 1e-4 && ca < accumS + segLen - 1e-4) {
+        sampleFracs.add(Number(((ca - accumS) / segLen).toFixed(6)));
+      }
+    }
+
+    const sortedFracs = [...sampleFracs].sort((a, b) => a - b);
+    for (const frac of sortedFracs) {
       const sx = p0[0] + (p1[0] - p0[0]) * frac;
       const sz = p0[1] + (p1[1] - p0[1]) * frac;
       const s = accumS + segLen * frac;
@@ -336,8 +387,8 @@ export function buildTunnelUndergroundProfile3D(
 
   return {
     profile,
-    minElevation: Number.isFinite(minElevation) ? minElevation : targetTunnelElevation,
-    maxElevation: Number.isFinite(maxElevation) ? maxElevation : targetTunnelElevation,
+    minElevation: Number.isFinite(minElevation) ? minElevation : deepestFloorY,
+    maxElevation: Number.isFinite(maxElevation) ? maxElevation : deepestFloorY,
     rampStartLength,
     rampEndLength,
   };
@@ -1089,6 +1140,8 @@ export function generateTunnelPortalAndTraceGeometries(
   portalStructureGeo: THREE.BufferGeometry | null;
   portalMouthGeo: THREE.BufferGeometry | null;
   undergroundTraceGeo: THREE.BufferGeometry | null;
+  /** Tightly bounded 2D polygons `[outerRing]` at each emitted portal mouth for localized ground-cover recession (M2.3-E4-T2). */
+  portalGroundCutoutPolygons: [number, number][][][];
 } {
   const cleanPts: [number, number][] = [];
   for (const pt of points) {
@@ -1101,7 +1154,12 @@ export function generateTunnelPortalAndTraceGeometries(
   }
 
   if (cleanPts.length < 2) {
-    return { portalStructureGeo: null, portalMouthGeo: null, undergroundTraceGeo: null };
+    return {
+      portalStructureGeo: null,
+      portalMouthGeo: null,
+      undergroundTraceGeo: null,
+      portalGroundCutoutPolygons: [],
+    };
   }
 
   const emitStartPortal = options?.emitStartPortal ?? true;
@@ -1121,6 +1179,8 @@ export function generateTunnelPortalAndTraceGeometries(
   const traceNorm: number[] = [];
   const traceIdx: number[] = [];
   let traceV = 0;
+
+  const portalGroundCutoutPolygons: [number, number][][][] = [];
 
   const appendBox = (
     posArr: number[],
@@ -1297,16 +1357,16 @@ export function generateTunnelPortalAndTraceGeometries(
       baseY + wingWallH
     );
 
-    // 4. Dark Recessed Tunnel Mouth Threshold Ramp & Shadow Backwall inside the portal arch
-    const mouthStartY = baseY + 0.002;
-    const mouthEndY = Math.max(ELEVATION_POLICY.GROUND_COVER_SURFACE, baseY - 0.015);
-    const mStartX = px - inTx * 0.25;
-    const mStartZ = pz - inTz * 0.25;
-    const mEndX = px + inTx * (hoodDepth * 0.92);
-    const mEndZ = pz + inTz * (hoodDepth * 0.92);
+    // 4. Localized Recessed Tunnel Mouth Trough, Sloped Entrance Ramp & Shadow Backwall inside the portal arch
+    const mouthStartY = baseY;
+    const mouthEndY = ELEVATION_POLICY.GROUND - 0.14;
+    const mStartX = px - inTx * 0.08;
+    const mStartZ = pz - inTz * 0.08;
+    const mEndX = px + inTx * (hoodDepth * 0.86);
+    const mEndZ = pz + inTz * (hoodDepth * 0.86);
     const mHalfW = halfOpen * 0.96;
 
-    // Sloped dark entrance ramp threshold mat (CCW from above)
+    // Sloped dark entrance ramp threshold mat descending below ground inside the portal opening (CCW from above)
     mouthPos.push(
       mStartX + nx * mHalfW, mouthStartY, mStartZ + nz * mHalfW,
       mEndX + nx * mHalfW, mouthEndY, mEndZ + nz * mHalfW,
@@ -1315,6 +1375,27 @@ export function generateTunnelPortalAndTraceGeometries(
     );
     for (let k = 0; k < 4; k++) mouthNorm.push(0, 1, 0);
     mouthIdx.push(mouthV, mouthV + 1, mouthV + 2, mouthV, mouthV + 2, mouthV + 3);
+    mouthV += 4;
+
+    // Recessed left & right interior cheek walls closing the wedge between surface baseY and the descending ramp
+    mouthPos.push(
+      mStartX + nx * mHalfW, mouthStartY, mStartZ + nz * mHalfW,
+      mEndX + nx * mHalfW, baseY, mEndZ + nz * mHalfW,
+      mEndX + nx * mHalfW, mouthEndY, mEndZ + nz * mHalfW,
+      mStartX + nx * mHalfW, mouthStartY, mStartZ + nz * mHalfW
+    );
+    for (let k = 0; k < 4; k++) mouthNorm.push(-nx, 0, -nz);
+    mouthIdx.push(mouthV, mouthV + 1, mouthV + 2);
+    mouthV += 4;
+
+    mouthPos.push(
+      mStartX - nx * mHalfW, mouthStartY, mStartZ - nz * mHalfW,
+      mEndX - nx * mHalfW, mouthEndY, mEndZ - nz * mHalfW,
+      mEndX - nx * mHalfW, baseY, mEndZ - nz * mHalfW,
+      mStartX - nx * mHalfW, mouthStartY, mStartZ - nz * mHalfW
+    );
+    for (let k = 0; k < 4; k++) mouthNorm.push(nx, 0, nz);
+    mouthIdx.push(mouthV, mouthV + 1, mouthV + 2);
     mouthV += 4;
 
     // Dark vertical shadow curtain inside the portal opening
@@ -1330,6 +1411,21 @@ export function generateTunnelPortalAndTraceGeometries(
     for (let k = 0; k < 4; k++) mouthNorm.push(-inTx, 0, -inTz);
     mouthIdx.push(mouthV, mouthV + 1, mouthV + 2, mouthV, mouthV + 2, mouthV + 3);
     mouthV += 4;
+
+    // 5. Tightly bounded 2D cutout rectangle for localized ground-cover recession at the portal mouth
+    const cutStartX = px;
+    const cutStartZ = pz;
+    const cutEndX = px + inTx * (hoodDepth * 0.76);
+    const cutEndZ = pz + inTz * (hoodDepth * 0.76);
+    const cutHalfW = halfOpen * 0.94;
+    const cutoutRing: [number, number][] = [
+      [Number((cutStartX + nx * cutHalfW).toFixed(4)), Number((cutStartZ + nz * cutHalfW).toFixed(4))],
+      [Number((cutEndX + nx * cutHalfW).toFixed(4)), Number((cutEndZ + nz * cutHalfW).toFixed(4))],
+      [Number((cutEndX - nx * cutHalfW).toFixed(4)), Number((cutEndZ - nz * cutHalfW).toFixed(4))],
+      [Number((cutStartX - nx * cutHalfW).toFixed(4)), Number((cutStartZ - nz * cutHalfW).toFixed(4))],
+      [Number((cutStartX + nx * cutHalfW).toFixed(4)), Number((cutStartZ + nz * cutHalfW).toFixed(4))],
+    ];
+    portalGroundCutoutPolygons.push([cutoutRing]);
   };
 
   // Start portal
@@ -1349,7 +1445,7 @@ export function generateTunnelPortalAndTraceGeometries(
     emitPortalAt(cleanPts[n - 1][0], cleanPts[n - 1][1], dxn / lenn, dzn / lenn);
   }
 
-  // 5. Dashed Underground Alignment Trace between the two portals
+  // 6. Optional Diagnostic Dashed Underground Alignment Trace between the two portals
   const totalLen = computePolylineLength(cleanPts);
   if (totalLen >= 8.0) {
     const dashLen = 1.5;
@@ -1406,6 +1502,7 @@ export function generateTunnelPortalAndTraceGeometries(
     portalStructureGeo: makeGeo(portalPos, portalNorm, portalIdx),
     portalMouthGeo: makeGeo(mouthPos, mouthNorm, mouthIdx),
     undergroundTraceGeo: makeGeo(tracePos, traceNorm, traceIdx),
+    portalGroundCutoutPolygons,
   };
 }
 
@@ -1521,6 +1618,9 @@ export function resolveGraphGradeSeparatedPlans(
     if (endpoint === 'start') cur.start = [pos[0], pos[1]];
     else cur.end = [pos[0], pos[1]];
     atGradePortalSnaps.set(edgeId, cur);
+    if (gEdge?.sourceFeatureId && gEdge.sourceFeatureId !== edgeId) {
+      atGradePortalSnaps.set(gEdge.sourceFeatureId, cur);
+    }
   };
 
   // Map from `${edgeId}|${'start'|'end'}` to confirmed ground-to-structure GradeTransitionRenderDescriptor
@@ -1863,7 +1963,7 @@ export function resolveGraphGradeSeparatedPlans(
     return { classification: 'intentionally_standalone' };
   };
 
-  // 6. Solve bridge connected components and shortest portal distances
+  // 6. Solve bridge and tunnel super-node target elevations for continuous multi-segment vertical profiles
   const superNodeKeyByNodeId = new Map<string, string>();
   const superNodeTargetY = new Map<string, number>();
   for (const e of bridgeEdges) {
@@ -1883,6 +1983,25 @@ export function resolveGraphGradeSeparatedPlans(
           ? elevs.reduce((sum, v) => sum + v, 0) / elevs.length
           : getTargetDeckElevation(e);
       superNodeTargetY.set(canonicalKey, Number(avgY.toFixed(4)));
+    }
+  }
+
+  for (const e of tunnelEdges) {
+    for (const nid of [e.fromNodeId, e.toNodeId]) {
+      if (superNodeKeyByNodeId.has(nid)) continue;
+      const equiv = getEquivalentNodeIds(nid);
+      const canonicalKey = equiv[0];
+      const elevs: number[] = [];
+      for (const eqId of equiv) {
+        superNodeKeyByNodeId.set(eqId, canonicalKey);
+        for (const inc of tunnelIncidentByNode.get(eqId) ?? []) {
+          elevs.push(getTargetDeckElevation(inc));
+        }
+      }
+      // For connected tunnel segments, harmonize at the deepest required clearance floor at the joint
+      const minY =
+        elevs.length > 0 ? Math.min(...elevs) : getTargetDeckElevation(e);
+      superNodeTargetY.set(canonicalKey, Number(minY.toFixed(4)));
     }
   }
 
@@ -2159,7 +2278,7 @@ export function resolveGraphGradeSeparatedPlans(
         ? (portalDistBySuperNode.get(vSuper) ?? Infinity)
         : Infinity;
 
-    plansByEdgeId.set(e.id, {
+    const plan = {
       edgeId: e.id,
       network,
       isBridge: !isTun,
@@ -2182,7 +2301,11 @@ export function resolveGraphGradeSeparatedPlans(
         ? (superNodeTargetY.get(vSuper) ?? defaultTargetY)
         : defaultTargetY,
       correctedPortalDiscontinuities: edgeCorrectedCount,
-    });
+    };
+    plansByEdgeId.set(e.id, plan);
+    if (e.sourceFeatureId && e.sourceFeatureId !== e.id) {
+      plansByEdgeId.set(e.sourceFeatureId, plan);
+    }
   }
 
   return {

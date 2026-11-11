@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_TUNNEL\_PORTAL\_RAMP\_MAX\_LENGTH\_METERS**: `10` = `10.0`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:211
+Defined in: world/BridgeAndTunnelBuilder.ts:219

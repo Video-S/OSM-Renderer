@@ -8,6 +8,6 @@
 
 > `const` **DEFAULT\_INFRASTRUCTURE\_RENDER\_OPTIONS**: `Readonly`\<[`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:106
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:118
 
 Default infrastructure render configuration (both domains use `'legacy'`).

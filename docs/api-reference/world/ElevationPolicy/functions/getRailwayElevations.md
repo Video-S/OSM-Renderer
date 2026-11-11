@@ -6,9 +6,9 @@
 
 # Function: getRailwayElevations()
 
-> **getRailwayElevations**(`layer?`, `isBridge?`, `isTunnel?`): `object`
+> **getRailwayElevations**(`layer?`, `isBridge?`, `isTunnel?`, `clearanceOptions?`): `object`
 
-Defined in: world/ElevationPolicy.ts:178
+Defined in: world/ElevationPolicy.ts:288
 
 Determines the physical Y-elevation for a railway feature (ballast bed, cross-tie sleepers, and steel rails).
 
@@ -25,6 +25,20 @@ Determines the physical Y-elevation for a railway feature (ballast bed, cross-ti
 ### isTunnel?
 
 `boolean` = `false`
+
+### clearanceOptions?
+
+#### electrified?
+
+`string` \| `boolean`
+
+#### maxheightMeters?
+
+`number`
+
+#### railwayType?
+
+`string`
 
 ## Returns
 

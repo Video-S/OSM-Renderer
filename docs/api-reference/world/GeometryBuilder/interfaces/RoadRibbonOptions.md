@@ -6,7 +6,7 @@
 
 # Interface: RoadRibbonOptions
 
-Defined in: world/GeometryBuilder.ts:201
+Defined in: world/GeometryBuilder.ts:213
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:201
 
 > `optional` **capSegments?**: `number`
 
-Defined in: world/GeometryBuilder.ts:205
+Defined in: world/GeometryBuilder.ts:217
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:205
 
 > `optional` **endPortal?**: `object`
 
-Defined in: world/GeometryBuilder.ts:207
+Defined in: world/GeometryBuilder.ts:219
 
 #### left
 
@@ -38,7 +38,7 @@ Defined in: world/GeometryBuilder.ts:207
 
 > `optional` **hasEndCap?**: `boolean`
 
-Defined in: world/GeometryBuilder.ts:204
+Defined in: world/GeometryBuilder.ts:216
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/GeometryBuilder.ts:204
 
 > `optional` **hasStartCap?**: `boolean`
 
-Defined in: world/GeometryBuilder.ts:203
+Defined in: world/GeometryBuilder.ts:215
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/GeometryBuilder.ts:203
 
 > `optional` **roundCaps?**: `boolean`
 
-Defined in: world/GeometryBuilder.ts:202
+Defined in: world/GeometryBuilder.ts:214
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/GeometryBuilder.ts:202
 
 > `optional` **startPortal?**: `object`
 
-Defined in: world/GeometryBuilder.ts:206
+Defined in: world/GeometryBuilder.ts:218
 
 #### left
 

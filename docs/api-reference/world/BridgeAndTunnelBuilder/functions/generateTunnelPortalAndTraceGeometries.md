@@ -8,7 +8,7 @@
 
 > **generateTunnelPortalAndTraceGeometries**(`points`, `width`, `isPedestrianOrCycle?`, `options?`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:1083
+Defined in: world/BridgeAndTunnelBuilder.ts:1134
 
 Generates 3D tunnel portal headwall arches, dark recessed portal entrance mouths,
 and a dashed underground corridor trace for a subterranean road, path, or railway tunnel.
@@ -35,7 +35,11 @@ so surface mesh invariants (y >= 0) and depth-buffer tests are strictly satisfie
 
 ## Returns
 
-`object`
+### portalGroundCutoutPolygons
+
+> **portalGroundCutoutPolygons**: \[`number`, `number`\][][][]
+
+Tightly bounded 2D polygons `[outerRing]` at each emitted portal mouth for localized ground-cover recession (M2.3-E4-T2).
 
 ### portalMouthGeo
 

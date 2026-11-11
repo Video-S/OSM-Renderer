@@ -6,6 +6,11 @@
 
 # world/ElevationPolicy
 
+## Interfaces
+
+- [ResolvedTunnelClearance](interfaces/ResolvedTunnelClearance.md)
+- [TunnelClearanceOptions](interfaces/TunnelClearanceOptions.md)
+
 ## Variables
 
 - [DEPTH\_OFFSET\_CONFIG](variables/DEPTH_OFFSET_CONFIG.md)
@@ -18,3 +23,4 @@
 - [getRoadElevation](functions/getRoadElevation.md)
 - [hashFeatureId](functions/hashFeatureId.md)
 - [isNonVehicularRoadClass](functions/isNonVehicularRoadClass.md)
+- [resolveTunnelClearanceAndDepth](functions/resolveTunnelClearanceAndDepth.md)

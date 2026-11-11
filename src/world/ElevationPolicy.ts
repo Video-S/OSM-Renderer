@@ -47,6 +47,7 @@ export const ELEVATION_POLICY = {
   // All mutually exclusive ground-cover fills share this single flush plane (+0.025m).
   GROUND_COVER_SURFACE: 0.025,
   PARKS: 0.025,
+  BARRIER_BASE: 0.025,
   LANDUSE_SUBZONING: 0.025,
   PAVED_LOT_SURFACE: 0.025,
   PITCH_SURFACE: 0.025,
@@ -100,14 +101,118 @@ export const ELEVATION_POLICY = {
   BRIDGE_BASE_CLEARANCE: 2.8,   // 2.8 meters base clearance above road grade
   BRIDGE_LAYER_STEP: 1.4,       // 1.4 meters per positive OSM layer
 
-  // 8. Subterranean Grade Separation (Tunnels & Underpasses)
-  TUNNEL_DEPTH: -2.0,           // -2.0 meters subterranean depth
-  TUNNEL_LAYER_STEP: 1.0,       // 1.0 meters per negative OSM layer
+  // 8. Subterranean Grade Separation (Tunnels, Underpasses & Cuttings)
+  TUNNEL_DEPTH: -5.0,                       // -5.0m baseline subterranean floor depth (4.6m standard clearance + 0.4m roof slab cover below Y=0m)
+  TUNNEL_LAYER_STEP: 5.0,                   // 5.0m vertical separation per deeper negative OSM layer
+  TUNNEL_ROOF_COVER_THICKNESS: 0.4,         // Minimum structural roof slab + soil cover allowance below Y=0.0m
+  TUNNEL_CLEARANCE_FOOT_CYCLE: 2.6,         // Minimum clearance for pedestrian/cycleway underpasses (m)
+  TUNNEL_CLEARANCE_VEHICULAR: 3.8,          // Standard vehicular tunnel clearance (m, matches Europatunnel maxheight=3.8)
+  TUNNEL_CLEARANCE_RAILWAY: 4.6,            // Non-electrified / urban transit railway tunnel clearance (m)
+  TUNNEL_CLEARANCE_RAILWAY_ELECTRIFIED: 5.2,// Mainline electrified railway tunnel clearance (m)
+  OPEN_CUTTING_DEPTH: -1.8,                 // Default open cutting floor depression alongside cutting retaining walls (m)
 
   // 9. Micro-tiering step is zero: no artificial height staggering
   MICRO_TIER_STEP: 0.0,
   MAX_MICRO_TIERS: 1,
 };
+
+export interface TunnelClearanceOptions {
+  domain?: 'road' | 'railway';
+  kind?: 'road' | 'railway';
+  layer?: number;
+  roadClass?: RoadClass;
+  roadCategory?: string;
+  railwayType?: string;
+  electrified?: boolean | string;
+  electrifiedTag?: boolean | string;
+  maxheightMeters?: number;
+  maxheightTag?: string | number;
+}
+
+export interface ResolvedTunnelClearance {
+  requiredClearanceMeters: number;
+  roofCoverThicknessMeters: number;
+  targetFloorElevation: number;
+  targetRoofSoffitElevation: number;
+}
+
+/**
+ * Centralizes subterranean tunnel clearance and floor depth calculations (M2.3-E4-T2).
+ *
+ * - Ensures every subterranean tunnel leaves sufficient vertical clearance plus structural roof cover
+ *   beneath `Y = 0.0 m` (`targetFloorElevation + requiredClearanceMeters <= -roofCoverThicknessMeters`).
+ * - Respects explicit OSM `maxheight=*` tags when present.
+ * - Distinguishes pedestrian/cycleway underpasses, vehicular roads, urban transit / non-electrified rail,
+ *   and electrified mainline rail.
+ */
+export function resolveTunnelClearanceAndDepth(
+  options: TunnelClearanceOptions
+): ResolvedTunnelClearance {
+  const domain = options.domain ?? options.kind ?? 'road';
+  const tunnelLayer = options.layer !== undefined && options.layer < 0 ? Math.abs(options.layer) : 1;
+  const roofCoverThicknessMeters = ELEVATION_POLICY.TUNNEL_ROOF_COVER_THICKNESS;
+
+  const rawParsedMaxH =
+    options.maxheightMeters !== undefined
+      ? options.maxheightMeters
+      : options.maxheightTag !== undefined
+        ? parseFloat(String(options.maxheightTag))
+        : undefined;
+
+  const explicitMaxH =
+    typeof rawParsedMaxH === 'number' &&
+    Number.isFinite(rawParsedMaxH) &&
+    rawParsedMaxH > 1.5
+      ? Math.min(Math.max(rawParsedMaxH, 2.0), 8.0)
+      : undefined;
+
+  let requiredClearanceMeters: number;
+  if (domain === 'railway') {
+    const rawElectrified = options.electrified ?? options.electrifiedTag;
+    const isElectrified =
+      rawElectrified === true ||
+      (typeof rawElectrified === 'string' &&
+        rawElectrified.trim() !== '' &&
+        rawElectrified.trim().toLowerCase() !== 'no' &&
+        rawElectrified.trim().toLowerCase() !== 'false');
+    const rType = (options.railwayType || 'rail').toLowerCase();
+    const isUrbanOrLight =
+      rType === 'subway' ||
+      rType === 'tram' ||
+      rType === 'light_rail' ||
+      rType === 'miniature' ||
+      rType === 'narrow_gauge';
+    const baseRailClearance =
+      isElectrified && !isUrbanOrLight
+        ? ELEVATION_POLICY.TUNNEL_CLEARANCE_RAILWAY_ELECTRIFIED
+        : ELEVATION_POLICY.TUNNEL_CLEARANCE_RAILWAY;
+    requiredClearanceMeters = explicitMaxH ? Math.max(explicitMaxH, 3.0) : baseRailClearance;
+  } else {
+    const rClass = (options.roadClass ?? options.roadCategory ?? 'residential') as RoadClass;
+    const isFootOrCycle = isNonVehicularRoadClass(rClass);
+    const baseRoadClearance = isFootOrCycle
+      ? ELEVATION_POLICY.TUNNEL_CLEARANCE_FOOT_CYCLE
+      : ELEVATION_POLICY.TUNNEL_CLEARANCE_VEHICULAR;
+    requiredClearanceMeters = explicitMaxH ?? baseRoadClearance;
+  }
+
+  const minDepthForClearance = -(requiredClearanceMeters + roofCoverThicknessMeters);
+  const layer1BaseDepth = Math.min(ELEVATION_POLICY.TUNNEL_DEPTH, minDepthForClearance);
+
+  const targetFloorElevation = Number(
+    (layer1BaseDepth - (tunnelLayer - 1) * ELEVATION_POLICY.TUNNEL_LAYER_STEP).toFixed(4)
+  );
+  const targetRoofSoffitElevation = Number(
+    Math.min(-roofCoverThicknessMeters, targetFloorElevation + requiredClearanceMeters).toFixed(4)
+  );
+
+  return {
+    requiredClearanceMeters: Number(requiredClearanceMeters.toFixed(3)),
+    roofCoverThicknessMeters,
+    targetFloorElevation,
+    targetRoofSoffitElevation,
+  };
+}
 
 /**
  * Helper to determine if a RoadClass belongs to the non-vehicular path/pedestrian category.
@@ -146,18 +251,23 @@ export function hashFeatureId(id: string | number): number {
  * Determines the physical Y-elevation for a road feature.
  * - All ordinary at-grade roads and paths share the uniform physical baseline ELEVATION_POLICY.ROAD_SURFACE (0.050m).
  * - Bridges: relational grade-separation clearance (>= 2.8m above grade).
- * - Tunnels: subterranean depth (<= -2.0m).
+ * - Tunnels: subterranean depth (<= ELEVATION_POLICY.TUNNEL_DEPTH = -4.2m, deepened further when explicit maxheight requires it).
  */
 export function getRoadElevation(
   roadClass: RoadClass,
   layer: number = 0,
   isBridge: boolean = false,
   isTunnel: boolean = false,
-  _featureId?: string
+  _featureId?: string,
+  maxheightMeters?: number
 ): number {
   if (isTunnel) {
-    const tunnelLayer = layer < 0 ? Math.abs(layer) : 1;
-    return ELEVATION_POLICY.TUNNEL_DEPTH - (tunnelLayer - 1) * ELEVATION_POLICY.TUNNEL_LAYER_STEP;
+    return resolveTunnelClearanceAndDepth({
+      domain: 'road',
+      layer,
+      roadClass,
+      maxheightMeters,
+    }).targetFloorElevation;
   }
 
   if (isBridge || layer > 0) {
@@ -178,12 +288,26 @@ export function getRoadElevation(
 export function getRailwayElevations(
   layer: number = 0,
   isBridge: boolean = false,
-  isTunnel: boolean = false
+  isTunnel: boolean = false,
+  clearanceOptions?: {
+    railwayType?: string;
+    electrified?: boolean | string;
+    maxheightMeters?: number;
+  }
 ): { ballast: number; sleepers: number; rails: number } {
   if (isTunnel) {
-    const tunnelLayer = layer < 0 ? Math.abs(layer) : 1;
-    const depth = ELEVATION_POLICY.TUNNEL_DEPTH - (tunnelLayer - 1) * ELEVATION_POLICY.TUNNEL_LAYER_STEP;
-    return { ballast: depth, sleepers: depth + 0.012, rails: depth + 0.025 };
+    const depth = resolveTunnelClearanceAndDepth({
+      domain: 'railway',
+      layer,
+      railwayType: clearanceOptions?.railwayType,
+      electrified: clearanceOptions?.electrified,
+      maxheightMeters: clearanceOptions?.maxheightMeters,
+    }).targetFloorElevation;
+    return {
+      ballast: depth,
+      sleepers: Number((depth + 0.1).toFixed(4)),
+      rails: Number((depth + 0.25).toFixed(4)),
+    };
   }
 
   if (isBridge || layer > 0) {

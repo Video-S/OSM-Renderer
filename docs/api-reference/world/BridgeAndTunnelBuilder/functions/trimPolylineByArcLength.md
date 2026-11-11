@@ -8,7 +8,7 @@
 
 > **trimPolylineByArcLength**(`points`, `startTrim`, `endTrim`): \[`number`, `number`\][]
 
-Defined in: world/BridgeAndTunnelBuilder.ts:142
+Defined in: world/BridgeAndTunnelBuilder.ts:150
 
 Trims a 2D polyline by `startTrim` meters from the start and `endTrim` meters from the end
 along its true arc length, removing any short intermediate segments inside the trim zone

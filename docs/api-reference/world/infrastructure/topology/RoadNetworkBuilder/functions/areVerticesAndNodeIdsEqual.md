@@ -8,7 +8,7 @@
 
 > **areVerticesAndNodeIdsEqual**(`ptsA`, `nodesA`, `ptsB`, `nodesB`, `reverseB`): `boolean`
 
-Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:333
+Defined in: world/infrastructure/topology/RoadNetworkBuilder.ts:335
 
 ## Parameters
 

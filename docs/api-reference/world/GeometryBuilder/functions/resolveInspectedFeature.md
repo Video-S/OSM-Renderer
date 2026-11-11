@@ -8,7 +8,7 @@
 
 > **resolveInspectedFeature**(`hit`): [`InspectableFeatureInfo`](../../../types/MapFeature/interfaces/InspectableFeatureInfo.md)
 
-Defined in: world/GeometryBuilder.ts:217
+Defined in: world/GeometryBuilder.ts:229
 
 Resolves any Three.js / React Three Fiber raycast intersection to its exact OpenStreetMap feature metadata.
 Supports:

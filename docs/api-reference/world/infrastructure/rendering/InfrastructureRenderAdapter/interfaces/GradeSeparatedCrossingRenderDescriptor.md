@@ -6,7 +6,7 @@
 
 # Interface: GradeSeparatedCrossingRenderDescriptor
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:723
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:756
 
 Render-ready descriptor for a confirmed grade-separated overpass/underpass crossing (Stage E4 handoff).
 
@@ -16,7 +16,7 @@ Render-ready descriptor for a confirmed grade-separated overpass/underpass cross
 
 > **id**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:724
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:757
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:724
 
 > **lowerEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:732
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:765
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:732
 
 > **lowerIsTunnel**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:734
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:767
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:734
 
 > **lowerLayer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:733
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:766
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:733
 
 > **lowerNetwork**: [`InfrastructureNetworkKind`](../../../topology/types/type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:731
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:764
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:731
 
 > **lowerSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:735
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:768
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:735
 
 > **position**: readonly \[`number`, `number`\]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:725
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:758
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:725
 
 > **upperEdgeId**: `string`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:727
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:760
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:727
 
 > **upperIsBridge**: `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:729
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:762
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:729
 
 > **upperLayer**: `number`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:728
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:761
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:728
 
 > **upperNetwork**: [`InfrastructureNetworkKind`](../../../topology/types/type-aliases/InfrastructureNetworkKind.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:726
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:759
 
 ***
 
@@ -104,4 +104,4 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:726
 
 > **upperSourceFeatureIds**: readonly `string`[]
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:730
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:763

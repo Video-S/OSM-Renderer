@@ -6,7 +6,7 @@
 
 # Interface: MapStyleTheme
 
-Defined in: types/MapFeature.ts:609
+Defined in: types/MapFeature.ts:635
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:609
 
 > `optional` **barrierColors?**: `object`
 
-Defined in: types/MapFeature.ts:633
+Defined in: types/MapFeature.ts:659
 
 #### city\_wall
 
@@ -42,7 +42,7 @@ Defined in: types/MapFeature.ts:633
 
 > `optional` **buildingArchetypeColors?**: `object`
 
-Defined in: types/MapFeature.ts:616
+Defined in: types/MapFeature.ts:642
 
 #### civic
 
@@ -122,7 +122,7 @@ Defined in: types/MapFeature.ts:616
 
 > **buildingRoofColor**: `string`
 
-Defined in: types/MapFeature.ts:615
+Defined in: types/MapFeature.ts:641
 
 ***
 
@@ -130,7 +130,7 @@ Defined in: types/MapFeature.ts:615
 
 > **buildingWallColor**: `string`
 
-Defined in: types/MapFeature.ts:614
+Defined in: types/MapFeature.ts:640
 
 ***
 
@@ -138,7 +138,7 @@ Defined in: types/MapFeature.ts:614
 
 > **fogColor**: `string`
 
-Defined in: types/MapFeature.ts:648
+Defined in: types/MapFeature.ts:674
 
 ***
 
@@ -146,7 +146,7 @@ Defined in: types/MapFeature.ts:648
 
 > `optional` **foliageColors?**: `object`
 
-Defined in: types/MapFeature.ts:627
+Defined in: types/MapFeature.ts:653
 
 #### broadleaved
 
@@ -170,7 +170,7 @@ Defined in: types/MapFeature.ts:627
 
 > **gridColor**: `string`
 
-Defined in: types/MapFeature.ts:613
+Defined in: types/MapFeature.ts:639
 
 ***
 
@@ -178,7 +178,7 @@ Defined in: types/MapFeature.ts:613
 
 > **groundColor**: `string`
 
-Defined in: types/MapFeature.ts:612
+Defined in: types/MapFeature.ts:638
 
 ***
 
@@ -186,7 +186,7 @@ Defined in: types/MapFeature.ts:612
 
 > **id**: `"tactical"` \| `"daylight"` \| `"dusk"` \| `"blueprint"`
 
-Defined in: types/MapFeature.ts:610
+Defined in: types/MapFeature.ts:636
 
 ***
 
@@ -194,7 +194,7 @@ Defined in: types/MapFeature.ts:610
 
 > **landuseColors**: `Record`\<`string`, `string`\>
 
-Defined in: types/MapFeature.ts:646
+Defined in: types/MapFeature.ts:672
 
 ***
 
@@ -202,7 +202,7 @@ Defined in: types/MapFeature.ts:646
 
 > **lightIntensity**: `number`
 
-Defined in: types/MapFeature.ts:649
+Defined in: types/MapFeature.ts:675
 
 ***
 
@@ -210,7 +210,7 @@ Defined in: types/MapFeature.ts:649
 
 > **name**: `string`
 
-Defined in: types/MapFeature.ts:611
+Defined in: types/MapFeature.ts:637
 
 ***
 
@@ -218,7 +218,7 @@ Defined in: types/MapFeature.ts:611
 
 > **parkColor**: `string`
 
-Defined in: types/MapFeature.ts:625
+Defined in: types/MapFeature.ts:651
 
 ***
 
@@ -226,7 +226,7 @@ Defined in: types/MapFeature.ts:625
 
 > **railwayColors**: `object`
 
-Defined in: types/MapFeature.ts:641
+Defined in: types/MapFeature.ts:667
 
 #### ballast
 
@@ -246,7 +246,7 @@ Defined in: types/MapFeature.ts:641
 
 > **roadColors**: `Record`\<[`RoadClass`](../type-aliases/RoadClass.md), `string`\>
 
-Defined in: types/MapFeature.ts:640
+Defined in: types/MapFeature.ts:666
 
 ***
 
@@ -254,7 +254,7 @@ Defined in: types/MapFeature.ts:640
 
 > **skyColor**: `string`
 
-Defined in: types/MapFeature.ts:647
+Defined in: types/MapFeature.ts:673
 
 ***
 
@@ -262,7 +262,7 @@ Defined in: types/MapFeature.ts:647
 
 > `optional` **terrainColors?**: `Record`\<`string`, `string`\>
 
-Defined in: types/MapFeature.ts:626
+Defined in: types/MapFeature.ts:652
 
 ***
 
@@ -270,4 +270,4 @@ Defined in: types/MapFeature.ts:626
 
 > **waterColor**: `string`
 
-Defined in: types/MapFeature.ts:624
+Defined in: types/MapFeature.ts:650

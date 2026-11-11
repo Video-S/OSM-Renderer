@@ -6,7 +6,7 @@
 
 # Interface: RailwayFeature
 
-Defined in: types/MapFeature.ts:305
+Defined in: types/MapFeature.ts:315
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:305
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:321
+Defined in: types/MapFeature.ts:331
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:321
 
 > `optional` **electrified?**: `boolean`
 
-Defined in: types/MapFeature.ts:320
+Defined in: types/MapFeature.ts:330
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:320
 
 > `optional` **gauge?**: `number`
 
-Defined in: types/MapFeature.ts:319
+Defined in: types/MapFeature.ts:329
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:319
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:306
+Defined in: types/MapFeature.ts:316
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:306
 
 > **isBridge**: `boolean`
 
-Defined in: types/MapFeature.ts:315
+Defined in: types/MapFeature.ts:325
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:315
 
 > **isTunnel**: `boolean`
 
-Defined in: types/MapFeature.ts:316
+Defined in: types/MapFeature.ts:326
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:316
 
 > **layer**: `number`
 
-Defined in: types/MapFeature.ts:317
+Defined in: types/MapFeature.ts:327
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:317
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:310
+Defined in: types/MapFeature.ts:320
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:310
 
 > `optional` **nodeIds?**: (`string` \| `number`)[]
 
-Defined in: types/MapFeature.ts:312
+Defined in: types/MapFeature.ts:322
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:312
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:323
+Defined in: types/MapFeature.ts:333
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:323
 
 > `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](InfrastructurePlacementClassification.md)
 
-Defined in: types/MapFeature.ts:318
+Defined in: types/MapFeature.ts:328
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:318
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: types/MapFeature.ts:311
+Defined in: types/MapFeature.ts:321
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: types/MapFeature.ts:311
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:322
+Defined in: types/MapFeature.ts:332
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: types/MapFeature.ts:322
 
 > **railwayType**: [`RailwayType`](../type-aliases/RailwayType.md)
 
-Defined in: types/MapFeature.ts:313
+Defined in: types/MapFeature.ts:323
 
 ***
 
@@ -126,7 +126,7 @@ Defined in: types/MapFeature.ts:313
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:307
+Defined in: types/MapFeature.ts:317
 
 ***
 
@@ -134,7 +134,7 @@ Defined in: types/MapFeature.ts:307
 
 > `optional` **sourceFeatureIds?**: `string`[]
 
-Defined in: types/MapFeature.ts:308
+Defined in: types/MapFeature.ts:318
 
 ***
 
@@ -142,7 +142,7 @@ Defined in: types/MapFeature.ts:308
 
 > **type**: `"railway"`
 
-Defined in: types/MapFeature.ts:309
+Defined in: types/MapFeature.ts:319
 
 ***
 
@@ -150,4 +150,4 @@ Defined in: types/MapFeature.ts:309
 
 > **width**: `number`
 
-Defined in: types/MapFeature.ts:314
+Defined in: types/MapFeature.ts:324

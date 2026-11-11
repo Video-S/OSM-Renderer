@@ -42,6 +42,13 @@ import {
 } from './BridgeAndTunnelBuilder';
 import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
 import {
+  generateProfiledBarrierRibbon3D,
+  resolveBarrierStructuralContexts,
+  type BarrierStructuralContext,
+  type BarrierStructuralKind,
+  type StructuralContextDiagnostics,
+} from './StructuralContextResolver';
+import {
   COORDINATE_SNAP_QUANTUM,
   MultiPolygonCoords,
   filterDegenerateBooleanArtifacts,
@@ -127,6 +134,11 @@ export {
   UNINTENDED_INTERIOR_HOLE_MAX_AREA_M2,
   validateInfrastructureRenderDescriptors,
   validateSurfaceFirstRoadGeometry,
+  generateProfiledBarrierRibbon3D,
+  resolveBarrierStructuralContexts,
+  type BarrierStructuralContext,
+  type BarrierStructuralKind,
+  type StructuralContextDiagnostics,
   type CategorizedRoadOverlapDefect,
   type GraphRoadDegenerateTriangleDefect,
   type GraphRoadGenerationTiming,
@@ -2113,6 +2125,112 @@ export class GeometryBuilder {
       if (pk.polygon) planarPolygonRingsById.set(pk.id, pk.polygon);
     }
 
+    // Apply localized portal entrance cutouts to overlapping ground-cover polygons (M2.3-E4-T2)
+    const hasSubterraneanTunnelsForGroundCutout =
+      (data.landuse.length > 0 || data.parks.length > 0) &&
+      ((data.roads || []).some((r) =>
+        r.placementClassification
+          ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+          : r.isTunnel
+      ) ||
+        (data.railways || []).some((r) =>
+          r.placementClassification
+            ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+            : r.isTunnel
+        ));
+
+    if (hasSubterraneanTunnelsForGroundCutout) {
+      const preCutouts: Array<{
+        poly: [number, number][][];
+        minX: number;
+        maxX: number;
+        minZ: number;
+        maxZ: number;
+      }> = [];
+      const pushPreCutoutFromTunnel = (pts: readonly [number, number][], width: number, isPath: boolean) => {
+        if (!pts || pts.length < 2) return;
+        const { portalGroundCutoutPolygons } = generateTunnelPortalAndTraceGeometries(
+          pts.map((p) => [p[0], p[1]] as [number, number]),
+          width,
+          isPath,
+          { emitStartPortal: true, emitEndPortal: true }
+        );
+        for (const poly of portalGroundCutoutPolygons) {
+          if (!poly[0] || poly[0].length < 3) continue;
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          for (const [x, z] of poly[0]) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+          }
+          preCutouts.push({ poly, minX, maxX, minZ, maxZ });
+        }
+      };
+
+      for (const r of data.roads || []) {
+        const isTun = r.placementClassification
+          ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+          : r.isTunnel;
+        if (isTun) {
+          pushPreCutoutFromTunnel(
+            r.points,
+            r.width * this.options.roadWidthMultiplier,
+            isNonVehicularRoadClass(r.roadClass)
+          );
+        }
+      }
+      for (const rl of data.railways || []) {
+        const isTun = rl.placementClassification
+          ? !rl.placementClassification.hasConflict && rl.placementClassification.isSubterraneanTunnel
+          : rl.isTunnel;
+        if (isTun) {
+          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false);
+        }
+      }
+
+      if (preCutouts.length > 0) {
+        for (const resolved of resolvedPlanarById.values()) {
+          if (
+            (resolved.category !== 'landuse' && resolved.category !== 'park') ||
+            resolved.resolvedMultiPolygon.length === 0
+          ) {
+            continue;
+          }
+          let rMinX = Infinity, rMaxX = -Infinity, rMinZ = Infinity, rMaxZ = -Infinity;
+          for (const poly of resolved.resolvedMultiPolygon) {
+            if (!poly[0]) continue;
+            for (const [x, z] of poly[0]) {
+              if (x < rMinX) rMinX = x;
+              if (x > rMaxX) rMaxX = x;
+              if (z < rMinZ) rMinZ = z;
+              if (z > rMaxZ) rMaxZ = z;
+            }
+          }
+          const matchingCutouts = preCutouts
+            .filter(
+              (c) =>
+                c.maxX >= rMinX && c.minX <= rMaxX && c.maxZ >= rMinZ && c.minZ <= rMaxZ
+            )
+            .map((c) => c.poly);
+          if (matchingCutouts.length > 0) {
+            try {
+              const diff = polygonClipping.difference(
+                resolved.resolvedMultiPolygon as unknown as polygonClipping.Geom,
+                ...(matchingCutouts as unknown as polygonClipping.Geom[])
+              ) as unknown as MultiPolygonCoords;
+              const cleaned = filterDegenerateBooleanArtifacts(diff);
+              if (cleaned.length > 0) {
+                resolved.resolvedMultiPolygon = cleaned;
+              }
+            } catch {
+              // Keep original resolvedMultiPolygon if boolean clipping fails
+            }
+          }
+        }
+      }
+    }
+
     const landuseBySubtype = new Map<
       string,
       Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo; sortY: number }>
@@ -2701,6 +2819,8 @@ export class GeometryBuilder {
           diagnostics: data.diagnostics,
           switchPolicy: infrastructureRenderOptions.railwaySwitchPolicy,
           ballastStrategy: infrastructureRenderOptions.railwayBallastStrategy,
+          showUndergroundTunnelTraces: infrastructureRenderOptions.showUndergroundTunnelTraces,
+          showHiddenUndergroundGeometry: infrastructureRenderOptions.showHiddenUndergroundGeometry,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {
@@ -2714,6 +2834,8 @@ export class GeometryBuilder {
         railwayInfrastructureResult.stats.railwayRenderSource ?? infrastructureRenderOptions.railways;
       railwaysGroup.userData.railwayStats = railwayInfrastructureResult.stats;
       railwaysGroup.userData.railwayProfile = railwayInfrastructureResult.profile;
+      railwaysGroup.userData.portalGroundCutoutPolygons =
+        railwayInfrastructureResult.portalGroundCutoutPolygons ?? [];
     }
 
     const bridgeSubstructureItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
@@ -2723,14 +2845,17 @@ export class GeometryBuilder {
     const tunnelMouthItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
     const tunnelTraceItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
     const tunnelUndergroundRoadItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
+    const roadPortalGroundCutoutPolygons: [number, number][][][] = [];
 
     // ==========================================================================
     // 6. ROADS, JUNCTION-NODE MESHING, 3D BRIDGE RAMPS & 3D TUNNEL PORTALS
     // ==========================================================================
     const rawAtGradeRoads: RoadFeature[] = [];
     const gradeSeparatedRoads: RoadFeature[] = [];
+    const conflictingFallbackRoads: RoadFeature[] = [];
     const atGradeRoadEndpoints: [number, number][] = [];
     const bridgeRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
+    const tunnelRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
     const gradeTransitionCoords: [number, number][] = [];
     let skippedRoadConflicts = 0;
 
@@ -2748,6 +2873,7 @@ export class GeometryBuilder {
 
       if (placement.hasConflict) {
         skippedRoadConflicts++;
+        conflictingFallbackRoads.push(r);
         continue;
       }
 
@@ -2770,6 +2896,8 @@ export class GeometryBuilder {
         gradeTransitionCoords.push(p0, pn);
         if (placement.isElevatedBridge) {
           bridgeRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
+        } else if (placement.isSubterraneanTunnel) {
+          tunnelRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
         }
       }
     }
@@ -3808,7 +3936,8 @@ export class GeometryBuilder {
                 edge.layer,
                 isBridge,
                 isTunnel,
-                edge.sourceFeatureIds[0] || edge.id
+                edge.sourceFeatureIds[0] || edge.id,
+                edge.placementClassification?.supportingEvidence.maxheightMeters
               );
             }
           )
@@ -3821,6 +3950,12 @@ export class GeometryBuilder {
             undergroundRoadGeometryCount: 0,
             undergroundRailwayGeometryCount: 0,
             conflictingPlacementSkippedCount: 0,
+            conflictingPlacementFallbackCount: 0,
+            portalGroundCutoutsCount: 0,
+            hiddenUndergroundMeshCount: 0,
+            undergroundTracesVisible: Boolean(
+              infrastructureRenderOptions.showUndergroundTunnelTraces
+            ),
           }
         : {
             mode: 'legacy',
@@ -3836,7 +3971,28 @@ export class GeometryBuilder {
             undergroundRoadGeometryCount: 0,
             undergroundRailwayGeometryCount: 0,
             conflictingPlacementSkippedCount: skippedRoadConflicts,
+            conflictingPlacementFallbackCount: 0,
+            portalGroundCutoutsCount: 0,
+            hiddenUndergroundMeshCount: 0,
+            undergroundTracesVisible: Boolean(
+              infrastructureRenderOptions.showUndergroundTunnelTraces
+            ),
           };
+
+    const recordConflictingRoadFallback = (sid: string) => {
+      if (data.diagnostics) {
+        if (!data.diagnostics.conflictingPlacementFallbacks) {
+          data.diagnostics.conflictingPlacementFallbacks = { count: 0, sampleIds: [] };
+        }
+        data.diagnostics.conflictingPlacementFallbacks.count++;
+        if (
+          data.diagnostics.conflictingPlacementFallbacks.sampleIds.length < 15 &&
+          !data.diagnostics.conflictingPlacementFallbacks.sampleIds.includes(sid)
+        ) {
+          data.diagnostics.conflictingPlacementFallbacks.sampleIds.push(sid);
+        }
+      }
+    };
 
     if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
       const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
@@ -3844,6 +4000,62 @@ export class GeometryBuilder {
         if (edge.placementClassification?.hasConflict) {
           roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount =
             (roadGradeTransitionDiagnostics.conflictingPlacementSkippedCount ?? 0) + 1;
+          roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount =
+            (roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount ?? 0) + 1;
+          const sids =
+            edge.sourceFeatureIds && edge.sourceFeatureIds.length > 0
+              ? [...edge.sourceFeatureIds]
+              : [edge.sourceFeatureId || edge.id];
+          recordConflictingRoadFallback(sids[0]);
+          const fallbackPts = edge.points.map((p) => [p[0], p[1]] as [number, number]);
+          const fallbackWidth = edge.width * this.options.roadWidthMultiplier;
+          const fallbackRibbon = generateRoadRibbon(
+            fallbackPts,
+            fallbackWidth,
+            ELEVATION_POLICY.ROAD_SURFACE,
+            { roundCaps: false }
+          );
+          if (fallbackRibbon) {
+            const g = resourceManager.registerGeometry(new THREE.BufferGeometry());
+            g.setAttribute('position', new THREE.BufferAttribute(fallbackRibbon.positions, 3));
+            g.setAttribute('normal', new THREE.BufferAttribute(fallbackRibbon.normals, 3));
+            g.setIndex(new THREE.BufferAttribute(fallbackRibbon.indices, 1));
+            const rawTags = (edge.primaryOsmTags || {}) as Record<
+              string,
+              string | number | boolean
+            >;
+            const fallbackInfo: InspectableFeatureInfo = {
+              id: edge.id,
+              sourceFeatureId: sids[0],
+              sourceFeatureIds: sids,
+              name: edge.name || `Road (${edge.roadClass})`,
+              category: 'Road & Way',
+              cartoLabel: edge.name || `${edge.roadClass} Road`,
+              primaryTag: `highway=${edge.roadClass}`,
+              subtype: edge.roadClass,
+              width: Number(fallbackWidth.toFixed(1)),
+              elevation: ELEVATION_POLICY.ROAD_SURFACE,
+              layer: 0,
+              isBridge: false,
+              isTunnel: false,
+              placementClassification: edge.placementClassification,
+              osmTags: sanitizeOsmTags(rawTags),
+            };
+            if (!roadsByClass.has(edge.roadClass)) {
+              roadsByClass.set(edge.roadClass, []);
+            }
+            roadsByClass.get(edge.roadClass)!.push({ geom: g, info: fallbackInfo });
+            for (const sid of sids) {
+              renderedSourceIds.add(sid);
+              const dups = roadLineage.deduplicatedMap[sid];
+              if (dups) {
+                for (const d of dups) renderedSourceIds.add(d);
+              }
+            }
+            for (const dupId of edge.deduplicatedFeatureIds) {
+              renderedSourceIds.add(dupId);
+            }
+          }
           continue;
         }
         if (edge.isAtGradeBuildable || edge.isCulvert) continue;
@@ -3883,7 +4095,14 @@ export class GeometryBuilder {
             : edge.isTunnel;
 
           if (isSubterraneanTunnel) {
-            const targetTunnelElev = getRoadElevation(edge.roadClass, edge.layer, false, true);
+            const targetTunnelElev = getRoadElevation(
+              edge.roadClass,
+              edge.layer,
+              false,
+              true,
+              sids[0] || edge.id,
+              edge.placementClassification?.supportingEvidence.maxheightMeters
+            );
             const tunnelInfo: InspectableFeatureInfo = {
               id: edge.id,
               sourceFeatureId: sids[0],
@@ -3911,18 +4130,28 @@ export class GeometryBuilder {
                 plan.endClassification === 'intentionally_standalone'
               : true;
 
-            const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
-              generateTunnelPortalAndTraceGeometries(
-                pts,
-                width,
-                isNonVehicularRoadClass(edge.roadClass),
-                {
-                  emitStartPortal,
-                  emitEndPortal,
-                  maxheightMeters: edge.placementClassification?.supportingEvidence.maxheightMeters,
-                  surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
-                }
-              );
+            const {
+              portalStructureGeo,
+              portalMouthGeo,
+              undergroundTraceGeo,
+              portalGroundCutoutPolygons: edgePortalCutouts,
+            } = generateTunnelPortalAndTraceGeometries(
+              pts,
+              width,
+              isNonVehicularRoadClass(edge.roadClass),
+              {
+                emitStartPortal,
+                emitEndPortal,
+                maxheightMeters: edge.placementClassification?.supportingEvidence.maxheightMeters,
+                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+              }
+            );
+            if (edgePortalCutouts.length > 0) {
+              roadPortalGroundCutoutPolygons.push(...edgePortalCutouts);
+              roadGradeTransitionDiagnostics.portalGroundCutoutsCount =
+                (roadGradeTransitionDiagnostics.portalGroundCutoutsCount ?? 0) +
+                edgePortalCutouts.length;
+            }
             if (portalStructureGeo) {
               resourceManager.registerGeometry(portalStructureGeo);
               tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
@@ -3950,6 +4179,8 @@ export class GeometryBuilder {
                 targetTunnelElevation: targetTunnelElev,
                 emitStartPortal,
                 emitEndPortal,
+                startTargetTunnelElevation: plan?.startTargetDeckElevation,
+                endTargetTunnelElevation: plan?.endTargetDeckElevation,
               });
               if (undergroundProf.profile.length >= 2) {
                 const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
@@ -4084,6 +4315,53 @@ export class GeometryBuilder {
         }
       }
     } else {
+      for (const fallbackRoad of conflictingFallbackRoads) {
+        const sids =
+          fallbackRoad.sourceFeatureIds && fallbackRoad.sourceFeatureIds.length > 0
+            ? fallbackRoad.sourceFeatureIds
+            : fallbackRoad.sourceFeatureId
+              ? [fallbackRoad.sourceFeatureId]
+              : [fallbackRoad.id];
+        roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount =
+          (roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount ?? 0) + 1;
+        recordConflictingRoadFallback(sids[0]);
+        const fallbackWidth = fallbackRoad.width * this.options.roadWidthMultiplier;
+        const fallbackRibbon = generateRoadRibbon(
+          fallbackRoad.points,
+          fallbackWidth,
+          ELEVATION_POLICY.ROAD_SURFACE,
+          { roundCaps: false }
+        );
+        if (fallbackRibbon) {
+          const g = resourceManager.registerGeometry(new THREE.BufferGeometry());
+          g.setAttribute('position', new THREE.BufferAttribute(fallbackRibbon.positions, 3));
+          g.setAttribute('normal', new THREE.BufferAttribute(fallbackRibbon.normals, 3));
+          g.setIndex(new THREE.BufferAttribute(fallbackRibbon.indices, 1));
+          const fallbackInfo: InspectableFeatureInfo = {
+            id: fallbackRoad.id,
+            sourceFeatureId: sids[0],
+            sourceFeatureIds: sids,
+            name: fallbackRoad.name || fallbackRoad.cartoLabel || `Road (${fallbackRoad.roadClass})`,
+            category: 'Road & Way',
+            cartoLabel: fallbackRoad.cartoLabel || `${fallbackRoad.roadClass} Road`,
+            primaryTag: fallbackRoad.primaryTag || `highway=${fallbackRoad.roadClass}`,
+            subtype: fallbackRoad.roadClass,
+            width: Number(fallbackWidth.toFixed(1)),
+            elevation: ELEVATION_POLICY.ROAD_SURFACE,
+            layer: 0,
+            isBridge: false,
+            isTunnel: false,
+            placementClassification: fallbackRoad.placementClassification,
+            osmTags: sanitizeOsmTags(fallbackRoad.osmTags),
+          };
+          if (!roadsByClass.has(fallbackRoad.roadClass)) {
+            roadsByClass.set(fallbackRoad.roadClass, []);
+          }
+          roadsByClass.get(fallbackRoad.roadClass)!.push({ geom: g, info: fallbackInfo });
+          for (const sid of sids) renderedSourceIds.add(sid);
+        }
+      }
+
       for (const road of gradeSeparatedRoads) {
         try {
           const width = road.width * this.options.roadWidthMultiplier;
@@ -4099,7 +4377,14 @@ export class GeometryBuilder {
             : road.isTunnel;
 
           if (isSubterraneanTunnel) {
-            const targetTunnelElev = getRoadElevation(road.roadClass, road.layer, false, true);
+            const targetTunnelElev = getRoadElevation(
+              road.roadClass,
+              road.layer,
+              false,
+              true,
+              road.sourceFeatureId || road.id,
+              road.placementClassification?.supportingEvidence.maxheightMeters
+            );
             const tunnelInfo: InspectableFeatureInfo = {
               id: road.id,
               sourceFeatureId: sids[0],
@@ -4118,21 +4403,46 @@ export class GeometryBuilder {
               osmTags: sanitizeOsmTags(road.osmTags),
             };
 
-            const { portalStructureGeo, portalMouthGeo, undergroundTraceGeo } =
-              generateTunnelPortalAndTraceGeometries(
-                road.points,
-                width,
-                isNonVehicularRoadClass(road.roadClass),
-                {
-                  maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
-                  surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
-                }
-              );
+            const pStart = road.points[0];
+            const pEnd = road.points[road.points.length - 1];
+            const touchesOtherTunnelStart = tunnelRoadEndpoints.some(
+              (t) => t.id !== road.id && Math.hypot(t.pt[0] - pStart[0], t.pt[1] - pStart[1]) <= 0.8
+            );
+            const touchesOtherTunnelEnd = tunnelRoadEndpoints.some(
+              (t) => t.id !== road.id && Math.hypot(t.pt[0] - pEnd[0], t.pt[1] - pEnd[1]) <= 0.8
+            );
+            const emitStartPortal = !touchesOtherTunnelStart;
+            const emitEndPortal = !touchesOtherTunnelEnd;
+
+            const {
+              portalStructureGeo,
+              portalMouthGeo,
+              undergroundTraceGeo,
+              portalGroundCutoutPolygons: roadPortalCutouts,
+            } = generateTunnelPortalAndTraceGeometries(
+              road.points,
+              width,
+              isNonVehicularRoadClass(road.roadClass),
+              {
+                emitStartPortal,
+                emitEndPortal,
+                maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
+                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
+              }
+            );
+            if (roadPortalCutouts.length > 0) {
+              roadPortalGroundCutoutPolygons.push(...roadPortalCutouts);
+              roadGradeTransitionDiagnostics.portalGroundCutoutsCount =
+                (roadGradeTransitionDiagnostics.portalGroundCutoutsCount ?? 0) +
+                roadPortalCutouts.length;
+            }
             if (portalStructureGeo) {
               resourceManager.registerGeometry(portalStructureGeo);
               tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
               roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount =
-                (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) + 2;
+                (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) +
+                (emitStartPortal ? 1 : 0) +
+                (emitEndPortal ? 1 : 0);
             }
             if (portalMouthGeo) {
               resourceManager.registerGeometry(portalMouthGeo);
@@ -4151,8 +4461,8 @@ export class GeometryBuilder {
                 points: road.points,
                 surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
                 targetTunnelElevation: targetTunnelElev,
-                emitStartPortal: true,
-                emitEndPortal: true,
+                emitStartPortal,
+                emitEndPortal,
               });
               if (undergroundProf.profile.length >= 2) {
                 const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
@@ -4280,6 +4590,7 @@ export class GeometryBuilder {
       (performance.now() - tRoadBridgeTunnel0).toFixed(2)
     );
     roadsGroup.userData.gradeTransitionDiagnostics = roadGradeTransitionDiagnostics;
+    roadsGroup.userData.portalGroundCutoutPolygons = roadPortalGroundCutoutPolygons;
 
     // Render order must strictly exceed water (2) and parks (3) for all paths and roads
     const ROAD_CLASS_RENDER_ORDER: Record<RoadClass, number> = {
@@ -4487,13 +4798,17 @@ export class GeometryBuilder {
             ...DEPTH_OFFSET_CONFIG.railways,
           })
         );
+        const showTraces = Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces);
         const mesh = new THREE.Mesh(merged, tunnelTraceMat);
         mesh.name = 'Tunnel_Underground_Trace';
+        mesh.visible = showTraces;
         mesh.receiveShadow = false;
         mesh.renderOrder = 15;
-        mesh.userData = { faceRanges };
+        mesh.userData = { faceRanges, isUndergroundTunnelTrace: true };
         roadsGroup.add(mesh);
-        drawCalls++;
+        if (mesh.visible) {
+          drawCalls++;
+        }
         totalVertices += merged.attributes.position.count;
         totalTriangles += getTriangleCount(merged);
       }
@@ -4512,7 +4827,7 @@ export class GeometryBuilder {
               theme.id === 'daylight'
                 ? '#475569'
                 : theme.id === 'blueprint'
-                  ? '#0077b6'
+                   ? '#0077b6'
                   : '#334155',
             roughness: 0.85,
             metalness: 0.1,
@@ -4520,17 +4835,25 @@ export class GeometryBuilder {
             ...DEPTH_OFFSET_CONFIG.roads,
           })
         );
+        const showHiddenUg = Boolean(infrastructureRenderOptions.showHiddenUndergroundGeometry);
         const mesh = new THREE.Mesh(merged, tunnelUndergroundRoadMat);
         mesh.name = 'Tunnel_Underground_Roads';
+        mesh.visible = showHiddenUg;
         mesh.receiveShadow = true;
         mesh.renderOrder = 3;
         mesh.userData = {
           faceRanges,
           isStructural3D: true,
           isUndergroundTunnelGeometry: true,
+          isHiddenUnderground: !showHiddenUg,
         };
         roadsGroup.add(mesh);
-        drawCalls++;
+        if (mesh.visible) {
+          drawCalls++;
+        } else {
+          roadGradeTransitionDiagnostics.hiddenUndergroundMeshCount =
+            (roadGradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
+        }
         totalVertices += merged.attributes.position.count;
         totalTriangles += getTriangleCount(merged);
       }
@@ -4539,13 +4862,30 @@ export class GeometryBuilder {
     // ==========================================================================
     // 7. LINEAR BARRIERS (Walls, Hedges, Fences, City Walls, Cliffs, Tree Rows)
     // ==========================================================================
+    const barrierResolution = resolveBarrierStructuralContexts(
+      data.barriers || [],
+      data.roads || [],
+      data.railways || []
+    );
+    barriersGroup.userData.structuralContextDiagnostics = barrierResolution.diagnostics;
+    if (data.diagnostics) {
+      data.diagnostics.structuralContextDiagnostics = barrierResolution.diagnostics;
+    }
+
     const barriersByType = new Map<
       string,
       Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
     >();
+    const subterraneanBarrierItems: Array<{
+      geom: THREE.BufferGeometry;
+      info: InspectableFeatureInfo;
+    }> = [];
 
     for (const bar of data.barriers || []) {
       try {
+        const ctx = barrierResolution.contextsById.get(bar.id);
+        bar.structuralContext = ctx;
+
         const info: InspectableFeatureInfo = {
           id: bar.id,
           sourceFeatureId: bar.sourceFeatureId || bar.id,
@@ -4556,7 +4896,11 @@ export class GeometryBuilder {
           subtype: bar.barrierType,
           width: bar.width,
           height: bar.height,
-          elevation: ELEVATION_POLICY.PARKS,
+          elevation: ctx ? ctx.representativeElevationY : ELEVATION_POLICY.PARKS,
+          layer: ctx ? ctx.layer : (bar.layer ?? 0),
+          isBridge: bar.isBridge,
+          isTunnel: ctx ? ctx.rendersInSubterraneanLayer : bar.isTunnel,
+          placementClassification: bar.placementClassification,
           osmTags: sanitizeOsmTags(bar.osmTags),
         };
 
@@ -4588,14 +4932,23 @@ export class GeometryBuilder {
           continue;
         }
 
-        const barGeo = generateExtrudedBarrierRibbon(
-          bar.points,
-          bar.width,
-          bar.height,
-          ELEVATION_POLICY.PARKS
-        );
+        const barGeo =
+          ctx && ctx.profile.length >= 2
+            ? generateProfiledBarrierRibbon3D(ctx.profile, bar.width)
+            : generateExtrudedBarrierRibbon(
+                bar.points,
+                bar.width,
+                bar.height,
+                ELEVATION_POLICY.PARKS
+              );
         if (!barGeo) continue;
         resourceManager.registerGeometry(barGeo);
+
+        if (ctx?.rendersInSubterraneanLayer) {
+          subterraneanBarrierItems.push({ geom: barGeo, info });
+          if (bar.sourceFeatureId) renderedSourceIds.add(bar.sourceFeatureId);
+          continue;
+        }
 
         const bKey =
           bar.barrierType === 'hedge'
@@ -4645,6 +4998,49 @@ export class GeometryBuilder {
         totalTriangles += (merged.index?.count || 0) / 3;
       }
     });
+
+    if (subterraneanBarrierItems.length > 0) {
+      const { merged, faceRanges } = mergeWithFaceRanges(
+        subterraneanBarrierItems,
+        resourceManager
+      );
+      if (merged) {
+        resourceManager.registerGeometry(merged);
+        const color = (theme.barrierColors as any)?.wall || '#475569';
+        const ugBarMat = resourceManager.registerMaterial(
+          new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.82,
+            metalness: 0.1,
+            side: THREE.DoubleSide,
+          })
+        );
+        barrierMaterialsByType.set('underground_wall', ugBarMat);
+
+        const showHiddenUg = Boolean(infrastructureRenderOptions.showHiddenUndergroundGeometry);
+        const mesh = new THREE.Mesh(merged, ugBarMat);
+        mesh.name = 'Tunnel_Underground_Barriers';
+        mesh.visible = showHiddenUg;
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 3;
+        mesh.userData = {
+          faceRanges,
+          isStructural3D: true,
+          isUndergroundTunnelGeometry: true,
+          isHiddenUnderground: !showHiddenUg,
+        };
+        barriersGroup.add(mesh);
+        if (mesh.visible) {
+          drawCalls++;
+        } else {
+          roadGradeTransitionDiagnostics.hiddenUndergroundMeshCount =
+            (roadGradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
+        }
+        totalVertices += merged.attributes.position.count;
+        totalTriangles += (merged.index?.count || 0) / 3;
+      }
+    }
 
     // ==========================================================================
     // 8. PROCEDURAL 3D FORESTS, INDIVIDUAL TREES, STREET FURNITURE & 3D LANDMARKS
@@ -5233,7 +5629,7 @@ export class GeometryBuilder {
       landuseBySubtype.forEach((items) => {
         landuseParts += items.length;
       });
-      let barrierParts = 0;
+      let barrierParts = subterraneanBarrierItems.length;
       barriersByType.forEach((items) => {
         barrierParts += items.length;
       });

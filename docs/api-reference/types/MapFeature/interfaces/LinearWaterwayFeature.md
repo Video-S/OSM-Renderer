@@ -6,7 +6,7 @@
 
 # Interface: LinearWaterwayFeature
 
-Defined in: types/MapFeature.ts:342
+Defined in: types/MapFeature.ts:352
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: types/MapFeature.ts:342
 
 > `optional` **cartoLabel?**: `string`
 
-Defined in: types/MapFeature.ts:355
+Defined in: types/MapFeature.ts:365
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: types/MapFeature.ts:355
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:343
+Defined in: types/MapFeature.ts:353
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: types/MapFeature.ts:343
 
 > `optional` **intermittent?**: `boolean`
 
-Defined in: types/MapFeature.ts:354
+Defined in: types/MapFeature.ts:364
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: types/MapFeature.ts:354
 
 > **isBridge**: `boolean`
 
-Defined in: types/MapFeature.ts:350
+Defined in: types/MapFeature.ts:360
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: types/MapFeature.ts:350
 
 > **isTunnel**: `boolean`
 
-Defined in: types/MapFeature.ts:351
+Defined in: types/MapFeature.ts:361
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: types/MapFeature.ts:351
 
 > **layer**: `number`
 
-Defined in: types/MapFeature.ts:352
+Defined in: types/MapFeature.ts:362
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: types/MapFeature.ts:352
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:346
+Defined in: types/MapFeature.ts:356
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: types/MapFeature.ts:346
 
 > `optional` **osmTags?**: [`RawGeoJsonProperties`](RawGeoJsonProperties.md)
 
-Defined in: types/MapFeature.ts:357
+Defined in: types/MapFeature.ts:367
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: types/MapFeature.ts:357
 
 > `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](InfrastructurePlacementClassification.md)
 
-Defined in: types/MapFeature.ts:353
+Defined in: types/MapFeature.ts:363
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: types/MapFeature.ts:353
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: types/MapFeature.ts:347
+Defined in: types/MapFeature.ts:357
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: types/MapFeature.ts:347
 
 > `optional` **primaryTag?**: `string`
 
-Defined in: types/MapFeature.ts:356
+Defined in: types/MapFeature.ts:366
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: types/MapFeature.ts:356
 
 > `optional` **sourceFeatureId?**: `string`
 
-Defined in: types/MapFeature.ts:344
+Defined in: types/MapFeature.ts:354
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: types/MapFeature.ts:344
 
 > **type**: `"waterway"`
 
-Defined in: types/MapFeature.ts:345
+Defined in: types/MapFeature.ts:355
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: types/MapFeature.ts:345
 
 > **waterwayType**: [`WaterwayType`](../type-aliases/WaterwayType.md)
 
-Defined in: types/MapFeature.ts:348
+Defined in: types/MapFeature.ts:358
 
 ***
 
@@ -126,4 +126,4 @@ Defined in: types/MapFeature.ts:348
 
 > **width**: `number`
 
-Defined in: types/MapFeature.ts:349
+Defined in: types/MapFeature.ts:359

@@ -28,6 +28,7 @@
 
 ## Type Aliases
 
+- [BarrierStructuralKind](type-aliases/BarrierStructuralKind.md)
 - [SurfaceCoverageDefectKind](type-aliases/SurfaceCoverageDefectKind.md)
 - [SurfaceOverlapCategory](type-aliases/SurfaceOverlapCategory.md)
 
@@ -48,9 +49,11 @@
 - [createShapesFromMultiPolygon](functions/createShapesFromMultiPolygon.md)
 - [generateExtrudedBarrierRibbon](functions/generateExtrudedBarrierRibbon.md)
 - [generateParkingStallMarkings](functions/generateParkingStallMarkings.md)
+- [generateProfiledBarrierRibbon3D](functions/generateProfiledBarrierRibbon3D.md)
 - [generateRoadRibbon](functions/generateRoadRibbon.md)
 - [generateStepTreads](functions/generateStepTreads.md)
 - [hasRingSelfIntersection](functions/hasRingSelfIntersection.md)
+- [resolveBarrierStructuralContexts](functions/resolveBarrierStructuralContexts.md)
 - [resolveInspectedFeature](functions/resolveInspectedFeature.md)
 - [sanitizeOsmTags](functions/sanitizeOsmTags.md)
 - [splitRoadsAtSharedInteriorNodes](functions/splitRoadsAtSharedInteriorNodes.md)
@@ -67,6 +70,12 @@ Re-exports [adaptInfrastructureGraphToRenderDescriptors](../infrastructure/rende
 ### auditGraphRoadMeshIntegrity
 
 Re-exports [auditGraphRoadMeshIntegrity](../infrastructure/roads/GraphRoadGeometryBuilder/functions/auditGraphRoadMeshIntegrity.md)
+
+***
+
+### BarrierStructuralContext
+
+Re-exports [BarrierStructuralContext](../../types/MapFeature/interfaces/BarrierStructuralContext.md)
 
 ***
 
@@ -229,6 +238,12 @@ Re-exports [RoadInfrastructureRenderSource](../infrastructure/rendering/Infrastr
 ### SceneResourceManager
 
 Re-exports [SceneResourceManager](../SceneResourceManager/classes/SceneResourceManager.md)
+
+***
+
+### StructuralContextDiagnostics
+
+Re-exports [StructuralContextDiagnostics](../../types/MapFeature/interfaces/StructuralContextDiagnostics.md)
 
 ***
 

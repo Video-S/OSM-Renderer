@@ -238,3 +238,35 @@ After Boolean subtraction, graph road remainders are conditioned on the coordina
 The boundary-derived junction/portal descriptions in sections 2 and 11 remain correct **for Legacy/E2**. With `roads: 'graph-surface'`, the engine instead buffers untrimmed provenance centerline segments via `SurfaceFirstRoadFootprints.ts`, subtracts already-owned coplanar road areas and triangulates the visible remainder. The uniform at-grade elevation and bridge/tunnel isolation remain unchanged; road connectivity still belongs to the graph.
 
 The [first validator/benchmark](../research/surface-first-road-rendering/baseline-results.json) found some missing disks at provenance splits and a small **0.0312 m² H01 triangle overlap**. E2+ is promising but not yet proven perfect or scalable to Twente. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md) and [technical design](./e2-plus-surface-first-road-rendering.md).
+
+
+## 13. Subterranean Visual Integration, Tunnel Clearances & Structural Retaining Wall Context (`M2.3-E4-T2` / `TKT-015`)
+
+Milestone 2.3 Stage E4-T2 refines the visual integration of tunnels, underpasses, and their supporting structures:
+
+1. **Centralized Subterranean Tunnel Clearance & Depth Policy (`ElevationPolicy.ts`)**:
+   - Subterranean tunnel base floor elevation is updated to `TUNNEL_DEPTH = -5.0 m` (`TUNNEL_LAYER_STEP = 5.0 m`), with structural roof slab cover beneath the surface `TUNNEL_ROOF_COVER_THICKNESS = 0.4 m`.
+   - `resolveTunnelClearanceAndDepth` dynamically computes minimum clearance and floor depth based on explicit OSM `maxheight` tags, domain, and vehicle/train clearance standards:
+     - Pedestrian/cycleway underpasses: `2.6 m` vertical clearance.
+     - Vehicular road tunnels: `3.8 m` vertical clearance.
+     - Non-electrified / urban transit railway tunnels: `4.6 m` vertical clearance.
+     - Electrified mainline railway tunnels: `5.2 m` vertical clearance (ensuring overhead pantograph clearance).
+     - Open cuttings: `-1.8 m` floor depression.
+   - Graph-connected multi-segment tunnel chains harmonize on the deepest required vertical clearance across shared internal joints to maintain a continuous, non-stepped vertical profile.
+
+2. **Context-Aware Structural Retaining Wall & Barrier Extrusion (`StructuralContextResolver.ts`)**:
+   - Barriers (`barrier=*`, particularly `barrier=retaining_wall`) ingest topological node IDs and vertical tags (`layer`, `tunnel`, `cutting`, `location`).
+   - `resolveBarrierStructuralContexts` associates barriers with nearby subterranean or cutting infrastructure using shared topological nodes, compatible vertical tags, and bounded corridor spatial indexing, classifying each barrier into:
+     - `surface_standard`: standard above-ground barrier extruded upward from surface elevation (`Y = +0.025 m`).
+     - `subterranean_enclosed`: retaining walls completely enclosed inside an underpass/tunnel (e.g., Europatunnel Hengelo `way/375064982` and `way/375064983`), placed on the corridor floor (`Y <= -4.0 m`, `topY <= -0.4 m`) in `Tunnel_Underground_Barriers`, hidden by default.
+     - `cutting_or_portal_approach`: retaining walls lining open approach ramps and cuttings, extruded via `generateProfiledBarrierRibbon3D` with variable per-vertex `[baseY, topY]` profiles that span from the depressed trench floor up to the surface rim (`Y = +0.05 m - +0.075 m`).
+     - `unassociated_negative_layer`: negative-layer barriers without verified corridor association, falling back conservatively to surface elevation with diagnostic tracking.
+
+3. **Subterranean Disappearance, Localized Ground Cutouts & Visibility Separation**:
+   - Surface dashed tunnel traces (`Tunnel_Underground_Trace`, `Railway_Tunnel_Traces`) are disabled by default (`showUndergroundTunnelTraces: false`).
+   - Buried underground road, railway, and barrier meshes (`Tunnel_Underground_Roads`, `Tunnel_Underground_Railway_*`, `Tunnel_Underground_Barriers`) are hidden by default (`visible = false`, toggleable via `showHiddenUndergroundGeometry`), eliminating unnecessary draw calls while preserving complete `faceRanges` inspectability.
+   - Visible portal entrances feature a localized recess/ramp transition dropping beneath ground cover inside the portal hood, accompanied by localized portal opening cutouts carved into overlapping `landuse`/`park` polygons without cutting overhead surface buildings or roads.
+
+4. **Conservative Fallback for Conflicting Vertical Tags**:
+   - Infrastructure features with conflicting placement tags (`placementClassification.hasConflict === true`) route to a conservative at-grade surface fallback, preserving source feature identity and recording `conflictingPlacementFallbackCount` in diagnostics.
+

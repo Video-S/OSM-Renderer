@@ -8,7 +8,7 @@
 
 > **buildBridgeProfile3D**(`options`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:358
+Defined in: world/BridgeAndTunnelBuilder.ts:409
 
 Densifies a 2D polyline and computes a smooth 3D vertical elevation profile `y(s)` for a bridge.
 - Preserves full grade separation (`peakElevation = targetBridgeElevation`) regardless of bridge length.

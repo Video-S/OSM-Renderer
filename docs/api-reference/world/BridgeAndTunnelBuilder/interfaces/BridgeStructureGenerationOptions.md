@@ -6,7 +6,7 @@
 
 # Interface: BridgeStructureGenerationOptions
 
-Defined in: world/BridgeAndTunnelBuilder.ts:194
+Defined in: world/BridgeAndTunnelBuilder.ts:202
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:194
 
 > `optional` **minElevatedDeckY?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:197
+Defined in: world/BridgeAndTunnelBuilder.ts:205
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:197
 
 > `optional` **suppressEndAbutmentHeadwall?**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:196
+Defined in: world/BridgeAndTunnelBuilder.ts:204
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: world/BridgeAndTunnelBuilder.ts:196
 
 > `optional` **suppressStartAbutmentHeadwall?**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:195
+Defined in: world/BridgeAndTunnelBuilder.ts:203

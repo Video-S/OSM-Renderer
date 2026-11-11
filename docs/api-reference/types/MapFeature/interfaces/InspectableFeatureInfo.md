@@ -6,7 +6,7 @@
 
 # Interface: InspectableFeatureInfo
 
-Defined in: types/MapFeature.ts:243
+Defined in: types/MapFeature.ts:253
 
 Rich metadata attached to every 3D geometry range / mesh / instance for universal hover & click inspection.
 
@@ -16,7 +16,7 @@ Rich metadata attached to every 3D geometry range / mesh / instance for universa
 
 > `optional` **amenity?**: `string`
 
-Defined in: types/MapFeature.ts:263
+Defined in: types/MapFeature.ts:273
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: types/MapFeature.ts:263
 
 > **cartoLabel**: `string`
 
-Defined in: types/MapFeature.ts:250
+Defined in: types/MapFeature.ts:260
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: types/MapFeature.ts:250
 
 > **category**: `string`
 
-Defined in: types/MapFeature.ts:249
+Defined in: types/MapFeature.ts:259
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: types/MapFeature.ts:249
 
 > `optional` **elevation?**: `number`
 
-Defined in: types/MapFeature.ts:257
+Defined in: types/MapFeature.ts:267
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: types/MapFeature.ts:257
 
 > `optional` **height?**: `number`
 
-Defined in: types/MapFeature.ts:253
+Defined in: types/MapFeature.ts:263
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: types/MapFeature.ts:253
 
 > `optional` **heightFormatted?**: `string`
 
-Defined in: types/MapFeature.ts:254
+Defined in: types/MapFeature.ts:264
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: types/MapFeature.ts:254
 
 > **id**: `string`
 
-Defined in: types/MapFeature.ts:244
+Defined in: types/MapFeature.ts:254
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: types/MapFeature.ts:244
 
 > `optional` **isBridge?**: `boolean`
 
-Defined in: types/MapFeature.ts:259
+Defined in: types/MapFeature.ts:269
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: types/MapFeature.ts:259
 
 > `optional` **isTunnel?**: `boolean`
 
-Defined in: types/MapFeature.ts:260
+Defined in: types/MapFeature.ts:270
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: types/MapFeature.ts:260
 
 > `optional` **layer?**: `number`
 
-Defined in: types/MapFeature.ts:258
+Defined in: types/MapFeature.ts:268
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: types/MapFeature.ts:258
 
 > `optional` **levels?**: `number`
 
-Defined in: types/MapFeature.ts:255
+Defined in: types/MapFeature.ts:265
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: types/MapFeature.ts:255
 
 > `optional` **name?**: `string`
 
-Defined in: types/MapFeature.ts:248
+Defined in: types/MapFeature.ts:258
 
 ***
 
@@ -112,7 +112,7 @@ Defined in: types/MapFeature.ts:248
 
 > **osmTags**: `Record`\<`string`, `string` \| `number` \| `boolean`\>
 
-Defined in: types/MapFeature.ts:264
+Defined in: types/MapFeature.ts:274
 
 ***
 
@@ -120,7 +120,7 @@ Defined in: types/MapFeature.ts:264
 
 > `optional` **placementClassification?**: [`InfrastructurePlacementClassification`](InfrastructurePlacementClassification.md)
 
-Defined in: types/MapFeature.ts:261
+Defined in: types/MapFeature.ts:271
 
 ***
 
@@ -128,7 +128,7 @@ Defined in: types/MapFeature.ts:261
 
 > `optional` **portalConnections?**: [`RoadPortalConnectionSpec`](RoadPortalConnectionSpec.md)[]
 
-Defined in: types/MapFeature.ts:247
+Defined in: types/MapFeature.ts:257
 
 ***
 
@@ -136,7 +136,7 @@ Defined in: types/MapFeature.ts:247
 
 > **primaryTag**: `string`
 
-Defined in: types/MapFeature.ts:251
+Defined in: types/MapFeature.ts:261
 
 ***
 
@@ -144,7 +144,7 @@ Defined in: types/MapFeature.ts:251
 
 > **sourceFeatureId**: `string`
 
-Defined in: types/MapFeature.ts:245
+Defined in: types/MapFeature.ts:255
 
 ***
 
@@ -152,7 +152,7 @@ Defined in: types/MapFeature.ts:245
 
 > `optional` **sourceFeatureIds?**: `string`[]
 
-Defined in: types/MapFeature.ts:246
+Defined in: types/MapFeature.ts:256
 
 ***
 
@@ -160,7 +160,7 @@ Defined in: types/MapFeature.ts:246
 
 > **subtype**: `string`
 
-Defined in: types/MapFeature.ts:252
+Defined in: types/MapFeature.ts:262
 
 ***
 
@@ -168,7 +168,7 @@ Defined in: types/MapFeature.ts:252
 
 > `optional` **type?**: `string`
 
-Defined in: types/MapFeature.ts:262
+Defined in: types/MapFeature.ts:272
 
 ***
 
@@ -176,4 +176,4 @@ Defined in: types/MapFeature.ts:262
 
 > `optional` **width?**: `number`
 
-Defined in: types/MapFeature.ts:256
+Defined in: types/MapFeature.ts:266

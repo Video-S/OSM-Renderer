@@ -6,14 +6,14 @@
 
 # Function: getRoadElevation()
 
-> **getRoadElevation**(`roadClass`, `layer?`, `isBridge?`, `isTunnel?`, `_featureId?`): `number`
+> **getRoadElevation**(`roadClass`, `layer?`, `isBridge?`, `isTunnel?`, `_featureId?`, `maxheightMeters?`): `number`
 
-Defined in: world/ElevationPolicy.ts:151
+Defined in: world/ElevationPolicy.ts:256
 
 Determines the physical Y-elevation for a road feature.
 - All ordinary at-grade roads and paths share the uniform physical baseline ELEVATION_POLICY.ROAD_SURFACE (0.050m).
 - Bridges: relational grade-separation clearance (>= 2.8m above grade).
-- Tunnels: subterranean depth (<= -2.0m).
+- Tunnels: subterranean depth (<= ELEVATION_POLICY.TUNNEL_DEPTH = -4.2m, deepened further when explicit maxheight requires it).
 
 ## Parameters
 
@@ -36,6 +36,10 @@ Determines the physical Y-elevation for a road feature.
 ### \_featureId?
 
 `string`
+
+### maxheightMeters?
+
+`number`
 
 ## Returns
 

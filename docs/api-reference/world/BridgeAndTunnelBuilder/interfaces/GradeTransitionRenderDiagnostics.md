@@ -42,6 +42,16 @@ Defined in: world/BridgeAndTunnelBuilder.ts:78
 
 ***
 
+### conflictingPlacementFallbackCount?
+
+> `optional` **conflictingPlacementFallbackCount?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:95
+
+Number of features with conflicting vertical tags routed to a conservative surface fallback (M2.3-E4-T2).
+
+***
+
 ### conflictingPlacementSkippedCount?
 
 > `optional` **conflictingPlacementSkippedCount?**: `number`
@@ -57,6 +67,16 @@ Number of features skipped from grade-separated/surface rendering due to contrad
 > **correctedPortalDiscontinuitiesCount**: `number`
 
 Defined in: world/BridgeAndTunnelBuilder.ts:84
+
+***
+
+### hiddenUndergroundMeshCount?
+
+> `optional` **hiddenUndergroundMeshCount?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:99
+
+Number of subterranean meshes hidden from normal surface draw calls (M2.3-E4-T2).
 
 ***
 
@@ -81,6 +101,16 @@ Defined in: world/BridgeAndTunnelBuilder.ts:83
 > **mode**: `"legacy"` \| `"graph"`
 
 Defined in: world/BridgeAndTunnelBuilder.ts:77
+
+***
+
+### portalGroundCutoutsCount?
+
+> `optional` **portalGroundCutoutsCount?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:97
+
+Number of localized portal ground-cover cutouts applied at confirmed tunnel entrances (M2.3-E4-T2).
 
 ***
 
@@ -111,6 +141,16 @@ Number of subterranean tunnel railway features rendered with continuous 3D under
 Defined in: world/BridgeAndTunnelBuilder.ts:89
 
 Number of subterranean tunnel road features rendered with continuous 3D underground road geometry (M2.3-E4-T).
+
+***
+
+### undergroundTracesVisible?
+
+> `optional` **undergroundTracesVisible?**: `boolean`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:101
+
+True when diagnostic dashed underground traces are enabled in visible presentation (M2.3-E4-T2).
 
 ***
 

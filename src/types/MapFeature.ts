@@ -16,8 +16,17 @@ import type {
   InfrastructureVerticalRelation,
   TunnelConstructionSubtype,
 } from '../world/InfrastructurePlacementClassifier';
+import type {
+  BarrierProfileVertex3D,
+  BarrierStructuralContext,
+  BarrierStructuralPlacementKind,
+  StructuralContextDiagnostics,
+} from '../world/StructuralContextResolver';
 
 export type {
+  BarrierProfileVertex3D,
+  BarrierStructuralContext,
+  BarrierStructuralPlacementKind,
   ExplicitPlacementHints,
   InfrastructureEnclosureKind,
   InfrastructurePlacementClassification,
@@ -28,6 +37,7 @@ export type {
   InfrastructurePointMetadata,
   InfrastructureSupportingVerticalEvidence,
   InfrastructureVerticalRelation,
+  StructuralContextDiagnostics,
   TopologySourceData,
   TunnelConstructionSubtype,
   UnchainedRailwayPart,
@@ -390,9 +400,16 @@ export interface BarrierFeature {
   type: 'barrier';
   name?: string;
   points: [number, number][];
+  nodeIds?: (string | number)[];
+  rawOsmNodeIds?: (string | undefined)[];
   barrierType: BarrierType;
   width: number;
   height: number;
+  layer?: number;
+  isBridge?: boolean;
+  isTunnel?: boolean;
+  placementClassification?: InfrastructurePlacementClassification;
+  structuralContext?: BarrierStructuralContext;
   cartoLabel?: string;
   primaryTag?: string;
   osmTags?: RawGeoJsonProperties;
@@ -563,6 +580,15 @@ export interface MapFeatureDiagnostics {
 
   /** Semantic placement classification breakdown (Stage E4-T) */
   placementDiagnostics?: InfrastructurePlacementDiagnostics;
+
+  /** Context-aware structural elevation breakdown for barriers & retaining walls (Stage E4-T2) */
+  structuralContextDiagnostics?: StructuralContextDiagnostics;
+
+  /** Conservative surface fallbacks applied to features with conflicting vertical tags (Stage E4-T2) */
+  conflictingPlacementFallbacks?: {
+    count: number;
+    sampleIds: string[];
+  };
 }
 
 export interface ProcessedMapData {

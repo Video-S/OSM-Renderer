@@ -6,7 +6,7 @@
 
 # Interface: TunnelUndergroundProfileOptions
 
-Defined in: world/BridgeAndTunnelBuilder.ts:214
+Defined in: world/BridgeAndTunnelBuilder.ts:222
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:214
 
 > **emitEndPortal**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:219
+Defined in: world/BridgeAndTunnelBuilder.ts:227
 
 ***
 
@@ -22,7 +22,15 @@ Defined in: world/BridgeAndTunnelBuilder.ts:219
 
 > **emitStartPortal**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:218
+Defined in: world/BridgeAndTunnelBuilder.ts:226
+
+***
+
+### endTargetTunnelElevation?
+
+> `optional` **endTargetTunnelElevation?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:230
 
 ***
 
@@ -30,7 +38,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:218
 
 > `optional` **maxSampleStep?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:220
+Defined in: world/BridgeAndTunnelBuilder.ts:228
 
 ***
 
@@ -38,7 +46,15 @@ Defined in: world/BridgeAndTunnelBuilder.ts:220
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: world/BridgeAndTunnelBuilder.ts:215
+Defined in: world/BridgeAndTunnelBuilder.ts:223
+
+***
+
+### startTargetTunnelElevation?
+
+> `optional` **startTargetTunnelElevation?**: `number`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:229
 
 ***
 
@@ -46,7 +62,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:215
 
 > **surfaceElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:216
+Defined in: world/BridgeAndTunnelBuilder.ts:224
 
 ***
 
@@ -54,4 +70,4 @@ Defined in: world/BridgeAndTunnelBuilder.ts:216
 
 > **targetTunnelElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:217
+Defined in: world/BridgeAndTunnelBuilder.ts:225

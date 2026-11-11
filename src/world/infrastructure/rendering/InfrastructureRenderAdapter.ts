@@ -98,6 +98,18 @@ export interface InfrastructureRenderOptions {
   railways: RailwayInfrastructureRenderSource;
   railwaySwitchPolicy?: RailwaySwitchPolicy;
   railwayBallastStrategy?: RailwayBallastStrategy;
+  /**
+   * Optional diagnostic overlay toggle for map-style dashed surface tunnel alignment traces
+   * (`Tunnel_Underground_Trace` / `Railway_Tunnel_Traces`). Disabled (`false`) by default in M2.3-E4-T2
+   * so tunnels convincingly disappear underground in physical 3D presentation.
+   */
+  showUndergroundTunnelTraces?: boolean;
+  /**
+   * Optional inspection/cutaway toggle for buried subterranean corridor meshes
+   * (`Tunnel_Underground_Roads`, `Tunnel_Underground_Railway_*`, `Tunnel_Underground_Barriers`).
+   * Disabled (`false`) by default in M2.3-E4-T2 so normal surface viewing avoids unnecessary draw calls.
+   */
+  showHiddenUndergroundGeometry?: boolean;
 }
 
 /**
@@ -258,6 +270,8 @@ export function normalizeInfrastructureRenderOptions(
     railways?: string | null;
     railwaySwitchPolicy?: string | null;
     railwayBallastStrategy?: string | null;
+    showUndergroundTunnelTraces?: boolean | null;
+    showHiddenUndergroundGeometry?: boolean | null;
   } | null
 ): InfrastructureRenderOptions {
   if (!options) {
@@ -284,6 +298,12 @@ export function normalizeInfrastructureRenderOptions(
       railways
     );
   }
+  if (typeof options.showUndergroundTunnelTraces === 'boolean') {
+    result.showUndergroundTunnelTraces = options.showUndergroundTunnelTraces;
+  }
+  if (typeof options.showHiddenUndergroundGeometry === 'boolean') {
+    result.showHiddenUndergroundGeometry = options.showHiddenUndergroundGeometry;
+  }
   return result;
 }
 
@@ -308,6 +328,9 @@ export function parseInfrastructureRenderOptionsFromSearch(
   const railways = parseRailwayInfrastructureRenderSource(params.get('topologyRailways'));
   const rawPolicy = params.get('railwaySwitchPolicy') ?? params.get('railwaySwitches');
   const rawBallast = params.get('railwayBallastStrategy') ?? params.get('railwayBallast');
+  const rawTraces = params.get('showUndergroundTunnelTraces') ?? params.get('tunnelTraces');
+  const rawUnderground =
+    params.get('showHiddenUndergroundGeometry') ?? params.get('undergroundCutaway');
   const result: InfrastructureRenderOptions = {
     roads: parseRoadInfrastructureRenderSource(params.get('topologyRoads')),
     railways,
@@ -317,6 +340,16 @@ export function parseInfrastructureRenderOptionsFromSearch(
   }
   if (rawBallast !== null || railways === 'graph-R+') {
     result.railwayBallastStrategy = parseRailwayBallastStrategy(rawBallast, railways);
+  }
+  if (rawTraces === 'true' || rawTraces === '1') {
+    result.showUndergroundTunnelTraces = true;
+  } else if (rawTraces === 'false' || rawTraces === '0') {
+    result.showUndergroundTunnelTraces = false;
+  }
+  if (rawUnderground === 'true' || rawUnderground === '1') {
+    result.showHiddenUndergroundGeometry = true;
+  } else if (rawUnderground === 'false' || rawUnderground === '0') {
+    result.showHiddenUndergroundGeometry = false;
   }
   return result;
 }

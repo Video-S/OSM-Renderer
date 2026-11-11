@@ -8,7 +8,7 @@
 
 > **buildSafeExteriorSubPolylines**(`points`, `width`, `overlappingBoxes`): \[`number`, `number`\][][]
 
-Defined in: world/GeometryBuilder.ts:932
+Defined in: world/GeometryBuilder.ts:944
 
 Documented safe fallback when sweep-line Boolean clipping fails on a degenerate/self-intersecting path:
 Clips each individual segment of the path to the exterior of the expanded bounding boxes of all

@@ -1372,126 +1372,115 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     );
   });
 
-  it('7. Primary E1 Acceptance: Legacy Renderer Invariance across Synthetic, Switchyard, Station Hengelo, and Amsterdam Centraal datasets', () => {
-    const provider = new LocalGeoJsonProvider();
-    const hengeloRawFc: any = {
-      type: 'FeatureCollection',
+  // Generate one dataset pair per test, rather than holding eight large map
+  // datasets at once. This also isolates real-world invariance cases in CI.
+  const legacyInvariantCases: Array<{ name: string; make: () => ProcessedMapData }> = [
+    { name: 'Synthetic M2.3-E1', make: () => createRichSyntheticDataset() },
+    { name: 'M2.1 Switchyard Fixture', make: () => createRailwayPrototypeFixtureData() },
+    {
       name: 'Station Hengelo',
-      features: JSON.parse(JSON.stringify(realOsmExtracts.regions.hengelo.features)),
-    };
-    const amsterdamRawFc: any = {
-      type: 'FeatureCollection',
+      make: () => new LocalGeoJsonProvider().parseGeoJson({
+        type: 'FeatureCollection',
+        name: 'Station Hengelo',
+        features: JSON.parse(JSON.stringify(realOsmExtracts.regions.hengelo.features)),
+      } as any, 'Station Hengelo'),
+    },
+    {
       name: 'Amsterdam Centraal',
-      features: JSON.parse(JSON.stringify(realOsmExtracts.regions.amsterdamCentraal.features)),
-    };
-
-    const makeDatasets = (): Array<{ name: string; data: ProcessedMapData }> => [
-      { name: 'Synthetic M2.3-E1', data: createRichSyntheticDataset() },
-      { name: 'M2.1 Switchyard Fixture', data: createRailwayPrototypeFixtureData() },
-      {
-        name: 'Station Hengelo (Overijssel)',
-        data: provider.parseGeoJson(
-          JSON.parse(JSON.stringify(hengeloRawFc)),
-          'Station Hengelo'
-        ),
-      },
-      {
+      make: () => new LocalGeoJsonProvider().parseGeoJson({
+        type: 'FeatureCollection',
         name: 'Amsterdam Centraal',
-        data: provider.parseGeoJson(
-          JSON.parse(JSON.stringify(amsterdamRawFc)),
-          'Amsterdam Centraal'
-        ),
-      },
-    ];
+        features: JSON.parse(JSON.stringify(realOsmExtracts.regions.amsterdamCentraal.features)),
+      } as any, 'Amsterdam Centraal'),
+    },
+  ];
 
-    const legacyDatasets = makeDatasets();
-    const previewDatasets = makeDatasets();
+  for (const scenario of legacyInvariantCases) {
+    it(`7. Primary E1 Acceptance: Legacy Renderer Invariance — ${scenario.name}`, () => {
+      const dsLegacy = { name: scenario.name, data: scenario.make() };
+      const dsPreview = { name: scenario.name, data: scenario.make() };
 
-    for (let i = 0; i < legacyDatasets.length; i++) {
-      const dsLegacy = legacyDatasets[i];
-      const dsPreview = previewDatasets[i];
+        const roadSnapshotBeforePreview = JSON.stringify(dsPreview.data.roads);
+        const railSnapshotBeforePreview = JSON.stringify(dsPreview.data.railways);
 
-      const roadSnapshotBeforePreview = JSON.stringify(dsPreview.data.roads);
-      const railSnapshotBeforePreview = JSON.stringify(dsPreview.data.railways);
+        // 1. Default legacy scene
+        const legacyBuilder = new GeometryBuilder({
+          initialCameraZoom: 1.0,
+          infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
+        });
+        const legacyScene = legacyBuilder.buildScene(dsLegacy.data, MAP_THEMES.tactical);
+        assert.deepEqual(legacyScene.infrastructureRenderOptions, {
+          roads: 'legacy',
+          railways: 'legacy',
+        });
+        // In legacy mode, no preview graph/descriptor bundle is allocated
+        assert.equal(legacyScene.infrastructureRenderPreview, null);
 
-      // 1. Default legacy scene
-      const legacyBuilder = new GeometryBuilder({
-        initialCameraZoom: 1.0,
-        infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
-      });
-      const legacyScene = legacyBuilder.buildScene(dsLegacy.data, MAP_THEMES.tactical);
-      assert.deepEqual(legacyScene.infrastructureRenderOptions, {
-        roads: 'legacy',
-        railways: 'legacy',
-      });
-      // In legacy mode, no preview graph/descriptor bundle is allocated
-      assert.equal(legacyScene.infrastructureRenderPreview, null);
-
-      // 2. Both road & railway graph-preview enabled (sharing 1 InfrastructureGraph)
-      const sharedPreview = prepareInfrastructureRenderPreview(dsPreview.data, {
-        roads: 'graph-preview',
-        railways: 'graph-preview',
-      });
-      assert.ok(sharedPreview.graph, `Expected sharedPreview.graph for ${dsPreview.name}`);
-      assert.ok(sharedPreview.descriptors, `Expected sharedPreview.descriptors for ${dsPreview.name}`);
-      assert.equal(sharedPreview.validation?.isValid, true);
-
-      // Verify prepareInfrastructureRenderPreview did NOT mutate ProcessedMapData.roads or .railways
-      assert.equal(JSON.stringify(dsPreview.data.roads), roadSnapshotBeforePreview);
-      assert.equal(JSON.stringify(dsPreview.data.railways), railSnapshotBeforePreview);
-
-      const previewBuilder = new GeometryBuilder({
-        initialCameraZoom: 1.0,
-        infrastructureRenderOptions: {
+        // 2. Both road & railway graph-preview enabled (sharing 1 InfrastructureGraph)
+        const sharedPreview = prepareInfrastructureRenderPreview(dsPreview.data, {
           roads: 'graph-preview',
           railways: 'graph-preview',
-        },
-        infrastructureRenderPreview: sharedPreview,
-      });
-      const previewScene = previewBuilder.buildScene(dsPreview.data, MAP_THEMES.tactical);
-      assert.equal(previewScene.infrastructureRenderPreview, sharedPreview);
+        });
+        assert.ok(sharedPreview.graph, `Expected sharedPreview.graph for ${dsPreview.name}`);
+        assert.ok(sharedPreview.descriptors, `Expected sharedPreview.descriptors for ${dsPreview.name}`);
+        assert.equal(sharedPreview.validation?.isValid, true);
 
-      // Verify after scene build that dsLegacy.data and dsPreview.data have identical roads and railways
-      assert.deepEqual(dsPreview.data.roads, dsLegacy.data.roads);
-      assert.deepEqual(dsPreview.data.railways, dsLegacy.data.railways);
+        // Verify prepareInfrastructureRenderPreview did NOT mutate ProcessedMapData.roads or .railways
+        assert.equal(JSON.stringify(dsPreview.data.roads), roadSnapshotBeforePreview);
+        assert.equal(JSON.stringify(dsPreview.data.railways), railSnapshotBeforePreview);
 
-      // Compare complete scene snapshots (groups, meshes, buffer attributes, instanced matrices, faceRanges, provenance, stats)
-      const snapLegacy = collectSceneSnapshot(legacyScene);
-      const snapPreview = collectSceneSnapshot(previewScene);
-      assert.deepEqual(snapPreview, snapLegacy);
+        const previewBuilder = new GeometryBuilder({
+          initialCameraZoom: 1.0,
+          infrastructureRenderOptions: {
+            roads: 'graph-preview',
+            railways: 'graph-preview',
+          },
+          infrastructureRenderPreview: sharedPreview,
+        });
+        const previewScene = previewBuilder.buildScene(dsPreview.data, MAP_THEMES.tactical);
+        assert.equal(previewScene.infrastructureRenderPreview, sharedPreview);
 
-      // Verify zoom/LOD transitions produce identical visibility in both scenes
-      legacyScene.updateCameraZoom?.(8.0);
-      previewScene.updateCameraZoom?.(8.0);
-      assert.deepEqual(
-        collectSceneSnapshot(previewScene).groupSnapshots,
-        collectSceneSnapshot(legacyScene).groupSnapshots
-      );
+        // Verify after scene build that dsLegacy.data and dsPreview.data have identical roads and railways
+        assert.deepEqual(dsPreview.data.roads, dsLegacy.data.roads);
+        assert.deepEqual(dsPreview.data.railways, dsLegacy.data.railways);
 
-      legacyScene.updateCameraZoom?.(1.0);
-      previewScene.updateCameraZoom?.(1.0);
-      assert.deepEqual(
-        collectSceneSnapshot(previewScene).groupSnapshots,
-        collectSceneSnapshot(legacyScene).groupSnapshots
-      );
+        // Compare complete scene snapshots (groups, meshes, buffer attributes, instanced matrices, faceRanges, provenance, stats)
+        const snapLegacy = collectSceneSnapshot(legacyScene);
+        const snapPreview = collectSceneSnapshot(previewScene);
+        assert.deepEqual(snapPreview, snapLegacy);
 
-      // Verify in-place theme update works identically without regenerating geometry or preview descriptors
-      legacyScene.updateTheme(MAP_THEMES.daylight);
-      previewScene.updateTheme(MAP_THEMES.daylight);
-      assert.equal(previewScene.infrastructureRenderPreview, sharedPreview);
+        // Verify zoom/LOD transitions produce identical visibility in both scenes
+        legacyScene.updateCameraZoom?.(8.0);
+        previewScene.updateCameraZoom?.(8.0);
+        assert.deepEqual(
+          collectSceneSnapshot(previewScene).groupSnapshots,
+          collectSceneSnapshot(legacyScene).groupSnapshots
+        );
 
-      // Verify disposal releases GPU resources and clears preview reference
-      legacyScene.dispose();
-      previewScene.dispose();
-      assert.equal(legacyScene.resources.ownedGeometriesCount, 0);
-      assert.equal(legacyScene.resources.ownedMaterialsCount, 0);
-      assert.equal(legacyScene.resources.disposed, true);
-      assert.equal(previewScene.resources.ownedGeometriesCount, 0);
-      assert.equal(previewScene.resources.ownedMaterialsCount, 0);
-      assert.equal(previewScene.resources.disposed, true);
-      assert.equal(previewScene.infrastructureRenderPreview, null);
-    }
-  });
+        legacyScene.updateCameraZoom?.(1.0);
+        previewScene.updateCameraZoom?.(1.0);
+        assert.deepEqual(
+          collectSceneSnapshot(previewScene).groupSnapshots,
+          collectSceneSnapshot(legacyScene).groupSnapshots
+        );
+
+        // Verify in-place theme update works identically without regenerating geometry or preview descriptors
+        legacyScene.updateTheme(MAP_THEMES.daylight);
+        previewScene.updateTheme(MAP_THEMES.daylight);
+        assert.equal(previewScene.infrastructureRenderPreview, sharedPreview);
+
+        // Verify disposal releases GPU resources and clears preview reference
+        legacyScene.dispose();
+        previewScene.dispose();
+        assert.equal(legacyScene.resources.ownedGeometriesCount, 0);
+        assert.equal(legacyScene.resources.ownedMaterialsCount, 0);
+        assert.equal(legacyScene.resources.disposed, true);
+        assert.equal(previewScene.resources.ownedGeometriesCount, 0);
+        assert.equal(previewScene.resources.ownedMaterialsCount, 0);
+        assert.equal(previewScene.resources.disposed, true);
+        assert.equal(previewScene.infrastructureRenderPreview, null);
+    });
+  }
 
   it('8. preserves full railwayPrototypeMode compatibility (production, candidateA, candidateB, disabled) alongside preview switches', () => {
     const fixtureLegacy = createRailwayPrototypeFixtureData();

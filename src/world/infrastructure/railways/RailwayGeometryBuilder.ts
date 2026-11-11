@@ -24,6 +24,7 @@ import {
   resolveGraphGradeSeparatedPlans,
 } from '../../BridgeAndTunnelBuilder';
 import { classifyInfrastructurePlacement } from '../../InfrastructurePlacementClassifier';
+import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from '../../SurfaceVisibilityPolicy';
 import { SceneResourceManager } from '../../SceneResourceManager';
 import {
   buildUvRibbonGeometry3D,
@@ -89,6 +90,8 @@ export interface BuildRailwayPrototypeOptions {
   showUndergroundTunnelTraces?: boolean;
   /** Whether to keep buried subterranean tunnel meshes visible in normal camera views (Stage E4-T2). Defaults to false. */
   showHiddenUndergroundGeometry?: boolean;
+  /** Canonical per-scene entrance decisions shared with terrain cutouts and road rendering. */
+  tunnelEntrances?: VerifiedTunnelEntrances;
 }
 
 export interface RailwayBuildProfile {
@@ -623,6 +626,7 @@ export function buildRailwayGroupInternal(
   const portalGroundCutoutPolygons: [number, number][][][] = [];
   const showUndergroundTunnelTraces = Boolean(options?.showUndergroundTunnelTraces);
   const showHiddenUndergroundGeometry = Boolean(options?.showHiddenUndergroundGeometry);
+  const tunnelEntrances = options?.tunnelEntrances ?? new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
 
   const requestedSource: RailwayInfrastructureRenderSource =
     options?.renderSource ?? 'legacy';
@@ -887,9 +891,7 @@ export function buildRailwayGroupInternal(
         f.points = pts;
       }
 
-      const isSurfaceTrack = f.placementClassification
-        ? f.placementClassification.rendersOnSurface
-        : f.layer === 0 && !f.isBridge && !f.isTunnel;
+      const isSurfaceTrack = resolveSurfaceVisibility(f) === 'surface';
       if (isSurfaceTrack) {
         const edgeDesc = edgeById.get(f.id);
         if (edgeDesc) {
@@ -922,7 +924,7 @@ export function buildRailwayGroupInternal(
 
   const tPhase0 = performance.now();
   const activeRailways = sortRailwaysMainlineFirst(
-    sourceFeatures,
+    sourceFeatures.filter((r) => resolveSurfaceVisibility(r) !== 'concealed_indoor'),
     effectiveSwitchPolicy === 'graph' ? divergingEdgeIdSet : undefined
   );
   const trackPhaseMap = computeContinuousTrackPhases(activeRailways);
@@ -934,7 +936,6 @@ export function buildRailwayGroupInternal(
 
   const atGradeRailEndpoints: [number, number][] = [];
   const bridgeRailEndpoints: Array<{ id: string; pt: [number, number] }> = [];
-  const tunnelRailEndpoints: Array<{ id: string; pt: [number, number] }> = [];
 
   for (const r of activeRailways) {
     if (!r.points || r.points.length < 2) continue;
@@ -948,11 +949,6 @@ export function buildRailwayGroupInternal(
       atGradeRailEndpoints.push(r.points[0], r.points[r.points.length - 1]);
     } else if (isElevatedBridge) {
       bridgeRailEndpoints.push(
-        { id: r.id, pt: r.points[0] },
-        { id: r.id, pt: r.points[r.points.length - 1] }
-      );
-    } else if (isSubterraneanTunnel) {
-      tunnelRailEndpoints.push(
         { id: r.id, pt: r.points[0] },
         { id: r.id, pt: r.points[r.points.length - 1] }
       );
@@ -1082,22 +1078,12 @@ export function buildRailwayGroupInternal(
         gradeTransitionDiagnostics.legacyFallbacksCount++;
       }
       const tunnelPts = tunnelPlan ? tunnelPlan.points : r.points;
-      const pStart = tunnelPts[0];
-      const pEnd = tunnelPts[tunnelPts.length - 1];
-      const touchesOtherTunnelStart = tunnelRailEndpoints.some(
-        (t) => t.id !== r.id && Math.hypot(t.pt[0] - pStart[0], t.pt[1] - pStart[1]) <= 0.8
-      );
-      const touchesOtherTunnelEnd = tunnelRailEndpoints.some(
-        (t) => t.id !== r.id && Math.hypot(t.pt[0] - pEnd[0], t.pt[1] - pEnd[1]) <= 0.8
-      );
-      const emitStartPortal = tunnelPlan
-        ? tunnelPlan.startClassification === 'confirmed_transition' ||
-          tunnelPlan.startClassification === 'intentionally_standalone'
-        : !touchesOtherTunnelStart;
-      const emitEndPortal = tunnelPlan
-        ? tunnelPlan.endClassification === 'confirmed_transition' ||
-          tunnelPlan.endClassification === 'intentionally_standalone'
-        : !touchesOtherTunnelEnd;
+      const entrance = {
+        start: tunnelEntrances.forEndpoint([r.id, r.sourceFeatureId, ...(r.sourceFeatureIds ?? [])], tunnelPts[0], 'start'),
+        end: tunnelEntrances.forEndpoint([r.id, r.sourceFeatureId, ...(r.sourceFeatureIds ?? [])], tunnelPts[tunnelPts.length - 1], 'end'),
+      };
+      const emitStartPortal = entrance.start;
+      const emitEndPortal = entrance.end;
       const {
         portalStructureGeo,
         portalMouthGeo,
@@ -1140,7 +1126,7 @@ export function buildRailwayGroupInternal(
       const canGenerateUnderground = r.placementClassification
         ? r.placementClassification.canGenerateUndergroundGeometry
         : true;
-      if (canGenerateUnderground) {
+      if (canGenerateUnderground && showHiddenUndergroundGeometry) {
         const undergroundProf = buildTunnelUndergroundProfile3D({
           points: tunnelPts,
           surfaceElevation: ELEVATION_POLICY.RAILWAY_BALLAST,

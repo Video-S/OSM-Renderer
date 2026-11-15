@@ -6,7 +6,13 @@ import type {
 import type { GroupGeometryStats } from '../src/world/prototype/PerformanceBaselineHarness';
 import type { RailwayPrototypeMode } from '../src/world/prototype/RailwayPrototypeBuilder';
 
-export const BENCHMARK_SCHEMA_VERSION = '1.0.0' as const;
+import type {
+  GpuScenarioStatus,
+  RailwayScenarioVisibilityStatus,
+} from '../src/types/BenchmarkTelemetry';
+
+export const BENCHMARK_SCHEMA_VERSION = '1.1.0' as const;
+export const SUPPORTED_BENCHMARK_SCHEMA_VERSIONS = ['1.0.0', '1.1.0'] as const;
 
 export type BenchmarkSuiteKind = 'cpu' | 'browser';
 
@@ -69,6 +75,7 @@ export interface BenchmarkEnvironmentMetadata {
     gpuVendor: string;
     gpuRenderer: string;
     isSoftwareRenderer: boolean;
+    useSwiftShader?: boolean;
     hardwareAccelerationRequested: boolean;
     launchFlags: string[];
   };
@@ -233,22 +240,36 @@ export interface BrowserScenarioResult {
   cpuFrameRenderTimeMs: SampleStatistics;
   /** GPU hardware timer query (EXT_disjoint_timer_query_webgl2) duration in milliseconds, or null when unsupported/disjoint */
   gpuFrameRenderTimeMs: {
-    status: 'supported' | 'unsupported' | 'disjoint' | 'unavailable';
+    status: GpuScenarioStatus;
     statistics: SampleStatistics | null;
+    sampleCounts?: {
+      totalFrames: number;
+      valid: number;
+      pending: number;
+      disjoint: number;
+      unsupported: number;
+    };
   };
   /** Actual WebGL draw calls per frame recorded from gl.info.render.calls after gl.render() */
   webglDrawCallsPerFrame: SampleStatistics;
   /** Actual rendered triangles per frame recorded from gl.info.render.triangles after gl.render() */
   renderedTrianglesPerFrame: SampleStatistics;
-  /** WebGL driver resource counts reported by Three.js gl.info.memory & gl.info.programs */
+  /** WebGL driver resource counts and static/sampled railway visibility metrics */
   webglResources: {
     driverGeometries: number;
     driverTextures: number;
     shaderPrograms: number;
-    activeRailwayMeshes: number;
-    frustumCulledRailwayMeshes: number;
-    frustumVisibleRailwayTriangles: number;
+    staticRailwayMeshes?: number;
+    staticRailwayTriangles?: number;
+    railwayVisibilityStatus?: RailwayScenarioVisibilityStatus;
+    railwayVisibilitySamplingStride?: number;
+    railwayVisibilitySampledFrames?: number;
+    activeRailwayMeshes: number | null;
+    frustumCulledRailwayMeshes: number | null;
+    frustumVisibleRailwayTriangles: number | null;
   };
+  /** Overhead of per-frame benchmark telemetry collection in milliseconds */
+  instrumentationOverheadMs?: SampleStatistics;
   /** Browser JS heap memory from performance.memory when available in Chromium */
   browserMemoryMB: {
     supported: boolean;

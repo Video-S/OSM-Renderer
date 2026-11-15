@@ -5,5 +5,6 @@ export * from './datasets';
 export * from './scenarios';
 export * from './serializer';
 export * from './compare';
+export * from './cliAndServer';
 export * from './cpuRunner';
 export * from './browserRunner';

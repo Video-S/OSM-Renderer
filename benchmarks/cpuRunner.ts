@@ -25,6 +25,7 @@ import {
   formatBenchmarkReportSummary,
   saveBenchmarkReport,
 } from './serializer';
+import { parseCpuRunnerCliArgs } from './cliAndServer';
 import { computeSampleStatistics } from './stats';
 import {
   BENCHMARK_SCHEMA_VERSION,
@@ -416,58 +417,34 @@ export function runCpuBenchmarks(options: CpuBenchmarkRunOptions = {}): Benchmar
   };
 }
 
-function parseCpuCliArgs(argv: string[]) {
-  let datasetIds: string[] | undefined;
-  let configIds: string[] | undefined;
-  let warmupIterations = 2;
-  let measuredIterations = 5;
-  let outPath = 'benchmarks/baselines/cpu-baseline.json';
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--datasets' && argv[i + 1]) {
-      datasetIds = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg === '--configs' && argv[i + 1]) {
-      configIds = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg === '--warmup' && argv[i + 1]) {
-      warmupIterations = Math.max(0, parseInt(argv[++i], 10));
-    } else if (arg === '--samples' && argv[i + 1]) {
-      measuredIterations = Math.max(1, parseInt(argv[++i], 10));
-    } else if (arg === '--out' && argv[i + 1]) {
-      outPath = argv[++i];
-    }
-  }
-
-  return {
-    datasetIds,
-    configIds,
-    warmupIterations,
-    measuredIterations,
-    outPath,
-  };
-}
-
 const isMainModule =
   process.argv[1] &&
   path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
 if (isMainModule) {
-  const cli = parseCpuCliArgs(process.argv.slice(2));
-  console.log(
-    `Running CPU benchmarks (warmup=${cli.warmupIterations}, samples=${cli.measuredIterations})...`
-  );
-  const report = runCpuBenchmarks({
-    datasetIds: cli.datasetIds,
-    configIds: cli.configIds,
-    warmupIterations: cli.warmupIterations,
-    measuredIterations: cli.measuredIterations,
-  });
+  try {
+    const cli = parseCpuRunnerCliArgs(process.argv.slice(2));
+    console.log(
+      `Running CPU benchmarks (warmup=${cli.warmupIterations}, samples=${cli.measuredIterations})...`
+    );
+    const report = runCpuBenchmarks({
+      datasetIds: cli.datasetIds,
+      configIds: cli.configIds,
+      warmupIterations: cli.warmupIterations,
+      measuredIterations: cli.measuredIterations,
+    });
 
-  console.log('\n' + formatBenchmarkReportSummary(report));
-  const savedPath = saveBenchmarkReport(report, cli.outPath);
-  console.log(`\nSaved validated CPU benchmark JSON report to: ${savedPath}`);
+    console.log('\n' + formatBenchmarkReportSummary(report));
+    if (cli.outputPath) {
+      const savedPath = saveBenchmarkReport(report, cli.outputPath);
+      console.log(`\nSaved validated CPU benchmark JSON report to: ${savedPath}`);
+    }
 
-  if (report.errors.length > 0) {
+    if (report.errors.length > 0) {
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(`CPU benchmark runner failed: ${err?.message || String(err)}`);
     process.exit(1);
   }
 }

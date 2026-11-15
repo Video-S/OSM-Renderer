@@ -101,17 +101,21 @@ export const STANDARD_METRIC_DEFINITIONS: Readonly<Record<string, string>> = Obj
   cpuBufferMemoryMB:
     'Exact deterministic sum (MB) of JavaScript TypedArray byteLengths across all active BufferGeometry vertex attributes, index buffers, and InstancedMesh matrices.',
   frameIntervalMs:
-    'Browser requestAnimationFrame-to-requestAnimationFrame wall-clock interval (ms). Distinct from CPU render call duration and GPU execution time.',
+    'Wall-clock interval (ms) between consecutive completed WebGL gl.render() calls measured post-render across the scenario. Distinct from synchronous CPU render duration and asynchronous GPU pass time.',
   effectiveMedianFps:
-    'Steady-state frame cadence derived from median frameIntervalMs (1000 / medianFrameIntervalMs).',
+    'Steady-state frame cadence derived strictly from median frameIntervalMs (1000 / medianFrameIntervalMs).',
   cpuFrameRenderTimeMs:
     'Synchronous CPU main-thread execution duration (ms) of Three.js WebGLRenderer.render(scene, camera) per frame.',
   gpuFrameRenderTimeMs:
-    'Asynchronous GPU command execution duration (ms) measured via WebGL2 EXT_disjoint_timer_query_webgl2 when supported and non-disjoint; explicitly null when unsupported or running on software rasterizers.',
+    'Asynchronous GPU command execution duration (ms) measured via WebGL2 EXT_disjoint_timer_query_webgl2 when supported and non-disjoint; explicitly null with valid/pending/disjoint/unsupported status counts when unavailable or running on software rasterizers.',
   webglDrawCallsPerFrame:
     'Actual WebGL draw calls issued per frame recorded from Three.js gl.info.render.calls immediately after gl.render().',
   renderedTrianglesPerFrame:
     'Actual triangles submitted to WebGL per frame recorded from Three.js gl.info.render.triangles immediately after gl.render().',
+  railwayVisibility:
+    'Static scene railway counts (staticRailwayMeshes, staticRailwayTriangles) computed once at scene commit, plus deterministic stride-sampled frustum visibility metrics (activeRailwayMeshes, frustumCulledRailwayMeshes, frustumVisibleRailwayTriangles) over a zero-traversal cached index. Null when unavailable.',
+  instrumentationOverheadMs:
+    'Measured CPU bookkeeping duration (ms) of the post-render benchmark telemetry collector itself per frame.',
 });
 
 export const MEMORY_MEASUREMENT_NOTES: readonly string[] = Object.freeze([

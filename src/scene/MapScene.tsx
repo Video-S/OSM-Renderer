@@ -1,15 +1,29 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { BuiltSceneGeometry, resolveInspectedFeature } from '../world/GeometryBuilder';
 import { InspectableFeatureInfo, MapStyleTheme } from '../types/MapFeature';
 import { LiveWebGLTelemetrySnapshot } from '../world/prototype/PerformanceBaselineHarness';
+import {
+  type BenchmarkFrameTelemetry,
+  type GpuTimerQueryStatus,
+  RAILWAY_VISIBILITY_SAMPLING_STRIDE,
+  resolveGpuFrameTelemetryState,
+  type SceneRevisionConfigMeta,
+  shouldSampleRailwayVisibilityForFrame,
+} from '../types/BenchmarkTelemetry';
+import {
+  buildCachedRailwayIndex,
+  type CachedRailwayIndex,
+  evaluateCachedRailwayVisibility,
+} from '../world/prototype/BenchmarkRailwayTelemetry';
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
   railwayGroupOverride?: THREE.Group | null;
   onCameraZoomChange?: (zoom: number) => void;
   onTelemetryUpdate?: (snapshot: LiveWebGLTelemetrySnapshot) => void;
+  onSceneRevisionRendered?: (meta: SceneRevisionConfigMeta) => void;
   theme: MapStyleTheme;
   showBuildings?: boolean;
   showRoads?: boolean;
@@ -79,6 +93,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
   railwayGroupOverride = null,
   onCameraZoomChange,
   onTelemetryUpdate,
+  onSceneRevisionRendered,
   theme,
   showBuildings = true,
   showRoads = true,
@@ -110,10 +125,12 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(performance.now());
   const lastFrameTimestampRef = useRef<number>(performance.now());
+  const lastRafIntervalMsRef = useRef<number>(16.667);
   const frameIntervalsRingRef = useRef<number[]>([]);
   const lastZoomRef = useRef<number>(-1);
 
   const lastGpuTimeMsRef = useRef<number | null>(null);
+  const lastGpuTimerStatusRef = useRef<GpuTimerQueryStatus>('unsupported');
   const lastCpuRenderTimeMsRef = useRef<number>(0);
   const gpuDisjointRef = useRef<boolean>(false);
   const gpuTimerSupportedRef = useRef<boolean>(false);
@@ -124,6 +141,23 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const lastDriverProgramsRef = useRef<number>(0);
 
   const activeRailwaysGroup = railwayGroupOverride || builtGeometry.railwaysGroup;
+  const cachedRailwayIndexRef = useRef<CachedRailwayIndex | null>(null);
+  const committedBuiltGeometryRef = useRef<BuiltSceneGeometry | null>(null);
+  const showRailwaysRef = useRef<boolean>(showRailways);
+  const cameraRef = useRef<THREE.Camera>(camera);
+  const onSceneRevisionRenderedRef = useRef(onSceneRevisionRendered);
+
+  showRailwaysRef.current = showRailways;
+  cameraRef.current = camera;
+  onSceneRevisionRenderedRef.current = onSceneRevisionRendered;
+
+  useLayoutEffect(() => {
+    committedBuiltGeometryRef.current = builtGeometry;
+  }, [builtGeometry]);
+
+  useLayoutEffect(() => {
+    cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
+  }, [activeRailwaysGroup, builtGeometry]);
 
   // Spatial area drag state
   const isDraggingBoxRef = useRef(false);
@@ -301,74 +335,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
     let queryInFlight = false;
     const origRender = gl.render.bind(gl);
 
-    const recordPostRenderInfo = (cpuElapsedMs: number) => {
-      lastCpuRenderTimeMsRef.current = Number(cpuElapsedMs.toFixed(3));
-      lastRenderCallsRef.current = gl.info.render.calls;
-      lastRenderTrianglesRef.current = gl.info.render.triangles;
-      lastDriverProgramsRef.current = Array.isArray((gl.info as any).programs)
-        ? (gl.info as any).programs.length
-        : 0;
-    };
-
-    gl.render = (scene: THREE.Object3D, camera: THREE.Camera) => {
-      if (timerExt && typeof rawGl.createQuery === 'function') {
-        const disjoint = Boolean(rawGl.getParameter(timerExt.GPU_DISJOINT_EXT));
-        if (disjoint) {
-          gpuDisjointRef.current = true;
-          while (pendingQueries.length > 0) {
-            const q = pendingQueries.shift()!;
-            rawGl.deleteQuery(q);
-          }
-          lastGpuTimeMsRef.current = null;
-        } else {
-          while (pendingQueries.length > 0) {
-            const head = pendingQueries[0];
-            const available = rawGl.getQueryParameter(head, rawGl.QUERY_RESULT_AVAILABLE);
-            if (!available) break;
-            pendingQueries.shift();
-            const ns = rawGl.getQueryParameter(head, rawGl.QUERY_RESULT);
-            rawGl.deleteQuery(head);
-            if (typeof ns === 'number' && ns > 0) {
-              lastGpuTimeMsRef.current = Number((ns / 1e6).toFixed(3));
-              gpuDisjointRef.current = false;
-            }
-          }
-        }
-
-        if (!queryInFlight && pendingQueries.length < 4) {
-          const q = rawGl.createQuery();
-          if (q) {
-            let tCpu0 = performance.now();
-            try {
-              rawGl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
-              queryInFlight = true;
-              tCpu0 = performance.now();
-              origRender(scene, camera);
-              const cpuElapsed = performance.now() - tCpu0;
-              rawGl.endQuery(timerExt.TIME_ELAPSED_EXT);
-              queryInFlight = false;
-              pendingQueries.push(q);
-              recordPostRenderInfo(cpuElapsed);
-              return;
-            } catch {
-              queryInFlight = false;
-              rawGl.deleteQuery(q);
-              tCpu0 = performance.now();
-              origRender(scene, camera);
-              recordPostRenderInfo(performance.now() - tCpu0);
-              return;
-            }
-          }
-        }
-      }
-
-      const tCpu0 = performance.now();
-      origRender(scene, camera);
-      recordPostRenderInfo(performance.now() - tCpu0);
-    };
-
-    return () => {
-      gl.render = origRender;
+    const drainPendingQueries = (deleteAll: boolean) => {
       while (pendingQueries.length > 0) {
         const q = pendingQueries.shift()!;
         try {
@@ -377,14 +344,216 @@ export const MapScene: React.FC<MapSceneProps> = ({
           // ignore context loss
         }
       }
+      if (deleteAll) {
+        lastGpuTimeMsRef.current = null;
+        gpuDisjointRef.current = false;
+        lastGpuTimerStatusRef.current = gpuTimerSupportedRef.current
+          ? 'pending'
+          : 'unsupported';
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      (window as any).__BENCHMARK_RESET_GPU_TIMERS__ = () => {
+        if (timerExt) {
+          try {
+            rawGl.getParameter(timerExt.GPU_DISJOINT_EXT);
+          } catch {
+            // ignore
+          }
+        }
+        drainPendingQueries(true);
+      };
+    }
+
+    const emitPostRenderTelemetry = (
+      scene: THREE.Object3D,
+      cpuElapsedMs: number,
+      gpuResolvedNsThisFrame: number | null,
+      disjointOccurredThisFrame: boolean
+    ) => {
+      const postRenderTimestampMs = performance.now();
+      lastCpuRenderTimeMsRef.current = Number(cpuElapsedMs.toFixed(3));
+      lastRenderCallsRef.current = gl.info.render.calls;
+      lastRenderTrianglesRef.current = gl.info.render.triangles;
+      lastDriverProgramsRef.current = Array.isArray((gl.info as any).programs)
+        ? (gl.info as any).programs.length
+        : 0;
+
+      const gpuState = resolveGpuFrameTelemetryState({
+        supported: gpuTimerSupportedRef.current,
+        disjoint: disjointOccurredThisFrame,
+        resolvedNs: gpuResolvedNsThisFrame,
+      });
+      lastGpuTimerStatusRef.current = gpuState.gpuTimerStatus;
+      gpuDisjointRef.current = gpuState.gpuDisjointOccurred;
+      lastGpuTimeMsRef.current = gpuState.gpuPassTimeMs;
+
+      const committedGeo = committedBuiltGeometryRef.current;
+      let renderedRevision: number | null = null;
+      if (committedGeo && committedGeo.groundMesh?.parent) {
+        const meta = committedGeo.groundMesh.userData
+          ?.__sceneMeta as SceneRevisionConfigMeta | undefined;
+        if (meta) {
+          meta.webglFramesRendered = (meta.webglFramesRendered || 0) + 1;
+          renderedRevision = meta.revision;
+          onSceneRevisionRenderedRef.current?.(meta);
+        }
+      }
+
+      const benchmarkCollector =
+        typeof window !== 'undefined' ? (window as any).__BENCHMARK_FRAME_COLLECTOR__ : null;
+      if (typeof benchmarkCollector === 'function') {
+        const tCollect0 = performance.now();
+        const collectorMeta = (window as any).__BENCHMARK_COLLECTOR_META__ as
+          | {
+              phase?: 'warmup' | 'measured';
+              frameIndex?: number;
+              totalMeasuredFrames?: number;
+              samplingStride?: number;
+            }
+          | undefined;
+        const stride = collectorMeta?.samplingStride ?? RAILWAY_VISIBILITY_SAMPLING_STRIDE;
+        const shouldSampleRailways =
+          collectorMeta && typeof collectorMeta.frameIndex === 'number'
+            ? shouldSampleRailwayVisibilityForFrame(
+                collectorMeta.frameIndex,
+                collectorMeta.totalMeasuredFrames ?? 0,
+                stride
+              )
+            : true;
+
+        const railSample = evaluateCachedRailwayVisibility({
+          index: cachedRailwayIndexRef.current,
+          camera: cameraRef.current,
+          showRailways: showRailwaysRef.current,
+          shouldSample: shouldSampleRailways,
+        });
+
+        const orthoCam = cameraRef.current as THREE.OrthographicCamera;
+        const payload: BenchmarkFrameTelemetry = {
+          frameTimestampMs: postRenderTimestampMs,
+          frameIntervalMs: Number(lastRafIntervalMsRef.current.toFixed(3)),
+          cpuRenderTimeMs: lastCpuRenderTimeMsRef.current,
+          renderCalls: lastRenderCallsRef.current,
+          renderTriangles: lastRenderTrianglesRef.current,
+          driverGeometries: gl.info.memory.geometries,
+          driverTextures: gl.info.memory.textures,
+          driverPrograms: lastDriverProgramsRef.current,
+          cameraZoom: Number((orthoCam?.zoom || 1).toFixed(3)),
+          gpuVendor: gpuVendorRef.current,
+          gpuRenderer: gpuRendererRef.current,
+          gpuTimerQuerySupported: gpuState.gpuTimerQuerySupported,
+          gpuTimerStatus: gpuState.gpuTimerStatus,
+          gpuDisjointOccurred: gpuState.gpuDisjointOccurred,
+          gpuPassTimeMs: gpuState.gpuPassTimeMs,
+          railwayVisibilityStatus: railSample.status,
+          staticRailwayMeshes: railSample.staticRailwayMeshes,
+          staticRailwayTriangles: railSample.staticRailwayTriangles,
+          activeRailwayMeshes: railSample.activeRailwayMeshes,
+          frustumCulledRailwayMeshes: railSample.frustumCulledRailwayMeshes,
+          frustumVisibleRailwayTriangles: railSample.frustumVisibleRailwayTriangles,
+          railwayVisibilitySamplingStride: stride,
+          sceneRevision: renderedRevision,
+          instrumentationOverheadMs: Number((performance.now() - tCollect0).toFixed(3)),
+        };
+        benchmarkCollector(payload);
+      }
+      void scene;
+    };
+
+    gl.render = (scene: THREE.Object3D, renderCamera: THREE.Camera) => {
+      let resolvedNsThisFrame: number | null = null;
+      let disjointThisFrame = false;
+
+      if (timerExt && typeof rawGl.createQuery === 'function') {
+        const disjoint = Boolean(rawGl.getParameter(timerExt.GPU_DISJOINT_EXT));
+        if (disjoint) {
+          disjointThisFrame = true;
+          drainPendingQueries(false);
+        } else {
+          while (pendingQueries.length > 0) {
+            const head = pendingQueries[0];
+            const available = rawGl.getQueryParameter(head, rawGl.QUERY_RESULT_AVAILABLE);
+            if (!available) break;
+            pendingQueries.shift();
+            const ns = rawGl.getQueryParameter(head, rawGl.QUERY_RESULT);
+            rawGl.deleteQuery(head);
+            if (typeof ns === 'number' && Number.isFinite(ns) && ns >= 0) {
+              resolvedNsThisFrame = ns;
+            }
+          }
+        }
+
+        if (!queryInFlight && pendingQueries.length < 8) {
+          const q = rawGl.createQuery();
+          if (q) {
+            let tCpu0 = performance.now();
+            try {
+              rawGl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
+              queryInFlight = true;
+              tCpu0 = performance.now();
+              origRender(scene, renderCamera);
+              const cpuElapsed = performance.now() - tCpu0;
+              rawGl.endQuery(timerExt.TIME_ELAPSED_EXT);
+              queryInFlight = false;
+              pendingQueries.push(q);
+              emitPostRenderTelemetry(
+                scene,
+                cpuElapsed,
+                resolvedNsThisFrame,
+                disjointThisFrame
+              );
+              return;
+            } catch {
+              queryInFlight = false;
+              try {
+                rawGl.deleteQuery(q);
+              } catch {
+                // ignore
+              }
+              tCpu0 = performance.now();
+              origRender(scene, renderCamera);
+              emitPostRenderTelemetry(
+                scene,
+                performance.now() - tCpu0,
+                resolvedNsThisFrame,
+                disjointThisFrame
+              );
+              return;
+            }
+          }
+        }
+      }
+
+      const tCpu0 = performance.now();
+      origRender(scene, renderCamera);
+      emitPostRenderTelemetry(
+        scene,
+        performance.now() - tCpu0,
+        resolvedNsThisFrame,
+        disjointThisFrame
+      );
+    };
+
+    return () => {
+      gl.render = origRender;
+      if (typeof window !== 'undefined') {
+        delete (window as any).__BENCHMARK_RESET_GPU_TIMERS__;
+      }
+      drainPendingQueries(false);
     };
   }, [gl]);
 
-  // Measure actual WebGL frame rate, frame interval percentiles, camera zoom, and frustum-culled railway telemetry
+  // Measure actual WebGL frame rate, camera zoom LOD updates, and live HUD telemetry
   useFrame((state) => {
     const now = performance.now();
     const frameDt = now - lastFrameTimestampRef.current;
     lastFrameTimestampRef.current = now;
+    lastRafIntervalMsRef.current = frameDt;
+
+    const isBenchmarkActive =
+      typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true;
 
     const cam = state.camera as THREE.OrthographicCamera;
     if (typeof cam.zoom === 'number' && Math.abs(cam.zoom - lastZoomRef.current) > 0.005) {
@@ -395,28 +564,9 @@ export const MapScene: React.FC<MapSceneProps> = ({
       }
     }
 
-    const benchmarkCollector =
-      typeof window !== 'undefined' ? (window as any).__BENCHMARK_FRAME_COLLECTOR__ : null;
-    if (typeof benchmarkCollector === 'function') {
-      benchmarkCollector({
-        frameIntervalMs: Number(frameDt.toFixed(3)),
-        cpuRenderTimeMs: lastCpuRenderTimeMsRef.current,
-        gpuPassTimeMs: lastGpuTimeMsRef.current,
-        gpuTimerQuerySupported: gpuTimerSupportedRef.current,
-        gpuDisjointOccurred: gpuDisjointRef.current,
-        renderCalls: lastRenderCallsRef.current || state.gl.info.render.calls,
-        renderTriangles: lastRenderTrianglesRef.current || state.gl.info.render.triangles,
-        driverGeometries: state.gl.info.memory.geometries,
-        driverTextures: state.gl.info.memory.textures,
-        driverPrograms: lastDriverProgramsRef.current,
-        cameraZoom: Number((cam.zoom || 1).toFixed(2)),
-        gpuVendor: gpuVendorRef.current,
-        gpuRenderer: gpuRendererRef.current,
-      });
-    }
-
-    // During active automated frame benchmarking, skip ring sorting, scene traversal, and React HUD updates
-    if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
+    // During active automated frame benchmarking, skip ring sorting, HUD stats, and React updates;
+    // benchmark frame telemetry is emitted synchronously post-origRender inside gl.render().
+    if (isBenchmarkActive) {
       return;
     }
 
@@ -430,7 +580,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
     frameCountRef.current++;
     const delta = now - lastFpsTimeRef.current;
-    let currentFps = delta > 0 ? Math.round((frameCountRef.current * 1000) / delta) : 60;
+    const currentFps = delta > 0 ? Math.round((frameCountRef.current * 1000) / delta) : 60;
     if (delta >= 400) {
       if (trackFps && onFpsUpdate) {
         onFpsUpdate(currentFps);
@@ -451,53 +601,12 @@ export const MapScene: React.FC<MapSceneProps> = ({
       const spikesOver33 = ring.filter((d) => d > 33.33).length;
       const spikesOver50 = ring.filter((d) => d > 50.0).length;
 
-      // Evaluate frustum-visible vs frustum-culled railway meshes
-      cam.updateMatrixWorld();
-      const projScreenMatrix = new THREE.Matrix4().multiplyMatrices(
-        cam.projectionMatrix,
-        cam.matrixWorldInverse
-      );
-      const frustum = new THREE.Frustum().setFromProjectionMatrix(projScreenMatrix);
-      let activeRailwayMeshes = 0;
-      let culledRailwayMeshes = 0;
-      let visibleRailwayTriangles = 0;
-
-      if (showRailways && activeRailwaysGroup) {
-        activeRailwaysGroup.traverse((child) => {
-          if (!(child as THREE.Mesh).isMesh) return;
-          let cur: THREE.Object3D | null = child;
-          while (cur) {
-            if (!cur.visible) return;
-            cur = cur.parent;
-          }
-          const mesh = child as THREE.Mesh;
-          const isInst = (mesh as unknown as THREE.InstancedMesh).isInstancedMesh === true;
-          const instMesh = mesh as unknown as THREE.InstancedMesh;
-          const instCount = isInst ? Math.max(0, instMesh.count || 0) : 1;
-          const geo = mesh.geometry;
-          const tris = geo
-            ? (geo.index
-                ? Math.round(geo.index.count / 3)
-                : Math.round((geo.attributes.position?.count || 0) / 3)) * instCount
-            : 0;
-
-          let inFrustum = true;
-          if (mesh.frustumCulled) {
-            if (isInst && instMesh.boundingSphere) {
-              inFrustum = frustum.intersectsSphere(instMesh.boundingSphere);
-            } else if (geo) {
-              if (!geo.boundingSphere) geo.computeBoundingSphere();
-              inFrustum = frustum.intersectsObject(mesh);
-            }
-          }
-          if (inFrustum) {
-            activeRailwayMeshes++;
-            visibleRailwayTriangles += tris;
-          } else {
-            culledRailwayMeshes++;
-          }
-        });
-      }
+      const railSample = evaluateCachedRailwayVisibility({
+        index: cachedRailwayIndexRef.current,
+        camera: cam,
+        showRailways,
+        shouldSample: true,
+      });
 
       onTelemetryUpdate({
         fps: currentFps,
@@ -516,9 +625,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
         cpuRenderTimeMs: lastCpuRenderTimeMsRef.current,
         renderCalls: lastRenderCallsRef.current || state.gl.info.render.calls,
         renderTriangles: lastRenderTrianglesRef.current || state.gl.info.render.triangles,
-        activeRailwayMeshes,
-        activeFrustumCulledRailwayMeshes: culledRailwayMeshes,
-        activeFrustumVisibleRailwayTriangles: visibleRailwayTriangles,
+        activeRailwayMeshes: railSample.activeRailwayMeshes ?? undefined,
+        activeFrustumCulledRailwayMeshes: railSample.frustumCulledRailwayMeshes ?? undefined,
+        activeFrustumVisibleRailwayTriangles:
+          railSample.frustumVisibleRailwayTriangles ?? undefined,
         hoverRaycastTimeMs: lastHoverRaycastMsRef.current,
         driverGeometries: state.gl.info.memory.geometries,
         driverTextures: state.gl.info.memory.textures,

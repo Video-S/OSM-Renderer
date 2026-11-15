@@ -1,9 +1,9 @@
-import * as fs from 'fs';
-import * as http from 'http';
-import * as net from 'net';
-import * as path from 'path';
-import { spawn, type ChildProcess } from 'child_process';
-import { pathToFileURL } from 'url';
+import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as net from 'node:net';
+import * as path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import {
   BENCHMARK_SCHEMA_VERSION,
   type BenchmarkErrorRecord,
@@ -31,6 +31,19 @@ import {
   saveBenchmarkReport,
   validateBenchmarkReport,
 } from './serializer';
+import {
+  buildLocalServerSpawnSpec,
+  parseBrowserRunnerCliArgs,
+  terminateChildProcessTree,
+} from './cliAndServer';
+import {
+  type BenchmarkFrameTelemetry,
+  type BenchmarkHarnessSnapshot,
+  computeConsecutiveFrameIntervalsMs,
+  RAILWAY_VISIBILITY_SAMPLING_STRIDE,
+  type RailwayScenarioVisibilityStatus,
+  validateSceneReadinessSnapshot,
+} from '../src/types/BenchmarkTelemetry';
 
 export interface BrowserBenchmarkRunnerOptions {
   datasetIds?: string[];
@@ -44,31 +57,18 @@ export interface BrowserBenchmarkRunnerOptions {
   devicePixelRatio?: number;
   serverUrl?: string;
   headless?: boolean;
+  useSwiftShader?: boolean;
+  requireHardwareGpu?: boolean;
   outputPath?: string;
   quiet?: boolean;
 }
 
-interface RawBrowserFrameSample {
-  frameIntervalMs: number;
-  cpuRenderTimeMs: number;
-  renderCalls: number;
-  renderTriangles: number;
-  driverGeometries: number;
-  driverTextures: number;
-  driverPrograms: number;
-  activeRailwayMeshes: number;
-  frustumCulledRailwayMeshes: number;
-  frustumVisibleRailwayTriangles: number;
-  gpuFrameTimeMs: number | null;
-  gpuTimerSupported: boolean;
-  gpuTimerDisjoint: boolean;
-}
-
-interface RawScenarioBrowserPayload {
+export interface RawScenarioBrowserPayload {
   scenarioId: BrowserScenarioKind;
   warmupFrames: number;
   measuredFrames: number;
-  samples: RawBrowserFrameSample[];
+  anchorTimestampMs: number | null;
+  samples: BenchmarkFrameTelemetry[];
   browserMemoryMB: {
     supported: boolean;
     usedJSHeapSizeMB: number | null;
@@ -88,6 +88,52 @@ interface RawScenarioBrowserPayload {
   };
 }
 
+export function resolveChromiumLaunchArgs(options: {
+  useSwiftShader?: boolean;
+}): string[] {
+  const args = [
+    '--enable-webgl',
+    '--ignore-gpu-blocklist',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+    '--enable-precise-memory-info',
+  ];
+  if (options.useSwiftShader) {
+    args.unshift('--use-gl=angle', '--use-angle=swiftshader');
+  }
+  return args;
+}
+
+function findPreinstalledContainerChromiumExecutable(): string | undefined {
+  if (process.platform !== 'linux') return undefined;
+  const envExec = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (envExec && fs.existsSync(envExec)) return envExec;
+
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/ms-playwright';
+  if (!fs.existsSync(root)) return undefined;
+
+  const direct = path.join(root, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+  if (fs.existsSync(direct)) return direct;
+
+  try {
+    const dirs = fs.readdirSync(root);
+    for (const d of dirs) {
+      if (d.startsWith('chromium_headless_shell-')) {
+        const candidate = path.join(root, d, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      if (d.startsWith('chromium-')) {
+        const candidate = path.join(root, d, 'chrome-linux', 'chrome');
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
 async function loadPlaywrightModule(): Promise<any> {
   try {
     const modName = 'playwright';
@@ -98,7 +144,7 @@ async function loadPlaywrightModule(): Promise<any> {
       return await import(pathToFileURL(globalPath).href);
     }
     throw new Error(
-      'Playwright is not installed locally or in /usr/local/share/bun-global/node_modules/playwright.'
+      'Playwright is not installed. Run "npm install" and "npx playwright install chromium".'
     );
   }
 }
@@ -151,24 +197,29 @@ async function ensureLocalBenchmarkServer(explicitUrl?: string): Promise<{
     return { baseUrl: explicitUrl.replace(/\/$/, ''), stopServer: async () => {} };
   }
 
-  if (await checkUrlReady('http://127.0.0.1:3000', 1000)) {
-    return { baseUrl: 'http://127.0.0.1:3000', stopServer: async () => {} };
-  }
-
   const port = await findAvailablePort(3145);
   const baseUrl = `http://127.0.0.1:${port}`;
-  const child: ChildProcess = spawn('npx', ['tsx', 'server.ts'], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-    },
+  const spawnSpec = buildLocalServerSpawnSpec(port);
+
+  const stderrChunks: string[] = [];
+  const child: ChildProcess = spawn(spawnSpec.command, spawnSpec.args, {
+    cwd: spawnSpec.cwd,
+    env: spawnSpec.env,
+    shell: spawnSpec.shell,
     stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stderr?.on('data', (chunk) => {
+    if (stderrChunks.length < 20) stderrChunks.push(String(chunk));
   });
 
   const startupDeadline = Date.now() + 25000;
   let ready = false;
   while (Date.now() < startupDeadline) {
+    if (child.exitCode !== null) {
+      throw new Error(
+        `Local benchmark server exited prematurely with code ${child.exitCode}: ${stderrChunks.join('')}`
+      );
+    }
     if (await checkUrlReady(baseUrl, 1000)) {
       ready = true;
       break;
@@ -177,75 +228,95 @@ async function ensureLocalBenchmarkServer(explicitUrl?: string): Promise<{
   }
 
   if (!ready) {
-    child.kill('SIGTERM');
+    await terminateChildProcessTree(child);
     throw new Error(`Timed out waiting for local benchmark server on ${baseUrl}`);
   }
 
   const stopServer = async () => {
-    if (child.killed) return;
-    child.kill('SIGTERM');
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          // ignore
-        }
-        resolve();
-      }, 2000);
-      child.once('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+    await terminateChildProcessTree(child);
   };
 
   return { baseUrl, stopServer };
 }
 
-function buildScenarioResult(
+/**
+ * Pure aggregation helper mapping raw post-gl.render() BenchmarkFrameTelemetry samples
+ * into a validated BrowserScenarioResult. Exported for deterministic unit testing.
+ */
+export function buildScenarioResult(
   scenarioSpec: BrowserScenarioSpec,
   raw: RawScenarioBrowserPayload
 ): {
   result: BrowserScenarioResult;
   gpuUnsupportedNotice: UnsupportedMetricNotice | null;
+  railwayUnavailableNotice: UnsupportedMetricNotice | null;
 } {
-  const frameIntervals = raw.samples.map((s) => s.frameIntervalMs);
+  // Compute consecutive completed-frame intervals from post-gl.render() timestamps when anchor exists
+  let frameIntervals: number[];
+  if (raw.anchorTimestampMs !== null && raw.samples.length > 0) {
+    frameIntervals = computeConsecutiveFrameIntervalsMs([
+      raw.anchorTimestampMs,
+      ...raw.samples.map((s) => s.frameTimestampMs),
+    ]);
+  } else if (raw.samples.length >= 2) {
+    // Reload scenario or unanchored fallback: fall back to consecutive pairs or recorded rAF intervals
+    frameIntervals = raw.samples.map((s) => s.frameIntervalMs);
+  } else {
+    frameIntervals = raw.samples.map((s) => s.frameIntervalMs);
+  }
+
   const cpuRenderTimes = raw.samples.map((s) => s.cpuRenderTimeMs);
   const drawCalls = raw.samples.map((s) => s.renderCalls);
   const triangles = raw.samples.map((s) => s.renderTriangles);
+  const collectorOverhead = raw.samples.map((s) => s.instrumentationOverheadMs ?? 0);
 
   const frameIntervalStats = computeSampleStatistics(frameIntervals);
   const cpuRenderStats = computeSampleStatistics(cpuRenderTimes);
   const drawCallStats = computeSampleStatistics(drawCalls);
   const triangleStats = computeSampleStatistics(triangles);
+  const overheadStats = computeSampleStatistics(collectorOverhead);
 
-  const validGpuSamples = raw.samples
-    .filter(
-      (s) =>
-        s.gpuTimerSupported &&
-        !s.gpuTimerDisjoint &&
-        typeof s.gpuFrameTimeMs === 'number' &&
-        s.gpuFrameTimeMs >= 0
-    )
-    .map((s) => s.gpuFrameTimeMs as number);
+  // Aggregate GPU timer query status & valid samples
+  let validCount = 0;
+  let pendingCount = 0;
+  let disjointCount = 0;
+  let unsupportedCount = 0;
+  const validGpuSamples: number[] = [];
 
-  const anyGpuSupported = raw.samples.some((s) => s.gpuTimerSupported);
-  const anyGpuDisjoint = raw.samples.some((s) => s.gpuTimerDisjoint);
+  for (const s of raw.samples) {
+    if (!s.gpuTimerQuerySupported || s.gpuTimerStatus === 'unsupported') {
+      unsupportedCount++;
+    } else if (s.gpuDisjointOccurred || s.gpuTimerStatus === 'disjoint') {
+      disjointCount++;
+    } else if (
+      s.gpuTimerStatus === 'valid' &&
+      typeof s.gpuPassTimeMs === 'number' &&
+      Number.isFinite(s.gpuPassTimeMs) &&
+      s.gpuPassTimeMs >= 0
+    ) {
+      validCount++;
+      validGpuSamples.push(s.gpuPassTimeMs);
+    } else {
+      pendingCount++;
+    }
+  }
 
   let gpuStatus: BrowserScenarioResult['gpuFrameRenderTimeMs']['status'];
   let gpuStatistics: BrowserScenarioResult['gpuFrameRenderTimeMs']['statistics'] = null;
   let gpuUnsupportedNotice: UnsupportedMetricNotice | null = null;
 
-  if (!anyGpuSupported) {
+  if (raw.samples.length === 0 || unsupportedCount === raw.samples.length) {
     gpuStatus = 'unsupported';
     gpuUnsupportedNotice = {
       metricId: `${scenarioSpec.id}::gpuFrameRenderTimeMs`,
       reason: 'unsupported_by_gpu_driver',
       explanation:
-        'EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted.',
+        'EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or restricted GPU contexts). No fabricated GPU times were substituted.',
     };
-  } else if (anyGpuDisjoint && validGpuSamples.length === 0) {
+  } else if (validGpuSamples.length > 0) {
+    gpuStatus = 'supported';
+    gpuStatistics = computeSampleStatistics(validGpuSamples);
+  } else if (disjointCount > 0) {
     gpuStatus = 'disjoint';
     gpuUnsupportedNotice = {
       metricId: `${scenarioSpec.id}::gpuFrameRenderTimeMs`,
@@ -253,7 +324,7 @@ function buildScenarioResult(
       explanation:
         'GPU timer queries reported GPU_DISJOINT_EXT during the scenario; measurements were invalidated.',
     };
-  } else if (validGpuSamples.length === 0) {
+  } else {
     gpuStatus = 'unavailable';
     gpuUnsupportedNotice = {
       metricId: `${scenarioSpec.id}::gpuFrameRenderTimeMs`,
@@ -261,12 +332,68 @@ function buildScenarioResult(
       explanation:
         'EXT_disjoint_timer_query_webgl2 was present, but no completed non-disjoint query results resolved during the measurement window.',
     };
-  } else {
-    gpuStatus = 'supported';
-    gpuStatistics = computeSampleStatistics(validGpuSamples);
   }
 
+  // Aggregate railway static counts & sampled frustum visibility (null if genuinely unavailable; 0 only if disabled/empty)
+  const measuredRailSamples = raw.samples.filter(
+    (s) =>
+      s.railwayVisibilityStatus === 'measured' &&
+      typeof s.activeRailwayMeshes === 'number' &&
+      typeof s.frustumCulledRailwayMeshes === 'number' &&
+      typeof s.frustumVisibleRailwayTriangles === 'number'
+  );
+  const disabledRailSamples = raw.samples.filter(
+    (s) => s.railwayVisibilityStatus === 'disabled_by_config'
+  );
+
   const lastSample = raw.samples[raw.samples.length - 1];
+  const staticRailwayMeshes =
+    raw.samples.find((s) => typeof s.staticRailwayMeshes === 'number')?.staticRailwayMeshes ??
+    0;
+  const staticRailwayTriangles =
+    raw.samples.find((s) => typeof s.staticRailwayTriangles === 'number')
+      ?.staticRailwayTriangles ?? 0;
+
+  let railwayVisibilityStatus: RailwayScenarioVisibilityStatus;
+  let activeRailwayMeshes: number | null;
+  let frustumCulledRailwayMeshes: number | null;
+  let frustumVisibleRailwayTriangles: number | null;
+  let railwayUnavailableNotice: UnsupportedMetricNotice | null = null;
+
+  if (disabledRailSamples.length === raw.samples.length && raw.samples.length > 0) {
+    railwayVisibilityStatus = 'disabled_by_config';
+    activeRailwayMeshes = 0;
+    frustumCulledRailwayMeshes = 0;
+    frustumVisibleRailwayTriangles = 0;
+  } else if (measuredRailSamples.length > 0) {
+    railwayVisibilityStatus = 'measured';
+    activeRailwayMeshes = Math.round(
+      computeSampleStatistics(measuredRailSamples.map((s) => s.activeRailwayMeshes as number))
+        .median
+    );
+    frustumCulledRailwayMeshes = Math.round(
+      computeSampleStatistics(
+        measuredRailSamples.map((s) => s.frustumCulledRailwayMeshes as number)
+      ).median
+    );
+    frustumVisibleRailwayTriangles = Math.round(
+      computeSampleStatistics(
+        measuredRailSamples.map((s) => s.frustumVisibleRailwayTriangles as number)
+      ).median
+    );
+  } else {
+    railwayVisibilityStatus = 'unavailable';
+    activeRailwayMeshes = null;
+    frustumCulledRailwayMeshes = null;
+    frustumVisibleRailwayTriangles = null;
+    railwayUnavailableNotice = {
+      metricId: `${scenarioSpec.id}::railwayVisibility`,
+      reason: 'unsupported_by_runtime',
+      explanation:
+        'Per-frame railway frustum visibility metrics could not be collected during this scenario; values are explicitly recorded as null rather than zero.',
+    };
+  }
+
   const effectiveMedianFps =
     frameIntervalStats.median > 0
       ? Number((1000 / frameIntervalStats.median).toFixed(2))
@@ -283,6 +410,13 @@ function buildScenarioResult(
     gpuFrameRenderTimeMs: {
       status: gpuStatus,
       statistics: gpuStatistics,
+      sampleCounts: {
+        totalFrames: raw.samples.length,
+        valid: validCount,
+        pending: pendingCount,
+        disjoint: disjointCount,
+        unsupported: unsupportedCount,
+      },
     },
     webglDrawCallsPerFrame: drawCallStats,
     renderedTrianglesPerFrame: triangleStats,
@@ -290,10 +424,17 @@ function buildScenarioResult(
       driverGeometries: lastSample?.driverGeometries ?? 0,
       driverTextures: lastSample?.driverTextures ?? 0,
       shaderPrograms: lastSample?.driverPrograms ?? 0,
-      activeRailwayMeshes: lastSample?.activeRailwayMeshes ?? 0,
-      frustumCulledRailwayMeshes: lastSample?.frustumCulledRailwayMeshes ?? 0,
-      frustumVisibleRailwayTriangles: lastSample?.frustumVisibleRailwayTriangles ?? 0,
+      staticRailwayMeshes,
+      staticRailwayTriangles,
+      railwayVisibilityStatus,
+      railwayVisibilitySamplingStride:
+        lastSample?.railwayVisibilitySamplingStride ?? RAILWAY_VISIBILITY_SAMPLING_STRIDE,
+      railwayVisibilitySampledFrames: measuredRailSamples.length,
+      activeRailwayMeshes,
+      frustumCulledRailwayMeshes,
+      frustumVisibleRailwayTriangles,
     },
+    instrumentationOverheadMs: overheadStats,
     browserMemoryMB: raw.browserMemoryMB,
     reloadLifecycleAudit: raw.reloadLifecycleAudit
       ? {
@@ -312,7 +453,7 @@ function buildScenarioResult(
       : undefined,
   };
 
-  return { result, gpuUnsupportedNotice };
+  return { result, gpuUnsupportedNotice, railwayUnavailableNotice };
 }
 
 export async function runBrowserBenchmarks(
@@ -329,27 +470,44 @@ export async function runBrowserBenchmarks(
   const viewportWidth = options.viewportWidth ?? 1440;
   const viewportHeight = options.viewportHeight ?? 900;
   const devicePixelRatio = options.devicePixelRatio ?? 1;
+  const headless = options.headless ?? true;
+  const useSwiftShader = options.useSwiftShader ?? false;
+  const requireHardwareGpu = options.requireHardwareGpu ?? false;
 
-  const launchFlags = [
-    '--use-gl=angle',
-    '--use-angle=swiftshader',
-    '--enable-webgl',
-    '--ignore-gpu-blocklist',
-    '--disable-background-timer-throttling',
-    '--disable-renderer-backgrounding',
-    '--disable-backgrounding-occluded-windows',
-    '--enable-precise-memory-info',
-  ];
+  if (useSwiftShader && requireHardwareGpu) {
+    throw new Error('Cannot combine useSwiftShader=true with requireHardwareGpu=true.');
+  }
+
+  const launchFlags = resolveChromiumLaunchArgs({ useSwiftShader });
 
   const { baseUrl, stopServer } = await ensureLocalBenchmarkServer(options.serverUrl);
   const playwright = await loadPlaywrightModule();
 
   let browser: any = null;
   try {
-    browser = await playwright.chromium.launch({
-      headless: options.headless ?? true,
+    const defaultExecutablePath =
+      typeof playwright.chromium.executablePath === 'function'
+        ? playwright.chromium.executablePath()
+        : undefined;
+    const launchOptions: Record<string, any> = {
+      headless,
       args: launchFlags,
-    });
+    };
+
+    if (!defaultExecutablePath || !fs.existsSync(defaultExecutablePath)) {
+      const containerFallback = headless
+        ? findPreinstalledContainerChromiumExecutable()
+        : undefined;
+      if (containerFallback) {
+        launchOptions.executablePath = containerFallback;
+      } else {
+        throw new Error(
+          `Playwright Chromium executable not found at "${defaultExecutablePath || 'unknown'}". Run "npx playwright install chromium" to install it.`
+        );
+      }
+    }
+
+    browser = await playwright.chromium.launch(launchOptions);
 
     const context = await browser.newContext({
       viewport: { width: viewportWidth, height: viewportHeight },
@@ -382,12 +540,21 @@ export async function runBrowserBenchmarks(
       { timeout: 25000 }
     );
 
-    await page.evaluate(async () => {
-      await new Promise<void>((r) => requestAnimationFrame(() => r()));
-      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    page.on('crash', () => {
+      console.error('[bench:browser] Chromium page crashed unexpectedly.');
+    });
+    page.on('pageerror', (err: Error) => {
+      console.error(`[bench:browser] Uncaught page error: ${err?.message || String(err)}`);
+    });
+    page.on('framenavigated', (frame: any) => {
+      if (frame === page.mainFrame()) {
+        console.error(`[bench:browser] Unexpected main-frame navigation to: ${frame.url()}`);
+      }
     });
 
-    const browserEnvInfo = await page.evaluate(() => {
+    const browserEnvInfo = await page.evaluate(async () => {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
       const harness = (window as any).__BENCHMARK_HARNESS__;
       const snap = harness?.getSnapshot?.();
       const live = snap?.liveWebGL;
@@ -418,6 +585,12 @@ export async function runBrowserBenchmarks(
     }
 
     const isSoftware = isSoftwareWebGLRenderer(browserEnvInfo.gpuRenderer);
+    if (requireHardwareGpu && isSoftware) {
+      throw new Error(
+        `--require-hardware was specified, but Chromium initialized a software WebGL renderer: "${browserEnvInfo.gpuRenderer}". Ensure a hardware GPU driver is available and do not pass --swiftshader.`
+      );
+    }
+
     const environment = collectHostEnvironmentMetadata({
       browserName: 'Chromium',
       browserVersion: browser.version(),
@@ -429,7 +602,8 @@ export async function runBrowserBenchmarks(
       gpuVendor: browserEnvInfo.gpuVendor,
       gpuRenderer: browserEnvInfo.gpuRenderer,
       isSoftwareRenderer: isSoftware,
-      hardwareAccelerationRequested: true,
+      useSwiftShader,
+      hardwareAccelerationRequested: !useSwiftShader,
       launchFlags,
     });
 
@@ -439,6 +613,8 @@ export async function runBrowserBenchmarks(
     const seenUnsupportedIds = new Set<string>();
 
     for (const dataset of datasets) {
+      const expectNonEmptyScene = dataset.metadata.parsedFeatureCounts.total > 0;
+
       for (const config of configs) {
         if (!options.quiet) {
           console.log(
@@ -468,15 +644,33 @@ export async function runBrowserBenchmarks(
           loadParams
         );
 
-        const staticSceneGeometry = await page.evaluate(() => {
-          const snap = (window as any).__BENCHMARK_HARNESS__.getSnapshot();
-          return {
-            constructedMeshesCount: snap?.constructedMeshesCount ?? 0,
-            sceneVertices: snap?.sceneVertices ?? 0,
-            sceneTriangles: snap?.sceneTriangles ?? 0,
-            cpuBufferMB: snap?.cpuBufferMB ?? 0,
-          };
+        const loadedSnapshot: BenchmarkHarnessSnapshot = await page.evaluate(() => {
+          return (window as any).__BENCHMARK_HARNESS__.getSnapshot();
         });
+
+        const readiness = validateSceneReadinessSnapshot(loadedSnapshot, {
+          expectedRevision: initializationTimingMs.sceneRevision,
+          datasetId: dataset.metadata.id,
+          roadsMode: config.infrastructureRenderOptions.roads,
+          railwaysMode: config.infrastructureRenderOptions.railways,
+          railwayPrototypeMode: config.railwayPrototypeMode,
+          themeId: config.themeId,
+          expectNonEmptyScene,
+          minWebglFramesRendered: 1,
+        });
+
+        if (!readiness.ready) {
+          throw new Error(
+            `Scene failed post-load readiness validation for dataset="${dataset.metadata.id}" config="${config.id}": ${readiness.reason}`
+          );
+        }
+
+        const staticSceneGeometry = {
+          constructedMeshesCount: loadedSnapshot.constructedMeshesCount,
+          sceneVertices: loadedSnapshot.sceneVertices,
+          sceneTriangles: loadedSnapshot.sceneTriangles,
+          cpuBufferMB: loadedSnapshot.cpuBufferMB,
+        };
 
         const scenarioResults: BrowserScenarioResult[] = [];
         const workloadUnsupported: UnsupportedMetricNotice[] = [];
@@ -495,9 +689,12 @@ export async function runBrowserBenchmarks(
               measuredFrames: number;
               reloadCycles: number;
               loadParams: typeof loadParams;
+              samplingStride: number;
+              expectNonEmptyScene: boolean;
             }) => {
               const harness = (window as any).__BENCHMARK_HARNESS__;
-              const samples: RawBrowserFrameSample[] = [];
+              const samples: BenchmarkFrameTelemetry[] = [];
+              let anchorTimestampMs: number | null = null;
 
               const applyStepPose = (stepIndex: number, totalSteps: number) => {
                 const u = totalSteps <= 1 ? 0 : stepIndex / (totalSteps - 1);
@@ -518,35 +715,33 @@ export async function runBrowserBenchmarks(
                 }
               };
 
-              const collectSingleFrame = (): Promise<RawBrowserFrameSample> => {
-                return new Promise((resolve) => {
-                  const tFrameStart = performance.now();
-                  (window as any).__BENCHMARK_FRAME_COLLECTOR__ = (tel: any) => {
-                    (window as any).__BENCHMARK_FRAME_COLLECTOR__ = null;
-                    const frameIntervalMs = Number((performance.now() - tFrameStart).toFixed(3));
-                    resolve({
-                      frameIntervalMs,
-                      cpuRenderTimeMs: Number((tel.cpuRenderTimeMs ?? 0).toFixed(3)),
-                      renderCalls: tel.renderCalls ?? 0,
-                      renderTriangles: tel.renderTriangles ?? 0,
-                      driverGeometries: tel.driverGeometries ?? 0,
-                      driverTextures: tel.driverTextures ?? 0,
-                      driverPrograms: tel.driverPrograms ?? 0,
-                      activeRailwayMeshes: tel.activeRailwayMeshes ?? 0,
-                      frustumCulledRailwayMeshes: tel.frustumCulledRailwayMeshes ?? 0,
-                      frustumVisibleRailwayTriangles: tel.activeFrustumVisibleRailwayTriangles ?? 0,
-                      gpuFrameTimeMs: tel.gpuFrameTimeMs ?? null,
-                      gpuTimerSupported: Boolean(tel.gpuTimerSupported),
-                      gpuTimerDisjoint: Boolean(tel.gpuTimerDisjoint),
-                    });
-                  };
+              let pendingFrameResolve: ((tel: BenchmarkFrameTelemetry) => void) | null = null;
+              const waitNextRenderedFrame = (): Promise<BenchmarkFrameTelemetry> =>
+                new Promise((resolve) => {
+                  pendingFrameResolve = resolve;
                 });
+
+              (window as any).__BENCHMARK_RESET_GPU_TIMERS__?.();
+              (window as any).__BENCHMARK_ACTIVE__ = true;
+              (window as any).__BENCHMARK_COLLECTOR_META__ = {
+                phase: 'warmup',
+                frameIndex: 0,
+                totalMeasuredFrames: args.measuredFrames,
+                samplingStride: args.samplingStride,
+              };
+              (window as any).__BENCHMARK_FRAME_COLLECTOR__ = (
+                tel: BenchmarkFrameTelemetry
+              ) => {
+                if (pendingFrameResolve) {
+                  const r = pendingFrameResolve;
+                  pendingFrameResolve = null;
+                  r(tel);
+                }
               };
 
               let reloadLifecycleAudit: RawScenarioBrowserPayload['reloadLifecycleAudit'] =
                 undefined;
 
-              (window as any).__BENCHMARK_ACTIVE__ = true;
               try {
                 if (args.scenarioId === 'repeated_scene_reload') {
                   const snap0 = harness.getSnapshot();
@@ -561,16 +756,51 @@ export async function runBrowserBenchmarks(
 
                   for (let cycle = 0; cycle < args.reloadCycles; cycle++) {
                     await harness.unloadDataset();
+                    const unloadedSnap = harness.getSnapshot();
+                    if (unloadedSnap?.locationId !== 'benchmark_unloaded') {
+                      throw new Error(
+                        `unloadDataset did not commit benchmark_unloaded state (got "${unloadedSnap?.locationId}").`
+                      );
+                    }
+
                     const reloadTiming = await harness.loadOfflineDataset(args.loadParams);
+                    const reloadedSnap = harness.getSnapshot();
+                    if (
+                      reloadedSnap?.locationId !== args.loadParams.datasetId ||
+                      (args.expectNonEmptyScene && reloadedSnap?.constructedMeshesCount <= 1)
+                    ) {
+                      throw new Error(
+                        `Reloaded scene snapshot invalid after cycle ${cycle}: locationId=${reloadedSnap?.locationId}, meshes=${reloadedSnap?.constructedMeshesCount}`
+                      );
+                    }
                     reloadAndFirstRenderSamplesMs.push(
                       reloadTiming.totalSceneInitToFirstFrameMs
                     );
+
+                    // Anchor frame for consecutive post-render intervals inside this reload cycle
+                    const anchorTel = await waitNextRenderedFrame();
+                    let prevTs = anchorTel.frameTimestampMs;
+
                     for (
                       let f = 0;
                       f < framesPerCycle && samples.length < args.measuredFrames;
                       f++
                     ) {
-                      samples.push(await collectSingleFrame());
+                      (window as any).__BENCHMARK_COLLECTOR_META__ = {
+                        phase: 'measured',
+                        frameIndex: samples.length,
+                        totalMeasuredFrames: args.measuredFrames,
+                        samplingStride: args.samplingStride,
+                      };
+                      const tel = await waitNextRenderedFrame();
+                      const consecutiveInterval = Number(
+                        Math.max(0, tel.frameTimestampMs - prevTs).toFixed(3)
+                      );
+                      prevTs = tel.frameTimestampMs;
+                      samples.push({
+                        ...tel,
+                        frameIntervalMs: consecutiveInterval,
+                      });
                     }
                   }
 
@@ -596,17 +826,37 @@ export async function runBrowserBenchmarks(
                   };
                 } else {
                   const totalSteps = args.warmupFrames + args.measuredFrames;
-                  for (let w = 0; w < args.warmupFrames; w++) {
-                    applyStepPose(w, totalSteps);
-                    await collectSingleFrame();
+                  // Ensure at least 1 anchor frame completes before measured frame 0
+                  const effectiveWarmup = Math.max(1, args.warmupFrames);
+
+                  for (let w = 0; w < effectiveWarmup; w++) {
+                    (window as any).__BENCHMARK_COLLECTOR_META__ = {
+                      phase: 'warmup',
+                      frameIndex: w,
+                      totalMeasuredFrames: args.measuredFrames,
+                      samplingStride: args.samplingStride,
+                    };
+                    applyStepPose(Math.min(w, Math.max(0, totalSteps - 1)), totalSteps);
+                    const warmTel = await waitNextRenderedFrame();
+                    anchorTimestampMs = warmTel.frameTimestampMs;
                   }
+
                   for (let m = 0; m < args.measuredFrames; m++) {
+                    (window as any).__BENCHMARK_COLLECTOR_META__ = {
+                      phase: 'measured',
+                      frameIndex: m,
+                      totalMeasuredFrames: args.measuredFrames,
+                      samplingStride: args.samplingStride,
+                    };
                     applyStepPose(args.warmupFrames + m, totalSteps);
-                    samples.push(await collectSingleFrame());
+                    const tel = await waitNextRenderedFrame();
+                    samples.push(tel);
                   }
                 }
               } finally {
+                pendingFrameResolve = null;
                 (window as any).__BENCHMARK_FRAME_COLLECTOR__ = null;
+                (window as any).__BENCHMARK_COLLECTOR_META__ = undefined;
                 (window as any).__BENCHMARK_ACTIVE__ = false;
               }
 
@@ -635,6 +885,8 @@ export async function runBrowserBenchmarks(
                 scenarioId: args.scenarioId,
                 warmupFrames: args.warmupFrames,
                 measuredFrames: samples.length,
+                anchorTimestampMs:
+                  args.scenarioId === 'repeated_scene_reload' ? null : anchorTimestampMs,
                 samples,
                 browserMemoryMB,
                 reloadLifecycleAudit,
@@ -646,20 +898,22 @@ export async function runBrowserBenchmarks(
               measuredFrames,
               reloadCycles,
               loadParams,
+              samplingStride: RAILWAY_VISIBILITY_SAMPLING_STRIDE,
+              expectNonEmptyScene,
             }
           );
 
-          const { result, gpuUnsupportedNotice } = buildScenarioResult(
-            scenarioSpec,
-            rawPayload
-          );
+          const { result, gpuUnsupportedNotice, railwayUnavailableNotice } =
+            buildScenarioResult(scenarioSpec, rawPayload);
           scenarioResults.push(result);
 
-          if (gpuUnsupportedNotice) {
-            workloadUnsupported.push(gpuUnsupportedNotice);
-            if (!seenUnsupportedIds.has(gpuUnsupportedNotice.metricId)) {
-              seenUnsupportedIds.add(gpuUnsupportedNotice.metricId);
-              globalUnsupported.push(gpuUnsupportedNotice);
+          for (const notice of [gpuUnsupportedNotice, railwayUnavailableNotice]) {
+            if (notice) {
+              workloadUnsupported.push(notice);
+              if (!seenUnsupportedIds.has(notice.metricId)) {
+                seenUnsupportedIds.add(notice.metricId);
+                globalUnsupported.push(notice);
+              }
             }
           }
         }
@@ -667,7 +921,13 @@ export async function runBrowserBenchmarks(
         browserResults.push({
           dataset: dataset.metadata,
           rendererConfig: config,
-          initializationTimingMs,
+          initializationTimingMs: {
+            datasetParseMs: initializationTimingMs.datasetParseMs,
+            cpuSceneBuildMs: initializationTimingMs.cpuSceneBuildMs,
+            firstWebGLRenderMs: initializationTimingMs.firstWebGLRenderMs,
+            totalSceneInitToFirstFrameMs:
+              initializationTimingMs.totalSceneInitToFirstFrameMs,
+          },
           staticSceneGeometry,
           scenarios: scenarioResults,
           unsupportedMetrics: workloadUnsupported,
@@ -718,71 +978,6 @@ export async function runBrowserBenchmarks(
     }
     await stopServer();
   }
-}
-
-function parseBrowserRunnerCliArgs(argv: string[]): BrowserBenchmarkRunnerOptions {
-  let datasetIds: string[] | undefined;
-  let configIds: string[] | undefined;
-  let scenarioIds: BrowserScenarioKind[] | undefined;
-  let warmupFramesOverride: number | undefined;
-  let measuredFramesOverride: number | undefined;
-  let reloadCyclesOverride: number | undefined;
-  let serverUrl: string | undefined;
-  let outputPath = 'benchmarks/baselines/browser-baseline.json';
-  let quiet = false;
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--datasets' && argv[i + 1]) {
-      datasetIds = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg.startsWith('--datasets=')) {
-      datasetIds = arg.slice('--datasets='.length).split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg === '--configs' && argv[i + 1]) {
-      configIds = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg.startsWith('--configs=')) {
-      configIds = arg.slice('--configs='.length).split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg === '--scenarios' && argv[i + 1]) {
-      scenarioIds = argv[++i].split(',').map((s) => s.trim()) as BrowserScenarioKind[];
-    } else if (arg.startsWith('--scenarios=')) {
-      scenarioIds = arg.slice('--scenarios='.length).split(',').map((s) => s.trim()) as BrowserScenarioKind[];
-    } else if (arg === '--warmup-frames' && argv[i + 1]) {
-      warmupFramesOverride = Math.max(0, parseInt(argv[++i], 10));
-    } else if (arg === '--measured-frames' && argv[i + 1]) {
-      measuredFramesOverride = Math.max(1, parseInt(argv[++i], 10));
-    } else if (arg === '--reload-iterations' && argv[i + 1]) {
-      reloadCyclesOverride = Math.max(1, parseInt(argv[++i], 10));
-    } else if (arg === '--url' && argv[i + 1]) {
-      serverUrl = argv[++i];
-    } else if (arg.startsWith('--url=')) {
-      serverUrl = arg.slice('--url='.length);
-    } else if (arg === '--out' && argv[i + 1]) {
-      outputPath = argv[++i];
-    } else if (arg.startsWith('--out=')) {
-      outputPath = arg.slice('--out='.length);
-    } else if (arg === '--no-save') {
-      outputPath = '';
-    } else if (arg === '--quiet') {
-      quiet = true;
-    } else if (arg === '--quick') {
-      warmupFramesOverride = 4;
-      measuredFramesOverride = 12;
-      reloadCyclesOverride = 2;
-      configIds = configIds ?? ['production-legacy', 'surface-first-e2plus-rplus'];
-      datasetIds = datasetIds ?? ['small-real-europatunnel', 'synthetic-stress-urban-switchyard'];
-    }
-  }
-
-  return {
-    datasetIds,
-    configIds,
-    scenarioIds,
-    warmupFramesOverride,
-    measuredFramesOverride,
-    reloadCyclesOverride,
-    serverUrl,
-    outputPath: outputPath || undefined,
-    quiet,
-  };
 }
 
 const isMainModule =

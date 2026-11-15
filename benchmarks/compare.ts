@@ -393,6 +393,13 @@ export function compareBenchmarkReports(
         incompatibilityErrors.push(
           `Incompatible GPU rasterizer class: baseline isSoftwareRenderer=${bBrowser.isSoftwareRenderer} (${bBrowser.gpuRenderer}) vs candidate isSoftwareRenderer=${cBrowser.isSoftwareRenderer} (${cBrowser.gpuRenderer}).`
         );
+      } else if (
+        !bBrowser.isSoftwareRenderer &&
+        bBrowser.gpuRenderer !== cBrowser.gpuRenderer
+      ) {
+        environmentWarnings.push(
+          `Hardware GPU renderer differs between reports: "${bBrowser.gpuRenderer}" vs "${cBrowser.gpuRenderer}".`
+        );
       }
     }
   }
@@ -584,20 +591,51 @@ function parseCliArgs(argv: string[]) {
   let failOnRegression = false;
   const thresholdOverrides: Partial<RegressionThresholdConfig> = {};
 
+  const readVal = (idx: number, flagName: string): { val: string; nextIdx: number } => {
+    const arg = argv[idx];
+    const eqIdx = arg.indexOf('=');
+    if (eqIdx !== -1) {
+      const val = arg.slice(eqIdx + 1).trim();
+      if (!val) throw new Error(`Flag ${flagName} requires a value.`);
+      return { val, nextIdx: idx };
+    }
+    const next = argv[idx + 1];
+    if (!next || next.startsWith('--')) {
+      throw new Error(`Flag ${flagName} requires a value.`);
+    }
+    return { val: next.trim(), nextIdx: idx + 1 };
+  };
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--out' && argv[i + 1]) {
-      outPath = argv[++i];
+    if (arg === '--out' || arg.startsWith('--out=')) {
+      const { val, nextIdx } = readVal(i, '--out');
+      outPath = val;
+      i = nextIdx;
     } else if (arg === '--fail-on-regression') {
       failOnRegression = true;
-    } else if (arg === '--max-cpu-regression-pct' && argv[i + 1]) {
-      thresholdOverrides.maxCpuTimeRegressionPct = Number(argv[++i]);
-    } else if (arg === '--max-frame-time-regression-pct' && argv[i + 1]) {
-      thresholdOverrides.maxFrameTimeRegressionPct = Number(argv[++i]);
-    } else if (arg === '--max-draw-call-regression-pct' && argv[i + 1]) {
-      thresholdOverrides.maxDrawCallsRegressionPct = Number(argv[++i]);
+    } else if (arg === '--max-cpu-regression-pct' || arg.startsWith('--max-cpu-regression-pct=')) {
+      const { val, nextIdx } = readVal(i, '--max-cpu-regression-pct');
+      thresholdOverrides.maxCpuTimeRegressionPct = Number(val);
+      i = nextIdx;
+    } else if (
+      arg === '--max-frame-time-regression-pct' ||
+      arg.startsWith('--max-frame-time-regression-pct=')
+    ) {
+      const { val, nextIdx } = readVal(i, '--max-frame-time-regression-pct');
+      thresholdOverrides.maxFrameTimeRegressionPct = Number(val);
+      i = nextIdx;
+    } else if (
+      arg === '--max-draw-call-regression-pct' ||
+      arg.startsWith('--max-draw-call-regression-pct=')
+    ) {
+      const { val, nextIdx } = readVal(i, '--max-draw-call-regression-pct');
+      thresholdOverrides.maxDrawCallsRegressionPct = Number(val);
+      i = nextIdx;
     } else if (!arg.startsWith('--')) {
       positional.push(arg);
+    } else {
+      throw new Error(`Unknown CLI argument for bench:compare: "${arg}".`);
     }
   }
 

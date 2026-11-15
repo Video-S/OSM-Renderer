@@ -36,6 +36,11 @@ export interface CameraControllerProps {
     azimuthRad?: number;
     signal: number;
   };
+  onRegisterImperativePoseSetter?: (
+    setter:
+      | ((target: [number, number, number], zoom: number, azimuthDeg?: number) => void)
+      | null
+  ) => void;
   controlsEnabled?: boolean;
 }
 
@@ -197,6 +202,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   maxZoom = 16.0,
   initialZoom = DEFAULT_INITIAL_ZOOM,
   explicitPose,
+  onRegisterImperativePoseSetter,
   controlsEnabled = true,
 }) => {
   const controlsRef = useRef<MapControlsImpl>(null);
@@ -402,6 +408,66 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       invalidate();
     }
   }, [explicitPose, fixedTiltAngle, minZoom, maxZoom, camera, invalidate]);
+
+  // 5b. Register imperative pose setter so automated benchmarks do not trigger React re-renders per frame
+  useEffect(() => {
+    if (!onRegisterImperativePoseSetter) return;
+
+    const applyImperativePose = (
+      poseTarget: [number, number, number],
+      poseZoom: number,
+      azimuthDeg?: number
+    ) => {
+      if (!controlsRef.current) return;
+      isResetting.current = false;
+
+      const [tx, ty, tz] = poseTarget;
+      const az =
+        typeof azimuthDeg === 'number' ? (azimuthDeg * Math.PI) / 180 : DEFAULT_AZIMUTH;
+      const dist = 600;
+      const camX = tx + dist * Math.sin(fixedTiltAngle) * Math.sin(az);
+      const camY = ty + dist * Math.cos(fixedTiltAngle);
+      const camZ = tz + dist * Math.sin(fixedTiltAngle) * Math.cos(az);
+
+      camera.position.set(camX, camY, camZ);
+      controlsRef.current.target.set(tx, ty, tz);
+      if ('zoom' in camera) {
+        const ortho = camera as THREE.OrthographicCamera;
+        ortho.zoom = Math.max(minZoom, Math.min(maxZoom, poseZoom));
+        const { near, far } = computeSceneFrustumPlanes(
+          bounds,
+          [camX, camY, camZ],
+          [tx, ty, tz],
+          verticalEnvelope
+        );
+        ortho.near = near;
+        ortho.far = far;
+        ortho.updateProjectionMatrix();
+      }
+      camera.lookAt(tx, ty, tz);
+
+      const prevDamping = controlsRef.current.enableDamping;
+      controlsRef.current.enableDamping = false;
+      controlsRef.current.update();
+      controlsRef.current.enableDamping = prevDamping;
+
+      invalidate();
+    };
+
+    onRegisterImperativePoseSetter(applyImperativePose);
+    return () => {
+      onRegisterImperativePoseSetter(null);
+    };
+  }, [
+    onRegisterImperativePoseSetter,
+    fixedTiltAngle,
+    minZoom,
+    maxZoom,
+    bounds,
+    verticalEnvelope,
+    camera,
+    invalidate,
+  ]);
 
   // Frame loop
   useFrame((state, delta) => {

@@ -1,24 +1,39 @@
 # Performance Benchmarking & Developer Profiling Guide
 
-This document describes the reproducible performance benchmarking infrastructure (`benchmarks/`) introduced in `TKT-016`, how to execute CPU and WebGL browser benchmarks, how to compare baseline and candidate reports, and how to profile CPU, memory, and WebGL bottlenecks.
+This document describes the reproducible performance benchmarking infrastructure (`benchmarks/`) introduced in `TKT-016` and hardened in `TKT-017`, how to execute CPU and WebGL browser benchmarks across Windows, Linux, and macOS, how to compare baseline and candidate reports, and how to profile CPU, memory, and WebGL bottlenecks.
 
 ---
 
-## 1. Architecture Overview
+## 1. Architecture Overview & Prerequisites
 
-The benchmarking system is organized under `/benchmarks/` and is decoupled from individual renderer subsystems:
+### 1.1 Runtime Prerequisites & Clean Installation
+- **Node.js**: `>= 22.12.0` (required by Vite 8).
+- **Clean Install (Windows / macOS / Linux)**:
+  ```bash
+  npm install
+  npx playwright install chromium
+  ```
+  - Do **not** use `--force` or `--legacy-peer-deps`. (`esbuild@^0.28.0` and `playwright` are declared in `package.json`, and stale Linux-only lockfiles are excluded so npm resolves platform-specific native packages such as `@rolldown/binding-win32-x64-msvc` and `@tailwindcss/oxide-win32-x64-msvc` cleanly on Windows.)
+  - `benchmarks/cliAndServer.ts` spawns the local `tsx` entrypoint directly via `process.execPath` (`node.exe` on Windows) without calling `npx`, preventing `spawn npx ENOENT` failures.
+
+### 1.2 Module Responsibilities
+
+The benchmarking system is organized under `/benchmarks/` (with the shared browser telemetry contract in `src/types/BenchmarkTelemetry.ts`) and is decoupled from individual renderer subsystems:
 
 | Module | Responsibility |
 | :--- | :--- |
-| `benchmarks/types.ts` | Versioned JSON report schema (`schemaVersion: "1.0.0"`), workload descriptors, statistical types, and comparison report contracts. |
+| `src/types/BenchmarkTelemetry.ts` | Shared typed contract between `MapScene.tsx` / `App.tsx` and `benchmarks/browserRunner.ts`, GPU timer state machine (`resolveGpuFrameTelemetryState`), consecutive frame interval helpers, railway sampling schedule (`RAILWAY_VISIBILITY_SAMPLING_STRIDE = 4`), and scene-readiness validation (`validateSceneReadinessSnapshot`). |
+| `src/world/prototype/BenchmarkRailwayTelemetry.ts` | Zero-traversal `CachedRailwayIndex` built on scene commit and O(1)-allocation frustum-visibility evaluator for railway telemetry. |
+| `benchmarks/types.ts` | Versioned JSON report schema (`schemaVersion: "1.1.0"`), workload descriptors, statistical types, and comparison report contracts. |
 | `benchmarks/datasets.ts` | Frozen, deterministic offline benchmark datasets with SHA-256 content hashes (`contentHashSha256`) and per-category feature counts. |
 | `benchmarks/scenarios.ts` | Renderer configurations (`production-legacy`, `graph-e2-e3`, `surface-first-e2plus-rplus`) and deterministic browser camera/lifecycle scenarios. |
+| `benchmarks/cliAndServer.ts` | Cross-platform CLI flag parser (handling Bash, PowerShell comma splitting, repeated flags, and `--iterations`) and direct Node-to-`tsx` local server process lifecycle management. |
 | `benchmarks/stats.ts` | Quantile (`median`, `p95`, `p99`), mean, standard deviation, interquartile range (`iqr`), coefficient of variation (`cv`), and threshold-based regression evaluation. |
 | `benchmarks/environment.ts` | Git commit/branch/dirty state, OS/CPU/RAM metadata, browser/GPU driver strings, hardware vs. software WebGL detection (`SwiftShader` / `llvmpipe`), and canonical metric definitions. |
 | `benchmarks/cpuRunner.ts` | Node.js CPU benchmark runner (`npm run bench:cpu`) measuring direct pipeline stages, deterministic typed-array memory, V8 heap snapshots, and `SceneResourceManager` disposal verification. |
-| `benchmarks/browserRunner.ts` | Playwright + Chromium WebGL benchmark runner (`npm run bench:browser`) measuring real rendering frame intervals, CPU `gl.render()` time, GPU timer queries, actual `gl.info.render.calls`, `gl.info.render.triangles`, and scene reload lifecycle leaks. |
-| `benchmarks/serializer.ts` | Schema validation (`validateBenchmarkReport`), JSON serialization, and human-readable terminal table formatting. |
-| `benchmarks/compare.ts` | Automated baseline vs. candidate comparison engine (`npm run bench:compare`) with compatibility validation and configurable regression thresholds. |
+| `benchmarks/browserRunner.ts` | Playwright + Chromium WebGL benchmark runner (`npm run bench:browser`) measuring post-`gl.render()` frame intervals, CPU `gl.render()` time, async GPU timer queries, actual `gl.info.render.calls` / `triangles`, static & sampled railway visibility, and scene reload lifecycle leaks. |
+| `benchmarks/serializer.ts` | Schema validation (`validateBenchmarkReport` supporting `1.0.0` & `1.1.0`), JSON serialization, and human-readable terminal table formatting. |
+| `benchmarks/compare.ts` | Automated baseline vs. candidate comparison engine (`npm run bench:compare`) with schema/dataset/GPU parity checks and configurable regression thresholds. |
 
 ---
 
@@ -70,30 +85,48 @@ npm run bench:cpu -- \
 
 ### 3.2 Browser & WebGL Benchmarks (`npm run bench:browser`)
 
-Launches headless Chromium via Playwright, starts or connects to the local application server (`/?benchmark=1&dock=collapsed`), blocks external network requests, and executes deterministic camera and lifecycle scenarios through the real Three.js / React Three Fiber rendering pipeline:
+Launches Chromium via Playwright, starts or connects to the local application server (`/?benchmark=1&dock=collapsed`), blocks external network requests, waits for deterministic WebGL scene readiness (`validateSceneReadinessSnapshot`), and executes deterministic camera and lifecycle scenarios through the real Three.js / React Three Fiber rendering pipeline.
 
+By default, Chromium launches **without** SwiftShader flags so hardware GPUs (e.g., NVIDIA RTX, AMD, Apple Silicon) are used automatically when present:
+
+**Bash / macOS / Linux:**
 ```bash
 # Run full Browser/WebGL benchmark suite and save to benchmarks/baselines/browser-baseline.json
 npm run bench:browser
 
-# Run a quick verification pass across representative datasets
-npm run bench:browser -- --quick --out benchmarks/results/browser-candidate.json
+# Run a quick verification pass with hardware GPU required (fails if Chromium falls back to software)
+npm run bench:browser -- --quick --require-hardware --out benchmarks/results/hardware-gpu.json
 
-# Filter specific datasets, configs, or scenarios
+# Explicitly force SwiftShader software rasterization (useful in headless CI containers)
+npm run bench:browser -- --quick --swiftshader --no-save
+
+# Run headed (visible browser window) and filter specific datasets, configs, or scenarios
 npm run bench:browser -- \
+  --headed \
   --datasets=small-real-europatunnel,large-real-amsterdam-centraal \
   --configs=production-legacy,surface-first-e2plus-rplus \
   --scenarios=static_overview,automated_pan_sweep,repeated_scene_reload \
-  --warmup-frames=5 \
-  --measured-frames=24 \
+  --warmup-frames=8 \
+  --measured-frames=36 \
   --out=benchmarks/results/browser-candidate.json
 ```
 
-**Deterministic Browser Scenarios (`BrowserScenarioId`):**
+**Windows PowerShell:**
+> Note: PowerShell splits unquoted comma-separated tokens into separate arguments. Quote comma lists (`"a,b"`), use space-separated values, or repeat `--scenario` / `--dataset` flags—all three forms are supported by `cliAndServer.ts`.
+
+```powershell
+# Hardware GPU validation run on Windows (RTX / Intel / AMD GPU)
+npm run bench:browser -- --quick --require-hardware --out benchmarks/results/hardware-rtx4060ti.json
+
+# Filter datasets and scenarios (quoted comma list OR space-separated)
+npm run bench:browser -- --datasets "small-real-europatunnel,synthetic-stress-urban-switchyard" --scenarios static_overview automated_pan_sweep --out benchmarks/results/browser-ps.json
+```
+
+**Deterministic Browser Scenarios (`BrowserScenarioKind`):**
 1. `static_overview`: Static orthographic overview camera framing `[0, 0, 0]` at `zoom = 1.0`, `azimuth = 45°`.
-2. `static_close_junction`: Close-up static inspection at `zoom = 7.5` over dense junction/switch geometry.
-3. `automated_pan_sweep`: Deterministic linear camera pan sweep across the map extent at `zoom = 4.5`.
-4. `zoom_and_orbit_sweep`: Simultaneous zoom (`1.5` to `7.0`) and `360°` azimuth orbit sweep exercising LOD transitions and frustum culling.
+2. `static_close_junction`: Close-up static inspection at `zoom = 8.0` over dense junction/switch geometry.
+3. `automated_pan_sweep`: Deterministic linear camera pan sweep across the map extent at `zoom = 5.5` (driven imperatively via `CameraController` without triggering React state re-renders).
+4. `zoom_and_orbit_sweep`: Simultaneous zoom (`1.2` to `8.5`) and `270°` azimuth orbit sweep exercising LOD transitions (`4.5 CSS px/m`) and frustum culling.
 5. `repeated_scene_reload`: Repeatedly unloads and reloads the dataset on the same WebGL2 context and audits `gl.info.memory.geometries` and `gl.info.memory.textures` for GPU resource leaks (`reloadLifecycleAudit`).
 
 ### 3.3 Comparing Baseline and Candidate Reports (`npm run bench:compare`)
@@ -116,27 +149,35 @@ npm run bench:compare -- \
 
 ---
 
-## 4. Metric Definitions & Measurement Limitations
+## 4. Metric Definitions & Measurement Limitations (Schema v1.1.0)
 
 ### 4.1 Frame Interval vs. FPS vs. CPU Render Time vs. GPU Time
 Do not conflate these four distinct measurements:
-- **`frameIntervalMs` (`ms`, lower is better)**: Wall-clock time elapsed between consecutive `requestAnimationFrame` callbacks during active rendering. Includes browser compositor scheduling, React Three Fiber `useFrame` hooks, and synchronous WebGL command submission.
+- **`frameIntervalMs` (`ms`, lower is better)**: Wall-clock interval elapsed between consecutive **completed `gl.render(scene, camera)` calls** (`computeConsecutiveFrameIntervalsMs` anchored on the final warmup frame). Telemetry is emitted strictly post-render (`emitPostRenderTelemetry` in `MapScene.tsx`), never pre-render inside R3F `useFrame`.
 - **`effectiveMedianFps` (`fps`, higher is better)**: Derived strictly as `1000 / frameIntervalMs.median`.
 - **`cpuFrameRenderTimeMs` (`ms`, lower is better)**: Synchronous CPU wall-clock duration of `gl.render(scene, camera)` inside `MapScene.tsx` (scene traversal, frustum culling, uniform updates, and WebGL driver command submission). Does **not** include asynchronous GPU rasterization or VSync wait time.
-- **`gpuFrameRenderTimeMs` (`ms`, lower is better)**: Asynchronous hardware GPU execution duration measured via WebGL2 `EXT_disjoint_timer_query_webgl2` (`TIME_ELAPSED_EXT`). When the extension is unavailable (such as on SwiftShader or restricted drivers) or reports `GPU_DISJOINT_EXT`, `gpuFrameRenderTimeMs.status` is explicitly recorded as `'unsupported'`, `'disjoint'`, or `'unavailable'` with `statistics: null`. Fabricated values are never substituted.
+- **`gpuFrameRenderTimeMs` (`ms`, lower is better)**: Asynchronous hardware GPU execution duration measured via WebGL2 `EXT_disjoint_timer_query_webgl2` (`TIME_ELAPSED_EXT`). Uses a strict state machine (`resolveGpuFrameTelemetryState`) tracking per-frame `sampleCounts` (`totalFrames`, `valid`, `pending`, `disjoint`, `unsupported`):
+  - Only frames whose asynchronous query resolved non-disjointly are counted under `valid` (`0 ms` inclusive).
+  - Pending frames record `null` (`gpuTimerStatus: 'pending'`)—never stale cached values from earlier frames and never substituted CPU time.
+  - When unsupported (`SwiftShader` / restricted driver) or disjoint (`GPU_DISJOINT_EXT`), `gpuFrameRenderTimeMs.status` is explicitly `'unsupported'`, `'disjoint'`, or `'unavailable'` with `statistics: null`.
+- **`instrumentationOverheadMs` (`ms`, lower is better)**: Measured CPU bookkeeping duration of the post-render collector callback itself per frame.
 
-### 4.2 Actual Draw Calls vs. Construction-Time Mesh Estimates
-- **`webglDrawCallsPerFrame`** and **`renderedTrianglesPerFrame`** come directly from `gl.info.render.calls` and `gl.info.render.triangles` captured immediately after `gl.render(scene, camera)` completes for that frame.
-- They reflect frustum culling, layer visibility, and instanced rendering (`THREE.InstancedMesh` submits 1 draw call for $N$ instances), whereas construction-time mesh counts (`BuiltSceneGeometry.stats.totalDrawCalls`) only count allocated scene-graph objects.
+### 4.2 Scene Readiness, Draw Calls & Railway Visibility Telemetry
+- **Deterministic Post-Load Readiness (`validateSceneReadinessSnapshot`)**: After `loadOfflineDataset()`, the harness waits until React commits the target `sceneRevision`, `MapScene` completes at least one WebGL `gl.render()` for that revision (`webglFramesRenderedForRevision >= 1`), and non-empty datasets report non-idle geometry (`constructedMeshesCount > 1`). Static counts (`staticSceneGeometry`) never capture pre-commit `{ 1, 4, 2 }` idle ground geometry.
+- **Actual Draw Calls & Triangles**: `webglDrawCallsPerFrame` and `renderedTrianglesPerFrame` come directly from `gl.info.render.calls` and `gl.info.render.triangles` captured immediately after `gl.render(scene, camera)` finishes for that frame.
+- **Static vs. Sampled Railway Telemetry (`BenchmarkRailwayTelemetry.ts`)**:
+  - `staticRailwayMeshes` and `staticRailwayTriangles` are computed once from `CachedRailwayIndex` upon scene/prototype commit.
+  - During benchmark scenarios, per-frame frustum visibility (`activeRailwayMeshes`, `frustumCulledRailwayMeshes`, `frustumVisibleRailwayTriangles`) is evaluated without scene traversal over `CachedRailwayIndex` at deterministic stride `RAILWAY_VISIBILITY_SAMPLING_STRIDE = 4` (plus frame `0` and the final frame).
+  - Missing/unavailable railway telemetry is explicitly reported as `null` with `railwayVisibilityStatus: 'unavailable'`—never as `0`. Genuine `0` values appear only when railways are disabled (`'disabled_by_config'`) or the scene contains `0` railway meshes.
 
 ### 4.3 Deterministic CPU Buffer Memory vs. JS V8 Heap Snapshots
 - **`cpuBufferMemory` (`totalBytes` / `totalMB`)**: Deterministic sum of all typed-array (`Float32Array`, `Uint16Array`, `Uint32Array`) vertex attributes, index buffers, and instance matrices tracked by `SceneResourceManager`. This metric is **100% deterministic** for a fixed dataset and algorithm and serves as the primary memory regression gate (`cpuBufferMemoryPct: 5%`).
 - **`v8HeapMemory` / `browserMemoryMB`**: Collected via `process.memoryUsage()` in Node.js (calling `global.gc()` between runs when `--expose-gc` is enabled) and `performance.memory` in Chromium. Because V8 garbage collection is generational and asynchronous, `heapUsedDeltaMB` and `usedJSHeapSizeMB` are **advisory** and subject to background GC timing.
 
 ### 4.4 Hardware GPU vs. Software Rasterization (`SwiftShader`)
-- Headless Linux CI/container environments without a physical display server or hardware GPU use Chromium's software WebGL2 rasterizer (`ANGLE (..., SwiftShader driver)`).
-- The benchmark report records `environment.browser.isSoftwareRenderer: true` and adds an explicit warning note whenever SwiftShader or `llvmpipe` is active.
-- `compareBenchmarkReports` rejects comparisons that mix hardware GPU baselines with software-rendered candidates (`compatible: false`). Always compare hardware-to-hardware or software-to-software on the same host class.
+- Hardware GPU acceleration is enabled by default (no `--use-gl=angle` / `--use-angle=swiftshader` flags unless `--swiftshader` is explicitly passed).
+- In headless Linux CI/container environments without a hardware GPU driver, Chromium automatically falls back to SwiftShader (`ANGLE (..., SwiftShader driver)`). Use `--require-hardware` on developer/GPU machines to guarantee that software fallback fails loudly rather than silently producing invalid GPU conclusions.
+- `compareBenchmarkReports` rejects comparisons that mix schema versions (`1.0.0` vs `1.1.0`) or hardware GPU baselines with software-rendered candidates (`compatible: false`), and emits a warning if two hardware runs use different GPU models. Always compare matching hardware baselines on the same GPU host class.
 
 ---
 
@@ -205,4 +246,4 @@ When `npm run bench:compare` flags a regression, use the following workflows to 
    console.log({ before, unloaded });
    ```
 3. **Hardware GPU Timer Queries**:
-   On machines with a discrete or integrated GPU where Chrome exposes `EXT_disjoint_timer_query_webgl2`, `liveWebGL.gpuFrameTimeMs` reports the exact hardware GPU rasterization duration in milliseconds. If `gpuTimerSupported` is `false`, launch local Chrome with `--enable-dawn-features=allow_unsafe_apis` or inspect GPU passes with **Spector.js**.
+   On machines with a discrete or integrated GPU where Chrome exposes `EXT_disjoint_timer_query_webgl2`, `liveWebGL.gpuPassTimeMs` reports the exact hardware GPU rasterization duration in milliseconds whenever `liveWebGL.gpuTimerQuerySupported` is `true` and queries resolve without `gpuDisjointOccurred`. If `gpuTimerQuerySupported` is `false`, launch local Chrome with `--enable-dawn-features=allow_unsafe_apis` or inspect GPU passes with **Spector.js**.

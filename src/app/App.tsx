@@ -69,6 +69,12 @@ import {
   computeGroupGeometryStats,
   LiveWebGLTelemetrySnapshot,
 } from '../world/prototype/PerformanceBaselineHarness';
+import {
+  type BenchmarkHarnessSnapshot,
+  type ExpectedSceneReadinessSpec,
+  type SceneRevisionConfigMeta,
+  validateSceneReadinessSnapshot,
+} from '../types/BenchmarkTelemetry';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
 
@@ -135,6 +141,41 @@ export default function App() {
         ? parseInfrastructureRenderOptionsFromSearch(window.location.search)
         : { ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS }
     );
+
+  // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
+  const transitionRevisionRef = useRef<number>(0);
+  const pendingTransitionMetaRef = useRef<Omit<SceneRevisionConfigMeta, 'webglFramesRendered'> | null>(null);
+  const latestRenderedMetaRef = useRef<SceneRevisionConfigMeta | null>(null);
+  const imperativePoseSetterRef = useRef<
+    ((target: [number, number, number], zoom: number, azimuthDeg?: number) => void) | null
+  >(null);
+  const readinessWaitersRef = useRef<
+    Array<{
+      targetRevision: number;
+      expected: ExpectedSceneReadinessSpec;
+      resolve: () => void;
+      reject: (err: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }>
+  >([]);
+  const activeLocationIdRef = useRef<string>(activeLocationId);
+  const mapDataRef = useRef<ProcessedMapData | null>(mapData);
+  const railwayPrototypeModeRef = useRef<RailwayPrototypeMode>(railwayPrototypeMode);
+  const infrastructureRenderOptionsRef = useRef<InfrastructureRenderOptions>(
+    infrastructureRenderOptions
+  );
+  const selectedThemeIdRef = useRef<string>(selectedThemeId);
+  const prototypeOptionsRef = useRef<BuildRailwayPrototypeOptions>(prototypeOptions);
+  const activePrototypeZoneRef = useRef<RailwayPrototypeZoneId>(activePrototypeZone);
+  const infrastructureRenderPreviewRef = useRef<any>(null);
+
+  activeLocationIdRef.current = activeLocationId;
+  mapDataRef.current = mapData;
+  railwayPrototypeModeRef.current = railwayPrototypeMode;
+  infrastructureRenderOptionsRef.current = infrastructureRenderOptions;
+  selectedThemeIdRef.current = selectedThemeId;
+  prototypeOptionsRef.current = prototypeOptions;
+  activePrototypeZoneRef.current = activePrototypeZone;
 
   // Layer visibility toggles
   const [showBuildings, setShowBuildings] = useState<boolean>(true);
@@ -587,10 +628,12 @@ export default function App() {
   const infrastructureRenderPreview = useMemo(() => {
     if (!mapData || !requiresInfrastructureGraphPreview(infrastructureRenderOptions)) {
       latestPreviewTimeMsRef.current = 0;
+      infrastructureRenderPreviewRef.current = null;
       return null;
     }
     const preview = prepareInfrastructureRenderPreview(mapData, infrastructureRenderOptions);
     latestPreviewTimeMsRef.current = preview?.timing.totalPreviewTimeMs ?? 0;
+    infrastructureRenderPreviewRef.current = preview;
     return preview;
   }, [mapData, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
 
@@ -599,6 +642,10 @@ export default function App() {
   // to GeometryBuilder so the non-railway map is 100% identical and railway bridges are never duplicated.
   useEffect(() => {
     if (!mapData) return;
+
+    if (typeof window !== 'undefined' && typeof (window as any).__BENCHMARK_RESET_GPU_TIMERS__ === 'function') {
+      (window as any).__BENCHMARK_RESET_GPU_TIMERS__();
+    }
 
     if (activeSceneRef.current) {
       activeSceneRef.current.dispose();
@@ -639,6 +686,45 @@ export default function App() {
     const scene = builder.buildScene(sceneData, currentTheme);
     const buildElapsedMs = Number((performance.now() - t0).toFixed(2));
     latestCpuBuildTimeMsRef.current = buildElapsedMs;
+
+    const hasFeatures =
+      (mapData.buildings?.length || 0) +
+        (mapData.roads?.length || 0) +
+        (mapData.railways?.length || 0) +
+        (mapData.waterBodies?.length || 0) +
+        (mapData.linearWaterways?.length || 0) +
+        (mapData.parks?.length || 0) +
+        (mapData.landuse?.length || 0) +
+        (mapData.barriers?.length || 0) +
+        (mapData.landmarks?.length || 0) >
+      0;
+
+    const pending = pendingTransitionMetaRef.current;
+    const matchesPending =
+      pending !== null &&
+      pending.datasetId === activeLocationIdRef.current &&
+      pending.roadsMode === infrastructureRenderOptions.roads &&
+      pending.railwaysMode === infrastructureRenderOptions.railways &&
+      pending.railwayPrototypeMode === railwayPrototypeMode &&
+      pending.themeId === selectedThemeIdRef.current;
+
+    const revision = matchesPending ? pending!.revision : ++transitionRevisionRef.current;
+    if (matchesPending) {
+      pendingTransitionMetaRef.current = null;
+    }
+
+    const sceneMeta: SceneRevisionConfigMeta = {
+      revision,
+      datasetId: activeLocationIdRef.current,
+      roadsMode: infrastructureRenderOptions.roads,
+      railwaysMode: infrastructureRenderOptions.railways,
+      railwayPrototypeMode,
+      themeId: selectedThemeIdRef.current,
+      hasFeatures,
+      webglFramesRendered: 0,
+    };
+    scene.groundMesh.userData.__sceneMeta = sceneMeta;
+
     setCpuBuildTimeMs(buildElapsedMs);
     activeSceneRef.current = scene;
     setBuiltGeometry(scene);
@@ -703,10 +789,20 @@ export default function App() {
     };
   }, []);
 
-  // Expose deterministic M2.1 Prototype Lab API on window for automated Playwright inspection
-  useEffect(() => {
+  // Helper reading live refs directly so benchmark snapshots are never poisoned by stale React closures
+  const buildLiveHarnessSnapshot = (): BenchmarkHarnessSnapshot & Record<string, any> => {
+    const liveScene = activeSceneRef.current;
+    const liveProto = activePrototypeRef.current;
+    const liveMode = railwayPrototypeModeRef.current;
+    const liveRenderOpts = infrastructureRenderOptionsRef.current;
+    const livePreview = infrastructureRenderPreviewRef.current;
+    const liveMap = mapDataRef.current;
+    const sceneMeta =
+      (liveScene?.groundMesh?.userData?.__sceneMeta as SceneRevisionConfigMeta | undefined) || null;
+    const renderedMeta = latestRenderedMetaRef.current;
+
     const railStats =
-      railwayPrototypeMode === 'disabled'
+      liveMode === 'disabled'
         ? {
             meshCount: 0,
             visibleMeshCount: 0,
@@ -718,38 +814,160 @@ export default function App() {
             cpuBufferBytes: 0,
             cpuBufferMB: 0,
           }
-        : builtPrototypeRailways
-          ? computeGroupGeometryStats(builtPrototypeRailways.railwaysGroup)
-          : builtGeometry
-            ? computeGroupGeometryStats(builtGeometry.railwaysGroup)
+        : liveProto
+          ? computeGroupGeometryStats(liveProto.railwaysGroup)
+          : liveScene
+            ? computeGroupGeometryStats(liveScene.railwaysGroup)
             : null;
-    const cpuMem = builtGeometry?.resources.getCpuBufferMemoryStats() || null;
-    const protoCpuBytes = builtPrototypeRailways?.stats.cpuBufferBytes ?? 0;
+    const cpuMem = liveScene?.resources.getCpuBufferMemoryStats() || null;
+    const protoCpuBytes = liveProto?.stats.cpuBufferBytes ?? 0;
     const totalCpuBufferMB = Number(
       (((cpuMem?.totalBytes ?? 0) + protoCpuBytes) / (1024 * 1024)).toFixed(3)
     );
     const totalSceneVertices =
-      (builtGeometry?.stats.totalVertices ?? 0) +
-      (builtPrototypeRailways?.stats.renderedVerticesWithInstances ?? 0);
+      (liveScene?.stats.totalVertices ?? 0) +
+      (liveProto?.stats.renderedVerticesWithInstances ?? 0);
     const totalSceneTriangles =
-      (builtGeometry?.stats.totalTriangles ?? 0) +
-      (builtPrototypeRailways?.stats.renderedTrianglesWithInstances ?? 0);
+      (liveScene?.stats.totalTriangles ?? 0) +
+      (liveProto?.stats.renderedTrianglesWithInstances ?? 0);
     const totalSceneMeshes =
-      (builtGeometry?.stats.totalDrawCalls ?? 0) +
-      (builtPrototypeRailways?.stats.drawCalls ?? 0);
+      (liveScene?.stats.totalDrawCalls ?? 0) + (liveProto?.stats.drawCalls ?? 0);
 
+    const webglFramesRenderedForRevision =
+      sceneMeta && renderedMeta && renderedMeta.revision === sceneMeta.revision
+        ? renderedMeta.webglFramesRendered
+        : (sceneMeta?.webglFramesRendered ?? 0);
+    const needsPrototype = liveMode === 'candidateA' || liveMode === 'candidateB';
+    const isSceneReady = Boolean(
+      liveScene &&
+        sceneMeta &&
+        webglFramesRenderedForRevision >= 1 &&
+        (!needsPrototype || liveProto)
+    );
+
+    return {
+      locationId: sceneMeta?.datasetId ?? activeLocationIdRef.current,
+      regionName: liveMap?.regionName,
+      prototypeMode: sceneMeta?.railwayPrototypeMode ?? liveMode,
+      infrastructureRenderOptions: sceneMeta
+        ? {
+            ...liveRenderOpts,
+            roads: sceneMeta.roadsMode,
+            railways: sceneMeta.railwaysMode,
+          }
+        : liveRenderOpts,
+      infrastructurePreviewStats: livePreview
+        ? {
+            graphBuildTimeMs: livePreview.timing.graphBuildTimeMs,
+            adapterBuildTimeMs: livePreview.timing.adapterBuildTimeMs,
+            validationTimeMs: livePreview.timing.validationTimeMs,
+            totalPreviewTimeMs: livePreview.timing.totalPreviewTimeMs,
+            isValid: livePreview.validation?.isValid ?? false,
+            roadEdgeCount: livePreview.validation?.roadEdgeCount ?? 0,
+            roadNodeCount: livePreview.validation?.roadNodeCount ?? 0,
+            railwayEdgeCount: livePreview.validation?.railwayEdgeCount ?? 0,
+            railwayNodeCount: livePreview.validation?.railwayNodeCount ?? 0,
+          }
+        : null,
+      prototypeOptions: prototypeOptionsRef.current,
+      activeZone: activePrototypeZoneRef.current,
+      themeId: sceneMeta?.themeId ?? selectedThemeIdRef.current,
+      sceneRevision: sceneMeta?.revision ?? null,
+      webglFramesRenderedForRevision,
+      isSceneReady,
+      cpuBuildTimeMs: latestCpuBuildTimeMsRef.current,
+      prototypeBuildTimeMs: liveProto?.stats.buildTimeMs ?? null,
+      prototypeBuildProfile: liveProto?.profile ?? null,
+      constructedMeshesCount: totalSceneMeshes,
+      sceneVertices: totalSceneVertices,
+      sceneTriangles: totalSceneTriangles,
+      cpuBufferMB: totalCpuBufferMB,
+      railwayGroupStats: railStats,
+      graphRoadStats: liveScene?.roadsGroup?.userData?.graphRoadStats ?? null,
+      graphRoadTiming: liveScene?.roadsGroup?.userData?.graphRoadTiming ?? null,
+      liveWebGL: latestTelemetryRef.current,
+    };
+  };
+
+  const handleSceneRevisionRendered = (meta: SceneRevisionConfigMeta) => {
+    latestRenderedMetaRef.current = meta;
+    if (readinessWaitersRef.current.length === 0) return;
+
+    const remaining: typeof readinessWaitersRef.current = [];
+    for (const waiter of readinessWaitersRef.current) {
+      if (waiter.targetRevision !== meta.revision) {
+        remaining.push(waiter);
+        continue;
+      }
+      const snap = buildLiveHarnessSnapshot();
+      const check = validateSceneReadinessSnapshot(snap, waiter.expected);
+      if (check.ready) {
+        clearTimeout(waiter.timer);
+        waiter.resolve();
+      } else {
+        remaining.push(waiter);
+      }
+    }
+    readinessWaitersRef.current = remaining;
+  };
+
+  const waitForSceneReady = (
+    targetRevision: number,
+    expected: ExpectedSceneReadinessSpec,
+    timeoutMs: number = 30000
+  ): Promise<void> => {
+    const existingSnap = buildLiveHarnessSnapshot();
+    const immediateCheck = validateSceneReadinessSnapshot(existingSnap, expected);
+    if (immediateCheck.ready) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        readinessWaitersRef.current = readinessWaitersRef.current.filter(
+          (w) => w.targetRevision !== targetRevision
+        );
+        const finalSnap = buildLiveHarnessSnapshot();
+        const finalCheck = validateSceneReadinessSnapshot(finalSnap, expected);
+        reject(
+          new Error(
+            `Timed out after ${timeoutMs}ms waiting for scene readiness (revision=${targetRevision}): ${finalCheck.reason || 'unknown readiness failure'}`
+          )
+        );
+      }, timeoutMs);
+
+      readinessWaitersRef.current.push({
+        targetRevision,
+        expected,
+        resolve,
+        reject,
+        timer,
+      });
+    });
+  };
+
+  // Expose deterministic M2.1 Prototype Lab & Benchmark Harness API on window
+  useEffect(() => {
     (window as any).__M21_LAB__ = {
-      setMode: (mode: RailwayPrototypeMode) => setRailwayPrototypeMode(mode),
+      setMode: (mode: RailwayPrototypeMode) => {
+        railwayPrototypeModeRef.current = mode;
+        setRailwayPrototypeMode(mode);
+      },
       setInfrastructureRenderOptions: (opts: Partial<InfrastructureRenderOptions>) =>
-        setInfrastructureRenderOptions((prev) =>
-          normalizeInfrastructureRenderOptions({ ...prev, ...opts })
-        ),
-      getInfrastructureRenderOptions: () => infrastructureRenderOptions,
-      getInfrastructureRenderPreview: () => infrastructureRenderPreview,
+        setInfrastructureRenderOptions((prev) => {
+          const next = normalizeInfrastructureRenderOptions({ ...prev, ...opts });
+          infrastructureRenderOptionsRef.current = next;
+          return next;
+        }),
+      getInfrastructureRenderOptions: () => infrastructureRenderOptionsRef.current,
+      getInfrastructureRenderPreview: () => infrastructureRenderPreviewRef.current,
       setPrototypeOptions: (opts: Partial<BuildRailwayPrototypeOptions>) =>
         setPrototypeOptions((prev) => ({ ...prev, ...opts })),
-      getPrototypeOptions: () => prototypeOptions,
-      setTheme: (themeId: string) => setSelectedThemeId(themeId),
+      getPrototypeOptions: () => prototypeOptionsRef.current,
+      setTheme: (themeId: string) => {
+        selectedThemeIdRef.current = themeId;
+        setSelectedThemeId(themeId);
+      },
       setDockCollapsed: (collapsed: boolean) => setIsDockCollapsed(collapsed),
       setActiveTab: (tab: 'layers' | 'inspector' | 'style' | 'stats' | 'info') =>
         setActiveTab(tab),
@@ -773,6 +991,10 @@ export default function App() {
         zoom: number,
         azimuthDeg?: number
       ) => {
+        if (imperativePoseSetterRef.current) {
+          imperativePoseSetterRef.current(target, zoom, azimuthDeg);
+          return;
+        }
         setExplicitPose((prev) => ({
           target,
           zoom,
@@ -786,39 +1008,7 @@ export default function App() {
         zoom?: number,
         azimuthDeg?: number
       ) => jumpToPrototypeZone(zone, zoom, azimuthDeg),
-      getSnapshot: () => ({
-        locationId: activeLocationId,
-        regionName: mapData?.regionName,
-        prototypeMode: railwayPrototypeMode,
-        infrastructureRenderOptions,
-        infrastructurePreviewStats: infrastructureRenderPreview
-          ? {
-              graphBuildTimeMs: infrastructureRenderPreview.timing.graphBuildTimeMs,
-              adapterBuildTimeMs: infrastructureRenderPreview.timing.adapterBuildTimeMs,
-              validationTimeMs: infrastructureRenderPreview.timing.validationTimeMs,
-              totalPreviewTimeMs: infrastructureRenderPreview.timing.totalPreviewTimeMs,
-              isValid: infrastructureRenderPreview.validation?.isValid ?? false,
-              roadEdgeCount: infrastructureRenderPreview.validation?.roadEdgeCount ?? 0,
-              roadNodeCount: infrastructureRenderPreview.validation?.roadNodeCount ?? 0,
-              railwayEdgeCount: infrastructureRenderPreview.validation?.railwayEdgeCount ?? 0,
-              railwayNodeCount: infrastructureRenderPreview.validation?.railwayNodeCount ?? 0,
-            }
-          : null,
-        prototypeOptions,
-        activeZone: activePrototypeZone,
-        themeId: selectedThemeId,
-        cpuBuildTimeMs,
-        prototypeBuildTimeMs: builtPrototypeRailways?.stats.buildTimeMs ?? null,
-        prototypeBuildProfile: builtPrototypeRailways?.profile ?? null,
-        constructedMeshesCount: totalSceneMeshes,
-        sceneVertices: totalSceneVertices,
-        sceneTriangles: totalSceneTriangles,
-        cpuBufferMB: totalCpuBufferMB,
-        railwayGroupStats: railStats,
-        graphRoadStats: builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null,
-        graphRoadTiming: builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null,
-        liveWebGL: latestTelemetryRef.current || liveTelemetry,
-      }),
+      getSnapshot: () => buildLiveHarnessSnapshot(),
       runCameraScenario: async (
         scenarioId:
           | 'overview'
@@ -1021,10 +1211,32 @@ export default function App() {
         azimuthDeg?: number;
       }) => {
         const tTotalStart = performance.now();
+        const targetRevision = ++transitionRevisionRef.current;
+
+        const targetPrototypeMode =
+          params.railwayPrototypeMode ?? railwayPrototypeModeRef.current;
+        const targetRenderOpts = params.infrastructureRenderOptions
+          ? normalizeInfrastructureRenderOptions({
+              ...infrastructureRenderOptionsRef.current,
+              ...params.infrastructureRenderOptions,
+            })
+          : params.roadsMode || params.railwaysMode
+            ? normalizeInfrastructureRenderOptions({
+                roads: params.roadsMode ?? infrastructureRenderOptionsRef.current.roads,
+                railways:
+                  params.railwaysMode ?? infrastructureRenderOptionsRef.current.railways,
+              })
+            : infrastructureRenderOptionsRef.current;
+        const targetThemeId =
+          params.themeId && MAP_THEMES[params.themeId]
+            ? params.themeId
+            : selectedThemeIdRef.current;
+
         setLoading(true);
         setError(null);
         setHoveredFeature(null);
         setSelectedFeature(null);
+        activeLocationIdRef.current = params.datasetId;
         setActiveLocationId(params.datasetId);
 
         const tParseStart = performance.now();
@@ -1038,34 +1250,44 @@ export default function App() {
             );
         const datasetParseMs = Number((performance.now() - tParseStart).toFixed(3));
 
-        if (params.railwayPrototypeMode) {
-          setRailwayPrototypeMode(params.railwayPrototypeMode);
-        }
-        if (params.infrastructureRenderOptions) {
-          setInfrastructureRenderOptions((prev) =>
-            normalizeInfrastructureRenderOptions({
-              ...prev,
-              ...params.infrastructureRenderOptions,
-            })
-          );
-        } else if (params.roadsMode || params.railwaysMode) {
-          setInfrastructureRenderOptions((prev) =>
-            normalizeInfrastructureRenderOptions({
-              roads: params.roadsMode ?? prev.roads,
-              railways: params.railwaysMode ?? prev.railways,
-            })
-          );
-        }
-        if (params.themeId && MAP_THEMES[params.themeId]) {
-          setSelectedThemeId(params.themeId);
-        }
+        const hasFeatures =
+          (parsedData.buildings?.length || 0) +
+            (parsedData.roads?.length || 0) +
+            (parsedData.railways?.length || 0) +
+            (parsedData.waterBodies?.length || 0) +
+            (parsedData.linearWaterways?.length || 0) +
+            (parsedData.parks?.length || 0) +
+            (parsedData.landuse?.length || 0) +
+            (parsedData.barriers?.length || 0) +
+            (parsedData.landmarks?.length || 0) >
+          0;
+
+        pendingTransitionMetaRef.current = {
+          revision: targetRevision,
+          datasetId: params.datasetId,
+          roadsMode: targetRenderOpts.roads,
+          railwaysMode: targetRenderOpts.railways,
+          railwayPrototypeMode: targetPrototypeMode,
+          themeId: targetThemeId,
+          hasFeatures,
+        };
+
+        railwayPrototypeModeRef.current = targetPrototypeMode;
+        setRailwayPrototypeMode(targetPrototypeMode);
+        infrastructureRenderOptionsRef.current = targetRenderOpts;
+        setInfrastructureRenderOptions(targetRenderOpts);
+        selectedThemeIdRef.current = targetThemeId;
+        setSelectedThemeId(targetThemeId);
+
         setCurrentRawGeoJson(params.rawGeoJson ?? null);
+        mapDataRef.current = parsedData;
         setMapData(parsedData);
         setLoading(false);
 
         const target: [number, number, number] = params.target ?? [0, 0, 0];
         const zoom = params.zoom ?? 1.0;
-        const azimuthRad = ((params.azimuthDeg ?? 45) * Math.PI) / 180;
+        const azimuthDeg = params.azimuthDeg ?? 45;
+        const azimuthRad = (azimuthDeg * Math.PI) / 180;
         setExplicitPose((prev) => ({
           target,
           zoom,
@@ -1073,14 +1295,33 @@ export default function App() {
           signal: prev.signal + 1,
         }));
 
-        // Wait for React commit + first WebGL frame render
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        const tRenderStart = performance.now();
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        const firstWebGLRenderMs = Number((performance.now() - tRenderStart).toFixed(3));
-        const totalSceneInitToFirstFrameMs = Number((performance.now() - tTotalStart).toFixed(3));
+        const tReadyWaitStart = performance.now();
+        await waitForSceneReady(targetRevision, {
+          expectedRevision: targetRevision,
+          datasetId: params.datasetId,
+          roadsMode: targetRenderOpts.roads,
+          railwaysMode: targetRenderOpts.railways,
+          railwayPrototypeMode: targetPrototypeMode,
+          themeId: targetThemeId,
+          expectNonEmptyScene: hasFeatures,
+          minWebglFramesRendered: 1,
+        });
+
+        if (imperativePoseSetterRef.current) {
+          imperativePoseSetterRef.current(target, zoom, azimuthDeg);
+        }
+
+        const totalSceneInitToFirstFrameMs = Number(
+          (performance.now() - tTotalStart).toFixed(3)
+        );
         const cpuSceneBuildMs = Number(
           (latestCpuBuildTimeMsRef.current + latestPreviewTimeMsRef.current).toFixed(3)
+        );
+        const firstWebGLRenderMs = Number(
+          Math.max(
+            0,
+            performance.now() - tReadyWaitStart - cpuSceneBuildMs
+          ).toFixed(3)
         );
 
         return {
@@ -1088,22 +1329,51 @@ export default function App() {
           cpuSceneBuildMs,
           firstWebGLRenderMs,
           totalSceneInitToFirstFrameMs,
+          sceneRevision: targetRevision,
         };
       },
       unloadDataset: async () => {
+        const targetRevision = ++transitionRevisionRef.current;
+        const curOpts = infrastructureRenderOptionsRef.current;
+        const curProto = railwayPrototypeModeRef.current;
+        const curTheme = selectedThemeIdRef.current;
+
         setHoveredFeature(null);
         setSelectedFeature(null);
+        activeLocationIdRef.current = 'benchmark_unloaded';
         setActiveLocationId('benchmark_unloaded');
+
         const emptyData = localProvider.parseGeoJson(
           { type: 'FeatureCollection', features: [] },
           'Benchmark Unloaded State',
           [4.9003, 52.3791],
           100
         );
+
+        pendingTransitionMetaRef.current = {
+          revision: targetRevision,
+          datasetId: 'benchmark_unloaded',
+          roadsMode: curOpts.roads,
+          railwaysMode: curOpts.railways,
+          railwayPrototypeMode: curProto,
+          themeId: curTheme,
+          hasFeatures: false,
+        };
+
         setCurrentRawGeoJson(null);
+        mapDataRef.current = emptyData;
         setMapData(emptyData);
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+        await waitForSceneReady(targetRevision, {
+          expectedRevision: targetRevision,
+          datasetId: 'benchmark_unloaded',
+          roadsMode: curOpts.roads,
+          railwaysMode: curOpts.railways,
+          railwayPrototypeMode: curProto,
+          themeId: curTheme,
+          expectNonEmptyScene: false,
+          minWebglFramesRendered: 1,
+        });
       },
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
@@ -1350,6 +1620,9 @@ export default function App() {
                   minZoom={0.15}
                   maxZoom={16.0}
                   explicitPose={explicitPose}
+                  onRegisterImperativePoseSetter={(setter) => {
+                    imperativePoseSetterRef.current = setter;
+                  }}
                   controlsEnabled={!isSpatialSelectActive}
                 />
 
@@ -1365,6 +1638,7 @@ export default function App() {
                     activeSceneRef.current?.updateCameraZoom?.(z);
                     activePrototypeRef.current?.updateCameraZoom(z);
                   }}
+                  onSceneRevisionRendered={handleSceneRevisionRendered}
                   onTelemetryUpdate={(snap) => {
                     latestTelemetryRef.current = snap;
                     if ((window as any).__BENCHMARK_ACTIVE__) return;

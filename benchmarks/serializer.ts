@@ -4,6 +4,7 @@ import {
   BENCHMARK_SCHEMA_VERSION,
   BenchmarkReport,
   SampleStatistics,
+  SUPPORTED_BENCHMARK_SCHEMA_VERSIONS,
 } from './types';
 
 function isValidSampleStats(obj: any): obj is SampleStatistics {
@@ -36,9 +37,13 @@ export function validateBenchmarkReport(raw: unknown): {
 
   const r = raw as Record<string, any>;
 
-  if (r.schemaVersion !== BENCHMARK_SCHEMA_VERSION) {
+  if (
+    !SUPPORTED_BENCHMARK_SCHEMA_VERSIONS.includes(
+      r.schemaVersion as (typeof SUPPORTED_BENCHMARK_SCHEMA_VERSIONS)[number]
+    )
+  ) {
     errors.push(
-      `Invalid or unsupported schemaVersion "${String(r.schemaVersion)}"; expected "${BENCHMARK_SCHEMA_VERSION}".`
+      `Invalid or unsupported schemaVersion "${String(r.schemaVersion)}"; expected one of [${SUPPORTED_BENCHMARK_SCHEMA_VERSIONS.join(', ')}] (current "${BENCHMARK_SCHEMA_VERSION}").`
     );
   }
 
@@ -165,6 +170,29 @@ export function validateBenchmarkReport(raw: unknown): {
                 `browserResults[${idx}].scenarios[${sIdx}].renderedTrianglesPerFrame is invalid.`
               );
             }
+            if (r.schemaVersion === '1.1.0') {
+              const wr = sc?.webglResources;
+              if (!wr || typeof wr !== 'object') {
+                errors.push(
+                  `browserResults[${idx}].scenarios[${sIdx}].webglResources is missing.`
+                );
+              } else {
+                if (
+                  wr.railwayVisibilityStatus !== 'measured' &&
+                  wr.railwayVisibilityStatus !== 'unavailable' &&
+                  wr.railwayVisibilityStatus !== 'disabled_by_config'
+                ) {
+                  errors.push(
+                    `browserResults[${idx}].scenarios[${sIdx}].webglResources.railwayVisibilityStatus is invalid.`
+                  );
+                }
+                if (typeof wr.staticRailwayMeshes !== 'number') {
+                  errors.push(
+                    `browserResults[${idx}].scenarios[${sIdx}].webglResources.staticRailwayMeshes must be a number.`
+                  );
+                }
+              }
+            }
           });
         }
       });
@@ -263,26 +291,32 @@ export function formatBenchmarkReportSummary(report: BenchmarkReport): string {
 
   if (report.suite === 'browser' && report.browserResults) {
     lines.push(
-      '| Dataset | Config | Scenario | Frame Int Med/p95/p99 (ms) | CPU Render Med/p95 (ms) | GPU Timer (ms) | Draw Calls Med | Rendered Tris Med | Driver Geos/Tex | JS Heap (MB) |'
+      '| Dataset | Config | Scenario | Frame Int Med/p95/p99 (ms) | FPS Med | CPU Render Med/p95 (ms) | GPU Timer (ms) | Draw Calls Med | Rendered Tris Med | Rail Vis (Act/Cull/Static) | Driver Geos/Tex | JS Heap (MB) |'
     );
-    lines.push('|---|---|---|---:|---:|---:|---:|---:|---:|---:|');
+    lines.push('|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|');
     for (const w of report.browserResults) {
       for (const sc of w.scenarios) {
         const fi = sc.frameIntervalMs;
         const cr = sc.cpuFrameRenderTimeMs;
+        const fpsMed = sc.effectiveMedianFps.toFixed(1);
         const gpuStr =
           sc.gpuFrameRenderTimeMs.status === 'supported' && sc.gpuFrameRenderTimeMs.statistics
             ? `${sc.gpuFrameRenderTimeMs.statistics.median.toFixed(2)} (p95 ${sc.gpuFrameRenderTimeMs.statistics.p95.toFixed(2)})`
             : `[${sc.gpuFrameRenderTimeMs.status}]`;
         const dc = sc.webglDrawCallsPerFrame.median.toFixed(0);
         const tris = Math.round(sc.renderedTrianglesPerFrame.median).toLocaleString();
-        const drv = `${sc.webglResources.driverGeometries}/${sc.webglResources.driverTextures}`;
+        const wr = sc.webglResources;
+        const railVis =
+          wr.railwayVisibilityStatus === 'unavailable'
+            ? `[unavailable] / ${wr.staticRailwayMeshes ?? '?'}`
+            : `${wr.activeRailwayMeshes ?? 'null'}/${wr.frustumCulledRailwayMeshes ?? 'null'}/${wr.staticRailwayMeshes ?? 'n/a'}`;
+        const drv = `${wr.driverGeometries}/${wr.driverTextures}`;
         const heap =
           sc.browserMemoryMB.supported && sc.browserMemoryMB.usedJSHeapSizeMB !== null
             ? sc.browserMemoryMB.usedJSHeapSizeMB.toFixed(1)
             : 'unsupported';
         lines.push(
-          `| ${w.dataset.id} | \`${w.rendererConfig.id}\` | \`${sc.scenarioId}\` | ${fi.median.toFixed(2)} / ${fi.p95.toFixed(2)} / ${fi.p99.toFixed(2)} | ${cr.median.toFixed(2)} / ${cr.p95.toFixed(2)} | ${gpuStr} | ${dc} | ${tris} | ${drv} | ${heap} |`
+          `| ${w.dataset.id} | \`${w.rendererConfig.id}\` | \`${sc.scenarioId}\` | ${fi.median.toFixed(2)} / ${fi.p95.toFixed(2)} / ${fi.p99.toFixed(2)} | ${fpsMed} | ${cr.median.toFixed(2)} / ${cr.p95.toFixed(2)} | ${gpuStr} | ${dc} | ${tris} | ${railVis} | ${drv} | ${heap} |`
         );
       }
     }

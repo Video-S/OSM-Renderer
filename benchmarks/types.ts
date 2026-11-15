@@ -16,6 +16,24 @@ export const SUPPORTED_BENCHMARK_SCHEMA_VERSIONS = ['1.0.0', '1.1.0'] as const;
 
 export type BenchmarkSuiteKind = 'cpu' | 'browser';
 
+export type ChromiumGpuBackend =
+  | 'auto'
+  | 'd3d11'
+  | 'vulkan'
+  | 'opengl'
+  | 'metal'
+  | 'swiftshader'
+  | 'default';
+
+export type GitMetadataStatus =
+  | 'available'
+  | 'ci_env_only'
+  | 'unborn_head'
+  | 'not_a_git_repository'
+  | 'git_unavailable'
+  | 'dubious_ownership'
+  | 'error';
+
 export type BenchmarkDatasetScale =
   | 'small-real-world'
   | 'medium-real-world'
@@ -54,6 +72,9 @@ export interface BenchmarkErrorRecord {
 export interface BenchmarkEnvironmentMetadata {
   gitCommitSha: string;
   gitDirty: boolean;
+  gitBranch?: string | null;
+  gitMetadataStatus?: GitMetadataStatus;
+  gitMetadataReason?: string;
   timestampIso: string;
   nodeVersion: string;
   v8Version: string;
@@ -76,6 +97,7 @@ export interface BenchmarkEnvironmentMetadata {
     gpuRenderer: string;
     isSoftwareRenderer: boolean;
     useSwiftShader?: boolean;
+    gpuBackendRequested?: ChromiumGpuBackend;
     hardwareAccelerationRequested: boolean;
     launchFlags: string[];
   };

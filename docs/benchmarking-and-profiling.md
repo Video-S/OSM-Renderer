@@ -15,6 +15,7 @@ This document describes the reproducible performance benchmarking infrastructure
   ```
   - Do **not** use `--force` or `--legacy-peer-deps`. (`esbuild@^0.28.0` and `playwright` are declared in `package.json`, and stale Linux-only lockfiles are excluded so npm resolves platform-specific native packages such as `@rolldown/binding-win32-x64-msvc` and `@tailwindcss/oxide-win32-x64-msvc` cleanly on Windows.)
   - `benchmarks/cliAndServer.ts` spawns the local `tsx` entrypoint directly via `process.execPath` (`node.exe` on Windows) without calling `npx`, preventing `spawn npx ENOENT` failures.
+  - **CLI Argument Passing Note (`npx tsx` vs. `npm run`)**: Zero-argument defaults work via `npm run bench:cpu` and `npm run bench:browser`. Whenever passing CLI flags (especially on **Windows PowerShell**, where unquoted `--` is consumed by PowerShell as an end-of-parameters token causing `npm` to swallow `--out` and other flags), invoke `npx tsx` directly (`npx tsx benchmarks/cpuRunner.ts ...`, `npx tsx benchmarks/browserRunner.ts ...`, `npx tsx benchmarks/compare.ts ...`).
 
 ### 1.2 Module Responsibilities
 
@@ -54,23 +55,36 @@ All benchmark datasets are stored locally in the repository and verified via SHA
 
 ### 3.1 CPU Benchmarks (`npm run bench:cpu`)
 
-Runs in Node.js without requiring a browser or GPU. Directly measures each pipeline stage with warm-up iterations, multiple measured iterations, and explicit resource disposal verification after every run:
+Runs in Node.js without requiring a browser or GPU. Directly measures each pipeline stage with warm-up iterations, multiple measured iterations, and explicit resource disposal verification after every run.
 
+**Bash / macOS / Linux:**
 ```bash
 # Run full CPU benchmark suite across all frozen datasets and renderer configs
 # Saves report to benchmarks/baselines/cpu-baseline.json
 npm run bench:cpu
 
-# Run a fast subset (e.g. during iterative development)
-npm run bench:cpu -- --quick --out benchmarks/results/cpu-candidate.json
+# Run a fast subset with explicit flags via direct tsx execution
+npx tsx benchmarks/cpuRunner.ts --quick --out=benchmarks/results/cpu-candidate.json
 
 # Filter specific datasets, renderer configurations, or sample counts
-npm run bench:cpu -- \
+npx tsx benchmarks/cpuRunner.ts \
   --datasets=small-real-europatunnel,large-real-amsterdam-centraal \
   --configs=production-legacy,surface-first-e2plus-rplus \
   --warmup=2 \
   --iterations=7 \
   --out=benchmarks/results/cpu-custom.json
+```
+
+**Windows PowerShell:**
+```powershell
+# Default full CPU suite (no CLI flags)
+npm run bench:cpu
+
+# Passing flags on Windows PowerShell (use direct npx tsx execution so PowerShell/npm do not swallow flags)
+npx tsx benchmarks/cpuRunner.ts "--out=benchmarks/results/tkt017-cpu.json"
+
+# Quick CPU subset
+npx tsx benchmarks/cpuRunner.ts --quick "--out=benchmarks/results/cpu-candidate.json"
 ```
 
 **Measured CPU Stages (`CpuPipelineStageTimings`):**
@@ -87,7 +101,10 @@ npm run bench:cpu -- \
 
 Launches Chromium via Playwright, starts or connects to the local application server (`/?benchmark=1&dock=collapsed`), blocks external network requests, waits for deterministic WebGL scene readiness (`validateSceneReadinessSnapshot`), and executes deterministic camera and lifecycle scenarios through the real Three.js / React Three Fiber rendering pipeline.
 
-By default, Chromium launches **without** SwiftShader flags so hardware GPUs (e.g., NVIDIA RTX, AMD, Apple Silicon) are used automatically when present:
+GPU backend selection (`resolveChromiumLaunchArgs` in `benchmarks/browserRunner.ts`):
+- **`--gpu-backend=auto` (default)**: On **Windows (`win32`)**, selects ANGLE Direct3D 11 (`--use-gl=angle`, `--use-angle=d3d11`) so hardware GPUs (NVIDIA/AMD/Intel) are used reliably instead of falling back to SwiftShader. On **Linux and macOS**, applies no Windows-specific ANGLE flags so native hardware WebGL drivers are used when available.
+- **Explicit backends**: Pass `--gpu-backend=<auto|d3d11|vulkan|opengl|metal|swiftshader|default>` (or set `BENCH_GPU_BACKEND`) to test a specific backend or `default` (unmodified Chromium default).
+- **Explicit software fallback**: Pass `--swiftshader` (or `--gpu-backend=swiftshader`) to force SwiftShader software rendering in headless CI. Cannot be combined with `--require-hardware`.
 
 **Bash / macOS / Linux:**
 ```bash
@@ -95,13 +112,13 @@ By default, Chromium launches **without** SwiftShader flags so hardware GPUs (e.
 npm run bench:browser
 
 # Run a quick verification pass with hardware GPU required (fails if Chromium falls back to software)
-npm run bench:browser -- --quick --require-hardware --out benchmarks/results/hardware-gpu.json
+npx tsx benchmarks/browserRunner.ts --quick --require-hardware --out=benchmarks/results/hardware-gpu.json
 
 # Explicitly force SwiftShader software rasterization (useful in headless CI containers)
-npm run bench:browser -- --quick --swiftshader --no-save
+npx tsx benchmarks/browserRunner.ts --quick --swiftshader --no-save
 
 # Run headed (visible browser window) and filter specific datasets, configs, or scenarios
-npm run bench:browser -- \
+npx tsx benchmarks/browserRunner.ts \
   --headed \
   --datasets=small-real-europatunnel,large-real-amsterdam-centraal \
   --configs=production-legacy,surface-first-e2plus-rplus \
@@ -112,14 +129,17 @@ npm run bench:browser -- \
 ```
 
 **Windows PowerShell:**
-> Note: PowerShell splits unquoted comma-separated tokens into separate arguments. Quote comma lists (`"a,b"`), use space-separated values, or repeat `--scenario` / `--dataset` flags—all three forms are supported by `cliAndServer.ts`.
+> Note: Use direct `npx tsx` execution when passing flags in PowerShell (do not use `npm run bench:browser -- --out ...`, because PowerShell consumes unquoted `--` before `npm` sees it). PowerShell also splits unquoted comma-separated tokens, so quote comma lists (`"a,b"`) or use space-separated values / repeated flags.
 
 ```powershell
-# Hardware GPU validation run on Windows (RTX / Intel / AMD GPU)
-npm run bench:browser -- --quick --require-hardware --out benchmarks/results/hardware-rtx4060ti.json
+# Hardware GPU smoke test on Windows (uses ANGLE Direct3D 11 by default)
+npx tsx benchmarks/browserRunner.ts --datasets=synthetic-stress-urban-switchyard --configs=production-legacy --scenarios=static_overview --warmup-frames=10 --measured-frames=60 --require-hardware "--out=benchmarks/results/hardware-smoke.json"
 
-# Filter datasets and scenarios (quoted comma list OR space-separated)
-npm run bench:browser -- --datasets "small-real-europatunnel,synthetic-stress-urban-switchyard" --scenarios static_overview automated_pan_sweep --out benchmarks/results/browser-ps.json
+# Quick hardware GPU validation run on Windows (RTX / Intel / AMD GPU)
+npx tsx benchmarks/browserRunner.ts --quick --require-hardware "--out=benchmarks/results/hardware-rtx4060ti.json"
+
+# Filter datasets and scenarios (quoted comma list OR space-separated) and optionally override backend
+npx tsx benchmarks/browserRunner.ts --datasets "small-real-europatunnel,synthetic-stress-urban-switchyard" --scenarios static_overview automated_pan_sweep --gpu-backend=d3d11 --require-hardware "--out=benchmarks/results/browser-ps.json"
 ```
 
 **Deterministic Browser Scenarios (`BrowserScenarioKind`):**
@@ -129,18 +149,18 @@ npm run bench:browser -- --datasets "small-real-europatunnel,synthetic-stress-ur
 4. `zoom_and_orbit_sweep`: Simultaneous zoom (`1.2` to `8.5`) and `270°` azimuth orbit sweep exercising LOD transitions (`4.5 CSS px/m`) and frustum culling.
 5. `repeated_scene_reload`: Repeatedly unloads and reloads the dataset on the same WebGL2 context and audits `gl.info.memory.geometries` and `gl.info.memory.textures` for GPU resource leaks (`reloadLifecycleAudit`).
 
-### 3.3 Comparing Baseline and Candidate Reports (`npm run bench:compare`)
+### 3.3 Comparing Baseline and Candidate Reports (`npx tsx benchmarks/compare.ts`)
 
 Compares two JSON benchmark reports (`cpu` vs. `cpu` or `browser` vs. `browser`), verifies dataset hash and environment compatibility, computes absolute and percentage deltas, and flags regressions exceeding both the percentage threshold and the minimum absolute noise floor:
 
 ```bash
 # Compare two reports and print a human-readable summary table
-npm run bench:compare -- \
+npx tsx benchmarks/compare.ts \
   benchmarks/baselines/cpu-baseline.json \
   benchmarks/results/cpu-candidate.json
 
 # Save structured JSON comparison report and exit non-zero on regression or incompatibility
-npm run bench:compare -- \
+npx tsx benchmarks/compare.ts \
   benchmarks/baselines/cpu-baseline.json \
   benchmarks/results/cpu-candidate.json \
   --out=benchmarks/results/cpu-comparison.json \
@@ -174,10 +194,11 @@ Do not conflate these four distinct measurements:
 - **`cpuBufferMemory` (`totalBytes` / `totalMB`)**: Deterministic sum of all typed-array (`Float32Array`, `Uint16Array`, `Uint32Array`) vertex attributes, index buffers, and instance matrices tracked by `SceneResourceManager`. This metric is **100% deterministic** for a fixed dataset and algorithm and serves as the primary memory regression gate (`cpuBufferMemoryPct: 5%`).
 - **`v8HeapMemory` / `browserMemoryMB`**: Collected via `process.memoryUsage()` in Node.js (calling `global.gc()` between runs when `--expose-gc` is enabled) and `performance.memory` in Chromium. Because V8 garbage collection is generational and asynchronous, `heapUsedDeltaMB` and `usedJSHeapSizeMB` are **advisory** and subject to background GC timing.
 
-### 4.4 Hardware GPU vs. Software Rasterization (`SwiftShader`)
-- Hardware GPU acceleration is enabled by default (no `--use-gl=angle` / `--use-angle=swiftshader` flags unless `--swiftshader` is explicitly passed).
-- In headless Linux CI/container environments without a hardware GPU driver, Chromium automatically falls back to SwiftShader (`ANGLE (..., SwiftShader driver)`). Use `--require-hardware` on developer/GPU machines to guarantee that software fallback fails loudly rather than silently producing invalid GPU conclusions.
+### 4.4 Hardware GPU vs. Software Rasterization (`SwiftShader`) & Reproducibility Metadata
+- On Windows (`win32`), `--gpu-backend=auto` (default) launches Chromium with `--use-gl=angle --use-angle=d3d11` so discrete/integrated GPUs are selected cleanly; Linux and macOS use native Chromium defaults unless overridden via `--gpu-backend=<d3d11|vulkan|opengl|metal|swiftshader|default>`.
+- In headless Linux CI/container environments without a hardware GPU driver, Chromium automatically falls back to SwiftShader (`ANGLE (..., SwiftShader driver)`). Pass `--require-hardware` on GPU machines to guarantee that software fallback fails loudly rather than silently producing invalid GPU conclusions.
 - `compareBenchmarkReports` rejects comparisons that mix schema versions (`1.0.0` vs `1.1.0`) or hardware GPU baselines with software-rendered candidates (`compatible: false`), and emits a warning if two hardware runs use different GPU models. Always compare matching hardware baselines on the same GPU host class.
+- **Git Reproducibility Metadata (`resolveGitState`)**: Captures `gitCommitSha`, `gitDirty`, `gitBranch`, `gitMetadataStatus`, and `gitMetadataReason`. When `.git` metadata is absent (`not_a_git_repository`), `HEAD` has no commits yet (`unborn_head`), `git` is missing (`git_unavailable`), or Windows `safe.directory` triggers (`dubious_ownership`), the exact status and diagnostic reason are recorded without ever fabricating a commit hash (falling back to validated `GITHUB_SHA` / `CI_COMMIT_SHA` only when present as `ci_env_only`).
 
 ---
 

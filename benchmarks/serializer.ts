@@ -249,18 +249,24 @@ export function loadBenchmarkReport(filePath: string): BenchmarkReport {
  */
 export function formatBenchmarkReportSummary(report: BenchmarkReport): string {
   const lines: string[] = [];
+  const env = report.environment;
+  const gitStatusNote =
+    env.gitMetadataStatus && env.gitMetadataStatus !== 'available'
+      ? ` [${env.gitMetadataStatus}${env.gitMetadataReason ? `: ${env.gitMetadataReason}` : ''}]`
+      : '';
   lines.push(`=== ${report.benchmarkName} (Schema v${report.schemaVersion}) ===`);
   lines.push(
-    `Commit: ${report.environment.gitCommitSha}${report.environment.gitDirty ? ' (dirty)' : ''} | Timestamp: ${report.environment.timestampIso}`
+    `Commit: ${env.gitCommitSha}${env.gitDirty ? ' (dirty)' : ''}${gitStatusNote} | Timestamp: ${env.timestampIso}`
   );
   lines.push(
-    `Host: ${report.environment.platform} (${report.environment.arch}) | CPU: ${report.environment.cpuModel} (${report.environment.cpuLogicalCores} cores) | Node: ${report.environment.nodeVersion} | GC Exposed: ${report.environment.gcExposed}`
+    `Host: ${env.platform} (${env.arch}) | CPU: ${env.cpuModel} (${env.cpuLogicalCores} cores) | Node: ${env.nodeVersion} | GC Exposed: ${env.gcExposed}`
   );
 
-  if (report.environment.browser) {
-    const b = report.environment.browser;
+  if (env.browser) {
+    const b = env.browser;
+    const backendLabel = b.gpuBackendRequested ? ` | Backend: ${b.gpuBackendRequested}` : '';
     lines.push(
-      `Browser: ${b.browserName} ${b.browserVersion} | Viewport: ${b.viewportWidth}x${b.viewportHeight} @ ${b.devicePixelRatio}x DPR`
+      `Browser: ${b.browserName} ${b.browserVersion}${backendLabel} | Viewport: ${b.viewportWidth}x${b.viewportHeight} @ ${b.devicePixelRatio}x DPR`
     );
     lines.push(
       `WebGL GPU: ${b.gpuRenderer} [${b.isSoftwareRenderer ? 'SOFTWARE RASTERIZER (SwiftShader/Mesa)' : 'HARDWARE ACCELERATED'}]`

@@ -3,7 +3,7 @@ import * as http from 'node:http';
 import * as net from 'node:net';
 import * as path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   BENCHMARK_SCHEMA_VERSION,
   type BenchmarkErrorRecord,
@@ -12,6 +12,7 @@ import {
   type BrowserScenarioResult,
   type BrowserScenarioSpec,
   type BrowserWorkloadBenchmarkResult,
+  type ChromiumGpuBackend,
   type UnsupportedMetricNotice,
 } from './types';
 import { computeSampleStatistics } from './stats';
@@ -34,6 +35,7 @@ import {
 import {
   buildLocalServerSpawnSpec,
   parseBrowserRunnerCliArgs,
+  parseChromiumGpuBackend,
   terminateChildProcessTree,
 } from './cliAndServer';
 import {
@@ -58,6 +60,7 @@ export interface BrowserBenchmarkRunnerOptions {
   serverUrl?: string;
   headless?: boolean;
   useSwiftShader?: boolean;
+  gpuBackend?: ChromiumGpuBackend;
   requireHardwareGpu?: boolean;
   outputPath?: string;
   quiet?: boolean;
@@ -88,9 +91,29 @@ export interface RawScenarioBrowserPayload {
   };
 }
 
-export function resolveChromiumLaunchArgs(options: {
-  useSwiftShader?: boolean;
-}): string[] {
+export function resolveChromiumLaunchArgs(
+  options: {
+    useSwiftShader?: boolean;
+    gpuBackend?: ChromiumGpuBackend;
+    platform?: NodeJS.Platform;
+  } = {}
+): string[] {
+  const platform = options.platform ?? process.platform;
+  const requestedBackend = options.gpuBackend ?? 'auto';
+  if (
+    options.useSwiftShader &&
+    requestedBackend !== 'auto' &&
+    requestedBackend !== 'swiftshader'
+  ) {
+    throw new Error(
+      `Cannot combine useSwiftShader=true with hardware GPU backend "${requestedBackend}".`
+    );
+  }
+
+  const effectiveBackend: ChromiumGpuBackend = options.useSwiftShader
+    ? 'swiftshader'
+    : requestedBackend;
+
   const args = [
     '--enable-webgl',
     '--ignore-gpu-blocklist',
@@ -99,9 +122,34 @@ export function resolveChromiumLaunchArgs(options: {
     '--disable-backgrounding-occluded-windows',
     '--enable-precise-memory-info',
   ];
-  if (options.useSwiftShader) {
-    args.unshift('--use-gl=angle', '--use-angle=swiftshader');
+
+  const resolvedAngleBackend: Exclude<ChromiumGpuBackend, 'auto'> =
+    effectiveBackend === 'auto'
+      ? platform === 'win32'
+        ? 'd3d11'
+        : 'default'
+      : effectiveBackend;
+
+  switch (resolvedAngleBackend) {
+    case 'swiftshader':
+      args.unshift('--use-gl=angle', '--use-angle=swiftshader');
+      break;
+    case 'd3d11':
+      args.unshift('--use-gl=angle', '--use-angle=d3d11');
+      break;
+    case 'vulkan':
+      args.unshift('--use-gl=angle', '--use-angle=vulkan');
+      break;
+    case 'opengl':
+      args.unshift('--use-gl=angle', '--use-angle=gl');
+      break;
+    case 'metal':
+      args.unshift('--use-gl=angle', '--use-angle=metal');
+      break;
+    case 'default':
+      break;
   }
+
   return args;
 }
 
@@ -472,13 +520,20 @@ export async function runBrowserBenchmarks(
   const devicePixelRatio = options.devicePixelRatio ?? 1;
   const headless = options.headless ?? true;
   const useSwiftShader = options.useSwiftShader ?? false;
+  const envBackend = process.env.BENCH_GPU_BACKEND
+    ? parseChromiumGpuBackend(process.env.BENCH_GPU_BACKEND)
+    : undefined;
+  const gpuBackend: ChromiumGpuBackend = options.gpuBackend ?? envBackend ?? 'auto';
   const requireHardwareGpu = options.requireHardwareGpu ?? false;
 
   if (useSwiftShader && requireHardwareGpu) {
     throw new Error('Cannot combine useSwiftShader=true with requireHardwareGpu=true.');
   }
+  if (gpuBackend === 'swiftshader' && requireHardwareGpu) {
+    throw new Error('Cannot combine gpuBackend="swiftshader" with requireHardwareGpu=true.');
+  }
 
-  const launchFlags = resolveChromiumLaunchArgs({ useSwiftShader });
+  const launchFlags = resolveChromiumLaunchArgs({ useSwiftShader, gpuBackend });
 
   const { baseUrl, stopServer } = await ensureLocalBenchmarkServer(options.serverUrl);
   const playwright = await loadPlaywrightModule();
@@ -591,6 +646,7 @@ export async function runBrowserBenchmarks(
       );
     }
 
+    const effectiveSwiftShader = useSwiftShader || gpuBackend === 'swiftshader';
     const environment = collectHostEnvironmentMetadata({
       browserName: 'Chromium',
       browserVersion: browser.version(),
@@ -602,8 +658,9 @@ export async function runBrowserBenchmarks(
       gpuVendor: browserEnvInfo.gpuVendor,
       gpuRenderer: browserEnvInfo.gpuRenderer,
       isSoftwareRenderer: isSoftware,
-      useSwiftShader,
-      hardwareAccelerationRequested: !useSwiftShader,
+      useSwiftShader: effectiveSwiftShader,
+      gpuBackendRequested: effectiveSwiftShader ? 'swiftshader' : gpuBackend,
+      hardwareAccelerationRequested: !effectiveSwiftShader,
       launchFlags,
     });
 
@@ -983,9 +1040,8 @@ export async function runBrowserBenchmarks(
 const isMainModule =
   typeof process !== 'undefined' &&
   Array.isArray(process.argv) &&
-  process.argv[1] &&
-  (process.argv[1].endsWith('benchmarks/browserRunner.ts') ||
-    process.argv[1].endsWith('benchmarks\\browserRunner.ts'));
+  Boolean(process.argv[1]) &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
 if (isMainModule) {
   try {

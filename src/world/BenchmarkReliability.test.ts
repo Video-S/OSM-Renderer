@@ -1,5 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as THREE from 'three';
 import {
@@ -9,6 +12,7 @@ import {
   parseBrowserRunnerCliArgs,
   parseCpuRunnerCliArgs,
   resolveChromiumLaunchArgs,
+  resolveGitState,
   resolveTsxCliPath,
   type RawScenarioBrowserPayload,
 } from '../../benchmarks/index';
@@ -726,14 +730,156 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         'Server spawn must never rely on npx.cmd'
       );
 
-      const defaultFlags = resolveChromiumLaunchArgs({ useSwiftShader: false });
-      assert.equal(defaultFlags.includes('--use-angle=swiftshader'), false);
-      assert.equal(defaultFlags.includes('--use-gl=angle'), false);
-      assert.equal(defaultFlags.includes('--enable-webgl'), true);
+      const winDefaultFlags = resolveChromiumLaunchArgs({
+        useSwiftShader: false,
+        platform: 'win32',
+      });
+      assert.equal(winDefaultFlags.includes('--use-gl=angle'), true);
+      assert.equal(winDefaultFlags.includes('--use-angle=d3d11'), true);
+      assert.equal(winDefaultFlags.includes('--use-angle=swiftshader'), false);
+      assert.equal(winDefaultFlags.includes('--enable-webgl'), true);
 
-      const swiftFlags = resolveChromiumLaunchArgs({ useSwiftShader: true });
-      assert.equal(swiftFlags.includes('--use-angle=swiftshader'), true);
-      assert.equal(swiftFlags.includes('--use-gl=angle'), true);
+      const linuxDefaultFlags = resolveChromiumLaunchArgs({
+        useSwiftShader: false,
+        platform: 'linux',
+      });
+      assert.equal(linuxDefaultFlags.includes('--use-angle=d3d11'), false);
+      assert.equal(linuxDefaultFlags.includes('--use-angle=swiftshader'), false);
+      assert.equal(linuxDefaultFlags.includes('--use-gl=angle'), false);
+      assert.equal(linuxDefaultFlags.includes('--enable-webgl'), true);
+
+      const macDefaultFlags = resolveChromiumLaunchArgs({
+        useSwiftShader: false,
+        platform: 'darwin',
+      });
+      assert.equal(macDefaultFlags.includes('--use-angle=d3d11'), false);
+      assert.equal(macDefaultFlags.includes('--use-gl=angle'), false);
+
+      const winSwiftFlags = resolveChromiumLaunchArgs({
+        useSwiftShader: true,
+        platform: 'win32',
+      });
+      assert.equal(winSwiftFlags.includes('--use-angle=swiftshader'), true);
+      assert.equal(winSwiftFlags.includes('--use-angle=d3d11'), false);
+      assert.equal(winSwiftFlags.includes('--use-gl=angle'), true);
+
+      const linuxSwiftFlags = resolveChromiumLaunchArgs({
+        useSwiftShader: true,
+        platform: 'linux',
+      });
+      assert.equal(linuxSwiftFlags.includes('--use-angle=swiftshader'), true);
+      assert.equal(linuxSwiftFlags.includes('--use-gl=angle'), true);
+
+      // Configurable backends override platform defaults cleanly
+      assert.equal(
+        resolveChromiumLaunchArgs({ gpuBackend: 'vulkan', platform: 'linux' }).includes(
+          '--use-angle=vulkan'
+        ),
+        true
+      );
+      assert.equal(
+        resolveChromiumLaunchArgs({ gpuBackend: 'opengl', platform: 'win32' }).includes(
+          '--use-angle=gl'
+        ),
+        true
+      );
+      assert.equal(
+        resolveChromiumLaunchArgs({ gpuBackend: 'default', platform: 'win32' }).includes(
+          '--use-gl=angle'
+        ),
+        false
+      );
+
+      // CLI parsing for --gpu-backend and mutual exclusion with --require-hardware / --swiftshader
+      const parsedBackend = parseBrowserRunnerCliArgs([
+        '--gpu-backend=d3d11',
+        '--require-hardware',
+      ]);
+      assert.equal(parsedBackend.gpuBackend, 'd3d11');
+      assert.equal(parsedBackend.requireHardwareGpu, true);
+
+      assert.throws(
+        () => parseBrowserRunnerCliArgs(['--gpu-backend=swiftshader', '--require-hardware']),
+        /Cannot combine --gpu-backend=swiftshader and --require-hardware/
+      );
+      assert.throws(
+        () => parseBrowserRunnerCliArgs(['--swiftshader', '--gpu-backend=d3d11']),
+        /Cannot combine --swiftshader with hardware GPU backend/
+      );
+      assert.throws(
+        () => parseBrowserRunnerCliArgs(['--gpu-backend=invalid-backend']),
+        /Unsupported --gpu-backend/
+      );
+    });
+  });
+
+  describe('9. Git Reproducibility Metadata Resolution', () => {
+    it('reports available commits, unborn HEAD, CI env SHAs, and non-git directories honestly without fabricating metadata', () => {
+      const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'osm-git-meta-test-'));
+      try {
+        // 1. Non-git workspace without CI env -> explicit not_a_git_repository status
+        const nonGitDir = path.join(tmpRoot, 'non-git');
+        fs.mkdirSync(nonGitDir, { recursive: true });
+        const nonGitState = resolveGitState(nonGitDir, {
+          env: {},
+          disableRepoRootFallback: true,
+        });
+        assert.equal(nonGitState.gitCommitSha, 'unknown');
+        assert.equal(nonGitState.gitDirty, false);
+        assert.equal(nonGitState.gitMetadataStatus, 'not_a_git_repository');
+        assert.match(nonGitState.gitMetadataReason || '', /No \.git repository metadata/i);
+
+        // 2. Non-git workspace with CI commit SHA -> ci_env_only without inventing dirty flag
+        const ciState = resolveGitState(nonGitDir, {
+          env: { GITHUB_SHA: '0123456789abcdef0123456789abcdef01234567', GITHUB_REF_NAME: 'main' },
+          disableRepoRootFallback: true,
+        });
+        assert.equal(ciState.gitCommitSha, '0123456789ab');
+        assert.equal(ciState.gitBranch, 'main');
+        assert.equal(ciState.gitDirty, false);
+        assert.equal(ciState.gitMetadataStatus, 'ci_env_only');
+
+        // 3. Initialized git repository with unborn HEAD and untracked file
+        const repoDir = path.join(tmpRoot, 'git-repo');
+        fs.mkdirSync(repoDir, { recursive: true });
+        execFileSync('git', ['init'], { cwd: repoDir, stdio: 'ignore' });
+        fs.writeFileSync(path.join(repoDir, 'sample.txt'), 'initial\n', 'utf8');
+
+        const unbornState = resolveGitState(repoDir, {
+          env: {},
+          disableRepoRootFallback: true,
+        });
+        assert.equal(unbornState.gitCommitSha, 'unborn-head');
+        assert.equal(unbornState.gitDirty, true);
+        assert.equal(unbornState.gitMetadataStatus, 'unborn_head');
+
+        // 4. Committed repository (clean -> available, then modified -> dirty)
+        execFileSync('git', ['add', 'sample.txt'], { cwd: repoDir, stdio: 'ignore' });
+        execFileSync(
+          'git',
+          ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'init'],
+          { cwd: repoDir, stdio: 'ignore' }
+        );
+
+        const cleanState = resolveGitState(repoDir, {
+          env: {},
+          disableRepoRootFallback: true,
+        });
+        assert.match(cleanState.gitCommitSha, /^[a-f0-9]{12}$/);
+        assert.equal(cleanState.gitDirty, false);
+        assert.equal(cleanState.gitMetadataStatus, 'available');
+
+        fs.writeFileSync(path.join(repoDir, 'sample.txt'), 'modified\n', 'utf8');
+        const dirtyState = resolveGitState(repoDir, {
+          env: {},
+          disableRepoRootFallback: true,
+        });
+        assert.equal(dirtyState.gitCommitSha, cleanState.gitCommitSha);
+        assert.equal(dirtyState.gitDirty, true);
+        assert.equal(dirtyState.gitMetadataStatus, 'available');
+      } finally {
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      }
     });
   });
 });

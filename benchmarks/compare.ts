@@ -1,3 +1,4 @@
+import fsMod from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -663,7 +664,7 @@ if (isMainModule) {
 
   if (!baselinePath || !candidatePath) {
     console.error(
-      'Usage: npm run bench:compare -- <baseline-report.json> <candidate-report.json> [--out comparison.json] [--fail-on-regression]'
+      'Usage: npx tsx benchmarks/compare.ts <baseline-report.json> <candidate-report.json> [--out=comparison.json] [--fail-on-regression]'
     );
     process.exit(1);
   }
@@ -675,7 +676,6 @@ if (isMainModule) {
     console.log(formatComparisonReportSummary(comparison));
 
     if (outPath) {
-      const fsMod = await import('node:fs');
       const resolvedOut = path.resolve(outPath);
       fsMod.mkdirSync(path.dirname(resolvedOut), { recursive: true });
       fsMod.writeFileSync(resolvedOut, JSON.stringify(comparison, null, 2) + '\n', 'utf8');

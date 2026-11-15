@@ -100,19 +100,18 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Windows Hardware Validation)
+## Verified Test & Build Results (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Full Windows Hardware Coverage)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Benchmark Suites (`TKT-016` & `TKT-017`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts` | **20 / 20 passed** (`15` suites, `0` failures) |
-| **Core & Railway/Topology Batches 1–2 (10 files)** | `npx tsx --test --test-concurrency=1 ...` (WorldCoordinates, FeatureCoverage, GeometryBuilder, ElevationAndZIndex, JunctionAndTopology, PerformanceBaseline, RailwayRendering, RoadNetworkTopology, RailwayNetworkTopology, CrossModalTopology) | **135 / 135 passed** (`0` failures); remaining 13 legacy test files deferred to local `npm test` per project owner |
-| **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
+| **Benchmark Suites (`TKT-016` & `TKT-017`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts` | **21 / 21 passed** (`16` suites, `0` failures, `~9.7 s`; `BenchmarkReliability.test.ts` in `~0.19 s`) |
+| **Core & Railway/Topology Batches 1–2 (10 files, prior to final CLI/Git polish)** | `npx tsx --test --test-concurrency=1 ...` | **135 / 135 passed** (`0` failures); full `npm test` Windows 16 GB RAM resource investigation tracked separately in `TKT-018` |
+| **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (`0` errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
-| **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
-| **CPU Benchmark Suite (`v1.1.0`)** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 leaks) |
-| **Browser WebGL Benchmark Suite (`v1.1.0`)** | `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, SwiftShader container fallback explicitly labeled; Windows RTX hardware run pending locally) |
-| **Hardware GPU Enforcement Gate** | `npm run bench:browser -- --datasets=small-real-europatunnel --configs=production-legacy --scenarios=static_overview --no-save --require-hardware` | **Exited 1 as expected** on SwiftShader container |
-| **Benchmark Comparison CLI** | `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions on `cpu-baseline.json` and `browser-baseline.json`) |
+| **CPU Benchmark Suite (`v1.1.0`)** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, `12/12` workloads, `0` leaks; also verified on owner Windows host) |
+| **Owner Windows RTX 4060 Ti Hardware Smoke Test** | `npx tsx benchmarks/browserRunner.ts` (Windows ANGLE Direct3D 11 smoke test) | **Successful** (`NVIDIA GeForce RTX 4060 Ti`, `59.88 FPS` median, `0.5 ms` CPU render, `0.607 ms` GPU render, `60/60` valid timer samples, `58` meshes, `36` static / `21` sampled railway meshes, `0` errors; full scenario suite pending) |
+| **Container SwiftShader Browser Benchmark (`v1.1.0`)** | `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** (`benchmarks/baselines/browser-baseline.json`, explicitly labeled `isSoftwareRenderer: true`) |
+| **Benchmark Comparison CLI** | `npx tsx benchmarks/compare.ts ...` | **Successful** (`COMPATIBLE`, `0` regressions on `cpu-baseline.json` and `browser-baseline.json`) |
 
 *(Historical baselines preserved: `TKT-016` on 2026-11-13: `331 / 331 passed` across 24 test files; Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
@@ -136,8 +135,8 @@
 | `SubterraneanVisualIntegration.test.ts` (`M2.3-E4-T2` / `TKT-015`) | 15 |
 | Specialized road/surface regression suites (`AdjacentServiceJunctions`, `BuswayRendering`, `PathJunctionCornerSmoothing`, `PizzaSlicePathJunctions`, `SurfaceVisibilityPolicy`) | 40 |
 | `BenchmarkInfrastructure.test.ts` (`TKT-016`) | 11 |
-| `BenchmarkReliability.test.ts` (`TKT-017`) | 9 |
-| **Total (`it` declarations / total subtests across 25 files)** | **329 (`340` with suite subtests)** |
+| `BenchmarkReliability.test.ts` (`TKT-017`) | 10 |
+| **Total (`it` declarations / total subtests across 25 files)** | **330 (`341` with suite subtests)** |
 
 ---
 

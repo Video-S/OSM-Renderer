@@ -2,7 +2,27 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
-import type { BrowserScenarioKind } from './types';
+import type { BrowserScenarioKind, ChromiumGpuBackend } from './types';
+
+export const SUPPORTED_CHROMIUM_GPU_BACKENDS: readonly ChromiumGpuBackend[] = Object.freeze([
+  'auto',
+  'd3d11',
+  'vulkan',
+  'opengl',
+  'metal',
+  'swiftshader',
+  'default',
+]);
+
+export function parseChromiumGpuBackend(raw: string): ChromiumGpuBackend {
+  const normalized = raw.trim().toLowerCase();
+  if ((SUPPORTED_CHROMIUM_GPU_BACKENDS as readonly string[]).includes(normalized)) {
+    return normalized as ChromiumGpuBackend;
+  }
+  throw new Error(
+    `Unsupported --gpu-backend value "${raw}". Expected one of: ${SUPPORTED_CHROMIUM_GPU_BACKENDS.join(', ')}.`
+  );
+}
 
 export interface ParsedBrowserCliOptions {
   datasetIds?: string[];
@@ -12,6 +32,7 @@ export interface ParsedBrowserCliOptions {
   measuredFramesOverride?: number;
   reloadCyclesOverride?: number;
   useSwiftShader: boolean;
+  gpuBackend: ChromiumGpuBackend;
   requireHardwareGpu: boolean;
   headless: boolean;
   serverUrl?: string;
@@ -101,6 +122,7 @@ export function parseBrowserRunnerCliArgs(argv: readonly string[]): ParsedBrowse
   let measuredFramesOverride: number | undefined;
   let reloadCyclesOverride: number | undefined;
   let useSwiftShader = false;
+  let gpuBackend: ChromiumGpuBackend = 'auto';
   let requireHardwareGpu = false;
   let headless = true;
   let serverUrl: string | undefined;
@@ -175,6 +197,10 @@ export function parseBrowserRunnerCliArgs(argv: readonly string[]): ParsedBrowse
       quiet = true;
     } else if (arg === '--swiftshader') {
       useSwiftShader = true;
+    } else if (arg === '--gpu-backend' || arg.startsWith('--gpu-backend=')) {
+      const { value, nextIndex } = readSingleValueFlag(argv, i, '--gpu-backend');
+      gpuBackend = parseChromiumGpuBackend(value);
+      i = nextIndex;
     } else if (arg === '--require-hardware') {
       requireHardwareGpu = true;
     } else if (arg === '--headed') {
@@ -190,6 +216,14 @@ export function parseBrowserRunnerCliArgs(argv: readonly string[]): ParsedBrowse
 
   if (useSwiftShader && requireHardwareGpu) {
     throw new Error('Cannot combine --swiftshader and --require-hardware flags.');
+  }
+  if (gpuBackend === 'swiftshader' && requireHardwareGpu) {
+    throw new Error('Cannot combine --gpu-backend=swiftshader and --require-hardware flags.');
+  }
+  if (useSwiftShader && gpuBackend !== 'auto' && gpuBackend !== 'swiftshader') {
+    throw new Error(
+      `Cannot combine --swiftshader with hardware GPU backend "--gpu-backend=${gpuBackend}".`
+    );
   }
 
   if (quickMode) {
@@ -216,6 +250,7 @@ export function parseBrowserRunnerCliArgs(argv: readonly string[]): ParsedBrowse
     measuredFramesOverride,
     reloadCyclesOverride,
     useSwiftShader,
+    gpuBackend,
     requireHardwareGpu,
     headless,
     serverUrl,

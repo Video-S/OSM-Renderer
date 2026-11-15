@@ -10,9 +10,9 @@ The following npm scripts defined in `package.json` constitute the official veri
 | `npm run lint` | `tsc --noEmit` | Validates TypeScript types across the entire codebase with zero file emission. |
 | `npm run build` | `vite build` | Compiles the production bundle and validates asset bundling. |
 | `npm run docs:api` | `typedoc` | Generates the Markdown API reference under `docs/api-reference/` using `typedoc-plugin-markdown`. |
-| `npm run bench:cpu` | `tsx benchmarks/cpuRunner.ts` | Executes the Node.js CPU & memory benchmark suite across frozen offline datasets (`benchmarks/baselines/cpu-baseline.json`). |
-| `npm run bench:browser` | `tsx benchmarks/browserRunner.ts` | Executes the Playwright + Chromium WebGL rendering benchmark suite (`benchmarks/baselines/browser-baseline.json`). |
-| `npm run bench:compare` | `tsx benchmarks/compare.ts` | Compares baseline and candidate JSON benchmark reports, validating dataset hash/environment parity and flagging regressions. |
+| `npm run bench:cpu` | `tsx benchmarks/cpuRunner.ts` | Executes the Node.js CPU & memory benchmark suite across frozen offline datasets (`benchmarks/baselines/cpu-baseline.json`). Invoke `npx tsx benchmarks/cpuRunner.ts ...` directly when passing CLI flags on Windows PowerShell. |
+| `npm run bench:browser` | `tsx benchmarks/browserRunner.ts` | Executes the Playwright + Chromium WebGL rendering benchmark suite (`benchmarks/baselines/browser-baseline.json`). Defaults to ANGLE Direct3D 11 on Windows and native drivers on Linux/macOS; invoke `npx tsx benchmarks/browserRunner.ts ...` directly when passing CLI flags on PowerShell. |
+| `npm run bench:compare` | `tsx benchmarks/compare.ts` | Compares baseline and candidate JSON benchmark reports, validating dataset hash/environment parity and flagging regressions. Invoke `npx tsx benchmarks/compare.ts ...` directly when passing CLI flags on PowerShell. |
 
 > **When to Run Verification**: Automated tests, linting, build checks, and API documentation generation only need to be executed when code changes are made. Pure documentation updates, filing tickets, or maintaining ticket files do not require running tests or builds.
 
@@ -119,25 +119,25 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **Report Schema Validation & Serialization Round-Trip**: Verifies `validateBenchmarkReport`, `serializeBenchmarkReport`, `saveBenchmarkReport`, and `loadBenchmarkReport`, plus rejection of malformed schemas.
    - **Baseline Comparison & Compatibility Checks**: Verifies `compareBenchmarkReports` regression detection, incompatible dataset content hash rejection, and `isSoftwareWebGLRenderer` hardware vs. SwiftShader classification. See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
 
-16. **`BenchmarkReliability.test.ts`** (`TKT-017` Benchmark Infrastructure Reliability & Windows Compatibility Suite — 9 tests):
+16. **`BenchmarkReliability.test.ts`** (`TKT-017` Benchmark Infrastructure Reliability & Windows Compatibility Suite — 10 tests):
     - **Telemetry Producer / Consumer Field Compatibility**: Verifies canonical `gpuPassTimeMs`, `gpuTimerQuerySupported`, `gpuDisjointOccurred`, `gpuTimerStatus`, and railway fields between `MapScene.tsx` and `buildScenarioResult`.
     - **GPU Timer Query State Machine & Aggregation**: Verifies `resolveGpuFrameTelemetryState` and `buildScenarioResult` across `'unsupported'`, `'pending'`, `'disjoint'`, and `'valid'` (including `0 ms`) without stale value caching or CPU time substitution.
     - **Scene Initialization & Stale Snapshot Rejection**: Verifies `validateSceneReadinessSnapshot` rejects unrendered revisions, `{ 1, 4, 2 }` idle ground-only geometry on non-empty datasets, and stale snapshots across dataset, renderer config, theme, and revision transitions.
     - **Post-Render Frame Cadence & Cached Railway Frustum Evaluation**: Verifies `computeConsecutiveFrameIntervalsMs`, `effectiveMedianFps`, `shouldSampleRailwayVisibilityForFrame`, `evaluateCachedRailwayVisibility` over Three.js `Group` / `Mesh` hierarchies, and `null` (`'unavailable'`) vs. `0` (`'disabled_by_config'`) handling.
-    - **Cross-Platform CLI & Process Resolution**: Verifies `parseBrowserRunnerCliArgs` / `parseCpuRunnerCliArgs` (including Windows PowerShell space/comma-split tokens, repeated flags, `--iterations`, `--swiftshader`, `--require-hardware`, and mutual exclusion), `buildLocalServerSpawnSpec` (`process.execPath` + local `tsx` with zero `npx`), and `resolveChromiumLaunchArgs` default hardware GPU flags. See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
+    - **Cross-Platform CLI, GPU Backends & Git Metadata Resolution**: Verifies `parseBrowserRunnerCliArgs` / `parseCpuRunnerCliArgs` (including Windows PowerShell space/comma-split tokens, repeated flags, `--iterations`, `--gpu-backend`, `--swiftshader`, `--require-hardware`, and mutual exclusion), `buildLocalServerSpawnSpec` (`process.execPath` + local `tsx` with zero `npx`), `resolveChromiumLaunchArgs` (Windows ANGLE D3D11 default, unmodified Linux/macOS defaults, SwiftShader, and configurable backends), and `resolveGitState` (`available`, `ci_env_only`, `unborn_head`, `not_a_git_repository`). See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
 
-### Recorded Verification Status (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Windows Hardware Validation)
+### Recorded Verification Status (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Full Windows Hardware Scenario Coverage)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `BenchmarkInfrastructure.test.ts` + `BenchmarkReliability.test.ts` | **20 / 20 passed**, 0 failures (`15` suites) |
-| Core & Railway/Topology Batches 1–2 (10 files) | **135 / 135 passed**, 0 failures (remaining 13 legacy test files deferred to local `npm test` per project owner) |
+| `BenchmarkInfrastructure.test.ts` + `BenchmarkReliability.test.ts` | **21 / 21 passed**, 0 failures (`16` suites, `~9.7 s` total; `BenchmarkReliability.test.ts` in `~0.19 s`) |
+| Core & Railway/Topology Batches 1–2 (10 files, pre-final CLI/Git polish) | **135 / 135 passed**, 0 failures (remaining 13 test files deferred; full `npm test` Windows 16 GB RAM resource investigation tracked in `TKT-018`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
-| `npm run docs:api` | **Successful** (`typedoc`) |
-| `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, Schema `v1.1.0`, 0 resource leaks) |
-| `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, Schema `v1.1.0`, SwiftShader container fallback; Windows hardware GPU run pending locally) |
-| `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions on `cpu-baseline.json` and `browser-baseline.json`) |
+| `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, Schema `v1.1.0`, `12/12` workloads, `0` resource leaks; also verified on owner Windows host) |
+| Owner Windows RTX 4060 Ti Hardware Smoke Test | **Successful** (`ANGLE Direct3D 11`, `isSoftwareRenderer: false`, `59.88 FPS` median, `0.5 ms` CPU render, `0.607 ms` GPU render, `60/60` valid GPU timer samples, `58` constructed meshes, `36` static / `21` sampled railway meshes, `0` errors; full multi-scenario hardware run pending) |
+| `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** in headless Linux container (`benchmarks/baselines/browser-baseline.json`, Schema `v1.1.0`, explicitly labeled `isSoftwareRenderer: true`) |
+| `npx tsx benchmarks/compare.ts` | **Successful** (`COMPATIBLE`, 0 regressions on `cpu-baseline.json` and `browser-baseline.json`) |
 
 *(Historical baselines preserved: Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 

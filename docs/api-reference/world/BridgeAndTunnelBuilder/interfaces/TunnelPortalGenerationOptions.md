@@ -6,7 +6,7 @@
 
 # Interface: TunnelPortalGenerationOptions
 
-Defined in: world/BridgeAndTunnelBuilder.ts:208
+Defined in: world/BridgeAndTunnelBuilder.ts:209
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:208
 
 > `optional` **emitEndPortal?**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:210
+Defined in: world/BridgeAndTunnelBuilder.ts:211
 
 ***
 
@@ -22,7 +22,17 @@ Defined in: world/BridgeAndTunnelBuilder.ts:210
 
 > `optional` **emitStartPortal?**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:209
+Defined in: world/BridgeAndTunnelBuilder.ts:210
+
+***
+
+### emitUndergroundTrace?
+
+> `optional` **emitUndergroundTrace?**: `boolean`
+
+Defined in: world/BridgeAndTunnelBuilder.ts:213
+
+Diagnostic-only dashed underground alignment; not allocated in normal rendering.
 
 ***
 
@@ -30,7 +40,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:209
 
 > `optional` **maxheightMeters?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:212
+Defined in: world/BridgeAndTunnelBuilder.ts:215
 
 Optional explicit maxheight in meters (`maxheight=*`) to scale portal vertical clearance (M2.3-E4-T).
 
@@ -40,7 +50,7 @@ Optional explicit maxheight in meters (`maxheight=*`) to scale portal vertical c
 
 > `optional` **railwayType?**: `string`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:214
+Defined in: world/BridgeAndTunnelBuilder.ts:217
 
 Optional railway type (`'rail'`, `'subway'`, `'light_rail'`, `'tram'`) for railway portal scaling (M2.3-E4-T).
 
@@ -50,6 +60,6 @@ Optional railway type (`'rail'`, `'subway'`, `'light_rail'`, `'tram'`) for railw
 
 > `optional` **surfaceElevation?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:216
+Defined in: world/BridgeAndTunnelBuilder.ts:219
 
 Surface base elevation at portal entrance (defaults to `ELEVATION_POLICY.ROAD_SURFACE = 0.050`).

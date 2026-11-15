@@ -8,7 +8,7 @@
 
 > **computePolylineLength**(`points`): `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:136
+Defined in: world/BridgeAndTunnelBuilder.ts:137
 
 Computes the total 2D arc length of a polyline.
 

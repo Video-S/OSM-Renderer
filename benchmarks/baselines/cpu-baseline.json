@@ -1,0 +1,4580 @@
+{
+  "schemaVersion": "1.0.0",
+  "suite": "cpu",
+  "benchmarkName": "OSM 3D Renderer — Node.js CPU & Memory Benchmark Suite",
+  "environment": {
+    "gitCommitSha": "unknown",
+    "gitDirty": false,
+    "timestampIso": "2026-11-13T13:59:41.709Z",
+    "nodeVersion": "v22.23.2",
+    "v8Version": "12.4.254.21-node.56",
+    "platform": "linux",
+    "osRelease": "4.19.0-gvisor",
+    "arch": "x64",
+    "cpuModel": "unknown",
+    "cpuLogicalCores": 4,
+    "totalSystemMemoryMB": 12288,
+    "gcExposed": false
+  },
+  "methodology": {
+    "warmupIterations": 2,
+    "measuredIterations": 5,
+    "metricDefinitions": {
+      "geojsonParseAndClassifyMs": "Wall-clock CPU time (ms) in LocalGeoJsonProvider.parseGeoJson to classify OSM tags, project WGS84 coordinates to local meters, clip to region bounds, and extract pre-chaining topologySource.",
+      "infrastructureGraphBuildMs": "Wall-clock CPU time (ms) in buildInfrastructureGraph to construct RoadNetwork, RailwayNetwork, and CrossModalAnalyzer connectivity relations.",
+      "graphToRendererAdapterMs": "Wall-clock CPU time (ms) in adaptInfrastructureGraphToRenderDescriptors and validateInfrastructureRenderDescriptors.",
+      "planarSurfaceResolutionMs": "Wall-clock CPU time (ms) in resolveAndValidatePlanarPolygons performing 2D Boolean ownership resolution and elevation separation for landuse, parks, and water.",
+      "roadGeometryGenerationMs": "Wall-clock CPU time (ms) in buildGraphAtGradeRoadGeometries constructing at-grade road and junction BufferGeometries.",
+      "railwayGeometryGenerationMs": "Wall-clock CPU time (ms) in buildRailwayInfrastructure constructing ballast, 3D instanced sleepers/bearers, 3D rails, and procedural UV ribbons.",
+      "fullSceneGeometryGenerationMs": "Wall-clock CPU time (ms) in GeometryBuilder.buildScene generating all 3D scene groups, materials, and spatial chunks.",
+      "sceneResourceDisposalMs": "Wall-clock CPU time (ms) in BuiltSceneGeometry.dispose() releasing all owned Three.js BufferGeometries, Materials, and Textures.",
+      "cpuBufferMemoryMB": "Exact deterministic sum (MB) of JavaScript TypedArray byteLengths across all active BufferGeometry vertex attributes, index buffers, and InstancedMesh matrices.",
+      "frameIntervalMs": "Browser requestAnimationFrame-to-requestAnimationFrame wall-clock interval (ms). Distinct from CPU render call duration and GPU execution time.",
+      "effectiveMedianFps": "Steady-state frame cadence derived from median frameIntervalMs (1000 / medianFrameIntervalMs).",
+      "cpuFrameRenderTimeMs": "Synchronous CPU main-thread execution duration (ms) of Three.js WebGLRenderer.render(scene, camera) per frame.",
+      "gpuFrameRenderTimeMs": "Asynchronous GPU command execution duration (ms) measured via WebGL2 EXT_disjoint_timer_query_webgl2 when supported and non-disjoint; explicitly null when unsupported or running on software rasterizers.",
+      "webglDrawCallsPerFrame": "Actual WebGL draw calls issued per frame recorded from Three.js gl.info.render.calls immediately after gl.render().",
+      "renderedTrianglesPerFrame": "Actual triangles submitted to WebGL per frame recorded from Three.js gl.info.render.triangles immediately after gl.render()."
+    },
+    "memoryMeasurementNotes": [
+      "cpuBufferMemoryMB measures exact TypedArray byteLengths allocated on owned Three.js BufferGeometries and InstancedMesh instance matrices; it is 100% deterministic across runs.",
+      "v8HeapMemory (process.memoryUsage) and browser performance.memory reflect V8 garbage collector timing, JIT compilation caches, and allocator fragmentation. Even when Node.js is launched with --expose-gc, V8 heap deltas are approximate indicators rather than strict byte-accurate allocations.",
+      "lifecycleAudit (ownedGeometriesAfterDispose, ownedMaterialsAfterDispose, and WebGL gl.info.memory.geometries) provides the authoritative deterministic check for Three.js / WebGL resource leaks."
+    ]
+  },
+  "cpuResults": [
+    {
+      "dataset": {
+        "id": "small-real-europatunnel",
+        "name": "Hengelo Europatunnel & Spoorstraat (Real OSM Extract)",
+        "scale": "small-real-world",
+        "description": "Frozen real-world OSM extract around Europatunnel / Spoorstraat in Hengelo including buildings, multi-tier roads/cycleways/footways, overhead railway tracks, and subterranean retaining walls.",
+        "sourceFiles": [
+          "src/world/prototype/EuropatunnelHengeloFixture.json"
+        ],
+        "contentHashSha256": "1782c4798fe5269ce7944b1fccde60085725acc3e877723908851a24b7b0233f",
+        "originLonLat": [
+          6.79225,
+          52.26188
+        ],
+        "clipRadiusMeters": 180,
+        "rawFeatureCount": 172,
+        "parsedFeatureCounts": {
+          "total": 78,
+          "buildings": 2,
+          "roads": 34,
+          "railways": 5,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 9,
+          "landuse": 2,
+          "barriers": 15,
+          "landmarks": 9
+        },
+        "topologySourceCounts": {
+          "roadParts": 37,
+          "railwayParts": 5,
+          "infrastructurePoints": 13
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 8.134,
+          "max": 11.166,
+          "mean": 9.819,
+          "median": 10.51,
+          "p95": 11.161,
+          "p99": 11.165,
+          "stdDev": 1.555,
+          "iqr": 2.993,
+          "coefficientOfVariation": 0.158,
+          "samples": [
+            11.139,
+            10.51,
+            8.134,
+            8.146,
+            11.166
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 4.532,
+          "max": 7.514,
+          "mean": 5.858,
+          "median": 5.239,
+          "p95": 7.49,
+          "p99": 7.509,
+          "stdDev": 1.484,
+          "iqr": 2.788,
+          "coefficientOfVariation": 0.253,
+          "samples": [
+            7.397,
+            7.514,
+            4.608,
+            5.239,
+            4.532
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.129,
+          "max": 2.837,
+          "mean": 1.824,
+          "median": 1.666,
+          "p95": 2.662,
+          "p99": 2.802,
+          "stdDev": 0.641,
+          "iqr": 0.437,
+          "coefficientOfVariation": 0.351,
+          "samples": [
+            1.526,
+            1.666,
+            1.963,
+            2.837,
+            1.129
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 8.682,
+          "max": 15.439,
+          "mean": 11.934,
+          "median": 11.199,
+          "p95": 15.102,
+          "p99": 15.371,
+          "stdDev": 2.67,
+          "iqr": 3.163,
+          "coefficientOfVariation": 0.224,
+          "samples": [
+            13.757,
+            11.199,
+            10.595,
+            8.682,
+            15.439
+          ]
+        },
+        "roadGeometryGenerationMs": null,
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 14.152,
+          "max": 27.872,
+          "mean": 19.144,
+          "median": 16.303,
+          "p95": 26.781,
+          "p99": 27.654,
+          "stdDev": 5.858,
+          "iqr": 7.443,
+          "coefficientOfVariation": 0.306,
+          "samples": [
+            27.872,
+            16.303,
+            22.418,
+            14.975,
+            14.152
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 51.191,
+          "max": 93.656,
+          "mean": 66.181,
+          "median": 63.642,
+          "p95": 88.503,
+          "p99": 92.625,
+          "stdDev": 16.769,
+          "iqr": 13.37,
+          "coefficientOfVariation": 0.253,
+          "samples": [
+            93.656,
+            63.642,
+            67.893,
+            51.191,
+            54.522
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.054,
+          "max": 0.196,
+          "mean": 0.09,
+          "median": 0.065,
+          "p95": 0.173,
+          "p99": 0.191,
+          "stdDev": 0.06,
+          "iqr": 0.024,
+          "coefficientOfVariation": 0.674,
+          "samples": [
+            0.078,
+            0.196,
+            0.065,
+            0.055,
+            0.054
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 33,
+          "attributeBytes": 230760,
+          "indexBytes": 21894,
+          "totalBytes": 252654,
+          "totalMB": 0.241
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 78.639,
+          "heapUsedPeakMB": 109.371,
+          "heapUsedAfterDisposeMB": 104.115,
+          "heapDeltaAfterDisposeMB": 25.476,
+          "rssMB": 240.582,
+          "externalMB": 14.027,
+          "arrayBuffersMB": 11.847
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 38,
+          "totalVertices": 27267,
+          "totalTriangles": 5039,
+          "renderedVerticesWithInstances": 60547,
+          "renderedTrianglesWithInstances": 27919,
+          "renderedFeaturesCount": 78,
+          "forestTreesCount": 26
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1920,
+            "triangles": 640,
+            "renderedVerticesWithInstances": 1920,
+            "renderedTrianglesWithInstances": 640,
+            "visibleRenderedTriangles": 640,
+            "cpuBufferBytes": 61440
+          },
+          "roads": {
+            "meshCount": 8,
+            "visibleMeshCount": 8,
+            "vertices": 1990,
+            "triangles": 1166,
+            "renderedVerticesWithInstances": 1990,
+            "renderedTrianglesWithInstances": 1166,
+            "visibleRenderedTriangles": 1166,
+            "cpuBufferBytes": 54756
+          },
+          "railways": {
+            "meshCount": 14,
+            "visibleMeshCount": 10,
+            "vertices": 1720,
+            "triangles": 1610,
+            "renderedVerticesWithInstances": 35000,
+            "renderedTrianglesWithInstances": 18250,
+            "visibleRenderedTriangles": 17770,
+            "cpuBufferBytes": 168440
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 32,
+            "triangles": 28,
+            "renderedVerticesWithInstances": 32,
+            "renderedTrianglesWithInstances": 28,
+            "visibleRenderedTriangles": 28,
+            "cpuBufferBytes": 936
+          },
+          "parks": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 201,
+            "triangles": 181,
+            "renderedVerticesWithInstances": 201,
+            "renderedTrianglesWithInstances": 181,
+            "visibleRenderedTriangles": 181,
+            "cpuBufferBytes": 5910
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 96,
+            "triangles": 96,
+            "renderedVerticesWithInstances": 96,
+            "renderedTrianglesWithInstances": 96,
+            "visibleRenderedTriangles": 96,
+            "cpuBufferBytes": 2880
+          },
+          "barriers": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1064,
+            "triangles": 532,
+            "renderedVerticesWithInstances": 1064,
+            "renderedTrianglesWithInstances": 532,
+            "visibleRenderedTriangles": 532,
+            "cpuBufferBytes": 28728
+          },
+          "foliage": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1240,
+            "triangles": 424,
+            "renderedVerticesWithInstances": 20240,
+            "renderedTrianglesWithInstances": 7024,
+            "visibleRenderedTriangles": 7024,
+            "cpuBufferBytes": 39312
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "small-real-europatunnel::production-legacy::roadGeometryGenerationMs",
+          "reason": "disabled_by_config",
+          "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "small-real-europatunnel",
+        "name": "Hengelo Europatunnel & Spoorstraat (Real OSM Extract)",
+        "scale": "small-real-world",
+        "description": "Frozen real-world OSM extract around Europatunnel / Spoorstraat in Hengelo including buildings, multi-tier roads/cycleways/footways, overhead railway tracks, and subterranean retaining walls.",
+        "sourceFiles": [
+          "src/world/prototype/EuropatunnelHengeloFixture.json"
+        ],
+        "contentHashSha256": "1782c4798fe5269ce7944b1fccde60085725acc3e877723908851a24b7b0233f",
+        "originLonLat": [
+          6.79225,
+          52.26188
+        ],
+        "clipRadiusMeters": 180,
+        "rawFeatureCount": 172,
+        "parsedFeatureCounts": {
+          "total": 78,
+          "buildings": 2,
+          "roads": 34,
+          "railways": 5,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 9,
+          "landuse": 2,
+          "barriers": 15,
+          "landmarks": 9
+        },
+        "topologySourceCounts": {
+          "roadParts": 37,
+          "railwayParts": 5,
+          "infrastructurePoints": 13
+        }
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 7.111,
+          "max": 9.726,
+          "mean": 8.762,
+          "median": 9.417,
+          "p95": 9.696,
+          "p99": 9.72,
+          "stdDev": 1.157,
+          "iqr": 1.591,
+          "coefficientOfVariation": 0.132,
+          "samples": [
+            7.111,
+            9.417,
+            9.726,
+            7.982,
+            9.574
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 4.238,
+          "max": 8.173,
+          "mean": 5.864,
+          "median": 5.3,
+          "p95": 7.947,
+          "p99": 8.128,
+          "stdDev": 1.685,
+          "iqr": 2.469,
+          "coefficientOfVariation": 0.287,
+          "samples": [
+            4.238,
+            5.3,
+            4.571,
+            8.173,
+            7.04
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.028,
+          "max": 1.483,
+          "mean": 1.179,
+          "median": 1.118,
+          "p95": 1.416,
+          "p99": 1.47,
+          "stdDev": 0.176,
+          "iqr": 0.028,
+          "coefficientOfVariation": 0.149,
+          "samples": [
+            1.483,
+            1.118,
+            1.028,
+            1.118,
+            1.146
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 7.605,
+          "max": 11.035,
+          "mean": 9.17,
+          "median": 9.534,
+          "p95": 10.821,
+          "p99": 10.992,
+          "stdDev": 1.485,
+          "iqr": 2.253,
+          "coefficientOfVariation": 0.162,
+          "samples": [
+            9.965,
+            9.534,
+            11.035,
+            7.605,
+            7.712
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 30.312,
+          "max": 50.825,
+          "mean": 36.565,
+          "median": 32.152,
+          "p95": 48.293,
+          "p99": 50.318,
+          "stdDev": 8.537,
+          "iqr": 6.799,
+          "coefficientOfVariation": 0.233,
+          "samples": [
+            32.152,
+            38.168,
+            50.825,
+            31.368,
+            30.312
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 12.716,
+          "max": 28.986,
+          "mean": 17.286,
+          "median": 14.848,
+          "p95": 26.294,
+          "p99": 28.448,
+          "stdDev": 6.622,
+          "iqr": 1.177,
+          "coefficientOfVariation": 0.383,
+          "samples": [
+            15.528,
+            14.848,
+            14.351,
+            28.986,
+            12.716
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 59.934,
+          "max": 89.347,
+          "mean": 72.517,
+          "median": 70.092,
+          "p95": 87.172,
+          "p99": 88.912,
+          "stdDev": 11.655,
+          "iqr": 13.727,
+          "coefficientOfVariation": 0.161,
+          "samples": [
+            64.742,
+            70.092,
+            89.347,
+            78.47,
+            59.934
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.062,
+          "max": 0.08,
+          "mean": 0.072,
+          "median": 0.075,
+          "p95": 0.08,
+          "p99": 0.08,
+          "stdDev": 0.008,
+          "iqr": 0.012,
+          "coefficientOfVariation": 0.107,
+          "samples": [
+            0.062,
+            0.075,
+            0.08,
+            0.077,
+            0.065
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 33,
+          "attributeBytes": 217328,
+          "indexBytes": 19416,
+          "totalBytes": 236744,
+          "totalMB": 0.226
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 112.332,
+          "heapUsedPeakMB": 124.389,
+          "heapUsedAfterDisposeMB": 105.289,
+          "heapDeltaAfterDisposeMB": -7.043,
+          "rssMB": 278.359,
+          "externalMB": 12.731,
+          "arrayBuffersMB": 10.551
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 38,
+          "totalVertices": 26846,
+          "totalTriangles": 4626,
+          "renderedVerticesWithInstances": 60686,
+          "renderedTrianglesWithInstances": 27786,
+          "renderedFeaturesCount": 78,
+          "forestTreesCount": 26
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1920,
+            "triangles": 640,
+            "renderedVerticesWithInstances": 1920,
+            "renderedTrianglesWithInstances": 640,
+            "visibleRenderedTriangles": 640,
+            "cpuBufferBytes": 61440
+          },
+          "roads": {
+            "meshCount": 8,
+            "visibleMeshCount": 8,
+            "vertices": 2089,
+            "triangles": 1253,
+            "renderedVerticesWithInstances": 2089,
+            "renderedTrianglesWithInstances": 1253,
+            "visibleRenderedTriangles": 1253,
+            "cpuBufferBytes": 57654
+          },
+          "railways": {
+            "meshCount": 14,
+            "visibleMeshCount": 10,
+            "vertices": 1200,
+            "triangles": 1110,
+            "renderedVerticesWithInstances": 35040,
+            "renderedTrianglesWithInstances": 18030,
+            "visibleRenderedTriangles": 17700,
+            "cpuBufferBytes": 151424
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 32,
+            "triangles": 28,
+            "renderedVerticesWithInstances": 32,
+            "renderedTrianglesWithInstances": 28,
+            "visibleRenderedTriangles": 28,
+            "cpuBufferBytes": 936
+          },
+          "parks": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 201,
+            "triangles": 181,
+            "renderedVerticesWithInstances": 201,
+            "renderedTrianglesWithInstances": 181,
+            "visibleRenderedTriangles": 181,
+            "cpuBufferBytes": 5910
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 96,
+            "triangles": 96,
+            "renderedVerticesWithInstances": 96,
+            "renderedTrianglesWithInstances": 96,
+            "visibleRenderedTriangles": 96,
+            "cpuBufferBytes": 2880
+          },
+          "barriers": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1064,
+            "triangles": 532,
+            "renderedVerticesWithInstances": 1064,
+            "renderedTrianglesWithInstances": 532,
+            "visibleRenderedTriangles": 532,
+            "cpuBufferBytes": 28728
+          },
+          "foliage": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1240,
+            "triangles": 424,
+            "renderedVerticesWithInstances": 20240,
+            "renderedTrianglesWithInstances": 7024,
+            "visibleRenderedTriangles": 7024,
+            "cpuBufferBytes": 39312
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "small-real-europatunnel",
+        "name": "Hengelo Europatunnel & Spoorstraat (Real OSM Extract)",
+        "scale": "small-real-world",
+        "description": "Frozen real-world OSM extract around Europatunnel / Spoorstraat in Hengelo including buildings, multi-tier roads/cycleways/footways, overhead railway tracks, and subterranean retaining walls.",
+        "sourceFiles": [
+          "src/world/prototype/EuropatunnelHengeloFixture.json"
+        ],
+        "contentHashSha256": "1782c4798fe5269ce7944b1fccde60085725acc3e877723908851a24b7b0233f",
+        "originLonLat": [
+          6.79225,
+          52.26188
+        ],
+        "clipRadiusMeters": 180,
+        "rawFeatureCount": 172,
+        "parsedFeatureCounts": {
+          "total": 78,
+          "buildings": 2,
+          "roads": 34,
+          "railways": 5,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 9,
+          "landuse": 2,
+          "barriers": 15,
+          "landmarks": 9
+        },
+        "topologySourceCounts": {
+          "roadParts": 37,
+          "railwayParts": 5,
+          "infrastructurePoints": 13
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 7.243,
+          "max": 9.254,
+          "mean": 8.386,
+          "median": 9.001,
+          "p95": 9.205,
+          "p99": 9.244,
+          "stdDev": 0.968,
+          "iqr": 1.586,
+          "coefficientOfVariation": 0.115,
+          "samples": [
+            7.424,
+            9.254,
+            9.001,
+            7.243,
+            9.01
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 3.763,
+          "max": 6.164,
+          "mean": 4.87,
+          "median": 4.533,
+          "p95": 6.138,
+          "p99": 6.159,
+          "stdDev": 1.161,
+          "iqr": 2.175,
+          "coefficientOfVariation": 0.238,
+          "samples": [
+            3.859,
+            6.034,
+            4.533,
+            3.763,
+            6.164
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 0.927,
+          "max": 1.152,
+          "mean": 1.027,
+          "median": 1.05,
+          "p95": 1.137,
+          "p99": 1.149,
+          "stdDev": 0.098,
+          "iqr": 0.149,
+          "coefficientOfVariation": 0.095,
+          "samples": [
+            1.05,
+            1.077,
+            1.152,
+            0.927,
+            0.928
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 7.633,
+          "max": 32.753,
+          "mean": 13.329,
+          "median": 9.111,
+          "p95": 28.089,
+          "p99": 31.82,
+          "stdDev": 10.889,
+          "iqr": 1.722,
+          "coefficientOfVariation": 0.817,
+          "samples": [
+            9.111,
+            7.713,
+            32.753,
+            9.435,
+            7.633
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 61.213,
+          "max": 76.697,
+          "mean": 67.964,
+          "median": 69.563,
+          "p95": 75.511,
+          "p99": 76.46,
+          "stdDev": 6.576,
+          "iqr": 9.183,
+          "coefficientOfVariation": 0.097,
+          "samples": [
+            61.583,
+            61.213,
+            70.766,
+            76.697,
+            69.563
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 22.098,
+            "max": 38.936,
+            "mean": 27.571,
+            "median": 24.858,
+            "p95": 36.603,
+            "p99": 38.469,
+            "stdDev": 6.612,
+            "iqr": 2.581,
+            "coefficientOfVariation": 0.24,
+            "samples": [
+              22.098,
+              24.858,
+              24.691,
+              38.936,
+              27.272
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 20.883,
+            "max": 37.865,
+            "mean": 26.119,
+            "median": 23.899,
+            "p95": 35.137,
+            "p99": 37.319,
+            "stdDev": 6.702,
+            "iqr": 0.505,
+            "coefficientOfVariation": 0.257,
+            "samples": [
+              20.883,
+              23.899,
+              23.721,
+              37.865,
+              24.226
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 28.077,
+            "max": 39.986,
+            "mean": 32.119,
+            "median": 30.474,
+            "p95": 38.372,
+            "p99": 39.663,
+            "stdDev": 4.607,
+            "iqr": 1.773,
+            "coefficientOfVariation": 0.143,
+            "samples": [
+              30.142,
+              28.077,
+              39.986,
+              30.474,
+              31.915
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 3.85,
+            "max": 7.025,
+            "mean": 5.449,
+            "median": 5.955,
+            "p95": 6.836,
+            "p99": 6.987,
+            "stdDev": 1.317,
+            "iqr": 1.747,
+            "coefficientOfVariation": 0.242,
+            "samples": [
+              6.081,
+              5.955,
+              3.85,
+              4.334,
+              7.025
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 12.77,
+          "max": 14.708,
+          "mean": 13.374,
+          "median": 12.937,
+          "p95": 14.472,
+          "p99": 14.661,
+          "stdDev": 0.8,
+          "iqr": 0.602,
+          "coefficientOfVariation": 0.06,
+          "samples": [
+            12.927,
+            12.77,
+            12.937,
+            13.529,
+            14.708
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 96.133,
+          "max": 129.938,
+          "mean": 110.875,
+          "median": 106.769,
+          "p95": 127.704,
+          "p99": 129.491,
+          "stdDev": 13.469,
+          "iqr": 16.002,
+          "coefficientOfVariation": 0.121,
+          "samples": [
+            96.133,
+            102.766,
+            106.769,
+            118.768,
+            129.938
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.048,
+          "max": 0.157,
+          "mean": 0.078,
+          "median": 0.059,
+          "p95": 0.141,
+          "p99": 0.154,
+          "stdDev": 0.046,
+          "iqr": 0.024,
+          "coefficientOfVariation": 0.584,
+          "samples": [
+            0.059,
+            0.074,
+            0.05,
+            0.157,
+            0.048
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 34,
+          "attributeBytes": 241120,
+          "indexBytes": 25110,
+          "totalBytes": 266230,
+          "totalMB": 0.254
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 107.148,
+          "heapUsedPeakMB": 141.422,
+          "heapUsedAfterDisposeMB": 96.654,
+          "heapDeltaAfterDisposeMB": -10.495,
+          "rssMB": 288.273,
+          "externalMB": 11.856,
+          "arrayBuffersMB": 9.675
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 39,
+          "totalVertices": 27754,
+          "totalTriangles": 5575,
+          "renderedVerticesWithInstances": 61594,
+          "renderedTrianglesWithInstances": 28735,
+          "renderedFeaturesCount": 78,
+          "forestTreesCount": 26
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1920,
+            "triangles": 640,
+            "renderedVerticesWithInstances": 1920,
+            "renderedTrianglesWithInstances": 640,
+            "visibleRenderedTriangles": 640,
+            "cpuBufferBytes": 61440
+          },
+          "roads": {
+            "meshCount": 8,
+            "visibleMeshCount": 8,
+            "vertices": 2872,
+            "triangles": 2057,
+            "renderedVerticesWithInstances": 2872,
+            "renderedTrianglesWithInstances": 2057,
+            "visibleRenderedTriangles": 2057,
+            "cpuBufferBytes": 81270
+          },
+          "railways": {
+            "meshCount": 15,
+            "visibleMeshCount": 11,
+            "vertices": 1325,
+            "triangles": 1255,
+            "renderedVerticesWithInstances": 35165,
+            "renderedTrianglesWithInstances": 18175,
+            "visibleRenderedTriangles": 17845,
+            "cpuBufferBytes": 157294
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 32,
+            "triangles": 28,
+            "renderedVerticesWithInstances": 32,
+            "renderedTrianglesWithInstances": 28,
+            "visibleRenderedTriangles": 28,
+            "cpuBufferBytes": 936
+          },
+          "parks": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 201,
+            "triangles": 181,
+            "renderedVerticesWithInstances": 201,
+            "renderedTrianglesWithInstances": 181,
+            "visibleRenderedTriangles": 181,
+            "cpuBufferBytes": 5910
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 96,
+            "triangles": 96,
+            "renderedVerticesWithInstances": 96,
+            "renderedTrianglesWithInstances": 96,
+            "visibleRenderedTriangles": 96,
+            "cpuBufferBytes": 2880
+          },
+          "barriers": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1064,
+            "triangles": 532,
+            "renderedVerticesWithInstances": 1064,
+            "renderedTrianglesWithInstances": 532,
+            "visibleRenderedTriangles": 532,
+            "cpuBufferBytes": 28728
+          },
+          "foliage": {
+            "meshCount": 3,
+            "visibleMeshCount": 3,
+            "vertices": 1240,
+            "triangles": 424,
+            "renderedVerticesWithInstances": 20240,
+            "renderedTrianglesWithInstances": 7024,
+            "visibleRenderedTriangles": 7024,
+            "cpuBufferBytes": 39312
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "medium-real-hengelo-station",
+        "name": "Station Hengelo Corridor & Throat (Real OSM Extract)",
+        "scale": "medium-real-world",
+        "description": "Frozen real-world OSM extract covering Station Hengelo railway switchyard throat (67 railway ways) and adjacent Stationsplein urban roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/holdout_data/holdout_osm.geojson"
+        ],
+        "contentHashSha256": "b5ddec7d133004f4f2cc657bb93f7e1e9fdf57cbce50272d6cab3ec9516abbeb",
+        "originLonLat": [
+          6.7934,
+          52.2623
+        ],
+        "clipRadiusMeters": 320,
+        "rawFeatureCount": 183,
+        "parsedFeatureCounts": {
+          "total": 89,
+          "buildings": 0,
+          "roads": 23,
+          "railways": 58,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 7,
+          "barriers": 0,
+          "landmarks": 1
+        },
+        "topologySourceCounts": {
+          "roadParts": 24,
+          "railwayParts": 58,
+          "infrastructurePoints": 30
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 5.897,
+          "max": 8.644,
+          "mean": 7.384,
+          "median": 7.63,
+          "p95": 8.528,
+          "p99": 8.621,
+          "stdDev": 1.097,
+          "iqr": 1.378,
+          "coefficientOfVariation": 0.149,
+          "samples": [
+            8.644,
+            8.062,
+            6.684,
+            5.897,
+            7.63
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 6.738,
+          "max": 10.921,
+          "mean": 9.076,
+          "median": 8.949,
+          "p95": 10.729,
+          "p99": 10.882,
+          "stdDev": 1.561,
+          "iqr": 1.15,
+          "coefficientOfVariation": 0.172,
+          "samples": [
+            10.921,
+            8.949,
+            6.738,
+            8.811,
+            9.961
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.312,
+          "max": 5.175,
+          "mean": 2.501,
+          "median": 2.163,
+          "p95": 4.609,
+          "p99": 5.062,
+          "stdDev": 1.556,
+          "iqr": 0.832,
+          "coefficientOfVariation": 0.622,
+          "samples": [
+            2.343,
+            5.175,
+            1.312,
+            1.511,
+            2.163
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 1.612,
+          "max": 2.878,
+          "mean": 2.239,
+          "median": 2.225,
+          "p95": 2.874,
+          "p99": 2.877,
+          "stdDev": 0.627,
+          "iqr": 1.24,
+          "coefficientOfVariation": 0.28,
+          "samples": [
+            2.225,
+            2.878,
+            1.621,
+            1.612,
+            2.861
+          ]
+        },
+        "roadGeometryGenerationMs": null,
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 82.781,
+          "max": 124.26,
+          "mean": 101.091,
+          "median": 91.382,
+          "p95": 123.264,
+          "p99": 124.061,
+          "stdDev": 19.204,
+          "iqr": 31.532,
+          "coefficientOfVariation": 0.19,
+          "samples": [
+            119.281,
+            91.382,
+            124.26,
+            82.781,
+            87.75
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 94.035,
+          "max": 112.041,
+          "mean": 104.1,
+          "median": 105.387,
+          "p95": 111.328,
+          "p99": 111.899,
+          "stdDev": 7.031,
+          "iqr": 7.918,
+          "coefficientOfVariation": 0.068,
+          "samples": [
+            108.477,
+            105.387,
+            112.041,
+            100.559,
+            94.035
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.046,
+          "max": 0.068,
+          "mean": 0.054,
+          "median": 0.054,
+          "p95": 0.065,
+          "p99": 0.067,
+          "stdDev": 0.009,
+          "iqr": 0.007,
+          "coefficientOfVariation": 0.158,
+          "samples": [
+            0.054,
+            0.048,
+            0.046,
+            0.055,
+            0.068
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 39,
+          "attributeBytes": 738664,
+          "indexBytes": 138966,
+          "totalBytes": 877630,
+          "totalMB": 0.837
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 111.455,
+          "heapUsedPeakMB": 143.356,
+          "heapUsedAfterDisposeMB": 131.562,
+          "heapDeltaAfterDisposeMB": 20.107,
+          "rssMB": 292.66,
+          "externalMB": 26.575,
+          "arrayBuffersMB": 24.395
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 48,
+          "totalVertices": 24419,
+          "totalTriangles": 23151,
+          "renderedVerticesWithInstances": 141879,
+          "renderedTrianglesWithInstances": 81881,
+          "renderedFeaturesCount": 86,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 468,
+            "triangles": 386,
+            "renderedVerticesWithInstances": 468,
+            "renderedTrianglesWithInstances": 386,
+            "visibleRenderedTriangles": 386,
+            "cpuBufferBytes": 13548
+          },
+          "railways": {
+            "meshCount": 42,
+            "visibleMeshCount": 26,
+            "vertices": 23860,
+            "triangles": 22690,
+            "renderedVerticesWithInstances": 141320,
+            "renderedTrianglesWithInstances": 81420,
+            "visibleRenderedTriangles": 74616,
+            "cpuBufferBytes": 1237352
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 87,
+            "triangles": 73,
+            "renderedVerticesWithInstances": 87,
+            "renderedTrianglesWithInstances": 73,
+            "visibleRenderedTriangles": 73,
+            "cpuBufferBytes": 2526
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "medium-real-hengelo-station::production-legacy::roadGeometryGenerationMs",
+          "reason": "disabled_by_config",
+          "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "medium-real-hengelo-station",
+        "name": "Station Hengelo Corridor & Throat (Real OSM Extract)",
+        "scale": "medium-real-world",
+        "description": "Frozen real-world OSM extract covering Station Hengelo railway switchyard throat (67 railway ways) and adjacent Stationsplein urban roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/holdout_data/holdout_osm.geojson"
+        ],
+        "contentHashSha256": "b5ddec7d133004f4f2cc657bb93f7e1e9fdf57cbce50272d6cab3ec9516abbeb",
+        "originLonLat": [
+          6.7934,
+          52.2623
+        ],
+        "clipRadiusMeters": 320,
+        "rawFeatureCount": 183,
+        "parsedFeatureCounts": {
+          "total": 89,
+          "buildings": 0,
+          "roads": 23,
+          "railways": 58,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 7,
+          "barriers": 0,
+          "landmarks": 1
+        },
+        "topologySourceCounts": {
+          "roadParts": 24,
+          "railwayParts": 58,
+          "infrastructurePoints": 30
+        }
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 5.49,
+          "max": 8.29,
+          "mean": 6.864,
+          "median": 6.534,
+          "p95": 8.246,
+          "p99": 8.281,
+          "stdDev": 1.259,
+          "iqr": 2.131,
+          "coefficientOfVariation": 0.183,
+          "samples": [
+            5.938,
+            5.49,
+            8.29,
+            6.534,
+            8.069
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 6.713,
+          "max": 10.535,
+          "mean": 8.474,
+          "median": 9.027,
+          "p95": 10.286,
+          "p99": 10.485,
+          "stdDev": 1.668,
+          "iqr": 2.493,
+          "coefficientOfVariation": 0.197,
+          "samples": [
+            6.8,
+            6.713,
+            9.027,
+            10.535,
+            9.293
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.336,
+          "max": 4.202,
+          "mean": 2.045,
+          "median": 1.598,
+          "p95": 3.686,
+          "p99": 4.099,
+          "stdDev": 1.211,
+          "iqr": 0.162,
+          "coefficientOfVariation": 0.592,
+          "samples": [
+            1.626,
+            1.598,
+            4.202,
+            1.336,
+            1.464
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 1.652,
+          "max": 2.117,
+          "mean": 1.771,
+          "median": 1.694,
+          "p95": 2.033,
+          "p99": 2.101,
+          "stdDev": 0.195,
+          "iqr": 0.005,
+          "coefficientOfVariation": 0.11,
+          "samples": [
+            1.696,
+            1.692,
+            2.117,
+            1.694,
+            1.652
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 10.282,
+          "max": 15.012,
+          "mean": 13.562,
+          "median": 14.278,
+          "p95": 15.001,
+          "p99": 15.009,
+          "stdDev": 1.962,
+          "iqr": 1.68,
+          "coefficientOfVariation": 0.145,
+          "samples": [
+            14.278,
+            15.012,
+            13.279,
+            14.96,
+            10.282
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 93.278,
+          "max": 130.974,
+          "mean": 107.196,
+          "median": 105.582,
+          "p95": 126.056,
+          "p99": 129.99,
+          "stdDev": 14.297,
+          "iqr": 6.622,
+          "coefficientOfVariation": 0.133,
+          "samples": [
+            93.278,
+            105.582,
+            130.974,
+            99.763,
+            106.384
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 113.309,
+          "max": 138.378,
+          "mean": 122.176,
+          "median": 116.964,
+          "p95": 136.334,
+          "p99": 137.969,
+          "stdDev": 10.836,
+          "iqr": 14.083,
+          "coefficientOfVariation": 0.089,
+          "samples": [
+            113.309,
+            138.378,
+            116.964,
+            128.157,
+            114.074
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.039,
+          "max": 0.07,
+          "mean": 0.051,
+          "median": 0.047,
+          "p95": 0.067,
+          "p99": 0.069,
+          "stdDev": 0.012,
+          "iqr": 0.012,
+          "coefficientOfVariation": 0.235,
+          "samples": [
+            0.039,
+            0.056,
+            0.047,
+            0.07,
+            0.044
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 39,
+          "attributeBytes": 755760,
+          "indexBytes": 142440,
+          "totalBytes": 898200,
+          "totalMB": 0.857
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 144.391,
+          "heapUsedPeakMB": 232.825,
+          "heapUsedAfterDisposeMB": 232.862,
+          "heapDeltaAfterDisposeMB": 88.472,
+          "rssMB": 431.051,
+          "externalMB": 52.753,
+          "arrayBuffersMB": 50.573
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 48,
+          "totalVertices": 24982,
+          "totalTriangles": 23730,
+          "renderedVerticesWithInstances": 148182,
+          "renderedTrianglesWithInstances": 85330,
+          "renderedFeaturesCount": 86,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 471,
+            "triangles": 385,
+            "renderedVerticesWithInstances": 471,
+            "renderedTrianglesWithInstances": 385,
+            "visibleRenderedTriangles": 385,
+            "cpuBufferBytes": 13614
+          },
+          "railways": {
+            "meshCount": 42,
+            "visibleMeshCount": 26,
+            "vertices": 24420,
+            "triangles": 23270,
+            "renderedVerticesWithInstances": 147620,
+            "renderedTrianglesWithInstances": 84870,
+            "visibleRenderedTriangles": 77892,
+            "cpuBufferBytes": 1276224
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 87,
+            "triangles": 73,
+            "renderedVerticesWithInstances": 87,
+            "renderedTrianglesWithInstances": 73,
+            "visibleRenderedTriangles": 73,
+            "cpuBufferBytes": 2526
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "medium-real-hengelo-station",
+        "name": "Station Hengelo Corridor & Throat (Real OSM Extract)",
+        "scale": "medium-real-world",
+        "description": "Frozen real-world OSM extract covering Station Hengelo railway switchyard throat (67 railway ways) and adjacent Stationsplein urban roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/holdout_data/holdout_osm.geojson"
+        ],
+        "contentHashSha256": "b5ddec7d133004f4f2cc657bb93f7e1e9fdf57cbce50272d6cab3ec9516abbeb",
+        "originLonLat": [
+          6.7934,
+          52.2623
+        ],
+        "clipRadiusMeters": 320,
+        "rawFeatureCount": 183,
+        "parsedFeatureCounts": {
+          "total": 89,
+          "buildings": 0,
+          "roads": 23,
+          "railways": 58,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 7,
+          "barriers": 0,
+          "landmarks": 1
+        },
+        "topologySourceCounts": {
+          "roadParts": 24,
+          "railwayParts": 58,
+          "infrastructurePoints": 30
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 6.141,
+          "max": 9.573,
+          "mean": 7.917,
+          "median": 8.515,
+          "p95": 9.493,
+          "p99": 9.557,
+          "stdDev": 1.645,
+          "iqr": 2.986,
+          "coefficientOfVariation": 0.208,
+          "samples": [
+            9.172,
+            8.515,
+            9.573,
+            6.141,
+            6.185
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 6.268,
+          "max": 9.613,
+          "mean": 7.083,
+          "median": 6.498,
+          "p95": 9.043,
+          "p99": 9.499,
+          "stdDev": 1.429,
+          "iqr": 0.492,
+          "coefficientOfVariation": 0.202,
+          "samples": [
+            6.271,
+            6.268,
+            9.613,
+            6.498,
+            6.763
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.333,
+          "max": 3.184,
+          "mean": 2.233,
+          "median": 2.207,
+          "p95": 3.152,
+          "p99": 3.178,
+          "stdDev": 0.866,
+          "iqr": 1.602,
+          "coefficientOfVariation": 0.388,
+          "samples": [
+            1.333,
+            1.42,
+            2.207,
+            3.021,
+            3.184
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 1.628,
+          "max": 3.136,
+          "mean": 1.983,
+          "median": 1.722,
+          "p95": 2.862,
+          "p99": 3.081,
+          "stdDev": 0.647,
+          "iqr": 0.106,
+          "coefficientOfVariation": 0.326,
+          "samples": [
+            1.661,
+            1.722,
+            3.136,
+            1.767,
+            1.628
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 29.612,
+          "max": 35.187,
+          "mean": 32.025,
+          "median": 32.325,
+          "p95": 34.725,
+          "p99": 35.094,
+          "stdDev": 2.249,
+          "iqr": 2.752,
+          "coefficientOfVariation": 0.07,
+          "samples": [
+            29.612,
+            32.877,
+            32.325,
+            30.126,
+            35.187
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 14.078,
+            "max": 17.027,
+            "mean": 15.334,
+            "median": 14.875,
+            "p95": 16.803,
+            "p99": 16.982,
+            "stdDev": 1.149,
+            "iqr": 1.118,
+            "coefficientOfVariation": 0.075,
+            "samples": [
+              14.786,
+              17.027,
+              14.875,
+              14.078,
+              15.904
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 11.955,
+            "max": 16.22,
+            "mean": 14.331,
+            "median": 14.16,
+            "p95": 16.015,
+            "p99": 16.179,
+            "stdDev": 1.584,
+            "iqr": 1.078,
+            "coefficientOfVariation": 0.111,
+            "samples": [
+              14.121,
+              16.22,
+              14.16,
+              11.955,
+              15.199
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 10.643,
+            "max": 14.992,
+            "mean": 12.427,
+            "median": 11.822,
+            "p95": 14.573,
+            "p99": 14.908,
+            "stdDev": 1.641,
+            "iqr": 1.119,
+            "coefficientOfVariation": 0.132,
+            "samples": [
+              10.643,
+              11.78,
+              12.899,
+              11.822,
+              14.992
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 2.35,
+            "max": 2.906,
+            "mean": 2.583,
+            "median": 2.575,
+            "p95": 2.84,
+            "p99": 2.893,
+            "stdDev": 0.203,
+            "iqr": 0.07,
+            "coefficientOfVariation": 0.078,
+            "samples": [
+              2.35,
+              2.507,
+              2.906,
+              2.577,
+              2.575
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 79.567,
+          "max": 143.52,
+          "mean": 101.756,
+          "median": 97.36,
+          "p95": 134.317,
+          "p99": 141.68,
+          "stdDev": 24.461,
+          "iqr": 6.676,
+          "coefficientOfVariation": 0.24,
+          "samples": [
+            97.505,
+            97.36,
+            143.52,
+            90.829,
+            79.567
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 220.498,
+          "max": 296.835,
+          "mean": 253.224,
+          "median": 239.937,
+          "p95": 293.596,
+          "p99": 296.187,
+          "stdDev": 33.641,
+          "iqr": 52.43,
+          "coefficientOfVariation": 0.133,
+          "samples": [
+            280.64,
+            296.835,
+            239.937,
+            228.209,
+            220.498
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.068,
+          "max": 0.081,
+          "mean": 0.074,
+          "median": 0.074,
+          "p95": 0.08,
+          "p99": 0.081,
+          "stdDev": 0.005,
+          "iqr": 0.006,
+          "coefficientOfVariation": 0.069,
+          "samples": [
+            0.074,
+            0.068,
+            0.075,
+            0.07,
+            0.081
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 32,
+          "attributeBytes": 697352,
+          "indexBytes": 136446,
+          "totalBytes": 833798,
+          "totalMB": 0.795
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 251.446,
+          "heapUsedPeakMB": 283.73,
+          "heapUsedAfterDisposeMB": 141.57,
+          "heapDeltaAfterDisposeMB": -109.876,
+          "rssMB": 528.199,
+          "externalMB": 26.44,
+          "arrayBuffersMB": 24.26
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 41,
+          "totalVertices": 23749,
+          "totalTriangles": 22731,
+          "renderedVerticesWithInstances": 146949,
+          "renderedTrianglesWithInstances": 84331,
+          "renderedFeaturesCount": 86,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 4,
+            "visibleMeshCount": 4,
+            "vertices": 1039,
+            "triangles": 963,
+            "renderedVerticesWithInstances": 1039,
+            "renderedTrianglesWithInstances": 963,
+            "visibleRenderedTriangles": 963,
+            "cpuBufferBytes": 30714
+          },
+          "railways": {
+            "meshCount": 35,
+            "visibleMeshCount": 19,
+            "vertices": 22619,
+            "triangles": 21693,
+            "renderedVerticesWithInstances": 145819,
+            "renderedTrianglesWithInstances": 83293,
+            "visibleRenderedTriangles": 76315,
+            "cpuBufferBytes": 1194722
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 87,
+            "triangles": 73,
+            "renderedVerticesWithInstances": 87,
+            "renderedTrianglesWithInstances": 73,
+            "visibleRenderedTriangles": 73,
+            "cpuBufferBytes": 2526
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "large-real-amsterdam-centraal",
+        "name": "Amsterdam Centraal & Prins Hendrikkade (Complex Real OSM Extract)",
+        "scale": "complex-real-world",
+        "description": "Frozen complex real-world OSM extract covering Amsterdam Centraal multi-track station throat, elevated viaducts, turnouts, diamond crossings, and Prins Hendrikkade multi-modal roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson"
+        ],
+        "contentHashSha256": "73e6b6398e18479a6ad9d0fdb908cbfc96e2f4aeea12b8c6d064b78ecf8012f5",
+        "originLonLat": [
+          4.9,
+          52.378
+        ],
+        "clipRadiusMeters": 280,
+        "rawFeatureCount": 801,
+        "parsedFeatureCounts": {
+          "total": 296,
+          "buildings": 0,
+          "roads": 2,
+          "railways": 236,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 40,
+          "barriers": 0,
+          "landmarks": 18
+        },
+        "topologySourceCounts": {
+          "roadParts": 2,
+          "railwayParts": 236,
+          "infrastructurePoints": 113
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 21.537,
+          "max": 25.665,
+          "mean": 23.604,
+          "median": 23.819,
+          "p95": 25.563,
+          "p99": 25.645,
+          "stdDev": 1.874,
+          "iqr": 3.306,
+          "coefficientOfVariation": 0.079,
+          "samples": [
+            21.846,
+            25.665,
+            25.152,
+            23.819,
+            21.537
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 35.36,
+          "max": 64.31,
+          "mean": 48.407,
+          "median": 48.501,
+          "p95": 62.153,
+          "p99": 63.879,
+          "stdDev": 11.34,
+          "iqr": 13.184,
+          "coefficientOfVariation": 0.234,
+          "samples": [
+            48.501,
+            40.34,
+            64.31,
+            53.524,
+            35.36
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 4.648,
+          "max": 8.248,
+          "mean": 6.47,
+          "median": 6.835,
+          "p95": 8.137,
+          "p99": 8.226,
+          "stdDev": 1.621,
+          "iqr": 2.772,
+          "coefficientOfVariation": 0.25,
+          "samples": [
+            6.835,
+            8.248,
+            4.648,
+            4.922,
+            7.694
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 95.581,
+          "max": 126.482,
+          "mean": 111.615,
+          "median": 112.648,
+          "p95": 123.824,
+          "p99": 125.951,
+          "stdDev": 10.997,
+          "iqr": 3.014,
+          "coefficientOfVariation": 0.099,
+          "samples": [
+            126.482,
+            110.174,
+            112.648,
+            113.188,
+            95.581
+          ]
+        },
+        "roadGeometryGenerationMs": null,
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 316.923,
+          "max": 469.921,
+          "mean": 364.33,
+          "median": 327.961,
+          "p95": 452.126,
+          "p99": 466.362,
+          "stdDev": 64.173,
+          "iqr": 55.048,
+          "coefficientOfVariation": 0.176,
+          "samples": [
+            469.921,
+            380.945,
+            325.897,
+            327.961,
+            316.923
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 430.562,
+          "max": 520.845,
+          "mean": 459.426,
+          "median": 452.144,
+          "p95": 508.859,
+          "p99": 518.448,
+          "stdDev": 36.663,
+          "iqr": 28.249,
+          "coefficientOfVariation": 0.08,
+          "samples": [
+            452.144,
+            520.845,
+            460.915,
+            432.666,
+            430.562
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.056,
+          "max": 0.078,
+          "mean": 0.064,
+          "median": 0.058,
+          "p95": 0.077,
+          "p99": 0.078,
+          "stdDev": 0.01,
+          "iqr": 0.014,
+          "coefficientOfVariation": 0.162,
+          "samples": [
+            0.07,
+            0.078,
+            0.056,
+            0.058,
+            0.056
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 101,
+          "attributeBytes": 3855064,
+          "indexBytes": 609726,
+          "totalBytes": 4464790,
+          "totalMB": 4.258
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 188.931,
+          "heapUsedPeakMB": 265.962,
+          "heapUsedAfterDisposeMB": 266.015,
+          "heapDeltaAfterDisposeMB": 77.084,
+          "rssMB": 553.215,
+          "externalMB": 88.234,
+          "arrayBuffersMB": 86.057
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 122,
+          "totalVertices": 142221,
+          "totalTriangles": 101611,
+          "renderedVerticesWithInstances": 461781,
+          "renderedTrianglesWithInstances": 261391,
+          "renderedFeaturesCount": 277,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "railways": {
+            "meshCount": 120,
+            "visibleMeshCount": 84,
+            "vertices": 141252,
+            "triangles": 100696,
+            "renderedVerticesWithInstances": 460812,
+            "renderedTrianglesWithInstances": 260476,
+            "visibleRenderedTriangles": 241102,
+            "cpuBufferBytes": 5458668
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 965,
+            "triangles": 913,
+            "renderedVerticesWithInstances": 965,
+            "renderedTrianglesWithInstances": 913,
+            "visibleRenderedTriangles": 913,
+            "cpuBufferBytes": 28638
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "large-real-amsterdam-centraal::production-legacy::roadGeometryGenerationMs",
+          "reason": "disabled_by_config",
+          "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "large-real-amsterdam-centraal",
+        "name": "Amsterdam Centraal & Prins Hendrikkade (Complex Real OSM Extract)",
+        "scale": "complex-real-world",
+        "description": "Frozen complex real-world OSM extract covering Amsterdam Centraal multi-track station throat, elevated viaducts, turnouts, diamond crossings, and Prins Hendrikkade multi-modal roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson"
+        ],
+        "contentHashSha256": "73e6b6398e18479a6ad9d0fdb908cbfc96e2f4aeea12b8c6d064b78ecf8012f5",
+        "originLonLat": [
+          4.9,
+          52.378
+        ],
+        "clipRadiusMeters": 280,
+        "rawFeatureCount": 801,
+        "parsedFeatureCounts": {
+          "total": 296,
+          "buildings": 0,
+          "roads": 2,
+          "railways": 236,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 40,
+          "barriers": 0,
+          "landmarks": 18
+        },
+        "topologySourceCounts": {
+          "roadParts": 2,
+          "railwayParts": 236,
+          "infrastructurePoints": 113
+        }
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 22.63,
+          "max": 29.531,
+          "mean": 26.487,
+          "median": 27.572,
+          "p95": 29.174,
+          "p99": 29.459,
+          "stdDev": 2.705,
+          "iqr": 2.797,
+          "coefficientOfVariation": 0.102,
+          "samples": [
+            22.63,
+            27.748,
+            29.531,
+            24.952,
+            27.572
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 38.073,
+          "max": 56.218,
+          "mean": 45.506,
+          "median": 47.263,
+          "p95": 54.484,
+          "p99": 55.872,
+          "stdDev": 7.54,
+          "iqr": 9.122,
+          "coefficientOfVariation": 0.166,
+          "samples": [
+            38.073,
+            47.263,
+            38.426,
+            56.218,
+            47.548
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 4.12,
+          "max": 7.881,
+          "mean": 6.045,
+          "median": 6.219,
+          "p95": 7.618,
+          "p99": 7.828,
+          "stdDev": 1.392,
+          "iqr": 1.13,
+          "coefficientOfVariation": 0.23,
+          "samples": [
+            5.439,
+            6.568,
+            4.12,
+            7.881,
+            6.219
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 97.757,
+          "max": 132.977,
+          "mean": 121.046,
+          "median": 127.942,
+          "p95": 132.576,
+          "p99": 132.897,
+          "stdDev": 14.668,
+          "iqr": 15.385,
+          "coefficientOfVariation": 0.121,
+          "samples": [
+            97.757,
+            130.97,
+            127.942,
+            132.977,
+            115.585
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 0.047,
+          "max": 0.066,
+          "mean": 0.055,
+          "median": 0.058,
+          "p95": 0.064,
+          "p99": 0.065,
+          "stdDev": 0.008,
+          "iqr": 0.009,
+          "coefficientOfVariation": 0.139,
+          "samples": [
+            0.058,
+            0.047,
+            0.066,
+            0.049,
+            0.058
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 310.084,
+          "max": 389.082,
+          "mean": 357.25,
+          "median": 358.256,
+          "p95": 386.13,
+          "p99": 388.492,
+          "stdDev": 29.739,
+          "iqr": 19.81,
+          "coefficientOfVariation": 0.083,
+          "samples": [
+            374.318,
+            310.084,
+            358.256,
+            354.509,
+            389.082
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 454.875,
+          "max": 569.291,
+          "mean": 520.649,
+          "median": 531.436,
+          "p95": 566.005,
+          "p99": 568.634,
+          "stdDev": 46.138,
+          "iqr": 58.073,
+          "coefficientOfVariation": 0.089,
+          "samples": [
+            494.784,
+            454.875,
+            569.291,
+            531.436,
+            552.858
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.071,
+          "max": 0.084,
+          "mean": 0.077,
+          "median": 0.074,
+          "p95": 0.084,
+          "p99": 0.084,
+          "stdDev": 0.007,
+          "iqr": 0.012,
+          "coefficientOfVariation": 0.084,
+          "samples": [
+            0.084,
+            0.074,
+            0.072,
+            0.071,
+            0.084
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 101,
+          "attributeBytes": 3618328,
+          "indexBytes": 573042,
+          "totalBytes": 4191370,
+          "totalMB": 3.997
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 146.725,
+          "heapUsedPeakMB": 261.753,
+          "heapUsedAfterDisposeMB": 256.386,
+          "heapDeltaAfterDisposeMB": 109.661,
+          "rssMB": 567.426,
+          "externalMB": 73.558,
+          "arrayBuffersMB": 71.382
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 122,
+          "totalVertices": 133333,
+          "totalTriangles": 95497,
+          "renderedVerticesWithInstances": 458733,
+          "renderedTrianglesWithInstances": 258197,
+          "renderedFeaturesCount": 277,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "railways": {
+            "meshCount": 120,
+            "visibleMeshCount": 84,
+            "vertices": 132364,
+            "triangles": 94582,
+            "renderedVerticesWithInstances": 457764,
+            "renderedTrianglesWithInstances": 257282,
+            "visibleRenderedTriangles": 238958,
+            "cpuBufferBytes": 5203936
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 965,
+            "triangles": 913,
+            "renderedVerticesWithInstances": 965,
+            "renderedTrianglesWithInstances": 913,
+            "visibleRenderedTriangles": 913,
+            "cpuBufferBytes": 28638
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "large-real-amsterdam-centraal",
+        "name": "Amsterdam Centraal & Prins Hendrikkade (Complex Real OSM Extract)",
+        "scale": "complex-real-world",
+        "description": "Frozen complex real-world OSM extract covering Amsterdam Centraal multi-track station throat, elevated viaducts, turnouts, diamond crossings, and Prins Hendrikkade multi-modal roads/cycleways.",
+        "sourceFiles": [
+          "src/world/prototype/realOsmRailwayExtracts.json",
+          "research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson"
+        ],
+        "contentHashSha256": "73e6b6398e18479a6ad9d0fdb908cbfc96e2f4aeea12b8c6d064b78ecf8012f5",
+        "originLonLat": [
+          4.9,
+          52.378
+        ],
+        "clipRadiusMeters": 280,
+        "rawFeatureCount": 801,
+        "parsedFeatureCounts": {
+          "total": 296,
+          "buildings": 0,
+          "roads": 2,
+          "railways": 236,
+          "waterBodies": 0,
+          "linearWaterways": 0,
+          "parks": 0,
+          "landuse": 40,
+          "barriers": 0,
+          "landmarks": 18
+        },
+        "topologySourceCounts": {
+          "roadParts": 2,
+          "railwayParts": 236,
+          "infrastructurePoints": 113
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 18.646,
+          "max": 58.227,
+          "mean": 29.294,
+          "median": 22.416,
+          "p95": 51.831,
+          "p99": 56.948,
+          "stdDev": 16.409,
+          "iqr": 5.316,
+          "coefficientOfVariation": 0.56,
+          "samples": [
+            58.227,
+            18.646,
+            26.247,
+            22.416,
+            20.931
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 33.622,
+          "max": 47.936,
+          "mean": 41.769,
+          "median": 44.258,
+          "p95": 47.865,
+          "p99": 47.922,
+          "stdDev": 6.787,
+          "iqr": 12.128,
+          "coefficientOfVariation": 0.162,
+          "samples": [
+            47.936,
+            44.258,
+            47.577,
+            33.622,
+            35.45
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 3.132,
+          "max": 8.372,
+          "mean": 5.97,
+          "median": 6.128,
+          "p95": 8.081,
+          "p99": 8.314,
+          "stdDev": 1.949,
+          "iqr": 1.619,
+          "coefficientOfVariation": 0.326,
+          "samples": [
+            6.918,
+            8.372,
+            3.132,
+            6.128,
+            5.299
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 106.019,
+          "max": 118.341,
+          "mean": 113.609,
+          "median": 113.755,
+          "p95": 118.173,
+          "p99": 118.307,
+          "stdDev": 4.913,
+          "iqr": 5.071,
+          "coefficientOfVariation": 0.043,
+          "samples": [
+            112.43,
+            113.755,
+            118.341,
+            117.501,
+            106.019
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 0.039,
+          "max": 0.056,
+          "mean": 0.045,
+          "median": 0.046,
+          "p95": 0.054,
+          "p99": 0.055,
+          "stdDev": 0.007,
+          "iqr": 0.008,
+          "coefficientOfVariation": 0.153,
+          "samples": [
+            0.039,
+            0.056,
+            0.039,
+            0.048,
+            0.046
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 326.571,
+          "max": 466.538,
+          "mean": 368.39,
+          "median": 338.323,
+          "p95": 448.913,
+          "p99": 463.013,
+          "stdDev": 58.529,
+          "iqr": 46.306,
+          "coefficientOfVariation": 0.159,
+          "samples": [
+            466.538,
+            338.323,
+            326.571,
+            378.413,
+            332.107
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 626.616,
+          "max": 676.04,
+          "mean": 644.618,
+          "median": 640.053,
+          "p95": 669.804,
+          "p99": 674.793,
+          "stdDev": 18.808,
+          "iqr": 9.335,
+          "coefficientOfVariation": 0.029,
+          "samples": [
+            635.523,
+            644.858,
+            626.616,
+            676.04,
+            640.053
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.059,
+          "max": 0.073,
+          "mean": 0.065,
+          "median": 0.063,
+          "p95": 0.072,
+          "p99": 0.073,
+          "stdDev": 0.005,
+          "iqr": 0.004,
+          "coefficientOfVariation": 0.083,
+          "samples": [
+            0.059,
+            0.073,
+            0.063,
+            0.066,
+            0.063
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 99,
+          "attributeBytes": 3597408,
+          "indexBytes": 570924,
+          "totalBytes": 4168332,
+          "totalMB": 3.975
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 306.693,
+          "heapUsedPeakMB": 306.693,
+          "heapUsedAfterDisposeMB": 215.048,
+          "heapDeltaAfterDisposeMB": -91.644,
+          "rssMB": 594.449,
+          "externalMB": 57.417,
+          "arrayBuffersMB": 55.241
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 120,
+          "totalVertices": 132810,
+          "totalTriangles": 95144,
+          "renderedVerticesWithInstances": 458210,
+          "renderedTrianglesWithInstances": 257844,
+          "renderedFeaturesCount": 277,
+          "forestTreesCount": 0
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "roads": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "railways": {
+            "meshCount": 118,
+            "visibleMeshCount": 82,
+            "vertices": 131841,
+            "triangles": 94229,
+            "renderedVerticesWithInstances": 457241,
+            "renderedTrianglesWithInstances": 256929,
+            "visibleRenderedTriangles": 238605,
+            "cpuBufferBytes": 5180898
+          },
+          "water": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "parks": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "landuse": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 965,
+            "triangles": 913,
+            "renderedVerticesWithInstances": 965,
+            "renderedTrianglesWithInstances": 913,
+            "visibleRenderedTriangles": 913,
+            "cpuBufferBytes": 28638
+          },
+          "barriers": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          },
+          "foliage": {
+            "meshCount": 0,
+            "visibleMeshCount": 0,
+            "vertices": 0,
+            "triangles": 0,
+            "renderedVerticesWithInstances": 0,
+            "renderedTrianglesWithInstances": 0,
+            "visibleRenderedTriangles": 0,
+            "cpuBufferBytes": 0
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "synthetic-stress-urban-switchyard",
+        "name": "Synthetic Stress Benchmark (Urban Grid + 65-Way Switchyard)",
+        "scale": "synthetic-stress",
+        "description": "Deterministic synthetic stress-test workload combining a 209-way interconnected urban road/cycleway/footway grid, the 65-way multi-zone railway switchyard, 36 block buildings (with courtyards), parks, parking lots, water bodies, canals, barriers, and trees.",
+        "sourceFiles": [
+          "benchmarks/datasets.ts#buildSyntheticStressGeoJson",
+          "src/world/prototype/RailwayTestFixtures.ts"
+        ],
+        "contentHashSha256": "2b2c55014647ab42019612f50addd8f1a424f6102df8f374ffdcc1aeadeafb9f",
+        "originLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "clipRadiusMeters": 480,
+        "rawFeatureCount": 324,
+        "parsedFeatureCounts": {
+          "total": 324,
+          "buildings": 36,
+          "roads": 197,
+          "railways": 65,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 1,
+          "landuse": 1,
+          "barriers": 6,
+          "landmarks": 16
+        },
+        "topologySourceCounts": {
+          "roadParts": 197,
+          "railwayParts": 65,
+          "infrastructurePoints": 0
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 7.486,
+          "max": 9.305,
+          "mean": 8.553,
+          "median": 8.629,
+          "p95": 9.258,
+          "p99": 9.295,
+          "stdDev": 0.717,
+          "iqr": 0.795,
+          "coefficientOfVariation": 0.084,
+          "samples": [
+            8.629,
+            9.305,
+            9.07,
+            8.275,
+            7.486
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 12.866,
+          "max": 21.256,
+          "mean": 15.282,
+          "median": 14.274,
+          "p95": 19.908,
+          "p99": 20.986,
+          "stdDev": 3.403,
+          "iqr": 1.023,
+          "coefficientOfVariation": 0.223,
+          "samples": [
+            14.519,
+            13.496,
+            12.866,
+            14.274,
+            21.256
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 2.086,
+          "max": 3.851,
+          "mean": 2.565,
+          "median": 2.33,
+          "p95": 3.555,
+          "p99": 3.791,
+          "stdDev": 0.727,
+          "iqr": 0.182,
+          "coefficientOfVariation": 0.284,
+          "samples": [
+            2.33,
+            3.851,
+            2.189,
+            2.086,
+            2.371
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 0.072,
+          "max": 0.128,
+          "mean": 0.091,
+          "median": 0.083,
+          "p95": 0.122,
+          "p99": 0.127,
+          "stdDev": 0.023,
+          "iqr": 0.027,
+          "coefficientOfVariation": 0.259,
+          "samples": [
+            0.099,
+            0.128,
+            0.072,
+            0.072,
+            0.083
+          ]
+        },
+        "roadGeometryGenerationMs": null,
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 58.973,
+          "max": 75.194,
+          "mean": 66.034,
+          "median": 67.485,
+          "p95": 73.664,
+          "p99": 74.888,
+          "stdDev": 6.398,
+          "iqr": 6.564,
+          "coefficientOfVariation": 0.097,
+          "samples": [
+            67.541,
+            75.194,
+            58.973,
+            60.977,
+            67.485
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 116.35,
+          "max": 133.637,
+          "mean": 125.076,
+          "median": 122.875,
+          "p95": 132.849,
+          "p99": 133.479,
+          "stdDev": 6.721,
+          "iqr": 6.873,
+          "coefficientOfVariation": 0.054,
+          "samples": [
+            129.697,
+            133.637,
+            122.824,
+            122.875,
+            116.35
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.054,
+          "max": 0.064,
+          "mean": 0.061,
+          "median": 0.063,
+          "p95": 0.064,
+          "p99": 0.064,
+          "stdDev": 0.004,
+          "iqr": 0.003,
+          "coefficientOfVariation": 0.064,
+          "samples": [
+            0.063,
+            0.063,
+            0.064,
+            0.06,
+            0.054
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 51,
+          "attributeBytes": 584800,
+          "indexBytes": 86118,
+          "totalBytes": 670918,
+          "totalMB": 0.64
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 228.383,
+          "heapUsedPeakMB": 305.767,
+          "heapUsedAfterDisposeMB": 305.801,
+          "heapDeltaAfterDisposeMB": 77.418,
+          "rssMB": 596.586,
+          "externalMB": 73.325,
+          "arrayBuffersMB": 71.15
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 58,
+          "totalVertices": 31516,
+          "totalTriangles": 15275,
+          "renderedVerticesWithInstances": 105816,
+          "renderedTrianglesWithInstances": 56265,
+          "renderedFeaturesCount": 324,
+          "forestTreesCount": 16
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1716,
+            "triangles": 572,
+            "renderedVerticesWithInstances": 1716,
+            "renderedTrianglesWithInstances": 572,
+            "visibleRenderedTriangles": 572,
+            "cpuBufferBytes": 54912
+          },
+          "roads": {
+            "meshCount": 11,
+            "visibleMeshCount": 11,
+            "vertices": 3022,
+            "triangles": 1883,
+            "renderedVerticesWithInstances": 3022,
+            "renderedTrianglesWithInstances": 1883,
+            "visibleRenderedTriangles": 1883,
+            "cpuBufferBytes": 83826
+          },
+          "railways": {
+            "meshCount": 36,
+            "visibleMeshCount": 22,
+            "vertices": 12860,
+            "triangles": 11550,
+            "renderedVerticesWithInstances": 87160,
+            "renderedTrianglesWithInstances": 48700,
+            "visibleRenderedTriangles": 45238,
+            "cpuBufferBytes": 698000
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 22,
+            "triangles": 18,
+            "renderedVerticesWithInstances": 22,
+            "renderedTrianglesWithInstances": 18,
+            "visibleRenderedTriangles": 18,
+            "cpuBufferBytes": 636
+          },
+          "parks": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 4,
+            "triangles": 2,
+            "renderedVerticesWithInstances": 4,
+            "renderedTrianglesWithInstances": 2,
+            "visibleRenderedTriangles": 2,
+            "cpuBufferBytes": 108
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1608,
+            "triangles": 804,
+            "renderedVerticesWithInstances": 1608,
+            "renderedTrianglesWithInstances": 804,
+            "visibleRenderedTriangles": 804,
+            "cpuBufferBytes": 43416
+          },
+          "barriers": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 120,
+            "triangles": 60,
+            "renderedVerticesWithInstances": 120,
+            "renderedTrianglesWithInstances": 60,
+            "visibleRenderedTriangles": 60,
+            "cpuBufferBytes": 3240
+          },
+          "foliage": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 760,
+            "triangles": 264,
+            "renderedVerticesWithInstances": 12160,
+            "renderedTrianglesWithInstances": 4224,
+            "visibleRenderedTriangles": 4224,
+            "cpuBufferBytes": 26512
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "synthetic-stress-urban-switchyard::production-legacy::roadGeometryGenerationMs",
+          "reason": "disabled_by_config",
+          "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "synthetic-stress-urban-switchyard",
+        "name": "Synthetic Stress Benchmark (Urban Grid + 65-Way Switchyard)",
+        "scale": "synthetic-stress",
+        "description": "Deterministic synthetic stress-test workload combining a 209-way interconnected urban road/cycleway/footway grid, the 65-way multi-zone railway switchyard, 36 block buildings (with courtyards), parks, parking lots, water bodies, canals, barriers, and trees.",
+        "sourceFiles": [
+          "benchmarks/datasets.ts#buildSyntheticStressGeoJson",
+          "src/world/prototype/RailwayTestFixtures.ts"
+        ],
+        "contentHashSha256": "2b2c55014647ab42019612f50addd8f1a424f6102df8f374ffdcc1aeadeafb9f",
+        "originLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "clipRadiusMeters": 480,
+        "rawFeatureCount": 324,
+        "parsedFeatureCounts": {
+          "total": 324,
+          "buildings": 36,
+          "roads": 197,
+          "railways": 65,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 1,
+          "landuse": 1,
+          "barriers": 6,
+          "landmarks": 16
+        },
+        "topologySourceCounts": {
+          "roadParts": 197,
+          "railwayParts": 65,
+          "infrastructurePoints": 0
+        }
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 6.447,
+          "max": 12.214,
+          "mean": 8.641,
+          "median": 8.34,
+          "p95": 11.539,
+          "p99": 12.079,
+          "stdDev": 2.199,
+          "iqr": 1.478,
+          "coefficientOfVariation": 0.254,
+          "samples": [
+            8.841,
+            8.34,
+            12.214,
+            6.447,
+            7.363
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 8.697,
+          "max": 16.703,
+          "mean": 13.155,
+          "median": 13.055,
+          "p95": 16.487,
+          "p99": 16.66,
+          "stdDev": 3.19,
+          "iqr": 3.93,
+          "coefficientOfVariation": 0.242,
+          "samples": [
+            13.055,
+            15.624,
+            16.703,
+            8.697,
+            11.694
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 2.07,
+          "max": 5.012,
+          "mean": 2.985,
+          "median": 2.565,
+          "p95": 4.65,
+          "p99": 4.939,
+          "stdDev": 1.224,
+          "iqr": 1.128,
+          "coefficientOfVariation": 0.41,
+          "samples": [
+            2.565,
+            3.204,
+            2.07,
+            5.012,
+            2.076
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 0.071,
+          "max": 0.107,
+          "mean": 0.086,
+          "median": 0.083,
+          "p95": 0.104,
+          "p99": 0.107,
+          "stdDev": 0.014,
+          "iqr": 0.009,
+          "coefficientOfVariation": 0.158,
+          "samples": [
+            0.071,
+            0.107,
+            0.08,
+            0.09,
+            0.083
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 57.483,
+          "max": 90.94,
+          "mean": 68.657,
+          "median": 64.286,
+          "p95": 87.296,
+          "p99": 90.211,
+          "stdDev": 13.908,
+          "iqr": 14.865,
+          "coefficientOfVariation": 0.203,
+          "samples": [
+            90.94,
+            72.72,
+            64.286,
+            57.855,
+            57.483
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 67.517,
+          "max": 124.977,
+          "mean": 84.207,
+          "median": 75.848,
+          "p95": 115.436,
+          "p99": 123.069,
+          "stdDev": 23.108,
+          "iqr": 1.853,
+          "coefficientOfVariation": 0.274,
+          "samples": [
+            75.418,
+            77.271,
+            124.977,
+            67.517,
+            75.848
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 159.859,
+          "max": 227.172,
+          "mean": 193.238,
+          "median": 199.502,
+          "p95": 221.979,
+          "p99": 226.133,
+          "stdDev": 25.431,
+          "iqr": 22.754,
+          "coefficientOfVariation": 0.132,
+          "samples": [
+            227.172,
+            201.207,
+            199.502,
+            159.859,
+            178.453
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.052,
+          "max": 0.087,
+          "mean": 0.067,
+          "median": 0.068,
+          "p95": 0.083,
+          "p99": 0.086,
+          "stdDev": 0.013,
+          "iqr": 0.009,
+          "coefficientOfVariation": 0.195,
+          "samples": [
+            0.07,
+            0.087,
+            0.06,
+            0.068,
+            0.052
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 51,
+          "attributeBytes": 580312,
+          "indexBytes": 85350,
+          "totalBytes": 665662,
+          "totalMB": 0.635
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 334.143,
+          "heapUsedPeakMB": 422.16,
+          "heapUsedAfterDisposeMB": 422.194,
+          "heapDeltaAfterDisposeMB": 88.051,
+          "rssMB": 723.195,
+          "externalMB": 89.212,
+          "arrayBuffersMB": 87.036
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 58,
+          "totalVertices": 31329,
+          "totalTriangles": 15147,
+          "renderedVerticesWithInstances": 111369,
+          "renderedTrianglesWithInstances": 59007,
+          "renderedFeaturesCount": 324,
+          "forestTreesCount": 16
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1716,
+            "triangles": 572,
+            "renderedVerticesWithInstances": 1716,
+            "renderedTrianglesWithInstances": 572,
+            "visibleRenderedTriangles": 572,
+            "cpuBufferBytes": 54912
+          },
+          "roads": {
+            "meshCount": 11,
+            "visibleMeshCount": 11,
+            "vertices": 2835,
+            "triangles": 1755,
+            "renderedVerticesWithInstances": 2835,
+            "renderedTrianglesWithInstances": 1755,
+            "visibleRenderedTriangles": 1755,
+            "cpuBufferBytes": 78570
+          },
+          "railways": {
+            "meshCount": 36,
+            "visibleMeshCount": 22,
+            "vertices": 12860,
+            "triangles": 11550,
+            "renderedVerticesWithInstances": 92900,
+            "renderedTrianglesWithInstances": 51570,
+            "visibleRenderedTriangles": 48108,
+            "cpuBufferBytes": 716368
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 22,
+            "triangles": 18,
+            "renderedVerticesWithInstances": 22,
+            "renderedTrianglesWithInstances": 18,
+            "visibleRenderedTriangles": 18,
+            "cpuBufferBytes": 636
+          },
+          "parks": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 4,
+            "triangles": 2,
+            "renderedVerticesWithInstances": 4,
+            "renderedTrianglesWithInstances": 2,
+            "visibleRenderedTriangles": 2,
+            "cpuBufferBytes": 108
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1608,
+            "triangles": 804,
+            "renderedVerticesWithInstances": 1608,
+            "renderedTrianglesWithInstances": 804,
+            "visibleRenderedTriangles": 804,
+            "cpuBufferBytes": 43416
+          },
+          "barriers": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 120,
+            "triangles": 60,
+            "renderedVerticesWithInstances": 120,
+            "renderedTrianglesWithInstances": 60,
+            "visibleRenderedTriangles": 60,
+            "cpuBufferBytes": 3240
+          },
+          "foliage": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 760,
+            "triangles": 264,
+            "renderedVerticesWithInstances": 12160,
+            "renderedTrianglesWithInstances": 4224,
+            "visibleRenderedTriangles": 4224,
+            "cpuBufferBytes": 26512
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "synthetic-stress-urban-switchyard",
+        "name": "Synthetic Stress Benchmark (Urban Grid + 65-Way Switchyard)",
+        "scale": "synthetic-stress",
+        "description": "Deterministic synthetic stress-test workload combining a 209-way interconnected urban road/cycleway/footway grid, the 65-way multi-zone railway switchyard, 36 block buildings (with courtyards), parks, parking lots, water bodies, canals, barriers, and trees.",
+        "sourceFiles": [
+          "benchmarks/datasets.ts#buildSyntheticStressGeoJson",
+          "src/world/prototype/RailwayTestFixtures.ts"
+        ],
+        "contentHashSha256": "2b2c55014647ab42019612f50addd8f1a424f6102df8f374ffdcc1aeadeafb9f",
+        "originLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "clipRadiusMeters": 480,
+        "rawFeatureCount": 324,
+        "parsedFeatureCounts": {
+          "total": 324,
+          "buildings": 36,
+          "roads": 197,
+          "railways": 65,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 1,
+          "landuse": 1,
+          "barriers": 6,
+          "landmarks": 16
+        },
+        "topologySourceCounts": {
+          "roadParts": 197,
+          "railwayParts": 65,
+          "infrastructurePoints": 0
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "warmupIterations": 2,
+      "measuredIterations": 5,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 5,
+          "min": 6.677,
+          "max": 10.558,
+          "mean": 7.882,
+          "median": 7.073,
+          "p95": 10.06,
+          "p99": 10.458,
+          "stdDev": 1.583,
+          "iqr": 1.033,
+          "coefficientOfVariation": 0.201,
+          "samples": [
+            7.073,
+            10.558,
+            8.067,
+            7.035,
+            6.677
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 5,
+          "min": 9.311,
+          "max": 14.697,
+          "mean": 11.866,
+          "median": 11.117,
+          "p95": 14.401,
+          "p99": 14.638,
+          "stdDev": 2.104,
+          "iqr": 2.23,
+          "coefficientOfVariation": 0.177,
+          "samples": [
+            13.218,
+            11.117,
+            14.697,
+            10.989,
+            9.311
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 5,
+          "min": 1.766,
+          "max": 2.559,
+          "mean": 2.175,
+          "median": 2.094,
+          "p95": 2.524,
+          "p99": 2.552,
+          "stdDev": 0.307,
+          "iqr": 0.318,
+          "coefficientOfVariation": 0.141,
+          "samples": [
+            2.559,
+            1.766,
+            2.386,
+            2.068,
+            2.094
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 5,
+          "min": 0.069,
+          "max": 0.095,
+          "mean": 0.081,
+          "median": 0.077,
+          "p95": 0.094,
+          "p99": 0.095,
+          "stdDev": 0.011,
+          "iqr": 0.016,
+          "coefficientOfVariation": 0.137,
+          "samples": [
+            0.077,
+            0.069,
+            0.095,
+            0.089,
+            0.072
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 89.196,
+          "max": 110.831,
+          "mean": 95.938,
+          "median": 92.237,
+          "p95": 108.157,
+          "p99": 110.296,
+          "stdDev": 8.93,
+          "iqr": 7.499,
+          "coefficientOfVariation": 0.093,
+          "samples": [
+            97.462,
+            92.237,
+            89.196,
+            89.962,
+            110.831
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 5,
+            "min": 26.176,
+            "max": 36.471,
+            "mean": 30.392,
+            "median": 29.493,
+            "p95": 35.709,
+            "p99": 36.318,
+            "stdDev": 4.217,
+            "iqr": 5.503,
+            "coefficientOfVariation": 0.139,
+            "samples": [
+              36.471,
+              27.159,
+              29.493,
+              26.176,
+              32.662
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 5,
+            "min": 25.195,
+            "max": 35.432,
+            "mean": 29.337,
+            "median": 28.502,
+            "p95": 34.632,
+            "p99": 35.272,
+            "stdDev": 4.174,
+            "iqr": 5.306,
+            "coefficientOfVariation": 0.142,
+            "samples": [
+              35.432,
+              26.125,
+              28.502,
+              25.195,
+              31.431
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 5,
+            "min": 48.341,
+            "max": 65.766,
+            "mean": 52.703,
+            "median": 49.24,
+            "p95": 62.873,
+            "p99": 65.187,
+            "stdDev": 7.389,
+            "iqr": 2.441,
+            "coefficientOfVariation": 0.14,
+            "samples": [
+              48.341,
+              49.24,
+              48.862,
+              51.304,
+              65.766
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 5,
+            "min": 4.671,
+            "max": 7.978,
+            "mean": 6.452,
+            "median": 6.58,
+            "p95": 7.725,
+            "p99": 7.927,
+            "stdDev": 1.183,
+            "iqr": 0.39,
+            "coefficientOfVariation": 0.183,
+            "samples": [
+              6.58,
+              4.671,
+              6.32,
+              7.978,
+              6.71
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 64.27,
+          "max": 96.687,
+          "mean": 75.263,
+          "median": 67.802,
+          "p95": 93.327,
+          "p99": 96.015,
+          "stdDev": 13.365,
+          "iqr": 12.214,
+          "coefficientOfVariation": 0.178,
+          "samples": [
+            79.886,
+            67.802,
+            64.27,
+            67.672,
+            96.687
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 5,
+          "min": 266.062,
+          "max": 369.328,
+          "mean": 302.663,
+          "median": 280.051,
+          "p95": 360.735,
+          "p99": 367.61,
+          "stdDev": 44.237,
+          "iqr": 54.855,
+          "coefficientOfVariation": 0.146,
+          "samples": [
+            369.328,
+            266.062,
+            280.051,
+            271.509,
+            326.364
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 5,
+          "min": 0.05,
+          "max": 1.758,
+          "mean": 0.421,
+          "median": 0.065,
+          "p95": 1.441,
+          "p99": 1.695,
+          "stdDev": 0.749,
+          "iqr": 0.111,
+          "coefficientOfVariation": 1.777,
+          "samples": [
+            0.172,
+            0.065,
+            0.061,
+            1.758,
+            0.05
+          ]
+        }
+      },
+      "memoryAndGeometry": {
+        "cpuBufferMemory": {
+          "geometryCount": 48,
+          "attributeBytes": 549920,
+          "indexBytes": 83400,
+          "totalBytes": 633320,
+          "totalMB": 0.604
+        },
+        "v8HeapMemory": {
+          "gcInvokedBetweenRuns": false,
+          "heapUsedBeforeMB": 445.506,
+          "heapUsedPeakMB": 445.506,
+          "heapUsedAfterDisposeMB": 186.879,
+          "heapDeltaAfterDisposeMB": -258.627,
+          "rssMB": 793.258,
+          "externalMB": 23.453,
+          "arrayBuffersMB": 21.278
+        },
+        "sceneGeometry": {
+          "constructedMeshesCount": 55,
+          "totalVertices": 30676,
+          "totalTriangles": 14822,
+          "renderedVerticesWithInstances": 110716,
+          "renderedTrianglesWithInstances": 58682,
+          "renderedFeaturesCount": 324,
+          "forestTreesCount": 16
+        },
+        "groupStats": {
+          "buildings": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1716,
+            "triangles": 572,
+            "renderedVerticesWithInstances": 1716,
+            "renderedTrianglesWithInstances": 572,
+            "visibleRenderedTriangles": 572,
+            "cpuBufferBytes": 54912
+          },
+          "roads": {
+            "meshCount": 11,
+            "visibleMeshCount": 11,
+            "vertices": 3102,
+            "triangles": 2202,
+            "renderedVerticesWithInstances": 3102,
+            "renderedTrianglesWithInstances": 2202,
+            "visibleRenderedTriangles": 2202,
+            "cpuBufferBytes": 87660
+          },
+          "railways": {
+            "meshCount": 33,
+            "visibleMeshCount": 19,
+            "vertices": 11940,
+            "triangles": 10778,
+            "renderedVerticesWithInstances": 91980,
+            "renderedTrianglesWithInstances": 50798,
+            "visibleRenderedTriangles": 47336,
+            "cpuBufferBytes": 674936
+          },
+          "water": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 22,
+            "triangles": 18,
+            "renderedVerticesWithInstances": 22,
+            "renderedTrianglesWithInstances": 18,
+            "visibleRenderedTriangles": 18,
+            "cpuBufferBytes": 636
+          },
+          "parks": {
+            "meshCount": 1,
+            "visibleMeshCount": 1,
+            "vertices": 4,
+            "triangles": 2,
+            "renderedVerticesWithInstances": 4,
+            "renderedTrianglesWithInstances": 2,
+            "visibleRenderedTriangles": 2,
+            "cpuBufferBytes": 108
+          },
+          "landuse": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 1608,
+            "triangles": 804,
+            "renderedVerticesWithInstances": 1608,
+            "renderedTrianglesWithInstances": 804,
+            "visibleRenderedTriangles": 804,
+            "cpuBufferBytes": 43416
+          },
+          "barriers": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 120,
+            "triangles": 60,
+            "renderedVerticesWithInstances": 120,
+            "renderedTrianglesWithInstances": 60,
+            "visibleRenderedTriangles": 60,
+            "cpuBufferBytes": 3240
+          },
+          "foliage": {
+            "meshCount": 2,
+            "visibleMeshCount": 2,
+            "vertices": 760,
+            "triangles": 264,
+            "renderedVerticesWithInstances": 12160,
+            "renderedTrianglesWithInstances": 4224,
+            "visibleRenderedTriangles": 4224,
+            "cpuBufferBytes": 26512
+          }
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 2,
+          "measuredIterations": 5,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    }
+  ],
+  "unsupportedMetrics": [
+    {
+      "metricId": "v8HeapMemory.deterministicGcBeforeSample",
+      "reason": "unsupported_by_runtime",
+      "explanation": "Node.js was launched without --expose-gc; V8 heap snapshots reflect natural GC cadence. Use cpuBufferMemory for deterministic byte-exact geometry memory."
+    },
+    {
+      "metricId": "small-real-europatunnel::production-legacy::roadGeometryGenerationMs",
+      "reason": "disabled_by_config",
+      "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+    },
+    {
+      "metricId": "medium-real-hengelo-station::production-legacy::roadGeometryGenerationMs",
+      "reason": "disabled_by_config",
+      "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+    },
+    {
+      "metricId": "large-real-amsterdam-centraal::production-legacy::roadGeometryGenerationMs",
+      "reason": "disabled_by_config",
+      "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+    },
+    {
+      "metricId": "synthetic-stress-urban-switchyard::production-legacy::roadGeometryGenerationMs",
+      "reason": "disabled_by_config",
+      "explanation": "Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is \"graph\" or \"graph-surface\"; in \"legacy\" mode road meshing executes inline inside GeometryBuilder.buildScene."
+    }
+  ],
+  "errors": []
+}

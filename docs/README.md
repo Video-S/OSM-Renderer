@@ -40,6 +40,9 @@ This documentation is organized into two distinct categories:
 - **[Testing & Diagnostics (testing-and-diagnostics.md)](./testing-and-diagnostics.md)**  
   Unit/integration test suite, coplanar triangle overlap validators, junction portal continuity checks, E2+ surface-first geometry validator & performance counters, and regression verification.
 
+- **[Performance Benchmarking & Developer Profiling (benchmarking-and-profiling.md)](./benchmarking-and-profiling.md)**  
+  Reproducible Node.js CPU (`npm run bench:cpu`) and Playwright + Chromium WebGL (`npm run bench:browser`) benchmarking infrastructure, frozen offline datasets, versioned JSON reports, baseline comparison (`npm run bench:compare`), metric definitions, and step-by-step CPU/memory/WebGL profiling guides (`TKT-016`).
+
 - **[Architectural Decision Records (decisions/README.md)](./decisions/README.md)**  
   Index of formal architectural decision records (ADRs) and guidelines on recording decisions.
   - **[ADR Template (decisions/ADR-TEMPLATE.md)](./decisions/ADR-TEMPLATE.md)**: Reusable template for proposing and documenting architectural decisions.

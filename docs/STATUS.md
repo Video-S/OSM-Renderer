@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, & Stage E4-A `M2.3-E4-A` / `TKT-013` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, & General Performance Benchmarking Infrastructure `TKT-016` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -32,7 +32,7 @@
    - Uniform `ROAD_SURFACE = 0.050 m` at-grade road baseline with boundary-derived junction meshing (`'legacy'` and `'graph'`) and surface-first rounded stroke union/subtraction (`'graph-surface'`).
    - Carriageway-vs-path 2D Boolean clipping removing coplanar overlapping road surfaces.
    - Building prism vertical extrusions preserving complex 2D footprints and interior courtyard holes.
-   - Hybrid multi-component railway geometry (`ADR-0008`, `TKT-001`, `TKT-002`) with crushed-stone ballast (`+0.060 m`), close-zoom (`> 4.5 CSS px/m`) 3D instanced sleepers (`+0.072 m`) and 3D extruded steel rails (`+0.085 m`), medium/far (`<= 4.5 CSS px/m`) derivative-filtered (`fwidth`) procedural UV-ribbons, elongated shared turnout bearers, multi-interval parallel-track sleeper clipping, and `128 m x 128 m` spatial chunking.
+   - Hybrid multi-component railway geometry (`ADR-0008`, `TKT-001`, `TKT-002`) with crushed-stone ballast (`+0.060 m`), close-zoom (`> 4.5 CSS px/m`) 3D instanced sleepers (`+0.072 m`) and 3D extruded steel rails (`+0.085 m`), medium/far (`<= 4.5 CSS px/m`) derivative-filtered (`fwidth`) procedural UV-ribbons, elongated shared turnout bearers, multi-interval clipping, and `128 m x 128 m` spatial chunking.
    - Grade-separated road and railway bridges rising to `+2.850 m` / `+2.860 m` with sloped approach ramps, concrete piers, and guardrail parapets (`M2.3-E4-A` / `TKT-013` graph-driven grade transitions).
    - Semantic infrastructure placement classification and subterranean tunnel rendering (`M2.3-E4-T` / `TKT-014`, `src/world/InfrastructurePlacementClassifier.ts`): separates physical vertical relation and enclosure (`surface_open`, `elevated`, `open_cutting`, `covered_passage`, `underground_tunnel`, `unknown_or_conflicting`) from relative OSM `layer` ordering, scales 3D tunnel portals to road width / railway type / `maxheight`, emits portals only at confirmed/justified entrances, and generates continuous 3D underground road (`Tunnel_Underground_Roads`) and railway (`Tunnel_Underground_Railway_Ballast`, `Tunnel_Underground_Railway_Sleepers`, `Tunnel_Underground_Railway_Rails`) geometry descending to `-2.000 m`.
 4. **Robust Geographic Boundary Clipping**:
@@ -50,6 +50,10 @@
    - Interactive spatial bounding box selection and 3D visual highlight overlays for features and topological nodes.
    - 1-click loading of development fixtures (`prins-fork` acute cycleway fork, `switchyard` benchmark with zone camera presets, `hengelo`, `amsterdam`).
    - Self-contained `.json` defect report export and re-import bundling selected OSM features, connected incident context (preserving original OSM node identities), configuration, camera pose, and developer notes.
+8. **General Performance Benchmarking Infrastructure (`TKT-016`, `benchmarks/`)**:
+   - Dedicated subsystem-independent `benchmarks/` architecture separating frozen offline datasets (`benchmarks/datasets.ts` with SHA-256 content hashes across `small-real-europatunnel`, `medium-real-hengelo-station`, `large-real-amsterdam-centraal`, and `synthetic-stress-urban-switchyard`), renderer/camera scenario definitions (`benchmarks/scenarios.ts`), Node.js CPU pipeline benchmarking (`npm run bench:cpu`), Playwright + Chromium WebGL rendering benchmarking (`npm run bench:browser`), versioned JSON report serialization (`benchmarks/serializer.ts`), and automated baseline comparison (`npm run bench:compare`).
+   - Direct measurement of CPU pipeline stages (`geojsonParseAndClassifyMs`, `infrastructureGraphBuildMs`, `graphToRendererAdapterMs`, `planarSurfaceResolutionMs`, `roadGeometryGenerationMs`, `railwayGeometryGenerationMs`, `fullSceneGeometryGenerationMs`, `sceneResourceDisposalMs`), deterministic TypedArray buffer accounting (`cpuBufferMemory`), V8 heap tracking (`v8HeapMemory`), and `SceneResourceManager` disposal verification (`0` leaks).
+   - Browser WebGL telemetry across 5 deterministic scenarios (`static_overview`, `static_close_junction`, `automated_pan_sweep`, `zoom_and_orbit_sweep`, `repeated_scene_reload`) recording `frameIntervalMs`, `cpuRenderCallMs`, `drawCallsPerFrame` (`gl.info.render.calls`), `renderedTrianglesPerFrame` (`gl.info.render.triangles`), `gpuFrameTimeMs` (`EXT_disjoint_timer_query_webgl2` with explicit unsupported/disjoint status), WebGL driver resource counts, JS heap usage, and hardware vs. software rasterizer (`SwiftShader`) detection.
 
 ---
 
@@ -62,7 +66,10 @@
 
 ---
 
-## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), & M2.3-E3-A1 (`TKT-010` — `closed`)
+## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), & General Performance Benchmarking Infrastructure (`TKT-016` — `closed`)
+
+- **General Performance Benchmarking Infrastructure (`TKT-016` — Closed)**:
+   - Implemented `benchmarks/` (`npm run bench:cpu`, `npm run bench:browser`, `npm run bench:compare`) with 4 frozen offline datasets, direct Node.js CPU stage timing and memory/disposal verification (`benchmarks/baselines/cpu-baseline.json`), Playwright + Chromium WebGL rendering scenarios (`benchmarks/baselines/browser-baseline.json`), versioned JSON schema (`1.0.0`) and comparison engine, `11` automated tests in `src/world/BenchmarkInfrastructure.test.ts`, and complete developer documentation in `docs/benchmarking-and-profiling.md`.
 
 - **Milestone 2.3 — Stage E3-A1 (`M2.3-E3-A1` / `TKT-010` — Closed)**:
    - Corrected and finalized M2.3-E3 railway architecture proposal (`docs/m2-3-e3-railway-rendering-proposal.md`), documenting realistic ballast spacing ($0.3\text{–}0.7\text{ m}$ gap on standard $3.8\text{–}4.2\text{ m}$ track centers, refuting false overlap assumptions), decoupling ballast overlap from graph topology, specifying deterministic OSM provenance preservation, and establishing a staged delivery sequence.
@@ -93,16 +100,19 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-11 — Milestone 2.3 Stage E4-T2 Subterranean Visual Integration & Structural Context)
+## Verified Test & Build Results (2026-11-13 — TKT-016 General Performance Benchmarking Infrastructure)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1–M2.3-E4-T2, DevTools & E2+ Tests** | `npm test` | **280 / 280 passed** (31 suites, 0 failures) |
+| **Unit, Integration, M2.1–M2.3-E4-T2, DevTools, E2+ & Benchmark Tests** | `npm test` | **331 / 331 passed** (24 test files, 0 failures) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
+| **CPU Benchmark Suite** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 leaks) |
+| **Browser WebGL Benchmark Suite** | `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`) |
+| **Benchmark Comparison CLI** | `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions) |
 
-*(Historical baselines preserved: Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
+*(Historical baselines preserved: Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -122,7 +132,9 @@
 | `GradeTransitionRendering.test.ts` (`M2.3-E4-A` / `TKT-013`) | 11 |
 | `TunnelClassificationAndRendering.test.ts` (`M2.3-E4-T` / `TKT-014`) | 18 |
 | `SubterraneanVisualIntegration.test.ts` (`M2.3-E4-T2` / `TKT-015`) | 15 |
-| **Total (`it` declarations / total subtests)** | **269 (`280` with suite subtests)** |
+| Specialized road/surface regression suites (`AdjacentServiceJunctions`, `BuswayRendering`, `PathJunctionCornerSmoothing`, `PizzaSlicePathJunctions`, `SurfaceVisibilityPolicy`) | 40 |
+| `BenchmarkInfrastructure.test.ts` (`TKT-016`) | 11 |
+| **Total (`it` declarations / total subtests)** | **320 (`331` with suite subtests)** |
 
 ---
 
@@ -154,6 +166,7 @@
   - **Status**: Completed exploratory experiment; closed as **Not Adopted** on 2026-11-08 by project owner decision.
   - **Summary**: Investigated an independent, mathematically modeled Python/Shapely carriageway reconstruction algorithm using variable lateral offsets $(w_L(s), w_R(s))$ and quadratic Bézier corner fillets evaluated against Dutch BGT reference polygons across 6 Amsterdam development sites (`A01`–`A06`) and 6 multi-city holdout sites (`H01`–`H06`).
   - **Decision & Production Impact**: Zero production changes. The experimental algorithm is not adopted into the TypeScript renderer. The separate Python/BGT reconstruction experiment remains **not adopted**. The TypeScript **E2+** renderer has instead been selected as the **preferred direction** (ADR-0010), reusing the existing infrastructure graph; E2 and Legacy remain selectable. All experiment code, data, and documentation are retained for historical benchmarking. See `research/road-surface-reconstruction/REPORT.md`.
+
 
 
 

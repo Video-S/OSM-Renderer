@@ -1,0 +1,3148 @@
+{
+  "schemaVersion": "1.0.0",
+  "suite": "browser",
+  "benchmarkName": "OSM 3D Renderer — Browser & WebGL Rendering Benchmark Suite (Playwright Chromium)",
+  "environment": {
+    "gitCommitSha": "unknown",
+    "gitDirty": false,
+    "timestampIso": "2026-11-13T14:06:55.408Z",
+    "nodeVersion": "v22.23.2",
+    "v8Version": "12.4.254.21-node.56",
+    "platform": "linux",
+    "osRelease": "4.19.0-gvisor",
+    "arch": "x64",
+    "cpuModel": "unknown",
+    "cpuLogicalCores": 4,
+    "totalSystemMemoryMB": 12288,
+    "gcExposed": false,
+    "browser": {
+      "browserName": "Chromium",
+      "browserVersion": "155.0.8059.12",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.8059.12 Safari/537.36",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "devicePixelRatio": 1,
+      "webglVersion": "WebGL2",
+      "gpuVendor": "Google Inc. (Google)",
+      "gpuRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "isSoftwareRenderer": true,
+      "hardwareAccelerationRequested": true,
+      "launchFlags": [
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-webgl",
+        "--ignore-gpu-blocklist",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--enable-precise-memory-info"
+      ]
+    }
+  },
+  "methodology": {
+    "warmupIterations": 4,
+    "measuredIterations": 12,
+    "metricDefinitions": {
+      "geojsonParseAndClassifyMs": "Wall-clock CPU time (ms) in LocalGeoJsonProvider.parseGeoJson to classify OSM tags, project WGS84 coordinates to local meters, clip to region bounds, and extract pre-chaining topologySource.",
+      "infrastructureGraphBuildMs": "Wall-clock CPU time (ms) in buildInfrastructureGraph to construct RoadNetwork, RailwayNetwork, and CrossModalAnalyzer connectivity relations.",
+      "graphToRendererAdapterMs": "Wall-clock CPU time (ms) in adaptInfrastructureGraphToRenderDescriptors and validateInfrastructureRenderDescriptors.",
+      "planarSurfaceResolutionMs": "Wall-clock CPU time (ms) in resolveAndValidatePlanarPolygons performing 2D Boolean ownership resolution and elevation separation for landuse, parks, and water.",
+      "roadGeometryGenerationMs": "Wall-clock CPU time (ms) in buildGraphAtGradeRoadGeometries constructing at-grade road and junction BufferGeometries.",
+      "railwayGeometryGenerationMs": "Wall-clock CPU time (ms) in buildRailwayInfrastructure constructing ballast, 3D instanced sleepers/bearers, 3D rails, and procedural UV ribbons.",
+      "fullSceneGeometryGenerationMs": "Wall-clock CPU time (ms) in GeometryBuilder.buildScene generating all 3D scene groups, materials, and spatial chunks.",
+      "sceneResourceDisposalMs": "Wall-clock CPU time (ms) in BuiltSceneGeometry.dispose() releasing all owned Three.js BufferGeometries, Materials, and Textures.",
+      "cpuBufferMemoryMB": "Exact deterministic sum (MB) of JavaScript TypedArray byteLengths across all active BufferGeometry vertex attributes, index buffers, and InstancedMesh matrices.",
+      "frameIntervalMs": "Browser requestAnimationFrame-to-requestAnimationFrame wall-clock interval (ms). Distinct from CPU render call duration and GPU execution time.",
+      "effectiveMedianFps": "Steady-state frame cadence derived from median frameIntervalMs (1000 / medianFrameIntervalMs).",
+      "cpuFrameRenderTimeMs": "Synchronous CPU main-thread execution duration (ms) of Three.js WebGLRenderer.render(scene, camera) per frame.",
+      "gpuFrameRenderTimeMs": "Asynchronous GPU command execution duration (ms) measured via WebGL2 EXT_disjoint_timer_query_webgl2 when supported and non-disjoint; explicitly null when unsupported or running on software rasterizers.",
+      "webglDrawCallsPerFrame": "Actual WebGL draw calls issued per frame recorded from Three.js gl.info.render.calls immediately after gl.render().",
+      "renderedTrianglesPerFrame": "Actual triangles submitted to WebGL per frame recorded from Three.js gl.info.render.triangles immediately after gl.render()."
+    },
+    "memoryMeasurementNotes": [
+      "cpuBufferMemoryMB measures exact TypedArray byteLengths allocated on owned Three.js BufferGeometries and InstancedMesh instance matrices; it is 100% deterministic across runs.",
+      "v8HeapMemory (process.memoryUsage) and browser performance.memory reflect V8 garbage collector timing, JIT compilation caches, and allocator fragmentation. Even when Node.js is launched with --expose-gc, V8 heap deltas are approximate indicators rather than strict byte-accurate allocations.",
+      "lifecycleAudit (ownedGeometriesAfterDispose, ownedMaterialsAfterDispose, and WebGL gl.info.memory.geometries) provides the authoritative deterministic check for Three.js / WebGL resource leaks."
+    ]
+  },
+  "browserResults": [
+    {
+      "dataset": {
+        "id": "small-real-europatunnel",
+        "name": "Hengelo Europatunnel & Spoorstraat (Real OSM Extract)",
+        "scale": "small-real-world",
+        "description": "Frozen real-world OSM extract around Europatunnel / Spoorstraat in Hengelo including buildings, multi-tier roads/cycleways/footways, overhead railway tracks, and subterranean retaining walls.",
+        "sourceFiles": [
+          "src/world/prototype/EuropatunnelHengeloFixture.json"
+        ],
+        "contentHashSha256": "1782c4798fe5269ce7944b1fccde60085725acc3e877723908851a24b7b0233f",
+        "originLonLat": [
+          6.79225,
+          52.26188
+        ],
+        "clipRadiusMeters": 180,
+        "rawFeatureCount": 172,
+        "parsedFeatureCounts": {
+          "total": 78,
+          "buildings": 2,
+          "roads": 34,
+          "railways": 5,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 9,
+          "landuse": 2,
+          "barriers": 15,
+          "landmarks": 9
+        },
+        "topologySourceCounts": {
+          "roadParts": 37,
+          "railwayParts": 5,
+          "infrastructurePoints": 13
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "initializationTimingMs": {
+        "datasetParseMs": 55.4,
+        "cpuSceneBuildMs": 10.8,
+        "firstWebGLRenderMs": 6.9,
+        "totalSceneInitToFirstFrameMs": 72.4
+      },
+      "staticSceneGeometry": {
+        "constructedMeshesCount": 1,
+        "sceneVertices": 4,
+        "sceneTriangles": 2,
+        "cpuBufferMB": 0
+      },
+      "scenarios": [
+        {
+          "scenarioId": "static_overview",
+          "scenarioName": "Static Overview Camera (Zoom 1.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 14.5,
+            "max": 1329,
+            "mean": 133.658,
+            "median": 15.65,
+            "p95": 634.9,
+            "p99": 1190.18,
+            "stdDev": 376.9,
+            "iqr": 18.625,
+            "coefficientOfVariation": 2.82,
+            "samples": [
+              15.8,
+              14.8,
+              15.3,
+              15.2,
+              14.5,
+              15.5,
+              16.3,
+              14.6,
+              1329,
+              61.4,
+              67,
+              24.5
+            ]
+          },
+          "effectiveMedianFps": 63.9,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.9,
+            "max": 1.9,
+            "mean": 1.358,
+            "median": 1.35,
+            "p95": 1.735,
+            "p99": 1.867,
+            "stdDev": 0.261,
+            "iqr": 0.25,
+            "coefficientOfVariation": 0.192,
+            "samples": [
+              1.3,
+              1.4,
+              1.1,
+              1.3,
+              1.9,
+              1.4,
+              1.2,
+              1.6,
+              1.6,
+              1.4,
+              1.2,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 45,
+            "max": 45,
+            "mean": 45,
+            "median": 45,
+            "p95": 45,
+            "p99": 45,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 19313,
+            "max": 19313,
+            "mean": 19313,
+            "median": 19313,
+            "p95": 19313,
+            "p99": 19313,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 31,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 76.529,
+            "totalJSHeapSizeMB": 91.607,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "static_close_junction",
+          "scenarioName": "Static Close-Zoom Junction & Throat (Zoom 8.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 27.3,
+            "max": 484.2,
+            "mean": 180.908,
+            "median": 167.8,
+            "p95": 390.755,
+            "p99": 465.511,
+            "stdDev": 120.98,
+            "iqr": 107.05,
+            "coefficientOfVariation": 0.669,
+            "samples": [
+              27.3,
+              174.7,
+              177.3,
+              314.3,
+              160.9,
+              484.2,
+              218.9,
+              206.2,
+              101.5,
+              105.9,
+              102.6,
+              97.1
+            ]
+          },
+          "effectiveMedianFps": 5.96,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 10.4,
+            "mean": 1.967,
+            "median": 1.15,
+            "p95": 5.67,
+            "p99": 9.454,
+            "stdDev": 2.682,
+            "iqr": 0.75,
+            "coefficientOfVariation": 1.364,
+            "samples": [
+              0.8,
+              0.7,
+              0.8,
+              0.9,
+              10.4,
+              1.1,
+              1.6,
+              1.8,
+              1.2,
+              1.7,
+              1.5,
+              1.1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 49,
+            "max": 49,
+            "mean": 49,
+            "median": 49,
+            "p95": 49,
+            "p99": 49,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49,
+              49
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 36443,
+            "max": 36443,
+            "mean": 36443,
+            "median": 36443,
+            "p95": 36443,
+            "p99": 36443,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443,
+              36443
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 34,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 81.281,
+            "totalJSHeapSizeMB": 92.525,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "automated_pan_sweep",
+          "scenarioName": "Automated Camera Pan Sweep across Region (Zoom 5.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 68.1,
+            "max": 846.8,
+            "mean": 247.425,
+            "median": 101.25,
+            "p95": 641.65,
+            "p99": 805.77,
+            "stdDev": 248.735,
+            "iqr": 338.3,
+            "coefficientOfVariation": 1.005,
+            "samples": [
+              120.9,
+              98.9,
+              68.1,
+              68.9,
+              99.9,
+              95.6,
+              101.4,
+              101.1,
+              467.8,
+              425.9,
+              473.8,
+              846.8
+            ]
+          },
+          "effectiveMedianFps": 9.88,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 1.2,
+            "mean": 1.017,
+            "median": 1.05,
+            "p95": 1.2,
+            "p99": 1.2,
+            "stdDev": 0.153,
+            "iqr": 0.125,
+            "coefficientOfVariation": 0.15,
+            "samples": [
+              0.8,
+              0.9,
+              1.1,
+              1,
+              1.1,
+              1.2,
+              1.1,
+              1.1,
+              1,
+              1,
+              1.2,
+              0.7
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 38,
+            "max": 49,
+            "mean": 46.25,
+            "median": 47.5,
+            "p95": 49,
+            "p99": 49,
+            "stdDev": 3.194,
+            "iqr": 3.5,
+            "coefficientOfVariation": 0.069,
+            "samples": [
+              44,
+              47,
+              48,
+              49,
+              49,
+              49,
+              48,
+              48,
+              46,
+              45,
+              44,
+              38
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 28505,
+            "max": 36443,
+            "mean": 35100.583,
+            "median": 35706,
+            "p95": 36443,
+            "p99": 36443,
+            "stdDev": 2149.568,
+            "iqr": 988.5,
+            "coefficientOfVariation": 0.061,
+            "samples": [
+              34934,
+              34979,
+              34983,
+              36443,
+              36443,
+              36443,
+              35813,
+              35813,
+              35713,
+              35699,
+              35439,
+              28505
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 34,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 78.288,
+            "totalJSHeapSizeMB": 93.193,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "zoom_and_orbit_sweep",
+          "scenarioName": "Automated Camera Zoom & Azimuth Orbit Sweep (1.2x -> 8.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 53.1,
+            "max": 810.7,
+            "mean": 398.55,
+            "median": 407.95,
+            "p95": 674.355,
+            "p99": 783.431,
+            "stdDev": 185.297,
+            "iqr": 89.075,
+            "coefficientOfVariation": 0.465,
+            "samples": [
+              810.7,
+              407.4,
+              457.8,
+              421.5,
+              402.7,
+              408.5,
+              53.1,
+              421.9,
+              209.2,
+              256.9,
+              562.8,
+              370.1
+            ]
+          },
+          "effectiveMedianFps": 2.45,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 1.3,
+            "mean": 0.967,
+            "median": 0.9,
+            "p95": 1.3,
+            "p99": 1.3,
+            "stdDev": 0.202,
+            "iqr": 0.225,
+            "coefficientOfVariation": 0.208,
+            "samples": [
+              1.3,
+              0.9,
+              0.7,
+              1.1,
+              0.8,
+              0.9,
+              1.1,
+              1,
+              1.3,
+              0.9,
+              0.9,
+              0.7
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 45,
+            "max": 49,
+            "mean": 47.333,
+            "median": 48,
+            "p95": 49,
+            "p99": 49,
+            "stdDev": 1.371,
+            "iqr": 1.25,
+            "coefficientOfVariation": 0.029,
+            "samples": [
+              49,
+              47,
+              47,
+              48,
+              46,
+              48,
+              48,
+              48,
+              48,
+              49,
+              45,
+              45
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 19313,
+            "max": 36443,
+            "mean": 32968.5,
+            "median": 35813,
+            "p95": 36443,
+            "p99": 36443,
+            "stdDev": 6403.385,
+            "iqr": 990.5,
+            "coefficientOfVariation": 0.194,
+            "samples": [
+              36443,
+              34979,
+              34353,
+              35813,
+              35713,
+              35813,
+              35813,
+              35813,
+              35813,
+              36443,
+              19313,
+              19313
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 34,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 78.908,
+            "totalJSHeapSizeMB": 94.36,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "repeated_scene_reload",
+          "scenarioName": "Repeated Scene Load, Build, First-Render & Unload Lifecycle",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 4.4,
+            "max": 600.2,
+            "mean": 254.058,
+            "median": 229.8,
+            "p95": 545.915,
+            "p99": 589.343,
+            "stdDev": 182.81,
+            "iqr": 219.1,
+            "coefficientOfVariation": 0.72,
+            "samples": [
+              4.4,
+              325,
+              242.4,
+              217.2,
+              122,
+              203.7,
+              12.8,
+              600.2,
+              385.7,
+              315.5,
+              501.5,
+              118.3
+            ]
+          },
+          "effectiveMedianFps": 4.35,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.2,
+            "mean": 0.95,
+            "median": 0.9,
+            "p95": 1.145,
+            "p99": 1.189,
+            "stdDev": 0.117,
+            "iqr": 0.1,
+            "coefficientOfVariation": 0.123,
+            "samples": [
+              0.9,
+              0.9,
+              1,
+              1,
+              0.8,
+              1,
+              1.1,
+              0.9,
+              1.2,
+              0.9,
+              0.8,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 45,
+            "max": 45,
+            "mean": 45,
+            "median": 45,
+            "p95": 45,
+            "p99": 45,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 19313,
+            "max": 19313,
+            "mean": 19313,
+            "median": 19313,
+            "p95": 19313,
+            "p99": 19313,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313,
+              19313
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 31,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 93.26,
+            "totalJSHeapSizeMB": 115.249,
+            "jsHeapSizeLimitMB": 4192
+          },
+          "reloadLifecycleAudit": {
+            "cyclesExecuted": 2,
+            "reloadAndFirstRenderMs": {
+              "sampleCount": 2,
+              "min": 1825.6,
+              "max": 2150.5,
+              "mean": 1988.05,
+              "median": 1988.05,
+              "p95": 2134.255,
+              "p99": 2147.251,
+              "stdDev": 229.739,
+              "iqr": 162.45,
+              "coefficientOfVariation": 0.116,
+              "samples": [
+                1825.6,
+                2150.5
+              ]
+            },
+            "initialDriverGeometries": 31,
+            "finalDriverGeometries": 31,
+            "netDriverGeometryDelta": 0,
+            "initialDriverTextures": 3,
+            "finalDriverTextures": 3,
+            "netDriverTextureDelta": 0,
+            "cleanDisposalVerified": true
+          }
+        }
+      ],
+      "unsupportedMetrics": [
+        {
+          "metricId": "static_overview::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "static_close_junction::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "automated_pan_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "zoom_and_orbit_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "repeated_scene_reload::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "small-real-europatunnel",
+        "name": "Hengelo Europatunnel & Spoorstraat (Real OSM Extract)",
+        "scale": "small-real-world",
+        "description": "Frozen real-world OSM extract around Europatunnel / Spoorstraat in Hengelo including buildings, multi-tier roads/cycleways/footways, overhead railway tracks, and subterranean retaining walls.",
+        "sourceFiles": [
+          "src/world/prototype/EuropatunnelHengeloFixture.json"
+        ],
+        "contentHashSha256": "1782c4798fe5269ce7944b1fccde60085725acc3e877723908851a24b7b0233f",
+        "originLonLat": [
+          6.79225,
+          52.26188
+        ],
+        "clipRadiusMeters": 180,
+        "rawFeatureCount": 172,
+        "parsedFeatureCounts": {
+          "total": 78,
+          "buildings": 2,
+          "roads": 34,
+          "railways": 5,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 9,
+          "landuse": 2,
+          "barriers": 15,
+          "landmarks": 9
+        },
+        "topologySourceCounts": {
+          "roadParts": 37,
+          "railwayParts": 5,
+          "infrastructurePoints": 13
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "initializationTimingMs": {
+        "datasetParseMs": 6.6,
+        "cpuSceneBuildMs": 302.8,
+        "firstWebGLRenderMs": 737.8,
+        "totalSceneInitToFirstFrameMs": 1066.2
+      },
+      "staticSceneGeometry": {
+        "constructedMeshesCount": 39,
+        "sceneVertices": 28066,
+        "sceneTriangles": 5679,
+        "cpuBufferMB": 0.263
+      },
+      "scenarios": [
+        {
+          "scenarioId": "static_overview",
+          "scenarioName": "Static Overview Camera (Zoom 1.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 13.4,
+            "max": 413.3,
+            "mean": 120.808,
+            "median": 104.6,
+            "p95": 350.49,
+            "p99": 400.738,
+            "stdDev": 121.223,
+            "iqr": 96,
+            "coefficientOfVariation": 1.003,
+            "samples": [
+              109.8,
+              110.3,
+              105.8,
+              103.4,
+              299.1,
+              16,
+              86.3,
+              413.3,
+              23.8,
+              13.4,
+              22,
+              146.5
+            ]
+          },
+          "effectiveMedianFps": 9.56,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 1.7,
+            "mean": 1.008,
+            "median": 0.9,
+            "p95": 1.425,
+            "p99": 1.645,
+            "stdDev": 0.268,
+            "iqr": 0.25,
+            "coefficientOfVariation": 0.266,
+            "samples": [
+              1.2,
+              0.9,
+              1.1,
+              1.2,
+              0.9,
+              0.8,
+              0.7,
+              1.7,
+              0.8,
+              1,
+              0.9,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 46,
+            "max": 46,
+            "mean": 46,
+            "median": 46,
+            "p95": 46,
+            "p99": 46,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 20149,
+            "max": 20149,
+            "mean": 20149,
+            "median": 20149,
+            "p95": 20149,
+            "p99": 20149,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 33,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 81.663,
+            "totalJSHeapSizeMB": 118.13,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "static_close_junction",
+          "scenarioName": "Static Close-Zoom Junction & Throat (Zoom 8.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 39.7,
+            "max": 459.1,
+            "mean": 140.733,
+            "median": 105.75,
+            "p95": 320.28,
+            "p99": 431.336,
+            "stdDev": 109.506,
+            "iqr": 49.675,
+            "coefficientOfVariation": 0.778,
+            "samples": [
+              106.8,
+              168.8,
+              67.7,
+              459.1,
+              206.7,
+              80.5,
+              39.7,
+              138.4,
+              104.7,
+              111.4,
+              103.4,
+              101.6
+            ]
+          },
+          "effectiveMedianFps": 9.46,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.5,
+            "mean": 1.017,
+            "median": 0.9,
+            "p95": 1.5,
+            "p99": 1.5,
+            "stdDev": 0.244,
+            "iqr": 0.2,
+            "coefficientOfVariation": 0.24,
+            "samples": [
+              0.9,
+              0.8,
+              0.8,
+              0.9,
+              0.9,
+              1.1,
+              0.9,
+              1.1,
+              1.5,
+              0.9,
+              0.9,
+              1.5
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 50,
+            "max": 50,
+            "mean": 50,
+            "median": 50,
+            "p95": 50,
+            "p99": 50,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50,
+              50
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 37409,
+            "max": 37409,
+            "mean": 37409,
+            "median": 37409,
+            "p95": 37409,
+            "p99": 37409,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409,
+              37409
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 36,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 90.843,
+            "totalJSHeapSizeMB": 118.298,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "automated_pan_sweep",
+          "scenarioName": "Automated Camera Pan Sweep across Region (Zoom 5.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 101.5,
+            "max": 527.2,
+            "mean": 233.008,
+            "median": 110.9,
+            "p95": 506.3,
+            "p99": 523.02,
+            "stdDev": 188.051,
+            "iqr": 353.825,
+            "coefficientOfVariation": 0.807,
+            "samples": [
+              101.5,
+              103,
+              102,
+              105.4,
+              109,
+              102.7,
+              113.5,
+              112.8,
+              527.2,
+              448.6,
+              481.2,
+              489.2
+            ]
+          },
+          "effectiveMedianFps": 9.02,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.3,
+            "mean": 1.05,
+            "median": 1.1,
+            "p95": 1.245,
+            "p99": 1.289,
+            "stdDev": 0.173,
+            "iqr": 0.25,
+            "coefficientOfVariation": 0.165,
+            "samples": [
+              0.8,
+              0.8,
+              1.3,
+              0.8,
+              1,
+              1.2,
+              1.1,
+              1.2,
+              1.2,
+              1.1,
+              1.1,
+              1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 39,
+            "max": 50,
+            "mean": 47.25,
+            "median": 48.5,
+            "p95": 50,
+            "p99": 50,
+            "stdDev": 3.194,
+            "iqr": 3.5,
+            "coefficientOfVariation": 0.068,
+            "samples": [
+              45,
+              48,
+              49,
+              50,
+              50,
+              50,
+              49,
+              49,
+              47,
+              46,
+              45,
+              39
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 29137,
+            "max": 37409,
+            "mean": 36019.667,
+            "median": 36645,
+            "p95": 37409,
+            "p99": 37409,
+            "stdDev": 2241.581,
+            "iqr": 998.5,
+            "coefficientOfVariation": 0.062,
+            "samples": [
+              35799,
+              35935,
+              35939,
+              37409,
+              37409,
+              37409,
+              36779,
+              36779,
+              36679,
+              36611,
+              36351,
+              29137
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 36,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 88.393,
+            "totalJSHeapSizeMB": 118.466,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "zoom_and_orbit_sweep",
+          "scenarioName": "Automated Camera Zoom & Azimuth Orbit Sweep (1.2x -> 8.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 207.2,
+            "max": 492,
+            "mean": 403.958,
+            "median": 446.4,
+            "p95": 488.37,
+            "p99": 491.274,
+            "stdDev": 95.228,
+            "iqr": 131.575,
+            "coefficientOfVariation": 0.236,
+            "samples": [
+              468.1,
+              444.3,
+              483.6,
+              484.5,
+              207.2,
+              292.7,
+              492,
+              485.4,
+              448.5,
+              295.4,
+              371.2,
+              374.6
+            ]
+          },
+          "effectiveMedianFps": 2.24,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.6,
+            "mean": 1.108,
+            "median": 1.1,
+            "p95": 1.435,
+            "p99": 1.567,
+            "stdDev": 0.231,
+            "iqr": 0.4,
+            "coefficientOfVariation": 0.209,
+            "samples": [
+              0.9,
+              1.6,
+              1.1,
+              1,
+              0.9,
+              1.1,
+              0.9,
+              1.3,
+              1.3,
+              1.3,
+              0.8,
+              1.1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 46,
+            "max": 50,
+            "mean": 48.333,
+            "median": 49,
+            "p95": 50,
+            "p99": 50,
+            "stdDev": 1.371,
+            "iqr": 1.25,
+            "coefficientOfVariation": 0.028,
+            "samples": [
+              50,
+              48,
+              48,
+              49,
+              47,
+              49,
+              49,
+              49,
+              49,
+              50,
+              46,
+              46
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 20149,
+            "max": 37409,
+            "mean": 33911.167,
+            "median": 36779,
+            "p95": 37409,
+            "p99": 37409,
+            "stdDev": 6453.309,
+            "iqr": 1000.5,
+            "coefficientOfVariation": 0.19,
+            "samples": [
+              37409,
+              35935,
+              35309,
+              36779,
+              36679,
+              36779,
+              36779,
+              36779,
+              36779,
+              37409,
+              20149,
+              20149
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 36,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 86.089,
+            "totalJSHeapSizeMB": 118.634,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "repeated_scene_reload",
+          "scenarioName": "Repeated Scene Load, Build, First-Render & Unload Lifecycle",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 15.5,
+            "max": 696.8,
+            "mean": 251.075,
+            "median": 258.35,
+            "p95": 517.115,
+            "p99": 660.863,
+            "stdDev": 178.965,
+            "iqr": 114.9,
+            "coefficientOfVariation": 0.713,
+            "samples": [
+              15.5,
+              108.2,
+              275.4,
+              203.2,
+              300.8,
+              217.3,
+              16.7,
+              292.2,
+              370.1,
+              696.8,
+              245.3,
+              271.4
+            ]
+          },
+          "effectiveMedianFps": 3.87,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 1.2,
+            "mean": 0.95,
+            "median": 0.9,
+            "p95": 1.2,
+            "p99": 1.2,
+            "stdDev": 0.168,
+            "iqr": 0.3,
+            "coefficientOfVariation": 0.177,
+            "samples": [
+              1,
+              0.8,
+              0.9,
+              1.1,
+              1.1,
+              0.9,
+              0.8,
+              0.8,
+              1.2,
+              1.2,
+              0.7,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 46,
+            "max": 46,
+            "mean": 46,
+            "median": 46,
+            "p95": 46,
+            "p99": 46,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46,
+              46
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 20149,
+            "max": 20149,
+            "mean": 20149,
+            "median": 20149,
+            "p95": 20149,
+            "p99": 20149,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149,
+              20149
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 33,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 103.15,
+            "totalJSHeapSizeMB": 155.955,
+            "jsHeapSizeLimitMB": 4192
+          },
+          "reloadLifecycleAudit": {
+            "cyclesExecuted": 2,
+            "reloadAndFirstRenderMs": {
+              "sampleCount": 2,
+              "min": 1854.5,
+              "max": 2267.5,
+              "mean": 2061,
+              "median": 2061,
+              "p95": 2246.85,
+              "p99": 2263.37,
+              "stdDev": 292.035,
+              "iqr": 206.5,
+              "coefficientOfVariation": 0.142,
+              "samples": [
+                1854.5,
+                2267.5
+              ]
+            },
+            "initialDriverGeometries": 33,
+            "finalDriverGeometries": 33,
+            "netDriverGeometryDelta": 0,
+            "initialDriverTextures": 3,
+            "finalDriverTextures": 3,
+            "netDriverTextureDelta": 0,
+            "cleanDisposalVerified": true
+          }
+        }
+      ],
+      "unsupportedMetrics": [
+        {
+          "metricId": "static_overview::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "static_close_junction::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "automated_pan_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "zoom_and_orbit_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "repeated_scene_reload::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "synthetic-stress-urban-switchyard",
+        "name": "Synthetic Stress Benchmark (Urban Grid + 65-Way Switchyard)",
+        "scale": "synthetic-stress",
+        "description": "Deterministic synthetic stress-test workload combining a 209-way interconnected urban road/cycleway/footway grid, the 65-way multi-zone railway switchyard, 36 block buildings (with courtyards), parks, parking lots, water bodies, canals, barriers, and trees.",
+        "sourceFiles": [
+          "benchmarks/datasets.ts#buildSyntheticStressGeoJson",
+          "src/world/prototype/RailwayTestFixtures.ts"
+        ],
+        "contentHashSha256": "2b2c55014647ab42019612f50addd8f1a424f6102df8f374ffdcc1aeadeafb9f",
+        "originLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "clipRadiusMeters": 480,
+        "rawFeatureCount": 324,
+        "parsedFeatureCounts": {
+          "total": 324,
+          "buildings": 36,
+          "roads": 197,
+          "railways": 65,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 1,
+          "landuse": 1,
+          "barriers": 6,
+          "landmarks": 16
+        },
+        "topologySourceCounts": {
+          "roadParts": 197,
+          "railwayParts": 65,
+          "infrastructurePoints": 0
+        }
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "initializationTimingMs": {
+        "datasetParseMs": 8.4,
+        "cpuSceneBuildMs": 494.1,
+        "firstWebGLRenderMs": 515.6,
+        "totalSceneInitToFirstFrameMs": 535.7
+      },
+      "staticSceneGeometry": {
+        "constructedMeshesCount": 39,
+        "sceneVertices": 28066,
+        "sceneTriangles": 5679,
+        "cpuBufferMB": 0
+      },
+      "scenarios": [
+        {
+          "scenarioId": "static_overview",
+          "scenarioName": "Static Overview Camera (Zoom 1.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 13.5,
+            "max": 460.2,
+            "mean": 130.658,
+            "median": 98.55,
+            "p95": 379.46,
+            "p99": 444.052,
+            "stdDev": 132.981,
+            "iqr": 79.6,
+            "coefficientOfVariation": 1.018,
+            "samples": [
+              98.8,
+              98.3,
+              65.4,
+              197.8,
+              103.5,
+              105,
+              313.4,
+              13.5,
+              54.5,
+              460.2,
+              30.9,
+              26.6
+            ]
+          },
+          "effectiveMedianFps": 10.15,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 35,
+            "mean": 3.875,
+            "median": 1.05,
+            "p95": 16.52,
+            "p99": 31.304,
+            "stdDev": 9.804,
+            "iqr": 0.325,
+            "coefficientOfVariation": 2.53,
+            "samples": [
+              0.7,
+              1.1,
+              1.2,
+              1.2,
+              0.9,
+              1,
+              0.9,
+              0.9,
+              35,
+              1.3,
+              1.4,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 190,
+            "max": 190,
+            "mean": 190,
+            "median": 190,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18129,
+            "max": 18129,
+            "mean": 18129,
+            "median": 18129,
+            "p95": 18129,
+            "p99": 18129,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 43,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 100.663,
+            "totalJSHeapSizeMB": 157.568,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "static_close_junction",
+          "scenarioName": "Static Close-Zoom Junction & Throat (Zoom 8.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 27.7,
+            "max": 483.8,
+            "mean": 143.342,
+            "median": 105.6,
+            "p95": 349.875,
+            "p99": 457.015,
+            "stdDev": 118.438,
+            "iqr": 24.15,
+            "coefficientOfVariation": 0.826,
+            "samples": [
+              99.8,
+              107.1,
+              105.3,
+              107.4,
+              86.2,
+              27.7,
+              483.8,
+              99.4,
+              105.9,
+              240.3,
+              92.3,
+              164.9
+            ]
+          },
+          "effectiveMedianFps": 9.47,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.9,
+            "max": 2.5,
+            "mean": 1.3,
+            "median": 1.1,
+            "p95": 2.28,
+            "p99": 2.456,
+            "stdDev": 0.499,
+            "iqr": 0.275,
+            "coefficientOfVariation": 0.384,
+            "samples": [
+              1,
+              0.9,
+              1.2,
+              1.1,
+              1.1,
+              1.2,
+              1,
+              1,
+              2.5,
+              1,
+              1.5,
+              2.1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 184,
+            "max": 184,
+            "mean": 184,
+            "median": 184,
+            "p95": 184,
+            "p99": 184,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 46549,
+            "max": 46549,
+            "mean": 46549,
+            "median": 46549,
+            "p95": 46549,
+            "p99": 46549,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549,
+              46549
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 50,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 109.989,
+            "totalJSHeapSizeMB": 157.744,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "automated_pan_sweep",
+          "scenarioName": "Automated Camera Pan Sweep across Region (Zoom 5.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 52.9,
+            "max": 938.5,
+            "mean": 244.983,
+            "median": 120.6,
+            "p95": 692.705,
+            "p99": 889.341,
+            "stdDev": 263.263,
+            "iqr": 107.95,
+            "coefficientOfVariation": 1.075,
+            "samples": [
+              135,
+              120.9,
+              113.5,
+              116.5,
+              133.1,
+              120.3,
+              117.2,
+              110.5,
+              52.9,
+              938.5,
+              489.8,
+              491.6
+            ]
+          },
+          "effectiveMedianFps": 8.29,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.9,
+            "max": 3.8,
+            "mean": 1.467,
+            "median": 1.2,
+            "p95": 2.81,
+            "p99": 3.602,
+            "stdDev": 0.803,
+            "iqr": 0.475,
+            "coefficientOfVariation": 0.547,
+            "samples": [
+              0.9,
+              3.8,
+              1.3,
+              1.1,
+              2,
+              1,
+              1.3,
+              1,
+              1.4,
+              1.1,
+              1.7,
+              1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 178,
+            "max": 188,
+            "mean": 184.667,
+            "median": 186,
+            "p95": 188,
+            "p99": 188,
+            "stdDev": 3.601,
+            "iqr": 5.5,
+            "coefficientOfVariation": 0.02,
+            "samples": [
+              185,
+              186,
+              186,
+              188,
+              188,
+              188,
+              188,
+              186,
+              183,
+              181,
+              179,
+              178
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 49095,
+            "max": 55657,
+            "mean": 51794.5,
+            "median": 51785.5,
+            "p95": 54904.6,
+            "p99": 55506.52,
+            "stdDev": 1954.934,
+            "iqr": 1772.5,
+            "coefficientOfVariation": 0.038,
+            "samples": [
+              51767,
+              51795,
+              51795,
+              52599,
+              55657,
+              54289,
+              52729,
+              51776,
+              51296,
+              49548,
+              49188,
+              49095
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 51,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 91.447,
+            "totalJSHeapSizeMB": 155.17,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "zoom_and_orbit_sweep",
+          "scenarioName": "Automated Camera Zoom & Azimuth Orbit Sweep (1.2x -> 8.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 22.3,
+            "max": 657.8,
+            "mean": 426.667,
+            "median": 467.2,
+            "p95": 575.19,
+            "p99": 641.278,
+            "stdDev": 153.425,
+            "iqr": 59.425,
+            "coefficientOfVariation": 0.36,
+            "samples": [
+              485.1,
+              22.3,
+              482.3,
+              507.6,
+              466.6,
+              444.2,
+              467.8,
+              449.5,
+              481.2,
+              293.9,
+              657.8,
+              361.7
+            ]
+          },
+          "effectiveMedianFps": 2.14,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 2.9,
+            "mean": 1.333,
+            "median": 1.1,
+            "p95": 2.35,
+            "p99": 2.79,
+            "stdDev": 0.597,
+            "iqr": 0.425,
+            "coefficientOfVariation": 0.448,
+            "samples": [
+              1.2,
+              1.1,
+              0.8,
+              1.8,
+              1,
+              1.1,
+              1.3,
+              1,
+              0.9,
+              1,
+              1.9,
+              2.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 181,
+            "max": 190,
+            "mean": 185.5,
+            "median": 185.5,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 3.261,
+            "iqr": 4.75,
+            "coefficientOfVariation": 0.018,
+            "samples": [
+              187,
+              187,
+              183,
+              185,
+              182,
+              186,
+              181,
+              181,
+              185,
+              189,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18129,
+            "max": 55659,
+            "mean": 45400.583,
+            "median": 49136,
+            "p95": 55233.3,
+            "p99": 55573.86,
+            "stdDev": 12988.722,
+            "iqr": 3762.75,
+            "coefficientOfVariation": 0.286,
+            "samples": [
+              54885,
+              52247,
+              47912,
+              48716,
+              49556,
+              51776,
+              48204,
+              48296,
+              51298,
+              55659,
+              18129,
+              18129
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 51,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 101.223,
+            "totalJSHeapSizeMB": 155.346,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "repeated_scene_reload",
+          "scenarioName": "Repeated Scene Load, Build, First-Render & Unload Lifecycle",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 0.4,
+            "max": 909.9,
+            "mean": 324.675,
+            "median": 298.95,
+            "p95": 810.9,
+            "p99": 890.1,
+            "stdDev": 303.955,
+            "iqr": 344.05,
+            "coefficientOfVariation": 0.936,
+            "samples": [
+              14.6,
+              909.9,
+              291.9,
+              163.5,
+              306,
+              693.9,
+              0.4,
+              8.2,
+              729.9,
+              347.8,
+              314.5,
+              115.5
+            ]
+          },
+          "effectiveMedianFps": 3.35,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 3.5,
+            "mean": 1.567,
+            "median": 1.5,
+            "p95": 2.895,
+            "p99": 3.379,
+            "stdDev": 0.784,
+            "iqr": 0.7,
+            "coefficientOfVariation": 0.501,
+            "samples": [
+              2.4,
+              2,
+              1.6,
+              1.2,
+              3.5,
+              0.8,
+              1.6,
+              1,
+              0.7,
+              1.4,
+              1,
+              1.6
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 190,
+            "max": 190,
+            "mean": 190,
+            "median": 190,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18129,
+            "max": 18129,
+            "mean": 18129,
+            "median": 18129,
+            "p95": 18129,
+            "p99": 18129,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129,
+              18129
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 43,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 108.296,
+            "totalJSHeapSizeMB": 162.85,
+            "jsHeapSizeLimitMB": 4192
+          },
+          "reloadLifecycleAudit": {
+            "cyclesExecuted": 2,
+            "reloadAndFirstRenderMs": {
+              "sampleCount": 2,
+              "min": 2519.7,
+              "max": 2881.5,
+              "mean": 2700.6,
+              "median": 2700.6,
+              "p95": 2863.41,
+              "p99": 2877.882,
+              "stdDev": 255.831,
+              "iqr": 180.9,
+              "coefficientOfVariation": 0.095,
+              "samples": [
+                2881.5,
+                2519.7
+              ]
+            },
+            "initialDriverGeometries": 3,
+            "finalDriverGeometries": 3,
+            "netDriverGeometryDelta": 0,
+            "initialDriverTextures": 3,
+            "finalDriverTextures": 3,
+            "netDriverTextureDelta": 0,
+            "cleanDisposalVerified": true
+          }
+        }
+      ],
+      "unsupportedMetrics": [
+        {
+          "metricId": "static_overview::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "static_close_junction::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "automated_pan_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "zoom_and_orbit_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "repeated_scene_reload::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "dataset": {
+        "id": "synthetic-stress-urban-switchyard",
+        "name": "Synthetic Stress Benchmark (Urban Grid + 65-Way Switchyard)",
+        "scale": "synthetic-stress",
+        "description": "Deterministic synthetic stress-test workload combining a 209-way interconnected urban road/cycleway/footway grid, the 65-way multi-zone railway switchyard, 36 block buildings (with courtyards), parks, parking lots, water bodies, canals, barriers, and trees.",
+        "sourceFiles": [
+          "benchmarks/datasets.ts#buildSyntheticStressGeoJson",
+          "src/world/prototype/RailwayTestFixtures.ts"
+        ],
+        "contentHashSha256": "2b2c55014647ab42019612f50addd8f1a424f6102df8f374ffdcc1aeadeafb9f",
+        "originLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "clipRadiusMeters": 480,
+        "rawFeatureCount": 324,
+        "parsedFeatureCounts": {
+          "total": 324,
+          "buildings": 36,
+          "roads": 197,
+          "railways": 65,
+          "waterBodies": 1,
+          "linearWaterways": 1,
+          "parks": 1,
+          "landuse": 1,
+          "barriers": 6,
+          "landmarks": 16
+        },
+        "topologySourceCounts": {
+          "roadParts": 197,
+          "railwayParts": 65,
+          "infrastructurePoints": 0
+        }
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "initializationTimingMs": {
+        "datasetParseMs": 9.2,
+        "cpuSceneBuildMs": 483.9,
+        "firstWebGLRenderMs": 558.4,
+        "totalSceneInitToFirstFrameMs": 1186
+      },
+      "staticSceneGeometry": {
+        "constructedMeshesCount": 55,
+        "sceneVertices": 32740,
+        "sceneTriangles": 15510,
+        "cpuBufferMB": 0.667
+      },
+      "scenarios": [
+        {
+          "scenarioId": "static_overview",
+          "scenarioName": "Static Overview Camera (Zoom 1.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 24.9,
+            "max": 365,
+            "mean": 132.367,
+            "median": 103.2,
+            "p95": 327.325,
+            "p99": 357.465,
+            "stdDev": 104.953,
+            "iqr": 72.45,
+            "coefficientOfVariation": 0.793,
+            "samples": [
+              113.1,
+              203,
+              112,
+              296.5,
+              24.9,
+              46.1,
+              83.8,
+              365,
+              35.6,
+              85.9,
+              128.1,
+              94.4
+            ]
+          },
+          "effectiveMedianFps": 9.69,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.4,
+            "mean": 0.992,
+            "median": 0.9,
+            "p95": 1.4,
+            "p99": 1.4,
+            "stdDev": 0.211,
+            "iqr": 0.15,
+            "coefficientOfVariation": 0.213,
+            "samples": [
+              1,
+              1.4,
+              0.8,
+              0.8,
+              1,
+              0.9,
+              0.9,
+              0.9,
+              1.1,
+              1.4,
+              0.9,
+              0.8
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 190,
+            "max": 190,
+            "mean": 190,
+            "median": 190,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18448,
+            "max": 18448,
+            "mean": 18448,
+            "median": 18448,
+            "p95": 18448,
+            "p99": 18448,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 44,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 107.572,
+            "totalJSHeapSizeMB": 168.17,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "static_close_junction",
+          "scenarioName": "Static Close-Zoom Junction & Throat (Zoom 8.0x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 62.8,
+            "max": 477,
+            "mean": 144.575,
+            "median": 117,
+            "p95": 295.665,
+            "p99": 440.733,
+            "stdDev": 107.291,
+            "iqr": 36.325,
+            "coefficientOfVariation": 0.742,
+            "samples": [
+              104.8,
+              146.3,
+              62.8,
+              477,
+              95.2,
+              118.3,
+              102.7,
+              138.7,
+              120.2,
+              115.7,
+              105.9,
+              147.3
+            ]
+          },
+          "effectiveMedianFps": 8.55,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 2.9,
+            "mean": 1.15,
+            "median": 0.95,
+            "p95": 2.02,
+            "p99": 2.724,
+            "stdDev": 0.573,
+            "iqr": 0.225,
+            "coefficientOfVariation": 0.498,
+            "samples": [
+              0.9,
+              0.8,
+              1.1,
+              1.1,
+              1.3,
+              1.2,
+              0.9,
+              0.9,
+              1,
+              0.8,
+              2.9,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 184,
+            "max": 184,
+            "mean": 184,
+            "median": 184,
+            "p95": 184,
+            "p99": 184,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184,
+              184
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 49478,
+            "max": 49478,
+            "mean": 49478,
+            "median": 49478,
+            "p95": 49478,
+            "p99": 49478,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478,
+              49478
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 51,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 116.783,
+            "totalJSHeapSizeMB": 168.346,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "automated_pan_sweep",
+          "scenarioName": "Automated Camera Pan Sweep across Region (Zoom 5.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 110.5,
+            "max": 513.2,
+            "mean": 256.408,
+            "median": 144.7,
+            "p95": 509.955,
+            "p99": 512.551,
+            "stdDev": 179.993,
+            "iqr": 363.3,
+            "coefficientOfVariation": 0.702,
+            "samples": [
+              224.2,
+              138.5,
+              117.7,
+              110.5,
+              117.1,
+              150.9,
+              117.6,
+              115,
+              507.3,
+              479.1,
+              485.8,
+              513.2
+            ]
+          },
+          "effectiveMedianFps": 6.91,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1.1,
+            "mean": 1.025,
+            "median": 1.1,
+            "p95": 1.1,
+            "p99": 1.1,
+            "stdDev": 0.106,
+            "iqr": 0.125,
+            "coefficientOfVariation": 0.103,
+            "samples": [
+              1.1,
+              1.1,
+              1.1,
+              1.1,
+              0.8,
+              1.1,
+              1,
+              1,
+              1.1,
+              0.9,
+              1.1,
+              0.9
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 178,
+            "max": 188,
+            "mean": 184.667,
+            "median": 186,
+            "p95": 188,
+            "p99": 188,
+            "stdDev": 3.601,
+            "iqr": 5.5,
+            "coefficientOfVariation": 0.02,
+            "samples": [
+              185,
+              186,
+              186,
+              188,
+              188,
+              188,
+              188,
+              186,
+              183,
+              181,
+              179,
+              178
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 52004,
+            "max": 58586,
+            "mean": 54783.5,
+            "median": 54724,
+            "p95": 57833.6,
+            "p99": 58435.52,
+            "stdDev": 1970.682,
+            "iqr": 1647.5,
+            "coefficientOfVariation": 0.036,
+            "samples": [
+              54696,
+              54724,
+              54724,
+              55528,
+              58586,
+              57218,
+              55918,
+              54965,
+              54485,
+              52457,
+              52097,
+              52004
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 52,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 98.846,
+            "totalJSHeapSizeMB": 165.772,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "zoom_and_orbit_sweep",
+          "scenarioName": "Automated Camera Zoom & Azimuth Orbit Sweep (1.2x -> 8.5x)",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 19.2,
+            "max": 958,
+            "mean": 425.975,
+            "median": 488.6,
+            "p95": 853.665,
+            "p99": 937.133,
+            "stdDev": 269.738,
+            "iqr": 248.75,
+            "coefficientOfVariation": 0.633,
+            "samples": [
+              489.4,
+              487.8,
+              491.6,
+              19.2,
+              958,
+              507.1,
+              499.1,
+              242.9,
+              50.5,
+              255.5,
+              342.3,
+              768.3
+            ]
+          },
+          "effectiveMedianFps": 2.05,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.7,
+            "max": 1.3,
+            "mean": 1.025,
+            "median": 1.05,
+            "p95": 1.245,
+            "p99": 1.289,
+            "stdDev": 0.171,
+            "iqr": 0.225,
+            "coefficientOfVariation": 0.167,
+            "samples": [
+              1.2,
+              0.9,
+              1.1,
+              1.1,
+              0.9,
+              0.9,
+              0.9,
+              1.1,
+              1,
+              1.2,
+              0.7,
+              1.3
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 181,
+            "max": 190,
+            "mean": 185.5,
+            "median": 185.5,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 3.261,
+            "iqr": 4.75,
+            "coefficientOfVariation": 0.018,
+            "samples": [
+              187,
+              187,
+              183,
+              185,
+              182,
+              186,
+              181,
+              181,
+              185,
+              189,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18448,
+            "max": 58588,
+            "mean": 48001.25,
+            "median": 52185,
+            "p95": 58305.3,
+            "p99": 58531.46,
+            "stdDev": 14038.361,
+            "iqr": 3957.75,
+            "coefficientOfVariation": 0.292,
+            "samples": [
+              58074,
+              55436,
+              51101,
+              51905,
+              52465,
+              54965,
+              51133,
+              51225,
+              54227,
+              58588,
+              18448,
+              18448
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 52,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 108.495,
+            "totalJSHeapSizeMB": 165.948,
+            "jsHeapSizeLimitMB": 4192
+          }
+        },
+        {
+          "scenarioId": "repeated_scene_reload",
+          "scenarioName": "Repeated Scene Load, Build, First-Render & Unload Lifecycle",
+          "warmupFrames": 4,
+          "measuredFrames": 12,
+          "frameIntervalMs": {
+            "sampleCount": 12,
+            "min": 0.9,
+            "max": 1520.6,
+            "mean": 321.975,
+            "median": 255.25,
+            "p95": 964.495,
+            "p99": 1409.379,
+            "stdDev": 419.305,
+            "iqr": 334.575,
+            "coefficientOfVariation": 1.302,
+            "samples": [
+              1.6,
+              47.9,
+              211.6,
+              310.8,
+              298.9,
+              129.5,
+              0.9,
+              5,
+              1520.6,
+              509.5,
+              497.6,
+              329.8
+            ]
+          },
+          "effectiveMedianFps": 3.92,
+          "cpuFrameRenderTimeMs": {
+            "sampleCount": 12,
+            "min": 0.8,
+            "max": 1539.3,
+            "mean": 129.333,
+            "median": 1.15,
+            "p95": 693.565,
+            "p99": 1370.153,
+            "stdDev": 444.024,
+            "iqr": 0.525,
+            "coefficientOfVariation": 3.433,
+            "samples": [
+              1539.3,
+              1.5,
+              1.5,
+              1.1,
+              1.3,
+              1.2,
+              1,
+              0.8,
+              0.9,
+              0.8,
+              1.6,
+              1
+            ]
+          },
+          "gpuFrameRenderTimeMs": {
+            "status": "unsupported",
+            "statistics": null
+          },
+          "webglDrawCallsPerFrame": {
+            "sampleCount": 12,
+            "min": 190,
+            "max": 190,
+            "mean": 190,
+            "median": 190,
+            "p95": 190,
+            "p99": 190,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190,
+              190
+            ]
+          },
+          "renderedTrianglesPerFrame": {
+            "sampleCount": 12,
+            "min": 18448,
+            "max": 18448,
+            "mean": 18448,
+            "median": 18448,
+            "p95": 18448,
+            "p99": 18448,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448,
+              18448
+            ]
+          },
+          "webglResources": {
+            "driverGeometries": 45,
+            "driverTextures": 3,
+            "shaderPrograms": 8,
+            "activeRailwayMeshes": 0,
+            "frustumCulledRailwayMeshes": 0,
+            "frustumVisibleRailwayTriangles": 0
+          },
+          "browserMemoryMB": {
+            "supported": true,
+            "usedJSHeapSizeMB": 107.553,
+            "totalJSHeapSizeMB": 139.448,
+            "jsHeapSizeLimitMB": 4192
+          },
+          "reloadLifecycleAudit": {
+            "cyclesExecuted": 2,
+            "reloadAndFirstRenderMs": {
+              "sampleCount": 2,
+              "min": 2458.2,
+              "max": 3692.6,
+              "mean": 3075.4,
+              "median": 3075.4,
+              "p95": 3630.88,
+              "p99": 3680.256,
+              "stdDev": 872.853,
+              "iqr": 617.2,
+              "coefficientOfVariation": 0.284,
+              "samples": [
+                3692.6,
+                2458.2
+              ]
+            },
+            "initialDriverGeometries": 44,
+            "finalDriverGeometries": 44,
+            "netDriverGeometryDelta": 0,
+            "initialDriverTextures": 3,
+            "finalDriverTextures": 3,
+            "netDriverTextureDelta": 0,
+            "cleanDisposalVerified": true
+          }
+        }
+      ],
+      "unsupportedMetrics": [
+        {
+          "metricId": "static_overview::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "static_close_junction::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "automated_pan_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "zoom_and_orbit_sweep::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        },
+        {
+          "metricId": "repeated_scene_reload::gpuFrameRenderTimeMs",
+          "reason": "unsupported_by_gpu_driver",
+          "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "unsupportedMetrics": [
+    {
+      "metricId": "static_overview::gpuFrameRenderTimeMs",
+      "reason": "unsupported_by_gpu_driver",
+      "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+    },
+    {
+      "metricId": "static_close_junction::gpuFrameRenderTimeMs",
+      "reason": "unsupported_by_gpu_driver",
+      "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+    },
+    {
+      "metricId": "automated_pan_sweep::gpuFrameRenderTimeMs",
+      "reason": "unsupported_by_gpu_driver",
+      "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+    },
+    {
+      "metricId": "zoom_and_orbit_sweep::gpuFrameRenderTimeMs",
+      "reason": "unsupported_by_gpu_driver",
+      "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+    },
+    {
+      "metricId": "repeated_scene_reload::gpuFrameRenderTimeMs",
+      "reason": "unsupported_by_gpu_driver",
+      "explanation": "EXT_disjoint_timer_query_webgl2 is not exposed by the active WebGL2 driver (common on SwiftShader or security-restricted GPU contexts). No fabricated GPU times were substituted."
+    }
+  ],
+  "errors": []
+}

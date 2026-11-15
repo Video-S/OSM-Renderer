@@ -189,6 +189,8 @@ export default function App() {
   // Performance stats & M2.1 telemetry
   const [fps, setFps] = useState<number>(60);
   const [cpuBuildTimeMs, setCpuBuildTimeMs] = useState<number>(0);
+  const latestCpuBuildTimeMsRef = useRef<number>(0);
+  const latestPreviewTimeMsRef = useRef<number>(0);
   const [liveTelemetry, setLiveTelemetry] = useState<LiveWebGLTelemetrySnapshot | null>(null);
   const lastUiTelemetryTimeRef = useRef<number>(0);
   const [webglSupported, setWebglSupported] = useState<boolean>(() => detectWebGLSupport().supported);
@@ -545,7 +547,22 @@ export default function App() {
     const zoomParam = params.get('zoom') ? parseFloat(params.get('zoom')!) : undefined;
     const azParam = params.get('azimuth') ? parseFloat(params.get('azimuth')!) : undefined;
 
-    if (fixtureParam === 'switchyard') {
+    const isBenchmarkMode =
+      params.get('benchmark') === '1' || params.get('benchmark') === 'true' || fixtureParam === 'benchmark';
+
+    if (isBenchmarkMode) {
+      setIsDockCollapsed(true);
+      setActiveLocationId('benchmark_idle');
+      const emptyData = localProvider.parseGeoJson(
+        { type: 'FeatureCollection', features: [] },
+        'Benchmark Idle State',
+        [4.9003, 52.3791],
+        100
+      );
+      setCurrentRawGeoJson(null);
+      setMapData(emptyData);
+      setLoading(false);
+    } else if (fixtureParam === 'switchyard') {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam);
     } else if (fixtureParam === 'prins-fork') {
       loadPrinsHendrikkadeForkFixture(zoomParam, azParam);
@@ -569,9 +586,12 @@ export default function App() {
   // when either road or railway preview mode is active; completely skipped in default 'legacy' mode.
   const infrastructureRenderPreview = useMemo(() => {
     if (!mapData || !requiresInfrastructureGraphPreview(infrastructureRenderOptions)) {
+      latestPreviewTimeMsRef.current = 0;
       return null;
     }
-    return prepareInfrastructureRenderPreview(mapData, infrastructureRenderOptions);
+    const preview = prepareInfrastructureRenderPreview(mapData, infrastructureRenderOptions);
+    latestPreviewTimeMsRef.current = preview?.timing.totalPreviewTimeMs ?? 0;
+    return preview;
   }, [mapData, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
 
   // Generate 3D Scene Geometries when geometric parameters or railway mode change.
@@ -617,7 +637,9 @@ export default function App() {
 
     const t0 = performance.now();
     const scene = builder.buildScene(sceneData, currentTheme);
-    setCpuBuildTimeMs(Number((performance.now() - t0).toFixed(2)));
+    const buildElapsedMs = Number((performance.now() - t0).toFixed(2));
+    latestCpuBuildTimeMsRef.current = buildElapsedMs;
+    setCpuBuildTimeMs(buildElapsedMs);
     activeSceneRef.current = scene;
     setBuiltGeometry(scene);
   }, [
@@ -982,7 +1004,109 @@ export default function App() {
             resolve(canvas ? canvas.toDataURL('image/png') : null);
           }, 450);
         }),
+      loadOfflineDataset: async (params: {
+        datasetId: string;
+        regionName: string;
+        rawGeoJson?: any;
+        isSwitchyardFixture?: boolean;
+        centerLonLat: [number, number];
+        clipRadiusMeters?: number;
+        infrastructureRenderOptions?: Partial<InfrastructureRenderOptions>;
+        roadsMode?: InfrastructureRenderOptions['roads'];
+        railwaysMode?: InfrastructureRenderOptions['railways'];
+        railwayPrototypeMode?: RailwayPrototypeMode;
+        themeId?: string;
+        target?: [number, number, number];
+        zoom?: number;
+        azimuthDeg?: number;
+      }) => {
+        const tTotalStart = performance.now();
+        setLoading(true);
+        setError(null);
+        setHoveredFeature(null);
+        setSelectedFeature(null);
+        setActiveLocationId(params.datasetId);
+
+        const tParseStart = performance.now();
+        const parsedData = params.isSwitchyardFixture
+          ? createRailwayPrototypeFixtureData()
+          : localProvider.parseGeoJson(
+              params.rawGeoJson,
+              params.regionName,
+              params.centerLonLat,
+              params.clipRadiusMeters
+            );
+        const datasetParseMs = Number((performance.now() - tParseStart).toFixed(3));
+
+        if (params.railwayPrototypeMode) {
+          setRailwayPrototypeMode(params.railwayPrototypeMode);
+        }
+        if (params.infrastructureRenderOptions) {
+          setInfrastructureRenderOptions((prev) =>
+            normalizeInfrastructureRenderOptions({
+              ...prev,
+              ...params.infrastructureRenderOptions,
+            })
+          );
+        } else if (params.roadsMode || params.railwaysMode) {
+          setInfrastructureRenderOptions((prev) =>
+            normalizeInfrastructureRenderOptions({
+              roads: params.roadsMode ?? prev.roads,
+              railways: params.railwaysMode ?? prev.railways,
+            })
+          );
+        }
+        if (params.themeId && MAP_THEMES[params.themeId]) {
+          setSelectedThemeId(params.themeId);
+        }
+        setCurrentRawGeoJson(params.rawGeoJson ?? null);
+        setMapData(parsedData);
+        setLoading(false);
+
+        const target: [number, number, number] = params.target ?? [0, 0, 0];
+        const zoom = params.zoom ?? 1.0;
+        const azimuthRad = ((params.azimuthDeg ?? 45) * Math.PI) / 180;
+        setExplicitPose((prev) => ({
+          target,
+          zoom,
+          azimuthRad,
+          signal: prev.signal + 1,
+        }));
+
+        // Wait for React commit + first WebGL frame render
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        const tRenderStart = performance.now();
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        const firstWebGLRenderMs = Number((performance.now() - tRenderStart).toFixed(3));
+        const totalSceneInitToFirstFrameMs = Number((performance.now() - tTotalStart).toFixed(3));
+        const cpuSceneBuildMs = Number(
+          (latestCpuBuildTimeMsRef.current + latestPreviewTimeMsRef.current).toFixed(3)
+        );
+
+        return {
+          datasetParseMs,
+          cpuSceneBuildMs,
+          firstWebGLRenderMs,
+          totalSceneInitToFirstFrameMs,
+        };
+      },
+      unloadDataset: async () => {
+        setHoveredFeature(null);
+        setSelectedFeature(null);
+        setActiveLocationId('benchmark_unloaded');
+        const emptyData = localProvider.parseGeoJson(
+          { type: 'FeatureCollection', features: [] },
+          'Benchmark Unloaded State',
+          [4.9003, 52.3791],
+          100
+        );
+        setCurrentRawGeoJson(null);
+        setMapData(emptyData);
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      },
     };
+    (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [
     activeLocationId,
     mapData,
@@ -1243,6 +1367,7 @@ export default function App() {
                   }}
                   onTelemetryUpdate={(snap) => {
                     latestTelemetryRef.current = snap;
+                    if ((window as any).__BENCHMARK_ACTIVE__) return;
                     const now = performance.now();
                     if (now - lastUiTelemetryTimeRef.current >= 400) {
                       lastUiTelemetryTimeRef.current = now;

@@ -8,7 +8,7 @@
 
 > **buildTunnelUndergroundProfile3D**(`options`): `object`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:243
+Defined in: world/BridgeAndTunnelBuilder.ts:319
 
 Constructs a continuous 3D vertical profile `ProfiledPoint3D[]` along a subterranean tunnel alignment (M2.3-E4-T / E4-T2).
 - At justified external portal entrances (`emitStartPortal` / `emitEndPortal`), starts at `surfaceElevation`

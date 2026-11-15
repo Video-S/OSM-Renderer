@@ -6,7 +6,7 @@
 
 # Interface: GraphGradeSeparatedResolutionResult
 
-Defined in: world/BridgeAndTunnelBuilder.ts:104
+Defined in: world/BridgeAndTunnelBuilder.ts:105
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:104
 
 > **atGradePortalSnapsByEdgeId**: `ReadonlyMap`\<`string`, \{ `end?`: readonly \[`number`, `number`\]; `start?`: readonly \[`number`, `number`\]; \}\>
 
-Defined in: world/BridgeAndTunnelBuilder.ts:107
+Defined in: world/BridgeAndTunnelBuilder.ts:108
 
 Map from at-grade edge ID to authoritative portal endpoint coordinates (`start` and/or `end`) snapped to confirmed GradeTransition positions.
 
@@ -24,7 +24,7 @@ Map from at-grade edge ID to authoritative portal endpoint coordinates (`start` 
 
 > **diagnostics**: [`GradeTransitionRenderDiagnostics`](GradeTransitionRenderDiagnostics.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:111
+Defined in: world/BridgeAndTunnelBuilder.ts:112
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: world/BridgeAndTunnelBuilder.ts:111
 
 > **plansByEdgeId**: `ReadonlyMap`\<`string`, [`ResolvedGradeSeparatedEdgePlan`](ResolvedGradeSeparatedEdgePlan.md)\>
 
-Defined in: world/BridgeAndTunnelBuilder.ts:105
+Defined in: world/BridgeAndTunnelBuilder.ts:106

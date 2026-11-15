@@ -8,7 +8,7 @@
 
 > `const` **DEFAULT\_BRIDGE\_RAMP\_MAX\_LENGTH\_METERS**: `12` = `12.0`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:29
+Defined in: world/BridgeAndTunnelBuilder.ts:30
 
 Canonical bridge approach ramp transition constants:
 - Standard/adapted approach ramp length: `min(12.0 m, 30% of mapped bridge length)`.

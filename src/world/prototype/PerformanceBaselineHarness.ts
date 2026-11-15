@@ -59,6 +59,7 @@ export interface LiveWebGLTelemetrySnapshot {
   gpuTimerQuerySupported: boolean;
   gpuDisjointOccurred?: boolean;
   gpuPassTimeMs: number | null;
+  cpuRenderTimeMs?: number;
   renderCalls: number;
   renderTriangles: number;
   activeRailwayMeshes?: number;
@@ -67,6 +68,7 @@ export interface LiveWebGLTelemetrySnapshot {
   hoverRaycastTimeMs?: number;
   driverGeometries: number;
   driverTextures: number;
+  driverPrograms?: number;
   cameraZoom: number;
   gpuVendor?: string;
   gpuRenderer?: string;

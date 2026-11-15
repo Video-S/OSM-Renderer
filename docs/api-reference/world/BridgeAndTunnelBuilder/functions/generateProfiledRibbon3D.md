@@ -8,7 +8,7 @@
 
 > **generateProfiledRibbon3D**(`profile`, `width`): `BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>
 
-Defined in: world/BridgeAndTunnelBuilder.ts:724
+Defined in: world/BridgeAndTunnelBuilder.ts:800
 
 Generates a 3D surface ribbon along a 3D profiled centerline `profile`.
 

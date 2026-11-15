@@ -8,6 +8,6 @@
 
 > **GradeSeparatedEndpointClassification** = `"confirmed_transition"` \| `"confirmed_elevated_continuation"` \| `"boundary_clipped_continuation"` \| `"unresolved_connection"` \| `"intentionally_standalone"`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:43
+Defined in: world/BridgeAndTunnelBuilder.ts:44
 
 Explicit Stage E4-A classification for each endpoint of a grade-separated (bridge or tunnel) edge.

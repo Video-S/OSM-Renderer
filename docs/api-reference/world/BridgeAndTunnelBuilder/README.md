@@ -35,6 +35,7 @@
 
 - [buildBridgeProfile3D](functions/buildBridgeProfile3D.md)
 - [buildTunnelUndergroundProfile3D](functions/buildTunnelUndergroundProfile3D.md)
+- [calculateTunnelPortalGroundCutouts](functions/calculateTunnelPortalGroundCutouts.md)
 - [computePolylineLength](functions/computePolylineLength.md)
 - [generateBridgeStructureGeometries](functions/generateBridgeStructureGeometries.md)
 - [generateProfiledRibbon3D](functions/generateProfiledRibbon3D.md)

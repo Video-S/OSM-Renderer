@@ -6,10 +6,13 @@ The following npm scripts defined in `package.json` constitute the official veri
 
 | Command | Tooling | Purpose |
 | :--- | :--- | :--- |
-| `npm test` | `tsx --test src/world/*.test.ts` | Runs the full automated unit and regression test suite using Node's native test runner. |
+| `npm test` | `tsx --test --test-concurrency=1 src/world/*.test.ts` | Runs the full automated unit and regression test suite using Node's native test runner. |
 | `npm run lint` | `tsc --noEmit` | Validates TypeScript types across the entire codebase with zero file emission. |
 | `npm run build` | `vite build` | Compiles the production bundle and validates asset bundling. |
 | `npm run docs:api` | `typedoc` | Generates the Markdown API reference under `docs/api-reference/` using `typedoc-plugin-markdown`. |
+| `npm run bench:cpu` | `tsx benchmarks/cpuRunner.ts` | Executes the Node.js CPU & memory benchmark suite across frozen offline datasets (`benchmarks/baselines/cpu-baseline.json`). |
+| `npm run bench:browser` | `tsx benchmarks/browserRunner.ts` | Executes the Playwright + Chromium WebGL rendering benchmark suite (`benchmarks/baselines/browser-baseline.json`). |
+| `npm run bench:compare` | `tsx benchmarks/compare.ts` | Compares baseline and candidate JSON benchmark reports, validating dataset hash/environment parity and flagging regressions. |
 
 > **When to Run Verification**: Automated tests, linting, build checks, and API documentation generation only need to be executed when code changes are made. Pure documentation updates, filing tickets, or maintaining ticket files do not require running tests or builds.
 
@@ -109,17 +112,26 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **A2 H01 Utrecht Vredenburg Pinched-Ring Coplanar Overlap Resolution**: Verifies that `conditionRing` strips the sub-`0.1 mm` `180°` fold-back needle spikes on the exact raw Boolean-difference contour of `road_edge:way/1576579935-0:seg_0:p_0#seg1` (`hasRingSelfIntersection === false`, triangulated area matching polygon area to `< 1e-4 m²`), and verifies `0` intra-feature and `0` multi-provenance segment overlaps, `0` coverage defects, intact `#seg0`/`#seg1` provenance, and input-order determinism on the 8-way H01 Nobelstraat / Lucasbolwerk reproduction fixture.
    - **Deliberate Negative Mutation Verification**: Confirms `validateSurfaceFirstRoadGeometry` catches removed road meshes (`omitted_road_feature`), injected coplanar overlaps, inverted triangle winding, vertex elevation drift, and corrupted OSM tag / subtype provenance.
    - **B1–B3 Performance Instrumentation Invariance & Determinism**: Verifies `bufferSurfaceFirstRoadCenterline` bit-for-bit geometry invariance with and without `SurfaceFirstBufferInstrumentation`, deterministic `GraphRoadRenderStats` counters across repeated builds and 5 seeded input permutations, clean per-rebuild reset, and `GraphRoadGenerationTiming` population on `roadsGroup.userData.graphRoadTiming`.
+15. **`BenchmarkInfrastructure.test.ts`** (`TKT-016` General Performance Benchmarking Infrastructure Suite — 11 tests):
+   - **Statistical Calculation & Regression Threshold Evaluation**: Verifies `computeSampleStatistics` (`median`, `p95`, `p99`, `iqr`, Bessel-corrected `stdDev`, `coefficientOfVariation`), empty/single-sample edge cases, and `evaluateMetricComparison` (`regressed`, `improved`, `unchanged`, `unsupported`, and noise-floor guards).
+   - **Reproducible Frozen Datasets & Content Hashing**: Verifies offline loading of `small-real-europatunnel`, `medium-real-hengelo-station`, `large-real-amsterdam-centraal`, and `synthetic-stress-urban-switchyard` with deterministic SHA-256 content hashes (`computeGeoJsonContentHash`) and feature counts.
+   - **CPU Benchmark Execution, Direct Stage Measurement & Resource Disposal**: Verifies `runCpuBenchmarks` direct stage timing across `production-legacy` and `surface-first-e2plus-rplus`, deterministic `cpuBufferMemory` calculation, and `SceneResourceManager` disposal (`disposalVerified === true`, `0` leaked geometries/materials).
+   - **Report Schema Validation & Serialization Round-Trip**: Verifies `validateBenchmarkReport`, `serializeBenchmarkReport`, `saveBenchmarkReport`, and `loadBenchmarkReport`, plus rejection of malformed schemas.
+   - **Baseline Comparison & Compatibility Checks**: Verifies `compareBenchmarkReports` regression detection, incompatible dataset content hash rejection, and `isSoftwareWebGLRenderer` hardware vs. SwiftShader classification. See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
 
-### Recorded Verification Status (2026-11-09 — E2+ Geometry Integrity & Performance Baseline Verification)
+### Recorded Verification Status (2026-11-13 — TKT-016 General Performance Benchmarking Infrastructure Verification)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **203 / 203 passed**, 0 failures across 15 suites (`193` `it` declarations: `66` core G1 tests across Suites 1–5 + `17` in `PerformanceBaseline.test.ts` + `9` in `RailwayRendering.test.ts` + `16` in `RoadNetworkTopology.test.ts` + `18` in `RailwayNetworkTopology.test.ts` + `9` in `CrossModalTopology.test.ts` + `10` in `InfrastructureRenderAdapter.test.ts` + `29` in `GraphRoadRendering.test.ts` + `11` in `DevToolsAndReproduction.test.ts` + `8` in `SurfaceFirstRoadRendering.test.ts`) |
+| `npm test` | **331 / 331 passed**, 0 failures across 24 test files (including `11` tests in `BenchmarkInfrastructure.test.ts`) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |
+| `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 resource leaks) |
+| `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, 5 scenarios per workload) |
+| `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions) |
 
-*(Historical baselines preserved: Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
+*(Historical baselines preserved: Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 
 
 ---

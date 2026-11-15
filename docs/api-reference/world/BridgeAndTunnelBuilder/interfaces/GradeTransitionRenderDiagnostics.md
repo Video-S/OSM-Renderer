@@ -6,7 +6,7 @@
 
 # Interface: GradeTransitionRenderDiagnostics
 
-Defined in: world/BridgeAndTunnelBuilder.ts:76
+Defined in: world/BridgeAndTunnelBuilder.ts:77
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:76
 
 > **boundaryClippedEndpointsCount**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:81
+Defined in: world/BridgeAndTunnelBuilder.ts:82
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:81
 
 > **bridgeAndTunnelBuildTimeMs**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:85
+Defined in: world/BridgeAndTunnelBuilder.ts:86
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:85
 
 > **confirmedElevatedContinuations**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:79
+Defined in: world/BridgeAndTunnelBuilder.ts:80
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:79
 
 > **confirmedTransitionsConsumed**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:78
+Defined in: world/BridgeAndTunnelBuilder.ts:79
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:78
 
 > `optional` **conflictingPlacementFallbackCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:95
+Defined in: world/BridgeAndTunnelBuilder.ts:96
 
 Number of features with conflicting vertical tags routed to a conservative surface fallback (M2.3-E4-T2).
 
@@ -56,7 +56,7 @@ Number of features with conflicting vertical tags routed to a conservative surfa
 
 > `optional` **conflictingPlacementSkippedCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:93
+Defined in: world/BridgeAndTunnelBuilder.ts:94
 
 Number of features skipped from grade-separated/surface rendering due to contradictory vertical/enclosure tags (M2.3-E4-T).
 
@@ -66,7 +66,7 @@ Number of features skipped from grade-separated/surface rendering due to contrad
 
 > **correctedPortalDiscontinuitiesCount**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:84
+Defined in: world/BridgeAndTunnelBuilder.ts:85
 
 ***
 
@@ -74,7 +74,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:84
 
 > `optional` **hiddenUndergroundMeshCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:99
+Defined in: world/BridgeAndTunnelBuilder.ts:100
 
 Number of subterranean meshes hidden from normal surface draw calls (M2.3-E4-T2).
 
@@ -84,7 +84,7 @@ Number of subterranean meshes hidden from normal surface draw calls (M2.3-E4-T2)
 
 > **intentionallyStandaloneEndpointsCount**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:82
+Defined in: world/BridgeAndTunnelBuilder.ts:83
 
 ***
 
@@ -92,7 +92,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:82
 
 > **legacyFallbacksCount**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:83
+Defined in: world/BridgeAndTunnelBuilder.ts:84
 
 ***
 
@@ -100,7 +100,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:83
 
 > **mode**: `"legacy"` \| `"graph"`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:77
+Defined in: world/BridgeAndTunnelBuilder.ts:78
 
 ***
 
@@ -108,7 +108,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:77
 
 > `optional` **portalGroundCutoutsCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:97
+Defined in: world/BridgeAndTunnelBuilder.ts:98
 
 Number of localized portal ground-cover cutouts applied at confirmed tunnel entrances (M2.3-E4-T2).
 
@@ -118,7 +118,7 @@ Number of localized portal ground-cover cutouts applied at confirmed tunnel entr
 
 > `optional` **tunnelPortalsEmittedCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:87
+Defined in: world/BridgeAndTunnelBuilder.ts:88
 
 Number of individual tunnel portal structures emitted at confirmed/standalone entrances (M2.3-E4-T).
 
@@ -128,7 +128,7 @@ Number of individual tunnel portal structures emitted at confirmed/standalone en
 
 > `optional` **undergroundRailwayGeometryCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:91
+Defined in: world/BridgeAndTunnelBuilder.ts:92
 
 Number of subterranean tunnel railway features rendered with continuous 3D underground track geometry (M2.3-E4-T).
 
@@ -138,7 +138,7 @@ Number of subterranean tunnel railway features rendered with continuous 3D under
 
 > `optional` **undergroundRoadGeometryCount?**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:89
+Defined in: world/BridgeAndTunnelBuilder.ts:90
 
 Number of subterranean tunnel road features rendered with continuous 3D underground road geometry (M2.3-E4-T).
 
@@ -148,7 +148,7 @@ Number of subterranean tunnel road features rendered with continuous 3D undergro
 
 > `optional` **undergroundTracesVisible?**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:101
+Defined in: world/BridgeAndTunnelBuilder.ts:102
 
 True when diagnostic dashed underground traces are enabled in visible presentation (M2.3-E4-T2).
 
@@ -158,4 +158,4 @@ True when diagnostic dashed underground traces are enabled in visible presentati
 
 > **unresolvedTransitionsCount**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:80
+Defined in: world/BridgeAndTunnelBuilder.ts:81

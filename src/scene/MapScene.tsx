@@ -114,12 +114,14 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const lastZoomRef = useRef<number>(-1);
 
   const lastGpuTimeMsRef = useRef<number | null>(null);
+  const lastCpuRenderTimeMsRef = useRef<number>(0);
   const gpuDisjointRef = useRef<boolean>(false);
   const gpuTimerSupportedRef = useRef<boolean>(false);
   const gpuVendorRef = useRef<string>('Unknown');
   const gpuRendererRef = useRef<string>('Unknown');
   const lastRenderCallsRef = useRef<number>(0);
   const lastRenderTrianglesRef = useRef<number>(0);
+  const lastDriverProgramsRef = useRef<number>(0);
 
   const activeRailwaysGroup = railwayGroupOverride || builtGeometry.railwaysGroup;
 
@@ -299,6 +301,15 @@ export const MapScene: React.FC<MapSceneProps> = ({
     let queryInFlight = false;
     const origRender = gl.render.bind(gl);
 
+    const recordPostRenderInfo = (cpuElapsedMs: number) => {
+      lastCpuRenderTimeMsRef.current = Number(cpuElapsedMs.toFixed(3));
+      lastRenderCallsRef.current = gl.info.render.calls;
+      lastRenderTrianglesRef.current = gl.info.render.triangles;
+      lastDriverProgramsRef.current = Array.isArray((gl.info as any).programs)
+        ? (gl.info as any).programs.length
+        : 0;
+    };
+
     gl.render = (scene: THREE.Object3D, camera: THREE.Camera) => {
       if (timerExt && typeof rawGl.createQuery === 'function') {
         const disjoint = Boolean(rawGl.getParameter(timerExt.GPU_DISJOINT_EXT));
@@ -327,28 +338,33 @@ export const MapScene: React.FC<MapSceneProps> = ({
         if (!queryInFlight && pendingQueries.length < 4) {
           const q = rawGl.createQuery();
           if (q) {
+            let tCpu0 = performance.now();
             try {
               rawGl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
               queryInFlight = true;
+              tCpu0 = performance.now();
               origRender(scene, camera);
+              const cpuElapsed = performance.now() - tCpu0;
               rawGl.endQuery(timerExt.TIME_ELAPSED_EXT);
               queryInFlight = false;
               pendingQueries.push(q);
+              recordPostRenderInfo(cpuElapsed);
+              return;
             } catch {
               queryInFlight = false;
               rawGl.deleteQuery(q);
+              tCpu0 = performance.now();
               origRender(scene, camera);
+              recordPostRenderInfo(performance.now() - tCpu0);
+              return;
             }
-            lastRenderCallsRef.current = gl.info.render.calls;
-            lastRenderTrianglesRef.current = gl.info.render.triangles;
-            return;
           }
         }
       }
 
+      const tCpu0 = performance.now();
       origRender(scene, camera);
-      lastRenderCallsRef.current = gl.info.render.calls;
-      lastRenderTrianglesRef.current = gl.info.render.triangles;
+      recordPostRenderInfo(performance.now() - tCpu0);
     };
 
     return () => {
@@ -369,13 +385,6 @@ export const MapScene: React.FC<MapSceneProps> = ({
     const now = performance.now();
     const frameDt = now - lastFrameTimestampRef.current;
     lastFrameTimestampRef.current = now;
-    if (frameDt > 0 && frameDt < 5000) {
-      const ring = frameIntervalsRingRef.current;
-      ring.push(frameDt);
-      if (ring.length > 120) {
-        ring.shift();
-      }
-    }
 
     const cam = state.camera as THREE.OrthographicCamera;
     if (typeof cam.zoom === 'number' && Math.abs(cam.zoom - lastZoomRef.current) > 0.005) {
@@ -383,6 +392,39 @@ export const MapScene: React.FC<MapSceneProps> = ({
       builtGeometry.updateCameraZoom?.(cam.zoom);
       if (onCameraZoomChange) {
         onCameraZoomChange(cam.zoom);
+      }
+    }
+
+    const benchmarkCollector =
+      typeof window !== 'undefined' ? (window as any).__BENCHMARK_FRAME_COLLECTOR__ : null;
+    if (typeof benchmarkCollector === 'function') {
+      benchmarkCollector({
+        frameIntervalMs: Number(frameDt.toFixed(3)),
+        cpuRenderTimeMs: lastCpuRenderTimeMsRef.current,
+        gpuPassTimeMs: lastGpuTimeMsRef.current,
+        gpuTimerQuerySupported: gpuTimerSupportedRef.current,
+        gpuDisjointOccurred: gpuDisjointRef.current,
+        renderCalls: lastRenderCallsRef.current || state.gl.info.render.calls,
+        renderTriangles: lastRenderTrianglesRef.current || state.gl.info.render.triangles,
+        driverGeometries: state.gl.info.memory.geometries,
+        driverTextures: state.gl.info.memory.textures,
+        driverPrograms: lastDriverProgramsRef.current,
+        cameraZoom: Number((cam.zoom || 1).toFixed(2)),
+        gpuVendor: gpuVendorRef.current,
+        gpuRenderer: gpuRendererRef.current,
+      });
+    }
+
+    // During active automated frame benchmarking, skip ring sorting, scene traversal, and React HUD updates
+    if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
+      return;
+    }
+
+    if (frameDt > 0 && frameDt < 5000) {
+      const ring = frameIntervalsRingRef.current;
+      ring.push(frameDt);
+      if (ring.length > 120) {
+        ring.shift();
       }
     }
 
@@ -471,6 +513,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         gpuTimerQuerySupported: gpuTimerSupportedRef.current,
         gpuDisjointOccurred: gpuDisjointRef.current,
         gpuPassTimeMs: lastGpuTimeMsRef.current,
+        cpuRenderTimeMs: lastCpuRenderTimeMsRef.current,
         renderCalls: lastRenderCallsRef.current || state.gl.info.render.calls,
         renderTriangles: lastRenderTrianglesRef.current || state.gl.info.render.triangles,
         activeRailwayMeshes,
@@ -479,6 +522,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         hoverRaycastTimeMs: lastHoverRaycastMsRef.current,
         driverGeometries: state.gl.info.memory.geometries,
         driverTextures: state.gl.info.memory.textures,
+        driverPrograms: lastDriverProgramsRef.current,
         cameraZoom: Number((cam.zoom || 1).toFixed(2)),
         gpuVendor: gpuVendorRef.current,
         gpuRenderer: gpuRendererRef.current,

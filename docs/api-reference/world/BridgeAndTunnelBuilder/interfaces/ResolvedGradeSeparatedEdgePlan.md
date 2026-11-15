@@ -6,7 +6,7 @@
 
 # Interface: ResolvedGradeSeparatedEdgePlan
 
-Defined in: world/BridgeAndTunnelBuilder.ts:50
+Defined in: world/BridgeAndTunnelBuilder.ts:51
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:50
 
 > **componentRampLengthMeters**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:65
+Defined in: world/BridgeAndTunnelBuilder.ts:66
 
 Effective ramp length (meters) for the connected bridge component containing this edge.
 
@@ -24,7 +24,7 @@ Effective ramp length (meters) for the connected bridge component containing thi
 
 > **componentSpanMeters**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:67
+Defined in: world/BridgeAndTunnelBuilder.ts:68
 
 Effective total span (meters) of the connected bridge component containing this edge.
 
@@ -34,7 +34,7 @@ Effective total span (meters) of the connected bridge component containing this 
 
 > **correctedPortalDiscontinuities**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:73
+Defined in: world/BridgeAndTunnelBuilder.ts:74
 
 Number of portal horizontal discontinuities (> 0.0001 m) snapped to authoritative transition node on this edge.
 
@@ -44,7 +44,7 @@ Number of portal horizontal discontinuities (> 0.0001 m) snapped to authoritativ
 
 > **edgeId**: `string`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:51
+Defined in: world/BridgeAndTunnelBuilder.ts:52
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:51
 
 > **endClassification**: [`GradeSeparatedEndpointClassification`](../type-aliases/GradeSeparatedEndpointClassification.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:57
+Defined in: world/BridgeAndTunnelBuilder.ts:58
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:57
 
 > **endPortalDistanceMeters**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:63
+Defined in: world/BridgeAndTunnelBuilder.ts:64
 
 Shortest path distance (meters) along connected bridge component from end node to nearest confirmed transition portal (`Infinity` if none).
 
@@ -70,7 +70,7 @@ Shortest path distance (meters) along connected bridge component from end node t
 
 > **endTargetDeckElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:71
+Defined in: world/BridgeAndTunnelBuilder.ts:72
 
 Authoritative target deck elevation at end node (supports smooth cross-layer bridge continuations).
 
@@ -80,7 +80,7 @@ Authoritative target deck elevation at end node (supports smooth cross-layer bri
 
 > `optional` **endTransition?**: [`GradeTransitionRenderDescriptor`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/GradeTransitionRenderDescriptor.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:59
+Defined in: world/BridgeAndTunnelBuilder.ts:60
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:59
 
 > **isBridge**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:53
+Defined in: world/BridgeAndTunnelBuilder.ts:54
 
 ***
 
@@ -96,7 +96,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:53
 
 > **isTunnel**: `boolean`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:54
+Defined in: world/BridgeAndTunnelBuilder.ts:55
 
 ***
 
@@ -104,7 +104,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:54
 
 > **network**: `"road"` \| `"railway"`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:52
+Defined in: world/BridgeAndTunnelBuilder.ts:53
 
 ***
 
@@ -112,7 +112,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:52
 
 > **points**: \[`number`, `number`\][]
 
-Defined in: world/BridgeAndTunnelBuilder.ts:55
+Defined in: world/BridgeAndTunnelBuilder.ts:56
 
 ***
 
@@ -120,7 +120,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:55
 
 > **startClassification**: [`GradeSeparatedEndpointClassification`](../type-aliases/GradeSeparatedEndpointClassification.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:56
+Defined in: world/BridgeAndTunnelBuilder.ts:57
 
 ***
 
@@ -128,7 +128,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:56
 
 > **startPortalDistanceMeters**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:61
+Defined in: world/BridgeAndTunnelBuilder.ts:62
 
 Shortest path distance (meters) along connected bridge component from start node to nearest confirmed transition portal (`Infinity` if none).
 
@@ -138,7 +138,7 @@ Shortest path distance (meters) along connected bridge component from start node
 
 > **startTargetDeckElevation**: `number`
 
-Defined in: world/BridgeAndTunnelBuilder.ts:69
+Defined in: world/BridgeAndTunnelBuilder.ts:70
 
 Authoritative target deck elevation at start node (supports smooth cross-layer bridge continuations).
 
@@ -148,4 +148,4 @@ Authoritative target deck elevation at start node (supports smooth cross-layer b
 
 > `optional` **startTransition?**: [`GradeTransitionRenderDescriptor`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/GradeTransitionRenderDescriptor.md)
 
-Defined in: world/BridgeAndTunnelBuilder.ts:58
+Defined in: world/BridgeAndTunnelBuilder.ts:59

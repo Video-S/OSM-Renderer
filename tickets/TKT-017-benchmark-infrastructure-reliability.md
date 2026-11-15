@@ -2,7 +2,7 @@
 id: TKT-017
 title: Benchmark Infrastructure Reliability & Windows Compatibility
 type: bug
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-15
 updated: 2026-11-15
@@ -67,20 +67,21 @@ Make the CPU and WebGL browser benchmarking infrastructure (`benchmarks/`, `src/
 - [x] Clean `npm install` / `bun install` compatibility, Windows-safe `tsx` spawning, direct `npx tsx` flag-passing guidance for PowerShell, and honest `resolveGitState` diagnostics.
 - [x] Automated benchmark tests pass (`BenchmarkInfrastructure.test.ts` + `BenchmarkReliability.test.ts`) and headless SwiftShader baselines (`v1.1.0`) regenerate cleanly.
 - [x] **Windows hardware smoke test verified by owner (`2026-11-15`)**: NVIDIA GeForce RTX 4060 Ti (ANGLE Direct3D 11, `isSoftwareRenderer: false`), `59.88 FPS` median, `0.5 ms` CPU render, `0.607 ms` GPU render (`60/60` valid timer samples), `58` constructed meshes, `36` static / `21` sampled active railway meshes, `0` errors; CPU suite completed all 12 workloads with `0` errors and `0` leaks.
-- [ ] **Pending full hardware scenario coverage**: Run full/quick multi-dataset & multi-scenario hardware suite on Windows (`npx tsx benchmarks/browserRunner.ts --quick --require-hardware "--out=benchmarks/results/hardware-rtx4060ti.json"`) after committing final corrections before closing `TKT-017`.
+- [x] **Windows hardware verification (`--quick`) completed by project owner (`2026-11-15`, commit `ea5848e52e51`, `gitDirty: true`)**: Verified `NVIDIA GeForce RTX 4060 Ti` with ANGLE Direct3D 11 (`isSoftwareRenderer: false`, SwiftShader disabled), `20/20` browser scenarios completed (`--quick` subset: `2` datasets × `2` configs × `5` scenarios; not the exhaustive hardware matrix), `238/240` valid GPU timer samples + `2` `pending` frames, `0` benchmark errors, `0` unsupported metrics, `4` scene-reload lifecycle audits passed with `0` WebGL resource leaks, `12/12` CPU workloads completed with `0` errors and `0` disposal leaks, and `21/21` focused benchmark tests passing.
 
 ## Verification
-- Status: **In Progress** (Final corrections verified in container + owner Windows hardware smoke test & 12-workload CPU run verified; full multi-scenario Windows hardware verification pending after commit)
+- Status: **Closed — Verified (`--quick` Windows Hardware + Full CPU Suite + Focused Tests)**
+- Owner Windows RTX 4060 Ti hardware verification (commit `ea5848e52e51`, `gitDirty: true`, `2026-11-15`):
+  - **GPU / Backend**: `NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11 (`isSoftwareRenderer: false`, SwiftShader disabled)
+  - **Browser `--quick` suite** (`npx tsx benchmarks/browserRunner.ts --quick --require-hardware ...`): `20/20` scenarios completed (`--quick` coverage: `small-real-europatunnel` and `synthetic-stress-urban-switchyard` across `production-legacy` and `surface-first-e2plus-rplus`; exhaustive multi-dataset hardware matrix not run in `--quick` mode), `238/240` valid GPU timer samples (`2` correctly classified as `pending`), `0` benchmark errors, `0` unsupported metrics, `4` scene-reload lifecycle audits passed with `0` detected WebGL resource leaks
+  - **Initial hardware smoke test**: `59.88 FPS` median, `0.5 ms` median CPU render, `0.607 ms` median GPU render (`60/60` valid GPU timer samples), `58` constructed meshes, `36` static / `21` sampled active railway meshes, `0` errors
+  - **CPU suite**: `12/12` workloads completed with `0` errors and `0` resource-disposal failures
 - Container verification (Linux, headless SwiftShader fallback for WebGL, `2026-11-15`):
-  - `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts`: exit `0` — `21/21` passed across `16` suites (`9033.21 ms`; `TKT-017` suite `155.50 ms`, `0` failed, `0` skipped).
-  - `tsc --noEmit` & `npm run build` (`vite build`): exit `0` (`0` TypeScript or bundle errors).
-  - `npm run bench:cpu`: exit `0` — `12/12` CPU workloads completed, `0` leaks, schema `v1.1.0`, `gitMetadataStatus: "not_a_git_repository"`.
-  - `npx tsx benchmarks/browserRunner.ts --quick --swiftshader`: exit `0` — `4` workloads x `5` scenarios (`20/20` scenarios), `isSoftwareRenderer: true`, `gpuBackendRequested: "swiftshader"`, `0` errors.
-  - Schema load + `npx tsx benchmarks/compare.ts` self-comparison on `benchmarks/baselines/cpu-baseline.json` and `benchmarks/baselines/browser-baseline.json`: exit `0` (`COMPATIBLE`, `0` regressions).
-- Verified on Windows RTX 4060 Ti hardware by project owner (`2026-11-15` — **smoke test only**, prior to full scenario coverage):
-  - GPU backend: ANGLE Direct3D 11 (`NVIDIA GeForce RTX 4060 Ti`, `isSoftwareRenderer: false`)
-  - Telemetry: `59.88 FPS` median frame rate, `0.5 ms` median CPU render, `0.607 ms` median GPU render (`60/60` valid GPU timer samples), `58` constructed meshes, `36` static railway meshes, `21` sampled active railway meshes, `0` benchmark errors
-  - CPU suite: All 12 workloads completed with `0` errors and `0` resource-disposal failures
+  - `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts`: exit `0` — `21/21` passed across `16` suites (`0` failed, `0` skipped)
+  - `npm run lint` (`tsc --noEmit`) & `npm run build` (`vite build`): exit `0` (`0` TypeScript or bundle errors)
+  - `npm run bench:cpu`: exit `0` — `12/12` CPU workloads completed, `0` leaks, schema `v1.1.0`, `benchmarks/baselines/cpu-baseline.json` updated (`gitMetadataStatus: "not_a_git_repository"`)
+  - `npx tsx benchmarks/browserRunner.ts --quick --swiftshader`: exit `0` — `4` workloads × `5` scenarios (`20/20` scenarios), `isSoftwareRenderer: true`, `gpuBackendRequested: "swiftshader"`, `0` errors
+  - Schema load + `npx tsx benchmarks/compare.ts` self-comparison on `benchmarks/baselines/cpu-baseline.json` and `benchmarks/baselines/browser-baseline.json`: exit `0` (`COMPATIBLE`, `0` regressions)
 
 ## Related Files and Documentation
 - Source: `src/types/BenchmarkTelemetry.ts`, `src/world/prototype/BenchmarkRailwayTelemetry.ts`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`, `src/app/App.tsx`, `benchmarks/cliAndServer.ts`, `benchmarks/browserRunner.ts`, `benchmarks/cpuRunner.ts`, `benchmarks/compare.ts`, `benchmarks/serializer.ts`, `benchmarks/types.ts`, `benchmarks/environment.ts`, `package.json`

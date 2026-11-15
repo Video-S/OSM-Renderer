@@ -1,0 +1,313 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, it } from 'node:test';
+import {
+  formatScalingMarkdownReport,
+  loadHengeloScalingDatasets,
+  loadScalingDatasetManifest,
+  parseScalingRunnerCliArgs,
+  readProcessRssMB,
+  runIsolatedScalingWorkload,
+  runRegionalScalingBenchmarks,
+  saveScalingJsonReport,
+} from '../../benchmarks';
+import type { RegionalScalingReport } from '../../benchmarks/types';
+import { resolveRendererConfigs } from '../../benchmarks/scenarios';
+
+const tempDirsToCleanup: string[] = [];
+
+function createTempDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirsToCleanup.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (tempDirsToCleanup.length > 0) {
+    const dir = tempDirsToCleanup.pop()!;
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures in temp
+    }
+  }
+});
+
+describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
+  it('loads Hengelo S1–S5 manifest with ODbL attribution, bboxes, and SHA-256 verified S1 offline data', () => {
+    const manifest = loadScalingDatasetManifest();
+    assert.equal(manifest.datasets.length, 5);
+    assert.deepEqual(
+      manifest.datasets.map((d) => d.level),
+      ['S1', 'S2', 'S3', 'S4', 'S5']
+    );
+    assert.ok(manifest.attribution.includes('OpenStreetMap'));
+    assert.ok(manifest.sourceSha256.length === 64);
+
+    // Strictly increasing areas and extents
+    for (let i = 1; i < manifest.datasets.length; i++) {
+      assert.ok(manifest.datasets[i].areaKm2 > manifest.datasets[i - 1].areaKm2);
+      assert.ok(
+        manifest.datasets[i].geoJsonFeatureCount >
+          manifest.datasets[i - 1].geoJsonFeatureCount
+      );
+    }
+
+    // Load & SHA-256 verify S1 (smallest tier, fast & low-memory for unit tests)
+    const { datasets } = loadHengeloScalingDatasets({
+      levelsOrIds: ['S1'],
+      verifyHashes: true,
+    });
+    assert.equal(datasets.length, 1);
+    const s1 = datasets[0];
+    const parsed = s1.parseInput();
+
+    assert.ok(parsed.roads.length > 50, 'S1 should contain real Hengelo roads');
+    assert.ok(parsed.railways.length > 10, 'S1 should contain real Hengelo station railways');
+    assert.ok(parsed.buildings.length > 30, 'S1 should contain real Hengelo buildings');
+    assert.ok(
+      parsed.roads.some((r) => Array.isArray(r.nodeIds) && r.nodeIds.length >= 2),
+      'S1 must preserve OSM node IDs (_nodeIds) on road features'
+    );
+    assert.ok(
+      parsed.roads.some((r) => typeof r.id === 'string' && r.id.startsWith('way/')),
+      'S1 must preserve original OSM way identities'
+    );
+  });
+
+  it('parses CLI arguments across Bash and Windows PowerShell token splitting', () => {
+    const parsed = parseScalingRunnerCliArgs([
+      '--datasets',
+      'S1,',
+      'S2',
+      '--configs',
+      'production-legacy',
+      'surface-first-e2plus-rplus',
+      '--max-scale=S4',
+      '--warmup=1',
+      '--iterations=2',
+      '--max-rss-mb=2048',
+      '--max-old-space-size-mb=2048',
+      '--timeout-ms=45000',
+      '--validator-max-edges=300',
+      '--out=benchmarks/results/test-scaling.json',
+      '--md-out=docs/test-scaling.md',
+    ]);
+
+    assert.deepEqual(parsed.datasetIds, ['S1', 'S2']);
+    assert.deepEqual(parsed.configIds, ['production-legacy', 'surface-first-e2plus-rplus']);
+    assert.equal(parsed.maxScale, 'S4');
+    assert.equal(parsed.warmupIterations, 1);
+    assert.equal(parsed.measuredIterations, 2);
+    assert.equal(parsed.resourceLimits.maxRssMB, 2048);
+    assert.equal(parsed.resourceLimits.maxOldSpaceSizeMB, 2048);
+    assert.equal(parsed.resourceLimits.timeoutMs, 45000);
+    assert.equal(parsed.resourceLimits.validatorMaxEdges, 300);
+    assert.equal(parsed.outputPath, 'benchmarks/results/test-scaling.json');
+    assert.equal(parsed.markdownOutputPath, 'docs/test-scaling.md');
+
+    assert.throws(
+      () => parseScalingRunnerCliArgs(['--max-scale=TWENTE']),
+      /Unsupported --max-scale/
+    );
+    assert.throws(
+      () => parseScalingRunnerCliArgs(['--unknown-flag']),
+      /Unknown CLI argument/
+    );
+  });
+
+  it('reads live RSS for the current process cleanly', async () => {
+    const rssMB = await readProcessRssMB(process.pid);
+    assert.ok(rssMB !== null && rssMB > 10, `Expected positive RSS in MB, got ${rssMB}`);
+  });
+
+  it('executes an isolated child scaling workload cleanly on Hengelo S1 with full completeness metrics and zero leaks', async () => {
+    const { datasets, manifest } = loadHengeloScalingDatasets({
+      levelsOrIds: ['S1'],
+      verifyHashes: true,
+    });
+    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+
+    const res = await runIsolatedScalingWorkload({
+      dataset: datasets[0],
+      rendererConfig: legacyCfg,
+      manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
+      warmupIterations: 0,
+      measuredIterations: 1,
+      resourceLimits: {
+        maxRssMB: 2048,
+        maxOldSpaceSizeMB: 2048,
+        timeoutMs: 60_000,
+        validatorMaxEdges: 500,
+        rssPollIntervalMs: 100,
+      },
+    });
+
+    assert.equal(res.status, 'completed', `Unexpected status: ${res.status} (${res.statusReason})`);
+    assert.ok(res.timingsMs !== null);
+    assert.equal(res.timingsMs.infrastructureGraphBuildMs, null);
+    assert.ok(
+      res.unsupportedMetrics.some((u) => u.metricId.endsWith('infrastructureGraphBuildMs') && u.reason === 'disabled_by_config')
+    );
+    assert.ok(res.timingsMs.fullSceneGeometryGenerationMs.median >= 0);
+    assert.ok(res.timingsMs.roadGeometryGenerationMs !== null);
+
+    assert.ok(res.memory !== null);
+    assert.equal(res.memory.lifecycleAudit.disposalVerified, true);
+    assert.equal(res.memory.lifecycleAudit.netLeakedGeometries, 0);
+    assert.equal(res.memory.lifecycleAudit.netLeakedMaterials, 0);
+    assert.ok(res.memory.processRssMB.workerPeakObservedMB > 0);
+    assert.ok(res.memory.cpuBufferMemory.totalBytes > 0);
+
+    assert.ok(res.operations !== null);
+    assert.ok(res.operations.planarSurface.totalInputPolygons > 0);
+    assert.ok((res.operations.roads.renderedPrimitivesOrRibbonsCount ?? 0) > 0);
+
+    assert.ok(res.completenessAndCorrectness !== null);
+    assert.ok(res.completenessAndCorrectness.renderedCoverage.sourceFeaturesRenderedCount > 0);
+    assert.ok(res.completenessAndCorrectness.topologyAudit !== null);
+    assert.equal(res.completenessAndCorrectness.geometryValidation.graphMeshIntegrity.status, 'executed');
+
+    // Verify Markdown and JSON report serialization on real result
+    const tmpDir = createTempDir('tkt019-report-');
+    const report: RegionalScalingReport = {
+      schemaVersion: '1.0.0',
+      suite: 'regional-scaling',
+      benchmarkName: 'TKT-019 Test Report',
+      generatedAtIso: new Date().toISOString(),
+      environment: {
+        gitCommitSha: 'unavailable',
+        gitDirty: false,
+        timestampIso: new Date().toISOString(),
+        nodeVersion: process.version,
+        v8Version: process.versions.v8,
+        platform: process.platform,
+        osRelease: os.release(),
+        arch: process.arch,
+        cpuModel: 'test',
+        cpuLogicalCores: 2,
+        totalSystemMemoryMB: 16384,
+        gcExposed: false,
+      },
+      datasetSeries: {
+        studyArea: manifest.studyArea,
+        sourceFileName: manifest.sourceFileName,
+        sourceSha256: manifest.sourceSha256,
+        osmTimestampIso: manifest.osmTimestampIso,
+        attribution: manifest.attribution,
+        datasets: [datasets[0].descriptor],
+      },
+      resourceLimits: {
+        maxRssMB: 2048,
+        maxOldSpaceSizeMB: 2048,
+        timeoutMs: 60_000,
+        validatorMaxEdges: 500,
+        rssPollIntervalMs: 100,
+      },
+      methodology: {
+        warmupIterations: 0,
+        measuredIterations: 1,
+        executionModel: 'unit-test',
+        metricDefinitions: {},
+        memoryMeasurementNotes: [],
+      },
+      configSummaries: [
+        {
+          configId: legacyCfg.id,
+          configLabel: legacyCfg.label,
+          highestCompletedLevel: 'S1',
+          stoppedAtLevel: null,
+          stopReason: null,
+          completedLevelsCount: 1,
+          skippedLevelsCount: 0,
+          failedLevelsCount: 0,
+        },
+      ],
+      results: [res],
+      errors: [],
+    };
+
+    const jsonOut = saveScalingJsonReport(report, path.join(tmpDir, 'out.json'));
+    assert.ok(fs.existsSync(jsonOut));
+    const md = formatScalingMarkdownReport(report);
+    assert.ok(md.includes('250 × 250 m'));
+    assert.ok(md.includes('production-legacy'));
+  });
+
+  it('enforces RSS memory limit, wall-clock timeout, and halts larger-scale progression with skipped_due_to_threshold', async () => {
+    const tmpDir = createTempDir('tkt019-guards-');
+    const memHogWorker = path.join(tmpDir, 'mem-hog-worker.ts');
+    fs.writeFileSync(
+      memHogWorker,
+      `
+      if (process.send) process.send({ type: 'heartbeat', stage: 'allocating', rssMB: 50, heapUsedMB: 30, elapsedMs: 10 });
+      const blocks = [];
+      for (let i = 0; i < 40; i++) {
+        const buf = Buffer.alloc(4 * 1024 * 1024, 0xab);
+        blocks.push(buf);
+      }
+      if (process.send) process.send({ type: 'heartbeat', stage: 'allocated', rssMB: Math.round(process.memoryUsage().rss / (1024*1024)), heapUsedMB: 100, elapsedMs: 50 });
+      setTimeout(() => {}, 15000);
+      `,
+      'utf8'
+    );
+
+    const reportMemFail = await runRegionalScalingBenchmarks({
+      datasetIds: ['S1', 'S2'],
+      configIds: ['production-legacy'],
+      warmupIterations: 0,
+      measuredIterations: 1,
+      quiet: true,
+      workerScriptPath: memHogWorker,
+      resourceLimits: {
+        maxRssMB: 110,
+        maxOldSpaceSizeMB: 512,
+        timeoutMs: 10_000,
+        rssPollIntervalMs: 50,
+        validatorMaxEdges: 100,
+      },
+    });
+
+    assert.equal(reportMemFail.results.length, 2);
+    assert.equal(reportMemFail.results[0].dataset.level, 'S1');
+    assert.equal(reportMemFail.results[0].status, 'failed_memory_limit');
+    assert.equal(reportMemFail.results[1].dataset.level, 'S2');
+    assert.equal(reportMemFail.results[1].status, 'skipped_due_to_threshold');
+    assert.equal(reportMemFail.configSummaries[0].stoppedAtLevel, 'S1');
+    assert.equal(reportMemFail.configSummaries[0].skippedLevelsCount, 1);
+
+    const slowWorker = path.join(tmpDir, 'timeout-worker.ts');
+    fs.writeFileSync(
+      slowWorker,
+      `
+      if (process.send) process.send({ type: 'heartbeat', stage: 'sleeping_test', rssMB: 40, heapUsedMB: 20, elapsedMs: 5 });
+      setTimeout(() => {}, 15000);
+      `,
+      'utf8'
+    );
+
+    const { datasets } = loadHengeloScalingDatasets({ levelsOrIds: ['S1'], verifyHashes: false });
+    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+
+    const timeoutRes = await runIsolatedScalingWorkload({
+      dataset: datasets[0],
+      rendererConfig: legacyCfg,
+      manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
+      warmupIterations: 0,
+      measuredIterations: 1,
+      workerScriptPath: slowWorker,
+      resourceLimits: {
+        maxRssMB: 1024,
+        maxOldSpaceSizeMB: 512,
+        timeoutMs: 350,
+        rssPollIntervalMs: 50,
+        validatorMaxEdges: 100,
+      },
+    });
+
+    assert.equal(timeoutRes.status, 'failed_timeout');
+    assert.equal(timeoutRes.lastHeartbeatStage, 'sleeping_test');
+  });
+});

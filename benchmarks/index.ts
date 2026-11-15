@@ -8,3 +8,7 @@ export * from './compare';
 export * from './cliAndServer';
 export * from './cpuRunner';
 export * from './browserRunner';
+export * from './scalingDatasets';
+export * from './scalingWorker';
+export * from './scalingRunner';
+export * from './scalingReport';

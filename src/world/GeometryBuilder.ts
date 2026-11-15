@@ -212,6 +212,21 @@ export interface BuiltSceneGeometry {
   updateCameraZoom?: (zoom: number) => void;
 }
 
+export interface LegacyRoadRenderStats {
+  rawAtGradeRoadCount: number;
+  splitAtGradeRoadCount: number;
+  skippedRoadConflictsCount: number;
+  renderedJunctionCount: number;
+  renderedRoadRibbonCount: number;
+  candidateBlockerCheckCount: number;
+  overlappingBlockerCount: number;
+  polygonIntersectionOperationCount: number;
+  polygonDifferenceOperationCount: number;
+  clippingFailureCount: number;
+  safeFallbackCount: number;
+  fullySubtractedCount: number;
+}
+
 export interface RoadRibbonOptions {
   roundCaps?: boolean;
   hasStartCap?: boolean;
@@ -2120,6 +2135,7 @@ export class GeometryBuilder {
         maxStackDepth: planarValidationReport.maxStackDepth,
       };
     }
+    landuseGroup.userData.planarValidationReport = planarValidationReport;
 
     const planarPolygonRingsById = new Map<string, [number, number][][]>();
     for (const lu of data.landuse) {
@@ -3003,10 +3019,26 @@ export class GeometryBuilder {
         }
       }
     } else {
+      const tLegacyRoad0 = performance.now();
+      const legacyStats: LegacyRoadRenderStats = {
+        rawAtGradeRoadCount: rawAtGradeRoads.length,
+        splitAtGradeRoadCount: 0,
+        skippedRoadConflictsCount: skippedRoadConflicts,
+        renderedJunctionCount: 0,
+        renderedRoadRibbonCount: 0,
+        candidateBlockerCheckCount: 0,
+        overlappingBlockerCount: 0,
+        polygonIntersectionOperationCount: 0,
+        polygonDifferenceOperationCount: 0,
+        clippingFailureCount: 0,
+        safeFallbackCount: 0,
+        fullySubtractedCount: 0,
+      };
       const topoIndex = new TopologicalNodeIndex(0.15);
 
       // Split at-grade roads at any shared interior nodes so mid-polyline intersections are meshed
       const atGradeRoads = splitRoadsAtSharedInteriorNodes(rawAtGradeRoads, topoIndex);
+      legacyStats.splitAtGradeRoadCount = atGradeRoads.length;
       const nodeBranches = new Map<string, RoadBranch[]>();
 
     // A. Gather road branches at at-grade junction nodes
@@ -3493,6 +3525,7 @@ export class GeometryBuilder {
       }
 
       if (junctionIndices.length > 0) {
+        legacyStats.renderedJunctionCount++;
         const junctionGeo = resourceManager.registerGeometry(new THREE.BufferGeometry());
         junctionGeo.setAttribute(
           'position',
@@ -3617,6 +3650,7 @@ export class GeometryBuilder {
           }
 
           if (candidateFootprints.length > 0) {
+            legacyStats.candidateBlockerCheckCount += candidateFootprints.length;
             const outlineHasSelfIntersection =
               !outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]);
 
@@ -3629,6 +3663,7 @@ export class GeometryBuilder {
             if (!outlineHasSelfIntersection && outlinePoly) {
               for (const fp of candidateFootprints) {
                 try {
+                  legacyStats.polygonIntersectionOperationCount++;
                   const inter = polygonClipping.intersection(
                     outlinePoly as unknown as polygonClipping.Geom,
                     fp.poly as unknown as polygonClipping.Geom
@@ -3668,12 +3703,14 @@ export class GeometryBuilder {
             }
 
             if (requiresClipping && overlappingPolys.length > 0) {
+              legacyStats.overlappingBlockerCount += overlappingPolys.length;
               let clippedSuccess = false;
               let diffResult: MultiPolygonCoords = [];
 
               // Stage 1: Primary Boolean difference (only if outline ring is manifold and self-intersection-free)
               if (!outlineHasSelfIntersection && outlinePoly) {
                 try {
+                  legacyStats.polygonDifferenceOperationCount++;
                   const rawDiff = polygonClipping.difference(
                     outlinePoly as unknown as polygonClipping.Geom,
                     ...(overlappingPolys as unknown as polygonClipping.Geom[])
@@ -3698,6 +3735,7 @@ export class GeometryBuilder {
                     let currentGeom: MultiPolygonCoords = [cleanedOutline];
                     for (const clipPoly of overlappingPolys) {
                       if (currentGeom.length === 0) break;
+                      legacyStats.polygonDifferenceOperationCount++;
                       currentGeom = polygonClipping.difference(
                         currentGeom as unknown as polygonClipping.Geom,
                         clipPoly as unknown as polygonClipping.Geom
@@ -3734,6 +3772,7 @@ export class GeometryBuilder {
                 }
               } else {
                 // Stage 3: Explicit clipping failure diagnostic + safe non-overlapping exterior sub-segment fallback
+                legacyStats.clippingFailureCount++;
                 if (data.diagnostics) {
                   if (!data.diagnostics.clippingFailures) {
                     data.diagnostics.clippingFailures = { count: 0, sampleIds: [] };
@@ -3776,6 +3815,7 @@ export class GeometryBuilder {
                   for (const fp of placedRoadFootprints) {
                     if (!isPath && fp.isPath) continue;
                     try {
+                      legacyStats.polygonIntersectionOperationCount++;
                       const subInter = polygonClipping.intersection(
                         subOutline as unknown as polygonClipping.Geom,
                         fp.poly as unknown as polygonClipping.Geom
@@ -3807,6 +3847,7 @@ export class GeometryBuilder {
                   const mergedSafe = mergeGeometries(subGeos, false);
                   for (const sg of subGeos) sg.dispose();
                   if (mergedSafe) {
+                    legacyStats.safeFallbackCount++;
                     geom = resourceManager.registerGeometry(mergedSafe);
                   }
                 }
@@ -3826,6 +3867,7 @@ export class GeometryBuilder {
             const cleanedPts = cleanPolylineForClipping(pts);
             const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width);
             if (!cleanedOutline || !cleanedOutline[0] || hasRingSelfIntersection(cleanedOutline[0])) {
+              legacyStats.clippingFailureCount++;
               if (data.diagnostics) {
                 if (!data.diagnostics.clippingFailures) {
                   data.diagnostics.clippingFailures = { count: 0, sampleIds: [] };
@@ -3887,6 +3929,7 @@ export class GeometryBuilder {
           geom,
           info: roadInfo,
         });
+        legacyStats.renderedRoadRibbonCount++;
 
         // For stairways (`highway=steps`), generate raised transverse step treads
         if (road.roadClass === 'steps') {
@@ -3907,7 +3950,10 @@ export class GeometryBuilder {
       }
     }
 
+    legacyStats.fullySubtractedCount = fullySubtractedRoadIds.size;
     roadsGroup.userData.fullySubtractedRoadIds = Array.from(fullySubtractedRoadIds);
+    roadsGroup.userData.legacyRoadStats = legacyStats;
+    roadsGroup.userData.legacyRoadTimingMs = performance.now() - tLegacyRoad0;
 
       // Add junction geometries into matching class buffers
       junctionGeometriesByClass.forEach((items, roadClass) => {

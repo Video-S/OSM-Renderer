@@ -1,0 +1,176 @@
+{
+  "schemaVersion": "1.0.0",
+  "studyArea": "Hengelo, Overijssel, Netherlands (Progressive S1–S5 Regional Scaling Series)",
+  "centerLonLat": [
+    6.7935,
+    52.2625
+  ],
+  "sourceDescription": "Geofabrik Netherlands / Overijssel OpenStreetMap PBF extract",
+  "sourceFileName": "overijssel-261114.osm.pbf",
+  "sourceSha256": "53d1f2d0b6c9461b4d752610c5c348bb48d1c1ac77838e75b934bf676a980243",
+  "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+  "extractedAtIso": "2026-11-15T21:54:40.140Z",
+  "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract",
+  "preparationProcedure": [
+    "Download https://download.geofabrik.de/europe/netherlands/overijssel-latest.osm.pbf",
+    "Run: npx tsx benchmarks/prepareHengeloScalingDatasets.ts --pbf=<path-to-overijssel.osm.pbf>",
+    "Verifies deterministic bbox slicing, multipolygon member closure, osmtogeojson conversion, OSM node ID enrichment (_nodeIds/_nodeIdsByPart), and SHA-256 content hashes in manifest.json."
+  ],
+  "datasets": [
+    {
+      "level": "S1",
+      "id": "hengelo-s1-250m",
+      "name": "Hengelo Center S1 (250 × 250 m)",
+      "file": "hengelo-s1-250m.geojson.gz",
+      "centerLonLat": [
+        6.7935,
+        52.2625
+      ],
+      "halfExtentMeters": 125,
+      "widthMeters": 250,
+      "depthMeters": 250,
+      "areaKm2": 0.0625,
+      "bbox": {
+        "minLon": 6.7916653,
+        "minLat": 52.2613771,
+        "maxLon": 6.7953347,
+        "maxLat": 52.2636229
+      },
+      "osmElementCounts": {
+        "nodes": 3998,
+        "ways": 374,
+        "relations": 5,
+        "total": 4377
+      },
+      "geoJsonFeatureCount": 957,
+      "geoJsonSha256": "e248b33015e6e97b02659244589904a9791de9272e9438ff909a4d0c74499f70",
+      "gzipFileSha256": "5e0a8198254b5e600a8613527d0e6632c27cf9fafb2ee5471a6f02140bf0bcb6",
+      "gzipBytes": 68371,
+      "uncompressedBytes": 406896
+    },
+    {
+      "level": "S2",
+      "id": "hengelo-s2-500m",
+      "name": "Hengelo Center S2 (500 × 500 m)",
+      "file": "hengelo-s2-500m.geojson.gz",
+      "centerLonLat": [
+        6.7935,
+        52.2625
+      ],
+      "halfExtentMeters": 250,
+      "widthMeters": 500,
+      "depthMeters": 500,
+      "areaKm2": 0.25,
+      "bbox": {
+        "minLon": 6.7898307,
+        "minLat": 52.2602542,
+        "maxLon": 6.7971693,
+        "maxLat": 52.2647458
+      },
+      "osmElementCounts": {
+        "nodes": 10611,
+        "ways": 1166,
+        "relations": 9,
+        "total": 11786
+      },
+      "geoJsonFeatureCount": 2757,
+      "geoJsonSha256": "2132987af7effe637ac067c9bd2b66e746b24d37101e9b28aeeee9bfbdd18470",
+      "gzipFileSha256": "9b08ccab2249de8ce1a2dea45494254e740bcd8d780862cb3caaae54ede0d7c7",
+      "gzipBytes": 171311,
+      "uncompressedBytes": 1068304
+    },
+    {
+      "level": "S3",
+      "id": "hengelo-s3-1km",
+      "name": "Hengelo Center S3 (1 × 1 km)",
+      "file": "hengelo-s3-1km.geojson.gz",
+      "centerLonLat": [
+        6.7935,
+        52.2625
+      ],
+      "halfExtentMeters": 500,
+      "widthMeters": 1000,
+      "depthMeters": 1000,
+      "areaKm2": 1,
+      "bbox": {
+        "minLon": 6.7861614,
+        "minLat": 52.2580084,
+        "maxLon": 6.8008386,
+        "maxLat": 52.2669916
+      },
+      "osmElementCounts": {
+        "nodes": 34093,
+        "ways": 4318,
+        "relations": 13,
+        "total": 38424
+      },
+      "geoJsonFeatureCount": 9738,
+      "geoJsonSha256": "5039cb96a99f71d13b18a43a6b19129b750d947ee62b9a12200ee0d03e3415c7",
+      "gzipFileSha256": "9177e6c5b277a30248cca9fff89c6795e2383bd3054772b0a315e1c2341b0af1",
+      "gzipBytes": 524367,
+      "uncompressedBytes": 3531619
+    },
+    {
+      "level": "S4",
+      "id": "hengelo-s4-2km",
+      "name": "Hengelo Center S4 (2 × 2 km)",
+      "file": "hengelo-s4-2km.geojson.gz",
+      "centerLonLat": [
+        6.7935,
+        52.2625
+      ],
+      "halfExtentMeters": 1000,
+      "widthMeters": 2000,
+      "depthMeters": 2000,
+      "areaKm2": 4,
+      "bbox": {
+        "minLon": 6.7788227,
+        "minLat": 52.2535168,
+        "maxLon": 6.8081773,
+        "maxLat": 52.2714832
+      },
+      "osmElementCounts": {
+        "nodes": 134951,
+        "ways": 18794,
+        "relations": 18,
+        "total": 153763
+      },
+      "geoJsonFeatureCount": 36669,
+      "geoJsonSha256": "0922f276347a9650bcf152c1ad23ff77defe2b20f6d8e259beb3a291d702b68a",
+      "gzipFileSha256": "a7064d39851e087dc510d6a41b27cfba061ec743da7eb56da4f832d8a9a8b26d",
+      "gzipBytes": 1815964,
+      "uncompressedBytes": 13075665
+    },
+    {
+      "level": "S5",
+      "id": "hengelo-s5-4km",
+      "name": "Hengelo Center S5 (4 × 4 km)",
+      "file": "hengelo-s5-4km.geojson.gz",
+      "centerLonLat": [
+        6.7935,
+        52.2625
+      ],
+      "halfExtentMeters": 2000,
+      "widthMeters": 4000,
+      "depthMeters": 4000,
+      "areaKm2": 16,
+      "bbox": {
+        "minLon": 6.7641454,
+        "minLat": 52.2445337,
+        "maxLon": 6.8228546,
+        "maxLat": 52.2804663
+      },
+      "osmElementCounts": {
+        "nodes": 358552,
+        "ways": 52142,
+        "relations": 67,
+        "total": 410761
+      },
+      "geoJsonFeatureCount": 96836,
+      "geoJsonSha256": "f0cea8ccd22ba17f936483871ada21d8d4defdbfebea29d81d0186dbdc0b35b1",
+      "gzipFileSha256": "e03b2b18ece549b5a25b4dc1c74f11df151aba1fef8435cf6015a04988635ad4",
+      "gzipBytes": 4781803,
+      "uncompressedBytes": 34351545
+    }
+  ]
+}

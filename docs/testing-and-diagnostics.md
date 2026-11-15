@@ -119,17 +119,25 @@ Automated tests reside under `src/world/` and cover specific behavioral contract
    - **Report Schema Validation & Serialization Round-Trip**: Verifies `validateBenchmarkReport`, `serializeBenchmarkReport`, `saveBenchmarkReport`, and `loadBenchmarkReport`, plus rejection of malformed schemas.
    - **Baseline Comparison & Compatibility Checks**: Verifies `compareBenchmarkReports` regression detection, incompatible dataset content hash rejection, and `isSoftwareWebGLRenderer` hardware vs. SwiftShader classification. See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
 
-### Recorded Verification Status (2026-11-13 — TKT-016 General Performance Benchmarking Infrastructure Verification)
+16. **`BenchmarkReliability.test.ts`** (`TKT-017` Benchmark Infrastructure Reliability & Windows Compatibility Suite — 9 tests):
+    - **Telemetry Producer / Consumer Field Compatibility**: Verifies canonical `gpuPassTimeMs`, `gpuTimerQuerySupported`, `gpuDisjointOccurred`, `gpuTimerStatus`, and railway fields between `MapScene.tsx` and `buildScenarioResult`.
+    - **GPU Timer Query State Machine & Aggregation**: Verifies `resolveGpuFrameTelemetryState` and `buildScenarioResult` across `'unsupported'`, `'pending'`, `'disjoint'`, and `'valid'` (including `0 ms`) without stale value caching or CPU time substitution.
+    - **Scene Initialization & Stale Snapshot Rejection**: Verifies `validateSceneReadinessSnapshot` rejects unrendered revisions, `{ 1, 4, 2 }` idle ground-only geometry on non-empty datasets, and stale snapshots across dataset, renderer config, theme, and revision transitions.
+    - **Post-Render Frame Cadence & Cached Railway Frustum Evaluation**: Verifies `computeConsecutiveFrameIntervalsMs`, `effectiveMedianFps`, `shouldSampleRailwayVisibilityForFrame`, `evaluateCachedRailwayVisibility` over Three.js `Group` / `Mesh` hierarchies, and `null` (`'unavailable'`) vs. `0` (`'disabled_by_config'`) handling.
+    - **Cross-Platform CLI & Process Resolution**: Verifies `parseBrowserRunnerCliArgs` / `parseCpuRunnerCliArgs` (including Windows PowerShell space/comma-split tokens, repeated flags, `--iterations`, `--swiftshader`, `--require-hardware`, and mutual exclusion), `buildLocalServerSpawnSpec` (`process.execPath` + local `tsx` with zero `npx`), and `resolveChromiumLaunchArgs` default hardware GPU flags. See **[Performance Benchmarking & Developer Profiling](./benchmarking-and-profiling.md)** for full usage instructions.
+
+### Recorded Verification Status (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Windows Hardware Validation)
 
 | Verification | Recorded Result |
 | :--- | :--- |
-| `npm test` | **331 / 331 passed**, 0 failures across 24 test files (including `11` tests in `BenchmarkInfrastructure.test.ts`) |
+| `BenchmarkInfrastructure.test.ts` + `BenchmarkReliability.test.ts` | **20 / 20 passed**, 0 failures (`15` suites) |
+| Core & Railway/Topology Batches 1–2 (10 files) | **135 / 135 passed**, 0 failures (remaining 13 legacy test files deferred to local `npm test` per project owner) |
 | `npm run lint` | **0 TypeScript errors** (`tsc --noEmit`) |
 | `npm run build` | **Successful** (`vite build`) |
 | `npm run docs:api` | **Successful** (`typedoc`) |
-| `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 resource leaks) |
-| `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, 5 scenarios per workload) |
-| `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions) |
+| `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, Schema `v1.1.0`, 0 resource leaks) |
+| `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, Schema `v1.1.0`, SwiftShader container fallback; Windows hardware GPU run pending locally) |
+| `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions on `cpu-baseline.json` and `browser-baseline.json`) |
 
 *(Historical baselines preserved: Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; M2.3-E2 width audit on 2026-11-06: `170 / 170 passed`; initial M2.3-E2 stabilization on 2026-11-06: `158 / 158 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed` with `10` Stage E1 tests; M2.3-D closeout on 2026-11-06: `135 / 135 passed` with `9` Stage D tests; M2.3-C closeout on 2026-11-05: `126 / 126 passed` with `18` Stage C tests; M2.3-B closeout on 2026-11-05: `108 / 108 passed` with `16` Stage B tests; M2.2 closeout on 2026-11-04: `92 / 92 passed`, `0` TypeScript errors, clean production build and API docs.)*
 

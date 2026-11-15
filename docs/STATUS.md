@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, & General Performance Benchmarking Infrastructure `TKT-016` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, & General Performance Benchmarking Infrastructure `TKT-016` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, Stage E4-T2 `M2.3-E4-T2` / `TKT-015`, & Benchmark Reliability & Windows Compatibility `TKT-017` implemented & `in_progress` pending project-owner review / Windows hardware GPU run; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -50,10 +50,10 @@
    - Interactive spatial bounding box selection and 3D visual highlight overlays for features and topological nodes.
    - 1-click loading of development fixtures (`prins-fork` acute cycleway fork, `switchyard` benchmark with zone camera presets, `hengelo`, `amsterdam`).
    - Self-contained `.json` defect report export and re-import bundling selected OSM features, connected incident context (preserving original OSM node identities), configuration, camera pose, and developer notes.
-8. **General Performance Benchmarking Infrastructure (`TKT-016`, `benchmarks/`)**:
-   - Dedicated subsystem-independent `benchmarks/` architecture separating frozen offline datasets (`benchmarks/datasets.ts` with SHA-256 content hashes across `small-real-europatunnel`, `medium-real-hengelo-station`, `large-real-amsterdam-centraal`, and `synthetic-stress-urban-switchyard`), renderer/camera scenario definitions (`benchmarks/scenarios.ts`), Node.js CPU pipeline benchmarking (`npm run bench:cpu`), Playwright + Chromium WebGL rendering benchmarking (`npm run bench:browser`), versioned JSON report serialization (`benchmarks/serializer.ts`), and automated baseline comparison (`npm run bench:compare`).
+8. **General Performance Benchmarking Infrastructure (`TKT-016`, `TKT-017`, `benchmarks/`)**:
+   - Dedicated subsystem-independent `benchmarks/` architecture separating frozen offline datasets (`benchmarks/datasets.ts` with SHA-256 content hashes across `small-real-europatunnel`, `medium-real-hengelo-station`, `large-real-amsterdam-centraal`, and `synthetic-stress-urban-switchyard`), renderer/camera scenario definitions (`benchmarks/scenarios.ts`), Node.js CPU pipeline benchmarking (`npm run bench:cpu`), Playwright + Chromium WebGL rendering benchmarking (`npm run bench:browser`), versioned JSON report serialization (`benchmarks/serializer.ts`, Schema `v1.1.0`), cross-platform CLI/server orchestration (`benchmarks/cliAndServer.ts`), and automated baseline comparison (`npm run bench:compare`).
    - Direct measurement of CPU pipeline stages (`geojsonParseAndClassifyMs`, `infrastructureGraphBuildMs`, `graphToRendererAdapterMs`, `planarSurfaceResolutionMs`, `roadGeometryGenerationMs`, `railwayGeometryGenerationMs`, `fullSceneGeometryGenerationMs`, `sceneResourceDisposalMs`), deterministic TypedArray buffer accounting (`cpuBufferMemory`), V8 heap tracking (`v8HeapMemory`), and `SceneResourceManager` disposal verification (`0` leaks).
-   - Browser WebGL telemetry across 5 deterministic scenarios (`static_overview`, `static_close_junction`, `automated_pan_sweep`, `zoom_and_orbit_sweep`, `repeated_scene_reload`) recording `frameIntervalMs`, `cpuRenderCallMs`, `drawCallsPerFrame` (`gl.info.render.calls`), `renderedTrianglesPerFrame` (`gl.info.render.triangles`), `gpuFrameTimeMs` (`EXT_disjoint_timer_query_webgl2` with explicit unsupported/disjoint status), WebGL driver resource counts, JS heap usage, and hardware vs. software rasterizer (`SwiftShader`) detection.
+   - Shared WebGL telemetry contract (`src/types/BenchmarkTelemetry.ts`) & zero-traversal railway visibility sampler (`src/world/prototype/BenchmarkRailwayTelemetry.ts`) across 5 deterministic scenarios (`static_overview`, `static_close_junction`, `automated_pan_sweep`, `zoom_and_orbit_sweep`, `repeated_scene_reload`): deterministic post-load readiness (`validateSceneReadinessSnapshot`), post-`gl.render()` consecutive `frameIntervalMs`, `cpuFrameRenderTimeMs`, actual `webglDrawCallsPerFrame` / `renderedTrianglesPerFrame`, async `gpuFrameRenderTimeMs` (`EXT_disjoint_timer_query_webgl2` state machine with `sampleCounts` and explicit `unsupported`/`disjoint`/`unavailable` statuses), static & stride-sampled railway visibility (`null` when unavailable), `instrumentationOverheadMs`, hardware GPU default launch (`--swiftshader` opt-in, `--require-hardware` strict gate), and Windows-compatible `npm install` + Node-to-`tsx` server spawning.
 
 ---
 
@@ -100,19 +100,21 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-13 — TKT-016 General Performance Benchmarking Infrastructure)
+## Verified Test & Build Results (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Windows Hardware Validation)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Unit, Integration, M2.1–M2.3-E4-T2, DevTools, E2+ & Benchmark Tests** | `npm test` | **331 / 331 passed** (24 test files, 0 failures) |
+| **Benchmark Suites (`TKT-016` & `TKT-017`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts` | **20 / 20 passed** (`15` suites, `0` failures) |
+| **Core & Railway/Topology Batches 1–2 (10 files)** | `npx tsx --test --test-concurrency=1 ...` (WorldCoordinates, FeatureCoverage, GeometryBuilder, ElevationAndZIndex, JunctionAndTopology, PerformanceBaseline, RailwayRendering, RoadNetworkTopology, RailwayNetworkTopology, CrossModalTopology) | **135 / 135 passed** (`0` failures); remaining 13 legacy test files deferred to local `npm test` per project owner |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (0 errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
 | **API Documentation** | `npm run docs:api` (`typedoc`) | **Generated** (`docs/api-reference/`) |
-| **CPU Benchmark Suite** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 leaks) |
-| **Browser WebGL Benchmark Suite** | `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`) |
-| **Benchmark Comparison CLI** | `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions) |
+| **CPU Benchmark Suite (`v1.1.0`)** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, 0 leaks) |
+| **Browser WebGL Benchmark Suite (`v1.1.0`)** | `npm run bench:browser -- --quick` | **Successful** (`benchmarks/baselines/browser-baseline.json`, SwiftShader container fallback explicitly labeled; Windows RTX hardware run pending locally) |
+| **Hardware GPU Enforcement Gate** | `npm run bench:browser -- --datasets=small-real-europatunnel --configs=production-legacy --scenarios=static_overview --no-save --require-hardware` | **Exited 1 as expected** on SwiftShader container |
+| **Benchmark Comparison CLI** | `npm run bench:compare` | **Successful** (`COMPATIBLE`, 0 regressions on `cpu-baseline.json` and `browser-baseline.json`) |
 
-*(Historical baselines preserved: Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
+*(Historical baselines preserved: `TKT-016` on 2026-11-13: `331 / 331 passed` across 24 test files; Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
 ### Test Declaration Breakdown (Verified Source Declarations)
 
@@ -134,7 +136,8 @@
 | `SubterraneanVisualIntegration.test.ts` (`M2.3-E4-T2` / `TKT-015`) | 15 |
 | Specialized road/surface regression suites (`AdjacentServiceJunctions`, `BuswayRendering`, `PathJunctionCornerSmoothing`, `PizzaSlicePathJunctions`, `SurfaceVisibilityPolicy`) | 40 |
 | `BenchmarkInfrastructure.test.ts` (`TKT-016`) | 11 |
-| **Total (`it` declarations / total subtests)** | **320 (`331` with suite subtests)** |
+| `BenchmarkReliability.test.ts` (`TKT-017`) | 9 |
+| **Total (`it` declarations / total subtests across 25 files)** | **329 (`340` with suite subtests)** |
 
 ---
 

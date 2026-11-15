@@ -22,7 +22,7 @@ Defined in: scene/CameraController.tsx:22
 
 > `optional` **controlsEnabled?**: `boolean`
 
-Defined in: scene/CameraController.tsx:39
+Defined in: scene/CameraController.tsx:44
 
 ***
 
@@ -87,6 +87,24 @@ Defined in: scene/CameraController.tsx:31
 > `optional` **minZoom?**: `number`
 
 Defined in: scene/CameraController.tsx:30
+
+***
+
+### onRegisterImperativePoseSetter?
+
+> `optional` **onRegisterImperativePoseSetter?**: (`setter`) => `void`
+
+Defined in: scene/CameraController.tsx:39
+
+#### Parameters
+
+##### setter
+
+(`target`, `zoom`, `azimuthDeg?`) => `void`
+
+#### Returns
+
+`void`
 
 ***
 

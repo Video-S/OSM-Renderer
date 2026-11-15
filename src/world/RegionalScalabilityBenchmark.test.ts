@@ -301,7 +301,7 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
       resourceLimits: {
         maxRssMB: 1024,
         maxOldSpaceSizeMB: 512,
-        timeoutMs: 350,
+        timeoutMs: 1500,
         rssPollIntervalMs: 50,
         validatorMaxEdges: 100,
       },

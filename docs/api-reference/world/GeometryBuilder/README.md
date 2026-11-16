@@ -54,6 +54,7 @@
 - [generateRoadRibbon](functions/generateRoadRibbon.md)
 - [generateStepTreads](functions/generateStepTreads.md)
 - [hasRingSelfIntersection](functions/hasRingSelfIntersection.md)
+- [mergeBuildingItemsByMaterial](functions/mergeBuildingItemsByMaterial.md)
 - [resolveBarrierStructuralContexts](functions/resolveBarrierStructuralContexts.md)
 - [resolveInspectedFeature](functions/resolveInspectedFeature.md)
 - [sanitizeOsmTags](functions/sanitizeOsmTags.md)

@@ -802,6 +802,201 @@ function mergeWithFaceRanges(
 }
 
 /**
+ * Consolidates a bucket of building geometries by `materialIndex` so each building bucket mesh
+ * emits at most one contiguous `BufferGeometry` group (and therefore one WebGL draw call per pass)
+ * per used material slot (e.g. `[0 = roof/cap, 1 = walls/bevels/pillars]`) instead of interleaving
+ * 2–3 groups per individual building (`O(buildings)` draw calls).
+ *
+ * Non-building layers continue to use `mergeWithFaceRanges` unchanged.
+ */
+export function mergeBuildingItemsByMaterial(
+  items: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>,
+  resourceManager?: SceneResourceManager
+): { merged: THREE.BufferGeometry | null; faceRanges: FaceFeatureRange[] } {
+  if (items.length === 0) return { merged: null, faceRanges: [] };
+
+  interface MaterialSlice {
+    srcGeom: THREE.BufferGeometry;
+    startVertex: number;
+    vertexCount: number;
+    info: InspectableFeatureInfo;
+  }
+
+  const slicesByMaterial = new Map<number, MaterialSlice[]>();
+  const intermediateToDispose: Array<{
+    original: THREE.BufferGeometry;
+    nonIndexed?: THREE.BufferGeometry;
+  }> = [];
+  let commonAttrNames: string[] | null = null;
+
+  for (const item of items) {
+    const rawTriCount = getTriangleCount(item.geom);
+    if (rawTriCount <= 0) {
+      if (resourceManager) resourceManager.releaseIntermediateGeometry(item.geom);
+      else item.geom.dispose();
+      continue;
+    }
+
+    const srcGeom = item.geom.index ? item.geom.toNonIndexed() : item.geom;
+    intermediateToDispose.push({
+      original: item.geom,
+      nonIndexed: srcGeom !== item.geom ? srcGeom : undefined,
+    });
+
+    const posAttr = srcGeom.attributes.position;
+    if (!posAttr) continue;
+    const usableVertCount = Math.floor(posAttr.count / 3) * 3;
+    if (usableVertCount <= 0) continue;
+
+    const attrNames = Object.keys(srcGeom.attributes);
+    if (commonAttrNames === null) {
+      commonAttrNames = attrNames;
+    } else {
+      commonAttrNames = commonAttrNames.filter((name) => Boolean(srcGeom.attributes[name]));
+    }
+
+    if (srcGeom.groups && srcGeom.groups.length > 0) {
+      for (const g of srcGeom.groups) {
+        const start = Math.max(0, g.start);
+        const rawEnd = g.count === Infinity ? usableVertCount : g.start + g.count;
+        const end = Math.min(usableVertCount, rawEnd);
+        const triCount = Math.floor((end - start) / 3);
+        if (triCount <= 0) continue;
+        const alignedCount = triCount * 3;
+        const matIdx = g.materialIndex ?? 0;
+        let list = slicesByMaterial.get(matIdx);
+        if (!list) {
+          list = [];
+          slicesByMaterial.set(matIdx, list);
+        }
+        list.push({
+          srcGeom,
+          startVertex: start,
+          vertexCount: alignedCount,
+          info: item.info,
+        });
+      }
+    } else {
+      let list = slicesByMaterial.get(0);
+      if (!list) {
+        list = [];
+        slicesByMaterial.set(0, list);
+      }
+      list.push({
+        srcGeom,
+        startVertex: 0,
+        vertexCount: usableVertCount,
+        info: item.info,
+      });
+    }
+  }
+
+  const releaseAllIntermediates = () => {
+    for (const entry of intermediateToDispose) {
+      if (entry.nonIndexed) {
+        entry.nonIndexed.dispose();
+      }
+      if (resourceManager) {
+        resourceManager.releaseIntermediateGeometry(entry.original);
+      } else {
+        entry.original.dispose();
+      }
+    }
+  };
+
+  if (slicesByMaterial.size === 0 || !commonAttrNames || commonAttrNames.length === 0) {
+    releaseAllIntermediates();
+    return { merged: null, faceRanges: [] };
+  }
+
+  const sortedMatIndices = Array.from(slicesByMaterial.keys()).sort((a, b) => a - b);
+  let totalVertices = 0;
+  for (const matIdx of sortedMatIndices) {
+    const slices = slicesByMaterial.get(matIdx)!;
+    for (const s of slices) {
+      totalVertices += s.vertexCount;
+    }
+  }
+
+  if (totalVertices <= 0) {
+    releaseAllIntermediates();
+    return { merged: null, faceRanges: [] };
+  }
+
+  const firstSliceGeom = slicesByMaterial.get(sortedMatIndices[0])![0].srcGeom;
+  const attrMeta = commonAttrNames.map((name) => {
+    const sample = firstSliceGeom.attributes[name] as THREE.BufferAttribute;
+    const ArrayCtor = sample.array.constructor as new (len: number) => THREE.TypedArray;
+    return {
+      name,
+      itemSize: sample.itemSize,
+      normalized: sample.normalized,
+      dstArray: new ArrayCtor(totalVertices * sample.itemSize),
+    };
+  });
+
+  const faceRanges: FaceFeatureRange[] = [];
+  const mergedGroups: Array<{ start: number; count: number; materialIndex: number }> = [];
+  let cursorVertex = 0;
+
+  for (const matIdx of sortedMatIndices) {
+    const slices = slicesByMaterial.get(matIdx)!;
+    const groupStart = cursorVertex;
+    let groupCount = 0;
+
+    for (const slice of slices) {
+      const { srcGeom, startVertex, vertexCount, info } = slice;
+      for (const meta of attrMeta) {
+        const srcAttr = srcGeom.attributes[meta.name] as THREE.BufferAttribute;
+        const srcArr = srcAttr.array as THREE.TypedArray;
+        const srcStart = startVertex * meta.itemSize;
+        const srcEnd = (startVertex + vertexCount) * meta.itemSize;
+        (meta.dstArray as any).set((srcArr as any).subarray(srcStart, srcEnd), cursorVertex * meta.itemSize);
+      }
+
+      const startFace = cursorVertex / 3;
+      const triCount = vertexCount / 3;
+      const endFace = startFace + triCount;
+      const prevRange = faceRanges[faceRanges.length - 1];
+      if (prevRange && prevRange.info === info && prevRange.endFace === startFace) {
+        prevRange.endFace = endFace;
+      } else {
+        faceRanges.push({
+          startFace,
+          endFace,
+          info,
+        });
+      }
+
+      cursorVertex += vertexCount;
+      groupCount += vertexCount;
+    }
+
+    if (groupCount > 0) {
+      mergedGroups.push({
+        start: groupStart,
+        count: groupCount,
+        materialIndex: matIdx,
+      });
+    }
+  }
+
+  const merged = new THREE.BufferGeometry();
+  for (const meta of attrMeta) {
+    merged.setAttribute(
+      meta.name,
+      new THREE.BufferAttribute(meta.dstArray, meta.itemSize, meta.normalized)
+    );
+  }
+  for (const grp of mergedGroups) {
+    merged.addGroup(grp.start, grp.count, grp.materialIndex);
+  }
+
+  releaseAllIntermediates();
+  return { merged, faceRanges };
+}
+
+/**
  * Extracts a closed 2D outer polygon ring `[x, z][]` around a centerline polyline of width `width`
  * so at-grade road ribbons and footpaths can participate in exact 2D Boolean clipping.
  */
@@ -5644,7 +5839,10 @@ export class GeometryBuilder {
     }
 
     buildingsByBucket.forEach(({ materials, items }, bucketKey) => {
-      const { merged: mergedBldgGeo, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+      const { merged: mergedBldgGeo, faceRanges } = mergeBuildingItemsByMaterial(
+        items,
+        resourceManager
+      );
       if (mergedBldgGeo) {
         resourceManager.registerGeometry(mergedBldgGeo);
         const mesh = new THREE.Mesh(mergedBldgGeo, materials);

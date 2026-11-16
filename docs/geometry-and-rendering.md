@@ -80,19 +80,21 @@ When non-vehicular paths (`footway`, `cycleway`, `path`) cross or run alongside 
 
 ---
 
-## 4. Building Footprints, Holes & Extrusion
+## 4. Building Footprints, Holes, Extrusion & Material-Group Batching
 
-Buildings are synthesized in Stage 8 of `GeometryBuilder.ts`:
+Buildings are synthesized in Stage 9 of `GeometryBuilder.ts`:
 1. **Footprint & Hole Extraction**: Outer boundary rings and interior hole rings (e.g., open-air courtyards, lightwells) are extracted from GeoJSON Polygons/MultiPolygons.
 2. **Region-Boundary Clipping**: Intersecting buildings are clipped against `[-clipRadius, +clipRadius]` using `clipPolygonRingsToBox()`.
-3. **Vertical Prism Extrusion**:
-   - The 2D shape with interior holes is converted to a Three.js `ShapeGeometry` via `THREE.ShapeUtils.triangulateShape`.
-   - Vertical wall quads are extruded upwards from `y = 0.0 m` to `y = height`.
-   - Roof caps are positioned at `y = height` with flat horizontal normals `(0, 1, 0)`.
+3. **Vertical Prism Extrusion & Open-Air Roof Structures**:
+   - Solid footprints with optional interior holes are extruded via `THREE.ExtrudeGeometry` (with bevels controlled by `bevelEnabled`), rotated `-Math.PI / 2` into XZ world space, and elevated to `min_height` when present.
+   - Open-air canopies (`building=roof`, `carport`, `canopy`, `grandstand`, `shelter`) generate an elevated roof slab with ground-level cylindrical support columns (`generateOpenAirRoofWithPillars`).
 4. **Height Resolution**:
    - Explicit `height` tag in meters.
    - Estimated from `building:levels` tag: $\text{height} = \text{levels} \times 3.2\text{ m}$.
    - Fallback: `defaultBuildingHeight = 12.0 m`.
+5. **Material-Group Consolidation (`mergeBuildingItemsByMaterial` — `TKT-023`)**:
+   - Buildings are bucketed by visual material family (`default`, `landmark`, `arch_industrial`, `arch_commercial`, `arch_civic`, `arch_religious`, `arch_transit`, `arch_historic`), with each bucket mesh (`Buildings_${bucketKey}`) using a 2-element `[roofMat, wallMat]` material array and `castShadow = receiveShadow = true`.
+   - Rather than interleaving individual buildings' groups (`2–3` groups per building), `mergeBuildingItemsByMaterial()` packs non-indexed triangle buffers contiguously by sorted `materialIndex` (all roof/cap triangles followed by all wall/bevel/pillar triangles), emitting at most **one `BufferGeometry` group per active material slot** (`<= 2` groups per bucket mesh) while rebuilding contiguous ascending `faceRanges` across all material blocks so `resolveInspectedFeature()` continues resolving every roof, bevel, wall, and pillar triangle back to its individual OSM feature.
 
 ---
 
@@ -179,9 +181,9 @@ Z-fighting is audited programmatically by `src/world/ZFightingValidator.ts`:
 
 ## 9. Resource Lifecycle & GPU Memory Management
 
-- **BufferGeometry Merging (`mergeGeometries`)**: Road ribbons and building walls of the same material are batched into single DrawCalls to maximize WebGL throughput.
-- **Face Feature Range Tracking (`faceRanges`)**: Merged geometries maintain index ranges mapping face indices to `InspectableFeatureInfo` for raycasting.
-- **Immediate Intermediate Disposal**: Temporary geometries created during intermediate clipping are tracked by `SceneResourceManager.registerIntermediateGeometry()` and immediately freed via `releaseIntermediateGeometry()`.
+- **BufferGeometry Merging (`mergeWithFaceRanges` & `mergeBuildingItemsByMaterial`)**: Non-building layers batch same-material meshes via `mergeWithFaceRanges()`, while multi-material building buckets consolidate triangles contiguously by `materialIndex` via `mergeBuildingItemsByMaterial()` (`<= 2` WebGL groups per bucket instead of `O(buildings)` interleaved draw calls).
+- **Face Feature Range Tracking (`faceRanges`)**: Merged geometries maintain monotonically ordered triangle face ranges (`startFace .. endFace`) mapping `faceIndex` back to `InspectableFeatureInfo` via binary search in `resolveInspectedFeature()`.
+- **Immediate Intermediate Disposal**: Temporary geometries created during intermediate extrusion, non-indexed normalization, and Boolean clipping are tracked by `SceneResourceManager.registerGeometry()` and immediately freed via `releaseIntermediateGeometry()`.
 - **Idempotent Cleanup**: `BuiltSceneGeometry.dispose()` disposes all GPU buffers, index arrays, materials, and textures in a single pass and clears any retained `infrastructureRenderPreview` reference.
 
 ---

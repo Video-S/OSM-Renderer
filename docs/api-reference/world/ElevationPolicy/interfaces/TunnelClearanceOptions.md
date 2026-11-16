@@ -12,7 +12,7 @@ Defined in: world/ElevationPolicy.ts:119
 
 ### domain?
 
-> `optional` **domain?**: `"road"` \| `"railway"`
+> `optional` **domain?**: `"railway"` \| `"road"`
 
 Defined in: world/ElevationPolicy.ts:120
 
@@ -36,7 +36,7 @@ Defined in: world/ElevationPolicy.ts:127
 
 ### kind?
 
-> `optional` **kind?**: `"road"` \| `"railway"`
+> `optional` **kind?**: `"railway"` \| `"road"`
 
 Defined in: world/ElevationPolicy.ts:121
 

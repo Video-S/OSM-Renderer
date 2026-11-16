@@ -15,7 +15,7 @@ directly in memory without populating `osmTags.tunnel` or `osmTags.bridge`.
 
 ### featureDomain?
 
-> `optional` **featureDomain?**: `"road"` \| `"railway"` \| `"waterway"` \| `"other"`
+> `optional` **featureDomain?**: `"waterway"` \| `"railway"` \| `"road"` \| `"other"`
 
 Defined in: world/InfrastructurePlacementClassifier.ts:124
 

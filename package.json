@@ -15,7 +15,10 @@
     "bench:cpu": "tsx benchmarks/cpuRunner.ts",
     "bench:browser": "tsx benchmarks/browserRunner.ts",
     "bench:compare": "tsx benchmarks/compare.ts",
-    "bench:scaling": "tsx benchmarks/scalingRunner.ts"
+    "bench:scaling": "tsx benchmarks/scalingRunner.ts",
+    "osm:fetch-overijssel": "tsx scripts/fetch-overijssel-pbf.ts",
+    "osm:build-overijssel-index": "tsx scripts/build-overijssel-index.ts",
+    "osm:setup-overijssel": "tsx scripts/setup-overijssel.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

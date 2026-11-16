@@ -28,7 +28,7 @@ export type MapLoadCacheStatus =
 export interface MapLoadServerTimingsMs {
   cacheLookupMs: number | null;
   upstreamFetchMs: number | null;
-  upstreamSource: 'cache' | 'overpass' | 'osm-xml' | 'unknown' | null;
+  upstreamSource: 'cache' | 'overpass' | 'osm-xml' | 'overijssel-offline' | 'unknown' | null;
   osmtogeojsonMs: number | null;
   nodeIdEnrichMs: number | null;
   totalServerMs: number | null;
@@ -199,9 +199,11 @@ export function parseServerTimingHeader(
         ? 'overpass'
         : normalizedSource === 'osm-xml'
           ? 'osm-xml'
-          : normalizedSource
-            ? 'unknown'
-            : null;
+          : normalizedSource === 'overijssel-offline'
+            ? 'overijssel-offline'
+            : normalizedSource
+              ? 'unknown'
+              : null;
 
   return {
     cacheLookupMs: durations.get('cache') ?? null,

@@ -7,3 +7,9 @@ coverage/
 .env*
 !.env.example
 .aistudio/
+data/osm/
+*.osm.pbf
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+

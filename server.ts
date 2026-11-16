@@ -3,12 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import osmtogeojson from 'osmtogeojson';
-import { DOMParser } from 'xmldom';
-import {
-  enrichGeoJsonWithOverpassNodeIds,
-  enrichGeoJsonWithOsmXmlNodeIds,
-} from './src/world/infrastructure/topology/OsmNodeIdEnricher';
+import { BoundedCache, createOsmDataHandler } from './src/server/osm/osmDataHandler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,48 +13,8 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
-/**
- * Bounded LRU + TTL in-memory cache to prevent unbounded memory growth.
- */
-class BoundedCache<K, V> {
-  private map = new Map<K, { value: V; expiresAt: number }>();
-
-  constructor(
-    private maxEntries: number,
-    private ttlMs: number
-  ) {}
-
-  get(key: K): V | undefined {
-    const entry = this.map.get(key);
-    if (!entry) return undefined;
-    if (Date.now() > entry.expiresAt) {
-      this.map.delete(key);
-      return undefined;
-    }
-    // Refresh LRU order
-    this.map.delete(key);
-    this.map.set(key, entry);
-    return entry.value;
-  }
-
-  set(key: K, value: V): void {
-    if (this.map.has(key)) {
-      this.map.delete(key);
-    } else if (this.map.size >= this.maxEntries) {
-      const oldestKey = this.map.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.map.delete(oldestKey);
-      }
-    }
-    this.map.set(key, {
-      value,
-      expiresAt: Date.now() + this.ttlMs,
-    });
-  }
-}
-
 const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
-const osmCache = new BoundedCache<string, any>(40, 30 * 60 * 1000);
+const osmDataController = createOsmDataHandler();
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
 app.get('/api/geocode', async (req, res) => {
@@ -116,153 +71,7 @@ app.get('/api/geocode', async (req, res) => {
 });
 
 // 2. Fetch and convert real OpenStreetMap data around (lat, lon) to GeoJSON
-app.get('/api/osm-data', async (req, res) => {
-  const tReq0 = performance.now();
-  const lat = parseFloat(req.query.lat as string);
-  const lon = parseFloat(req.query.lon as string);
-  const radiusMeters = Math.min(Math.max(parseFloat(req.query.radius as string) || 350, 200), 5000);
-  const locationName = (req.query.name as string) || 'Location';
-
-  if (isNaN(lat) || isNaN(lon)) {
-    return res.status(400).json({ error: 'Valid "lat" and "lon" coordinates are required' });
-  }
-
-  const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)},${radiusMeters}`;
-  const tCache0 = performance.now();
-  const cachedOsm = osmCache.get(cacheKey);
-  const cacheLookupMs = performance.now() - tCache0;
-  if (cachedOsm) {
-    const totalServerMs = performance.now() - tReq0;
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'Server-Timing, X-OSM-Cache, X-OSM-Source, X-OSM-Feature-Count'
-    );
-    res.setHeader('X-OSM-Cache', 'HIT');
-    res.setHeader('X-OSM-Source', 'cache');
-    res.setHeader('X-OSM-Feature-Count', String(cachedOsm.features?.length ?? 0));
-    res.setHeader(
-      'Server-Timing',
-      `cache;dur=${cacheLookupMs.toFixed(3)}, total;dur=${totalServerMs.toFixed(3)}`
-    );
-    return res.json(cachedOsm);
-  }
-
-  try {
-    // 1 degree latitude ~ 111,320m
-    const dLat = radiusMeters / 111320;
-    const dLon = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180));
-
-    const minLon = (lon - dLon).toFixed(5);
-    const minLat = (lat - dLat).toFixed(5);
-    const maxLon = (lon + dLon).toFixed(5);
-    const maxLat = (lat + dLat).toFixed(5);
-
-    const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
-    console.log(`Fetching real OSM data for "${locationName}" [${bbox}]...`);
-
-    let geojson: any = null;
-    let upstreamSource: 'overpass' | 'osm-xml' = 'overpass';
-    let upstreamFetchMs = 0;
-    let osmtogeojsonMs = 0;
-    let nodeIdEnrichMs = 0;
-
-    // Primary read-only Overpass API query with targeted feature selection for large radii
-    const isLargeRadius = radiusMeters > 600;
-    const overpassQuery = isLargeRadius
-      ? `[out:json][timeout:60];(way["highway"](${minLat},${minLon},${maxLat},${maxLon});way["railway"](${minLat},${minLon},${maxLat},${maxLon});way["building"](${minLat},${minLon},${maxLat},${maxLon});way["waterway"](${minLat},${minLon},${maxLat},${maxLon});way["natural"](${minLat},${minLon},${maxLat},${maxLon});way["landuse"](${minLat},${minLon},${maxLat},${maxLon});way["leisure"](${minLat},${minLon},${maxLat},${maxLon});relation["highway"](${minLat},${minLon},${maxLat},${maxLon});relation["railway"](${minLat},${minLon},${maxLat},${maxLon}););out body;>;out skel qt;`
-      : `[out:json][timeout:30];(node(${minLat},${minLon},${maxLat},${maxLon});way(${minLat},${minLon},${maxLat},${maxLon});relation(${minLat},${minLon},${maxLat},${maxLon}););out body;>;out skel qt;`;
-
-    try {
-      const tOverpass0 = performance.now();
-      const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-          'User-Agent': 'RealWorld3DMapViewer/1.0',
-        },
-        body: `data=${encodeURIComponent(overpassQuery)}`,
-      });
-      if (overpassRes.ok) {
-        const overpassJson = await overpassRes.json();
-        upstreamFetchMs = performance.now() - tOverpass0;
-
-        const tConvert0 = performance.now();
-        geojson = osmtogeojson(overpassJson);
-        osmtogeojsonMs = performance.now() - tConvert0;
-
-        const tEnrich0 = performance.now();
-        enrichGeoJsonWithOverpassNodeIds(geojson, overpassJson);
-        nodeIdEnrichMs = performance.now() - tEnrich0;
-      } else {
-        upstreamFetchMs = performance.now() - tOverpass0;
-      }
-    } catch (err) {
-      console.warn('Overpass fetch exception:', err);
-    }
-
-    // Fall back to OSM 0.6 XML map endpoint only for smaller radii (<= 600m)
-    if (!geojson && radiusMeters <= 600) {
-      upstreamSource = 'osm-xml';
-      const osmUrl = `https://api.openstreetmap.org/api/0.6/map?bbox=${bbox}`;
-      const tXml0 = performance.now();
-      const osmRes = await fetch(osmUrl, {
-        headers: {
-          'User-Agent': 'RealWorld3DMapViewer/1.0 (https://github.com/google-gemini)',
-        },
-      });
-
-      if (!osmRes.ok) {
-        if (osmRes.status === 400 || osmRes.status === 509) {
-          throw new Error('Requested area is too dense. Please try a slightly smaller radius.');
-        }
-        throw new Error(`OpenStreetMap API returned status ${osmRes.status}`);
-      }
-
-      const xmlText = await osmRes.text();
-      upstreamFetchMs += performance.now() - tXml0;
-
-      const tConvert0 = performance.now();
-      const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
-      geojson = osmtogeojson(xmlDoc);
-      osmtogeojsonMs = performance.now() - tConvert0;
-
-      const tEnrich0 = performance.now();
-      enrichGeoJsonWithOsmXmlNodeIds(geojson, xmlDoc);
-      nodeIdEnrichMs = performance.now() - tEnrich0;
-    }
-
-    if (!geojson || !geojson.features || geojson.features.length === 0) {
-      throw new Error('Requested area returned no features or Overpass API is busy. Please try a slightly smaller radius.');
-    }
-
-    // Attach metadata
-    geojson.name = locationName;
-    geojson.crs = {
-      type: 'name',
-      properties: {
-        name: 'urn:ogc:def:crs:OGC:1.3:CRS84',
-      },
-    };
-
-    osmCache.set(cacheKey, geojson);
-    const totalServerMs = performance.now() - tReq0;
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'Server-Timing, X-OSM-Cache, X-OSM-Source, X-OSM-Feature-Count'
-    );
-    res.setHeader('X-OSM-Cache', 'MISS');
-    res.setHeader('X-OSM-Source', upstreamSource);
-    res.setHeader('X-OSM-Feature-Count', String(geojson.features?.length ?? 0));
-    res.setHeader(
-      'Server-Timing',
-      `cache;dur=${cacheLookupMs.toFixed(3)}, upstream;dur=${upstreamFetchMs.toFixed(3)}, osmtogeojson;dur=${osmtogeojsonMs.toFixed(3)}, enrich;dur=${nodeIdEnrichMs.toFixed(3)}, total;dur=${totalServerMs.toFixed(3)}`
-    );
-    return res.json(geojson);
-  } catch (err: any) {
-    console.error('OSM Data fetch error:', err);
-    return res.status(500).json({ error: `Failed to retrieve OSM data: ${err.message}` });
-  }
-});
+app.get('/api/osm-data', osmDataController.handler);
 
 // Vite middleware in development or static hosting in production
 async function startServer() {
@@ -285,6 +94,24 @@ async function startServer() {
       res.sendFile(path.resolve(__dirname, 'dist/index.html'));
     });
   }
+
+  const overijsselStatus = osmDataController.getStoreStatus();
+  if (overijsselStatus.available) {
+    console.log(
+      `Overijssel offline spatial store ready (${overijsselStatus.snapshotId}) at ${overijsselStatus.indexPath}`
+    );
+  } else {
+    console.warn(
+      `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
+        `Run "npm run osm:setup-overijssel" to enable local Overijssel/Twente queries.`
+    );
+  }
+
+  const shutdown = () => {
+    osmDataController.close();
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT} in ${isProduction ? 'production' : 'development'} mode`);

@@ -32,7 +32,7 @@ at every interior node and every confirmed ground portal without vertical cliffs
 
 ### network
 
-`"road"` \| `"railway"`
+`"railway"` \| `"road"`
 
 ### getTargetDeckElevation
 

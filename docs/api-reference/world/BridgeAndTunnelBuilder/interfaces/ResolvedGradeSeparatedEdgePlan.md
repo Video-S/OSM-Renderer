@@ -102,7 +102,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:55
 
 ### network
 
-> **network**: `"road"` \| `"railway"`
+> **network**: `"railway"` \| `"road"`
 
 Defined in: world/BridgeAndTunnelBuilder.ts:53
 

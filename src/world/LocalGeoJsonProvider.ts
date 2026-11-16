@@ -39,6 +39,7 @@ import {
   TopologicalNodeIndex,
   DEFAULT_NODE_SNAP_TOLERANCE_METERS,
 } from './TopologicalNodeIndex';
+import type { GeoJsonParseSubTimingsMs } from './dev/MapLoadDiagnostics';
 
 export { TopologicalNodeIndex, DEFAULT_NODE_SNAP_TOLERANCE_METERS };
 
@@ -902,11 +903,16 @@ export class LocalGeoJsonProvider implements MapDataProvider {
   private sourceUrl: string;
   private defaultBuildingHeight: number;
   private levelHeightMeters: number;
+  private lastParseSubTimings: GeoJsonParseSubTimingsMs | null = null;
 
   constructor(options: LocalGeoJsonProviderOptions = {}) {
     this.sourceUrl = options.sourceUrl || '';
     this.defaultBuildingHeight = options.defaultBuildingHeight || 12.0;
     this.levelHeightMeters = options.levelHeightMeters || 3.2;
+  }
+
+  getLastParseSubTimings(): GeoJsonParseSubTimingsMs | null {
+    return this.lastParseSubTimings ? { ...this.lastParseSubTimings } : null;
   }
 
   async loadRegion(query?: MapRegionQuery): Promise<ProcessedMapData> {
@@ -942,6 +948,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       throw new Error('Invalid GeoJSON: Expected a FeatureCollection with features array');
     }
 
+    const tParseStart = performance.now();
     const rawFeatures = geojson.features;
 
     // Initialize comprehensive diagnostics
@@ -1201,6 +1208,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
       return false;
     };
+
+    const tBoundsAndScanEnd = performance.now();
 
     const buildings: BuildingFeature[] = [];
     const roads: RoadFeature[] = [];
@@ -2285,6 +2294,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       }
     }
 
+    const tExtractAndClipEnd = performance.now();
+
     // Chain contiguous road segments that belong to the same roadway before generating geometries.
     const chainedRoads = this.chainContiguousRoads(roads, diagnostics);
 
@@ -2363,6 +2374,17 @@ export class LocalGeoJsonProvider implements MapDataProvider {
       roadParts: topologyRoadParts,
       railwayParts: topologyRailwayParts,
       infrastructurePoints: topologyInfrastructurePoints,
+    };
+
+    const tChainingAndStatsEnd = performance.now();
+    this.lastParseSubTimings = {
+      boundsAndPreScanMs: Number(Math.max(0, tBoundsAndScanEnd - tParseStart).toFixed(3)),
+      featureClipAndExtractMs: Number(
+        Math.max(0, tExtractAndClipEnd - tBoundsAndScanEnd).toFixed(3)
+      ),
+      roadChainingAndStatsMs: Number(
+        Math.max(0, tChainingAndStatsEnd - tExtractAndClipEnd).toFixed(3)
+      ),
     };
 
     return {

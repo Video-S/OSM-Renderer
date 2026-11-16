@@ -75,6 +75,11 @@ import {
   type SceneRevisionConfigMeta,
   validateSceneReadinessSnapshot,
 } from '../types/BenchmarkTelemetry';
+import {
+  type MapLoadDiagnosticsRecord,
+  type MapLoadSourceType,
+  MapLoadTimelineTracker,
+} from '../world/dev/MapLoadDiagnostics';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
 
@@ -240,6 +245,24 @@ export default function App() {
   const osmApiProvider = useMemo(() => new OsmApiProvider(), []);
   const localProvider = useMemo(() => new LocalGeoJsonProvider(), []);
 
+  // TKT-021: End-to-end map loading diagnostics (diagnostic instrumentation only)
+  const mapLoadTrackerRef = useRef<MapLoadTimelineTracker>(new MapLoadTimelineTracker(10));
+  const mapDataRequestIdRef = useRef<WeakMap<ProcessedMapData, number>>(new WeakMap());
+  const initialMountLoadStartedRef = useRef<boolean>(false);
+  const [lastMapLoadDiagnostics, setLastMapLoadDiagnostics] =
+    useState<MapLoadDiagnosticsRecord | null>(null);
+
+  const commitMapDataForRequest = (requestId: number, data: ProcessedMapData) => {
+    mapDataRequestIdRef.current.set(data, requestId);
+    mapLoadTrackerRef.current.markMapDataCommitted(requestId, {
+      buildings: data.stats?.totalBuildings ?? data.buildings?.length ?? 0,
+      roads: data.stats?.totalRoads ?? data.roads?.length ?? 0,
+      railways: data.stats?.totalRailways ?? data.railways?.length ?? 0,
+      totalFeaturesParsed: data.diagnostics?.totalFeaturesParsed ?? 0,
+    });
+    setMapData(data);
+  };
+
   // Built scene geometry reference for cleanup and in-place material updates
   const [builtGeometry, setBuiltGeometry] = useState<BuiltSceneGeometry | null>(null);
   const activeSceneRef = useRef<BuiltSceneGeometry | null>(null);
@@ -247,17 +270,37 @@ export default function App() {
   const loadSwitchyardFixture = (
     targetZone: RailwayPrototypeZoneId = 'overview',
     overrideZoom?: number,
-    overrideAzimuthDeg?: number
+    overrideAzimuthDeg?: number,
+    isInitialStartupLoad: boolean = false
   ) => {
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: 'm21_switchyard',
+      locationName: 'M2.1 Railway Switchyard Benchmark',
+      radiusMeters: null,
+      sourceType: 'fixture',
+      isInitialStartupLoad,
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        themeId: selectedThemeIdRef.current,
+      },
+    });
     setLoading(true);
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
     setActiveLocationId('m21_switchyard');
+    const tFixture0 = performance.now();
     const fixtureData = createRailwayPrototypeFixtureData();
+    const tFixture1 = performance.now();
+    mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+      geoJsonProcessingMs: tFixture1 - tFixture0,
+    });
     setCurrentRawGeoJson(null);
-    setMapData(fixtureData);
+    commitMapDataForRequest(requestId, fixtureData);
     setLoading(false);
+    mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
 
     const preset =
       RAILWAY_PROTOTYPE_ZONE_PRESETS[targetZone] || RAILWAY_PROTOTYPE_ZONE_PRESETS.overview;
@@ -277,22 +320,45 @@ export default function App() {
   // No background network call, railway prototype scene, or separate renderer.
   const loadPrinsHendrikkadeForkFixture = (
     overrideZoom?: number,
-    overrideAzimuthDeg?: number
+    overrideAzimuthDeg?: number,
+    isInitialStartupLoad: boolean = false
   ) => {
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: 'm23_prins_fork',
+      locationName: 'M2.3-E2 Junction Lab · Prins Hendrikkade South',
+      radiusMeters: 60,
+      sourceType: 'fixture',
+      isInitialStartupLoad,
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        themeId: selectedThemeIdRef.current,
+      },
+    });
     setLoading(true);
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
     setActiveLocationId('m23_prins_fork');
     try {
+      const tParse0 = performance.now();
       const data = localProvider.parseGeoJson(
         prinsHendrikkadeForkFixture,
         'M2.3-E2 Junction Lab · Prins Hendrikkade South',
         [4.8979247, 52.3773823],
         60
       );
+      const tParse1 = performance.now();
+      mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+        geoJsonProcessingMs: tParse1 - tParse0,
+        geoJsonSubTimingsMs: localProvider.getLastParseSubTimings(),
+        featureCount: Array.isArray((prinsHendrikkadeForkFixture as any)?.features)
+          ? (prinsHendrikkadeForkFixture as any).features.length
+          : null,
+      });
       setCurrentRawGeoJson(prinsHendrikkadeForkFixture);
-      setMapData(data);
+      commitMapDataForRequest(requestId, data);
       setStatusMessage('Loaded southern Prins Hendrikkade acute cycleway fork');
       setExplicitPose((prev) => ({
         target: [0, 0, 0],
@@ -303,18 +369,29 @@ export default function App() {
     } catch (err: any) {
       console.error('Failed to load Prins Hendrikkade junction fixture:', err);
       setError(err.message);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        err?.message || 'Failed to load fixture'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
     } finally {
       setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
     }
   };
 
   const loadLiveHengeloPreset = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
-    azimuthDeg: number = 45
+    azimuthDeg: number = 45,
+    isInitialStartupLoad: boolean = false
   ) => {
     setActiveLocationId('hengelo');
-    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0]);
+    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0], {
+      locationId: 'hengelo',
+      sourceType: 'preset_live_osm',
+      isInitialStartupLoad,
+    });
     setExplicitPose((prev) => ({
       target,
       zoom,
@@ -326,10 +403,15 @@ export default function App() {
   const loadLiveAmsterdamPreset = async (
     target: [number, number, number] = [0, 0, 0],
     zoom: number = 1.0,
-    azimuthDeg: number = 45
+    azimuthDeg: number = 45,
+    isInitialStartupLoad: boolean = false
   ) => {
     setActiveLocationId('amsterdam');
-    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[1]);
+    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[1], {
+      locationId: 'amsterdam',
+      sourceType: 'preset_live_osm',
+      isInitialStartupLoad,
+    });
     setExplicitPose((prev) => ({
       target,
       zoom,
@@ -339,22 +421,52 @@ export default function App() {
   };
 
   const handleImportReproductionPackage = (pkg: DeveloperReproductionPackage) => {
+    const reproId = `repro_${Date.now()}`;
+    const targetRenderOpts = pkg.configuration?.infrastructureRenderOptions
+      ? normalizeInfrastructureRenderOptions(pkg.configuration.infrastructureRenderOptions)
+      : infrastructureRenderOptionsRef.current;
+    const targetProtoMode =
+      pkg.configuration?.railwayPrototypeMode ?? railwayPrototypeModeRef.current;
+    const targetThemeId =
+      pkg.configuration?.themeId && MAP_THEMES[pkg.configuration.themeId]
+        ? pkg.configuration.themeId
+        : selectedThemeIdRef.current;
+
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: reproId,
+      locationName: pkg.report?.title || 'Imported Reproduction Scenario',
+      radiusMeters: null,
+      sourceType: 'repro_import',
+      rendererConfig: {
+        roadsMode: targetRenderOpts.roads,
+        railwaysMode: targetRenderOpts.railways,
+        railwayPrototypeMode: targetProtoMode,
+        themeId: targetThemeId,
+      },
+    });
     setLoading(true);
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
-    setActiveLocationId(`repro_${Date.now()}`);
+    setActiveLocationId(reproId);
 
     try {
       const defaultCenter: [number, number] = [4.897, 52.377];
+      const tParse0 = performance.now();
       const parsedData = localProvider.parseGeoJson(
         pkg.geoJson,
         pkg.report?.title || 'Imported Reproduction Scenario',
         defaultCenter
       );
+      const tParse1 = performance.now();
+      mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+        geoJsonProcessingMs: tParse1 - tParse0,
+        geoJsonSubTimingsMs: localProvider.getLastParseSubTimings(),
+        featureCount: Array.isArray(pkg.geoJson?.features) ? pkg.geoJson.features.length : null,
+      });
 
       setCurrentRawGeoJson(pkg.geoJson);
-      setMapData(parsedData);
+      commitMapDataForRequest(requestId, parsedData);
 
       if (pkg.configuration?.infrastructureRenderOptions) {
         setInfrastructureRenderOptions(
@@ -456,8 +568,14 @@ export default function App() {
     } catch (err: any) {
       console.error('Failed to import reproduction package:', err);
       setError(`Failed to import reproduction package: ${err.message}`);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        err?.message || 'Failed to import reproduction package'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
     } finally {
       setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
     }
   };
 
@@ -492,7 +610,27 @@ export default function App() {
   };
 
   // Function to load any real-world coordinates through MapDataProvider abstraction
-  const fetchLiveOsmLocation = async (loc: { name: string; lat: number; lon: number; radius: number }) => {
+  const fetchLiveOsmLocation = async (
+    loc: { name: string; lat: number; lon: number; radius: number },
+    options?: {
+      locationId?: string;
+      sourceType?: MapLoadSourceType;
+      isInitialStartupLoad?: boolean;
+    }
+  ) => {
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: options?.locationId ?? activeLocationIdRef.current,
+      locationName: loc.name,
+      radiusMeters: loc.radius,
+      sourceType: options?.sourceType ?? 'live_osm',
+      isInitialStartupLoad: options?.isInitialStartupLoad,
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        themeId: selectedThemeIdRef.current,
+      },
+    });
     setLoading(true);
     setError(null);
     setHoveredFeature(null);
@@ -506,13 +644,24 @@ export default function App() {
         locationName: loc.name,
       });
 
+      const providerMetrics = osmApiProvider.getLastLoadMetrics();
+      if (providerMetrics) {
+        mapLoadTrackerRef.current.recordOsmProviderMetrics(requestId, providerMetrics);
+      }
+
+      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) {
+        return;
+      }
+
       setCurrentRawGeoJson(osmApiProvider.getLastRawGeoJson());
-      setMapData(parsedData);
+      commitMapDataForRequest(requestId, parsedData);
       setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
       setResetCount((c) => c + 1);
 
       // Log development-only diagnostics to console
       if (parsedData.diagnostics) {
+        const tConsole0 = performance.now();
         console.group(`🗺️ OpenStreetMap Diagnostics [${loc.name}]`);
         console.table({
           'Source Features Received': parsedData.diagnostics.sourceFeaturesReceived,
@@ -534,16 +683,32 @@ export default function App() {
           'Rejected (Invalid)': parsedData.diagnostics.rejectedInvalid.total,
         });
         console.groupEnd();
+        mapLoadTrackerRef.current.recordConsoleDiagnosticsMs(
+          requestId,
+          performance.now() - tConsole0
+        );
       }
     } catch (err: any) {
       console.error('Failed to load real OSM region:', err);
+      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) {
+        return;
+      }
       setError(err.message);
       setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        err?.message || 'Failed to load real OSM region'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
     }
   };
 
   // Initial load: Check URL query parameters for M2.1 Prototype Lab or fetch Station Hengelo
   useEffect(() => {
+    if (initialMountLoadStartedRef.current) return;
+    initialMountLoadStartedRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const protoParam = params.get('prototype') as RailwayPrototypeMode | null;
     if (
@@ -552,20 +717,25 @@ export default function App() {
       protoParam === 'candidateA' ||
       protoParam === 'candidateB'
     ) {
+      railwayPrototypeModeRef.current = protoParam;
       setRailwayPrototypeMode(protoParam);
     } else if ((protoParam as string) === 'baseline') {
+      railwayPrototypeModeRef.current = 'production';
       setRailwayPrototypeMode('production');
     }
     // The isolated junction lab is specifically for E2 graph-road visuals.
     // Keep an explicit topologyRoads query value authoritative for A/B comparison.
     const isForkFixture = params.get('fixture') === 'prins-fork';
-    setInfrastructureRenderOptions(
+    const initialRenderOpts =
       isForkFixture && !params.has('topologyRoads')
-        ? { roads: 'graph', railways: 'legacy' }
-        : parseInfrastructureRenderOptionsFromSearch(window.location.search)
-    );
+        ? { roads: 'graph' as const, railways: 'legacy' as const }
+        : parseInfrastructureRenderOptionsFromSearch(window.location.search);
+    infrastructureRenderOptionsRef.current = initialRenderOpts;
+    setInfrastructureRenderOptions(initialRenderOpts);
+
     const themeParam = params.get('theme');
     if (themeParam && MAP_THEMES[themeParam]) {
+      selectedThemeIdRef.current = themeParam;
       setSelectedThemeId(themeParam);
     }
     const tabParam = params.get('tab');
@@ -604,15 +774,19 @@ export default function App() {
       setMapData(emptyData);
       setLoading(false);
     } else if (fixtureParam === 'switchyard') {
-      loadSwitchyardFixture(zoneParam, zoomParam, azParam);
+      loadSwitchyardFixture(zoneParam, zoomParam, azParam, true);
     } else if (fixtureParam === 'prins-fork') {
-      loadPrinsHendrikkadeForkFixture(zoomParam, azParam);
+      loadPrinsHendrikkadeForkFixture(zoomParam, azParam, true);
     } else if (fixtureParam === 'amsterdam') {
-      loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
+      loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
     } else if (fixtureParam === 'hengelo') {
-      loadLiveHengeloPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45);
+      loadLiveHengeloPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
     } else {
-      fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0]);
+      fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0], {
+        locationId: LIVE_PRESET_LOCATIONS[0].id,
+        sourceType: 'preset_live_osm',
+        isInitialStartupLoad: true,
+      });
     }
   }, []);
 
@@ -626,14 +800,26 @@ export default function App() {
   // Milestone 2.3-E1: Build one shared InfrastructureGraph + render descriptor bundle per dataset
   // when either road or railway preview mode is active; completely skipped in default 'legacy' mode.
   const infrastructureRenderPreview = useMemo(() => {
+    const requestId = mapData ? mapDataRequestIdRef.current.get(mapData) : undefined;
+    const trackPrep =
+      requestId !== undefined && !mapLoadTrackerRef.current.hasFinalizedPresentation(requestId);
+
     if (!mapData || !requiresInfrastructureGraphPreview(infrastructureRenderOptions)) {
       latestPreviewTimeMsRef.current = 0;
       infrastructureRenderPreviewRef.current = null;
+      if (trackPrep && requestId !== undefined) {
+        mapLoadTrackerRef.current.recordInfrastructurePrep(requestId, performance.now(), 0);
+      }
       return null;
     }
+    const tPrep0 = performance.now();
     const preview = prepareInfrastructureRenderPreview(mapData, infrastructureRenderOptions);
+    const prepDurationMs = performance.now() - tPrep0;
     latestPreviewTimeMsRef.current = preview?.timing.totalPreviewTimeMs ?? 0;
     infrastructureRenderPreviewRef.current = preview;
+    if (trackPrep && requestId !== undefined) {
+      mapLoadTrackerRef.current.recordInfrastructurePrep(requestId, tPrep0, prepDurationMs);
+    }
     return preview;
   }, [mapData, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
 
@@ -642,6 +828,9 @@ export default function App() {
   // to GeometryBuilder so the non-railway map is 100% identical and railway bridges are never duplicated.
   useEffect(() => {
     if (!mapData) return;
+
+    const tEffectStart = performance.now();
+    const requestId = mapDataRequestIdRef.current.get(mapData);
 
     if (typeof window !== 'undefined' && typeof (window as any).__BENCHMARK_RESET_GPU_TIMERS__ === 'function') {
       (window as any).__BENCHMARK_RESET_GPU_TIMERS__();
@@ -684,7 +873,8 @@ export default function App() {
 
     const t0 = performance.now();
     const scene = builder.buildScene(sceneData, currentTheme);
-    const buildElapsedMs = Number((performance.now() - t0).toFixed(2));
+    const rawBuildElapsedMs = performance.now() - t0;
+    const buildElapsedMs = Number(rawBuildElapsedMs.toFixed(2));
     latestCpuBuildTimeMsRef.current = buildElapsedMs;
 
     const hasFeatures =
@@ -725,6 +915,22 @@ export default function App() {
     };
     scene.groundMesh.userData.__sceneMeta = sceneMeta;
 
+    if (requestId !== undefined && !mapLoadTrackerRef.current.hasFinalizedPresentation(requestId)) {
+      mapLoadTrackerRef.current.recordSceneGeometryBuild(requestId, {
+        effectStartedAtMs: tEffectStart,
+        buildDurationMs: rawBuildElapsedMs,
+        sceneRevision: revision,
+        rendererConfig: {
+          roadsMode: infrastructureRenderOptions.roads,
+          railwaysMode: infrastructureRenderOptions.railways,
+          railwayPrototypeMode,
+          themeId: selectedThemeIdRef.current,
+        },
+        triangles: scene.stats.totalTriangles,
+        drawCalls: scene.stats.totalDrawCalls,
+      });
+    }
+
     setCpuBuildTimeMs(buildElapsedMs);
     activeSceneRef.current = scene;
     setBuiltGeometry(scene);
@@ -753,6 +959,7 @@ export default function App() {
       setBuiltPrototypeRailways(null);
       return;
     }
+    const tProto0 = performance.now();
     const proto = buildRailwayPrototypeGroup(
       mapData,
       currentTheme,
@@ -760,6 +967,11 @@ export default function App() {
       currentCameraZoomRef.current,
       prototypeOptions
     );
+    const tProto1 = performance.now();
+    const requestId = mapDataRequestIdRef.current.get(mapData);
+    if (requestId !== undefined && !mapLoadTrackerRef.current.hasFinalizedPresentation(requestId)) {
+      mapLoadTrackerRef.current.addPrototypeRailwayBuildMs(requestId, tProto1 - tProto0, tProto1);
+    }
     activePrototypeRef.current = proto;
     setBuiltPrototypeRailways(proto);
   }, [mapData, railwayPrototypeMode, prototypeOptions]);
@@ -891,6 +1103,12 @@ export default function App() {
 
   const handleSceneRevisionRendered = (meta: SceneRevisionConfigMeta) => {
     latestRenderedMetaRef.current = meta;
+    if (meta.webglFramesRendered === 1) {
+      const completedRecord = mapLoadTrackerRef.current.markScenePresented(meta.revision);
+      if (completedRecord) {
+        setLastMapLoadDiagnostics(completedRecord);
+      }
+    }
     if (readinessWaitersRef.current.length === 0) return;
 
     const remaining: typeof readinessWaitersRef.current = [];
@@ -1009,6 +1227,11 @@ export default function App() {
         azimuthDeg?: number
       ) => jumpToPrototypeZone(zone, zoom, azimuthDeg),
       getSnapshot: () => buildLiveHarnessSnapshot(),
+      getMapLoadDiagnostics: () => ({
+        latest: mapLoadTrackerRef.current.getLatestRecord(),
+        inProgress: mapLoadTrackerRef.current.getInProgressSnapshot(),
+        history: mapLoadTrackerRef.current.getHistory(),
+      }),
       runCameraScenario: async (
         scenarioId:
           | 'overview'
@@ -1232,6 +1455,19 @@ export default function App() {
             ? params.themeId
             : selectedThemeIdRef.current;
 
+        const requestId = mapLoadTrackerRef.current.startLoad({
+          locationId: params.datasetId,
+          locationName: params.regionName,
+          radiusMeters: params.clipRadiusMeters ?? null,
+          sourceType: 'offline_benchmark',
+          rendererConfig: {
+            roadsMode: targetRenderOpts.roads,
+            railwaysMode: targetRenderOpts.railways,
+            railwayPrototypeMode: targetPrototypeMode,
+            themeId: targetThemeId,
+          },
+        });
+
         setLoading(true);
         setError(null);
         setHoveredFeature(null);
@@ -1248,7 +1484,17 @@ export default function App() {
               params.centerLonLat,
               params.clipRadiusMeters
             );
-        const datasetParseMs = Number((performance.now() - tParseStart).toFixed(3));
+        const rawParseMs = performance.now() - tParseStart;
+        const datasetParseMs = Number(rawParseMs.toFixed(3));
+        mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+          geoJsonProcessingMs: rawParseMs,
+          geoJsonSubTimingsMs: params.isSwitchyardFixture
+            ? null
+            : localProvider.getLastParseSubTimings(),
+          featureCount: Array.isArray(params.rawGeoJson?.features)
+            ? params.rawGeoJson.features.length
+            : null,
+        });
 
         const hasFeatures =
           (parsedData.buildings?.length || 0) +
@@ -1281,8 +1527,9 @@ export default function App() {
 
         setCurrentRawGeoJson(params.rawGeoJson ?? null);
         mapDataRef.current = parsedData;
-        setMapData(parsedData);
+        commitMapDataForRequest(requestId, parsedData);
         setLoading(false);
+        mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
 
         const target: [number, number, number] = params.target ?? [0, 0, 0];
         const zoom = params.zoom ?? 1.0;
@@ -1398,46 +1645,104 @@ export default function App() {
 
   const handlePresetSelect = (preset: LivePresetLocation) => {
     setActiveLocationId(preset.id);
-    fetchLiveOsmLocation(preset);
+    fetchLiveOsmLocation(preset, {
+      locationId: preset.id,
+      sourceType: 'preset_live_osm',
+    });
   };
 
   const handleSelectAddress = async (location: GeocodeResult, radiusMeters: number) => {
     setActiveLocationId('custom');
-    await fetchLiveOsmLocation({
-      name: location.name,
-      lat: location.lat,
-      lon: location.lon,
-      radius: radiusMeters,
-    });
+    await fetchLiveOsmLocation(
+      {
+        name: location.name,
+        lat: location.lat,
+        lon: location.lon,
+        radius: radiusMeters,
+      },
+      {
+        locationId: 'custom',
+        sourceType: 'address_search',
+      }
+    );
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: 'custom',
+      locationName: file.name,
+      radiusMeters: null,
+      sourceType: 'geojson_upload',
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        themeId: selectedThemeIdRef.current,
+      },
+    });
+    const tReadStart = performance.now();
+
     setLoading(true);
     setError(null);
     setStatusMessage(`Parsing uploaded GeoJSON file ${file.name}...`);
     const reader = new FileReader();
     reader.onload = (event) => {
+      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) return;
       try {
+        const tReadEnd = performance.now();
         const text = event.target?.result as string;
+        const tJson0 = performance.now();
         const json = JSON.parse(text);
+        const tJson1 = performance.now();
         setCurrentRawGeoJson(json);
+
+        const tParse0 = performance.now();
         const data = localProvider.parseGeoJson(json, file.name);
-        setMapData(data);
+        const tParse1 = performance.now();
+
+        mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+          responseTransferMs: tReadEnd - tReadStart,
+          jsonDecodeMs: tJson1 - tJson0,
+          dataTransferAndDecodeMs: tJson1 - tReadStart,
+          geoJsonProcessingMs: tParse1 - tParse0,
+          geoJsonSubTimingsMs: localProvider.getLastParseSubTimings(),
+          payloadBytes:
+            typeof TextEncoder !== 'undefined'
+              ? new TextEncoder().encode(text).byteLength
+              : text.length,
+          featureCount: Array.isArray(json?.features) ? json.features.length : null,
+        });
+
+        commitMapDataForRequest(requestId, data);
         setActiveLocationId('custom');
         setLoading(false);
+        mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
         setResetCount((c) => c + 1);
       } catch (err: any) {
         console.error('Failed to parse uploaded GeoJSON:', err);
         setError(`Failed to parse uploaded GeoJSON: ${err.message}`);
         setLoading(false);
+        mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+        const failed = mapLoadTrackerRef.current.markLoadFailed(
+          requestId,
+          err?.message || 'Failed to parse uploaded GeoJSON'
+        );
+        if (failed) setLastMapLoadDiagnostics(failed);
       }
     };
     reader.onerror = () => {
+      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) return;
       setError('Failed to read selected file');
       setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        'Failed to read selected file'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
     };
     reader.readAsText(file);
   };
@@ -2801,6 +3106,11 @@ export default function App() {
         roadRenderTiming={builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null}
         infrastructurePreviewTiming={infrastructureRenderPreview?.timing ?? null}
         cpuBuildTimeMs={cpuBuildTimeMs}
+        lastLoadDiagnostics={
+          lastMapLoadDiagnostics ?? mapLoadTrackerRef.current.getInProgressSnapshot()
+        }
+        loadDiagnosticsHistory={mapLoadTrackerRef.current.getHistory()}
+        liveWebGLSnapshot={liveTelemetry ?? latestTelemetryRef.current}
       />
     </div>
   );

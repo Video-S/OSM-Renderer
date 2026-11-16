@@ -20,6 +20,9 @@ import {
   ShieldCheck,
   MousePointer,
   Crosshair,
+  Copy,
+  Check,
+  Clock,
 } from 'lucide-react';
 import {
   InfrastructureRenderOptions,
@@ -44,6 +47,8 @@ import type {
   GraphRoadRenderStats,
 } from '../world/infrastructure/roads/GraphRoadGeometryBuilder';
 import type { InfrastructureRenderPreviewTiming } from '../world/infrastructure/rendering/InfrastructureRenderAdapter';
+import type { MapLoadDiagnosticsRecord } from '../world/dev/MapLoadDiagnostics';
+import type { LiveWebGLTelemetrySnapshot } from '../world/prototype/PerformanceBaselineHarness';
 
 export interface DevToolsPanelProps {
   isOpen: boolean;
@@ -89,6 +94,10 @@ export interface DevToolsPanelProps {
   roadRenderTiming?: GraphRoadGenerationTiming | null;
   infrastructurePreviewTiming?: InfrastructureRenderPreviewTiming | null;
   cpuBuildTimeMs?: number | null;
+  // TKT-021 End-to-end map loading diagnostics
+  lastLoadDiagnostics?: MapLoadDiagnosticsRecord | null;
+  loadDiagnosticsHistory?: MapLoadDiagnosticsRecord[];
+  liveWebGLSnapshot?: LiveWebGLTelemetrySnapshot | null;
 }
 
 export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
@@ -129,6 +138,9 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   roadRenderTiming = null,
   infrastructurePreviewTiming = null,
   cpuBuildTimeMs = null,
+  lastLoadDiagnostics = null,
+  loadDiagnosticsHistory = [],
+  liveWebGLSnapshot = null,
 }) => {
   const [activeDevTab, setActiveDevTab] = useState<'rendering' | 'inspection' | 'reporting' | 'fixtures'>('rendering');
 
@@ -140,6 +152,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   const [reportCategory, setReportCategory] = useState<'junction' | 'width' | 'alignment' | 'railway' | 'elevation' | 'other'>('junction');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
   const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
+  const [copiedLoadDiagStatus, setCopiedLoadDiagStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -235,6 +248,53 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
     };
     reader.readAsText(file);
     if (e.target) e.target.value = '';
+  };
+
+  const formatDiagMs = (val: number | null | undefined): string => {
+    if (typeof val !== 'number' || !Number.isFinite(val)) return '—';
+    return `${val.toFixed(1)} ms`;
+  };
+
+  const handleCopyLoadDiagnostics = async () => {
+    const payload = {
+      schema: 'tkt021-map-load-diagnostics-v1',
+      capturedAtIso: new Date().toISOString(),
+      environment: {
+        locationHref: typeof window !== 'undefined' ? window.location.origin + window.location.pathname : null,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : null,
+        hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : null,
+        gpuVendor: liveWebGLSnapshot?.gpuVendor ?? null,
+        gpuRenderer: liveWebGLSnapshot?.gpuRenderer ?? null,
+      },
+      latestLoad: lastLoadDiagnostics,
+      recentHistory: loadDiagnosticsHistory,
+    };
+    const jsonText = JSON.stringify(payload, null, 2);
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(jsonText);
+      } else if (typeof document !== 'undefined') {
+        const textarea = document.createElement('textarea');
+        textarea.value = jsonText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } else {
+        throw new Error('Clipboard unavailable');
+      }
+      setCopiedLoadDiagStatus('copied');
+      setTimeout(() => setCopiedLoadDiagStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Failed to copy load diagnostics JSON:', err);
+      setCopiedLoadDiagStatus('error');
+      setTimeout(() => setCopiedLoadDiagStatus('idle'), 3000);
+    }
   };
 
   return (
@@ -715,6 +775,210 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 </div>
               </section>
             )}
+
+            {/* TKT-021: End-to-End Map Load Timing Diagnostics */}
+            <section
+              data-testid="e2e-load-diagnostics-section"
+              className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span className="text-xs font-bold text-slate-200">
+                    End-to-End Load Diagnostics
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  data-testid="btn-copy-load-diagnostics"
+                  disabled={!lastLoadDiagnostics}
+                  onClick={handleCopyLoadDiagnostics}
+                  className="px-2 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 disabled:opacity-40 border border-cyan-500/40 text-cyan-200 text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                >
+                  {copiedLoadDiagStatus === 'copied' ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-300" />
+                      <span className="text-emerald-300">Copied JSON</span>
+                    </>
+                  ) : copiedLoadDiagStatus === 'error' ? (
+                    <span>Copy failed</span>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Diagnostics</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {!lastLoadDiagnostics ? (
+                <p className="text-[11px] text-slate-400">
+                  Waiting for a map load or fixture transition to complete...
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Location, Cache & Renderer Summary */}
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] font-mono bg-slate-950/80 border border-slate-800/80 rounded-lg px-2 py-1.5">
+                    <div className="text-slate-200 truncate max-w-[240px]" title={lastLoadDiagnostics.locationName}>
+                      {lastLoadDiagnostics.locationName}
+                      {lastLoadDiagnostics.sceneRevision !== null
+                        ? ` (rev ${lastLoadDiagnostics.sceneRevision})`
+                        : ''}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`px-1.5 py-0.5 rounded uppercase font-bold ${
+                          lastLoadDiagnostics.network.cacheStatus === 'warm_hit'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : lastLoadDiagnostics.network.cacheStatus === 'cold_miss'
+                              ? 'bg-amber-500/20 text-amber-300'
+                              : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {lastLoadDiagnostics.network.cacheStatus === 'warm_hit'
+                          ? 'Cache Hit'
+                          : lastLoadDiagnostics.network.cacheStatus === 'cold_miss'
+                            ? 'Cold Miss'
+                            : lastLoadDiagnostics.network.cacheStatus === 'not_applicable'
+                              ? 'Local'
+                              : 'Unknown'}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded uppercase font-bold ${
+                          lastLoadDiagnostics.status === 'completed'
+                            ? 'bg-cyan-500/20 text-cyan-300'
+                            : lastLoadDiagnostics.status === 'failed'
+                              ? 'bg-rose-500/20 text-rose-300'
+                              : 'bg-slate-800 text-slate-300'
+                        }`}
+                      >
+                        {lastLoadDiagnostics.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Primary End-to-End Total */}
+                  <div className="flex items-baseline justify-between bg-slate-950/90 border border-cyan-500/30 rounded-lg px-2.5 py-1.5 font-mono tabular-nums">
+                    <span className="text-[11px] font-semibold text-slate-300">
+                      Total (Request → 1st Frame)
+                    </span>
+                    <span
+                      data-testid="e2e-total-loading-ms"
+                      className="text-xs font-bold text-cyan-300"
+                    >
+                      {formatDiagMs(lastLoadDiagnostics.timings.totalLoadingMs)}
+                    </span>
+                  </div>
+
+                  {/* Stage Breakdown */}
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono tabular-nums bg-slate-950/80 border border-slate-800/80 rounded-lg p-2">
+                    <div className="text-slate-400">
+                      OSM Wait:{' '}
+                      <span className="text-slate-200">
+                        {formatDiagMs(lastLoadDiagnostics.timings.osmRequestMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Transfer+JSON:{' '}
+                      <span className="text-slate-200">
+                        {formatDiagMs(lastLoadDiagnostics.timings.dataTransferAndDecodeMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      GeoJSON Parse:{' '}
+                      <span className="text-slate-200">
+                        {formatDiagMs(lastLoadDiagnostics.timings.geoJsonProcessingMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Infra Prep:{' '}
+                      <span className="text-slate-200">
+                        {formatDiagMs(lastLoadDiagnostics.timings.infrastructurePreparationMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Scene Build:{' '}
+                      <span className="text-cyan-300">
+                        {formatDiagMs(lastLoadDiagnostics.timings.sceneGeometryMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      1st Frame:{' '}
+                      <span className="text-emerald-300">
+                        {formatDiagMs(lastLoadDiagnostics.timings.scenePresentationMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Accounted:{' '}
+                      <span className="text-slate-200">
+                        {formatDiagMs(lastLoadDiagnostics.accounting.accountedMs)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      Unacct / React:{' '}
+                      <span className="text-amber-300">
+                        {formatDiagMs(lastLoadDiagnostics.accounting.unaccountedMs)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Server & Payload Sub-details */}
+                  {(lastLoadDiagnostics.network.serverTimings ||
+                    lastLoadDiagnostics.network.payloadBytes !== null) && (
+                    <div className="text-[10px] font-mono text-slate-400 bg-slate-950/60 border border-slate-800/60 rounded-lg px-2 py-1.5 space-y-0.5">
+                      {lastLoadDiagnostics.network.serverTimings && (
+                        <div>
+                          Server ({lastLoadDiagnostics.network.serverTimings.upstreamSource ?? 'unknown'}):
+                          {' '}upstream {formatDiagMs(lastLoadDiagnostics.network.serverTimings.upstreamFetchMs)}
+                          {' · '}osmtogeojson {formatDiagMs(lastLoadDiagnostics.network.serverTimings.osmtogeojsonMs)}
+                          {' · '}enrich {formatDiagMs(lastLoadDiagnostics.network.serverTimings.nodeIdEnrichMs)}
+                          {' · '}total {formatDiagMs(lastLoadDiagnostics.network.serverTimings.totalServerMs)}
+                        </div>
+                      )}
+                      <div>
+                        Payload:{' '}
+                        {lastLoadDiagnostics.network.payloadBytes !== null
+                          ? `${(lastLoadDiagnostics.network.payloadBytes / 1024).toFixed(1)} KB`
+                          : '—'}
+                        {lastLoadDiagnostics.network.transferSizeBytes !== null
+                          ? ` (${(lastLoadDiagnostics.network.transferSizeBytes / 1024).toFixed(1)} KB wire)`
+                          : ''}
+                        {' · '}
+                        Transfer {formatDiagMs(lastLoadDiagnostics.timings.responseTransferMs)}
+                        {' · '}
+                        JSON {formatDiagMs(lastLoadDiagnostics.timings.jsonDecodeMs)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Renderer config & premature spinner indicator */}
+                  <div className="text-[10px] font-mono text-slate-400 flex flex-wrap items-center justify-between gap-1 px-0.5">
+                    <span>
+                      Config: {lastLoadDiagnostics.rendererConfig.roadsMode} /{' '}
+                      {lastLoadDiagnostics.rendererConfig.railwaysMode} /{' '}
+                      {lastLoadDiagnostics.rendererConfig.themeId}
+                    </span>
+                    {lastLoadDiagnostics.network.featureCount !== null && (
+                      <span>{lastLoadDiagnostics.network.featureCount} raw feats</span>
+                    )}
+                  </div>
+
+                  {lastLoadDiagnostics.spinner.prematureSpinnerHideMs !== null &&
+                    lastLoadDiagnostics.spinner.prematureSpinnerHideMs > 0 && (
+                      <div className="text-[10px] font-mono text-amber-300/90 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1">
+                        Spinner hid at {formatDiagMs(lastLoadDiagnostics.spinner.spinnerHiddenAtMs)} (
+                        {formatDiagMs(lastLoadDiagnostics.spinner.prematureSpinnerHideMs)} before 1st frame)
+                      </div>
+                    )}
+
+                  {lastLoadDiagnostics.errorMessage && (
+                    <div className="text-[10px] font-mono text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2 py-1">
+                      Error: {lastLoadDiagnostics.errorMessage}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
           </div>
         )}
 

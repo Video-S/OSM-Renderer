@@ -6,7 +6,7 @@
 
 # Class: LocalGeoJsonProvider
 
-Defined in: world/LocalGeoJsonProvider.ts:898
+Defined in: world/LocalGeoJsonProvider.ts:899
 
 Common provider interface for geographic features.
 In this version, LocalGeoJsonProvider provides the data.
@@ -22,7 +22,7 @@ Future implementations could fetch vector tiles (MVT/PMTiles) or Overpass API qu
 
 > **new LocalGeoJsonProvider**(`options?`): `LocalGeoJsonProvider`
 
-Defined in: world/LocalGeoJsonProvider.ts:906
+Defined in: world/LocalGeoJsonProvider.ts:908
 
 #### Parameters
 
@@ -40,7 +40,7 @@ Defined in: world/LocalGeoJsonProvider.ts:906
 
 > `readonly` **id**: `"local-geojson"` = `'local-geojson'`
 
-Defined in: world/LocalGeoJsonProvider.ts:899
+Defined in: world/LocalGeoJsonProvider.ts:900
 
 #### Implementation of
 
@@ -52,7 +52,7 @@ Defined in: world/LocalGeoJsonProvider.ts:899
 
 > `readonly` **name**: `"Local GeoJSON Provider"` = `'Local GeoJSON Provider'`
 
-Defined in: world/LocalGeoJsonProvider.ts:900
+Defined in: world/LocalGeoJsonProvider.ts:901
 
 #### Implementation of
 
@@ -60,11 +60,23 @@ Defined in: world/LocalGeoJsonProvider.ts:900
 
 ## Methods
 
+### getLastParseSubTimings()
+
+> **getLastParseSubTimings**(): `GeoJsonParseSubTimingsMs`
+
+Defined in: world/LocalGeoJsonProvider.ts:914
+
+#### Returns
+
+`GeoJsonParseSubTimingsMs`
+
+***
+
 ### loadRegion()
 
 > **loadRegion**(`query?`): `Promise`\<[`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)\>
 
-Defined in: world/LocalGeoJsonProvider.ts:912
+Defined in: world/LocalGeoJsonProvider.ts:918
 
 #### Parameters
 
@@ -86,7 +98,7 @@ Defined in: world/LocalGeoJsonProvider.ts:912
 
 > **parseGeoJson**(`geojson`, `explicitRegionName?`, `explicitCenter?`, `clipRadiusMeters?`): [`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)
 
-Defined in: world/LocalGeoJsonProvider.ts:935
+Defined in: world/LocalGeoJsonProvider.ts:941
 
 Parses a GeoJSON object into ProcessedMapData with strict, unambiguous diagnostic accounting.
 

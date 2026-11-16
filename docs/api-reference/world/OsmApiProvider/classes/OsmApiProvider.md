@@ -6,7 +6,7 @@
 
 # Class: OsmApiProvider
 
-Defined in: world/OsmApiProvider.ts:9
+Defined in: world/OsmApiProvider.ts:15
 
 MapDataProvider implementation that queries the server-side OpenStreetMap API proxy
 (/api/osm-data) and parses the returned GeoJSON into high-fidelity 3D map data.
@@ -21,7 +21,7 @@ MapDataProvider implementation that queries the server-side OpenStreetMap API pr
 
 > **new OsmApiProvider**(): `OsmApiProvider`
 
-Defined in: world/OsmApiProvider.ts:16
+Defined in: world/OsmApiProvider.ts:23
 
 #### Returns
 
@@ -33,7 +33,7 @@ Defined in: world/OsmApiProvider.ts:16
 
 > `readonly` **id**: `"osm-live-api"` = `'osm-live-api'`
 
-Defined in: world/OsmApiProvider.ts:10
+Defined in: world/OsmApiProvider.ts:16
 
 #### Implementation of
 
@@ -45,7 +45,7 @@ Defined in: world/OsmApiProvider.ts:10
 
 > `readonly` **name**: `"OpenStreetMap Live API"` = `'OpenStreetMap Live API'`
 
-Defined in: world/OsmApiProvider.ts:11
+Defined in: world/OsmApiProvider.ts:17
 
 #### Implementation of
 
@@ -53,11 +53,23 @@ Defined in: world/OsmApiProvider.ts:11
 
 ## Methods
 
+### getLastLoadMetrics()
+
+> **getLastLoadMetrics**(): `OsmProviderLoadMetrics`
+
+Defined in: world/OsmApiProvider.ts:31
+
+#### Returns
+
+`OsmProviderLoadMetrics`
+
+***
+
 ### getLastRawGeoJson()
 
 > **getLastRawGeoJson**(): `any`
 
-Defined in: world/OsmApiProvider.ts:20
+Defined in: world/OsmApiProvider.ts:27
 
 #### Returns
 
@@ -69,7 +81,7 @@ Defined in: world/OsmApiProvider.ts:20
 
 > **loadRegion**(`query?`): `Promise`\<[`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)\>
 
-Defined in: world/OsmApiProvider.ts:24
+Defined in: world/OsmApiProvider.ts:35
 
 #### Parameters
 

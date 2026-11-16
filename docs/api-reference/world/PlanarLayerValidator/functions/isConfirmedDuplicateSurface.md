@@ -8,7 +8,7 @@
 
 > **isConfirmedDuplicateSurface**(`a`, `b`): `boolean`
 
-Defined in: world/PlanarLayerValidator.ts:576
+Defined in: world/PlanarLayerValidator.ts:581
 
 Symmetric Multi-Criteria Duplicate Detection (v5):
 1. Identical (category, subtype) and no conflicting distinguishing metadata (name, ref, sport).

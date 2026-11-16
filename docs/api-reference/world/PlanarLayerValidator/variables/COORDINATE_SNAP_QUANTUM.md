@@ -8,6 +8,6 @@
 
 > `const` **COORDINATE\_SNAP\_QUANTUM**: `0.0001` = `1e-4`
 
-Defined in: world/PlanarLayerValidator.ts:93
+Defined in: world/PlanarLayerValidator.ts:98
 
 Coordinate grid snap quantum (0.1 mm = 1e-4 m) to stabilize plane-sweep event ordering

@@ -8,4 +8,4 @@
 
 > `const` **ALL\_SEMANTIC\_SURFACE\_CLASSES**: [`SemanticSurfaceClass`](../type-aliases/SemanticSurfaceClass.md)[]
 
-Defined in: world/PlanarLayerValidator.ts:106
+Defined in: world/PlanarLayerValidator.ts:111

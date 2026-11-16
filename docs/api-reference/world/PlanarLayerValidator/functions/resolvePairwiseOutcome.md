@@ -8,7 +8,7 @@
 
 > **resolvePairwiseOutcome**(`a`, `b`, `aContainedInB`, `bContainedInA`, `isDuplicateOrLogicalUnion?`): [`PairwiseOwnershipOutcome`](../type-aliases/PairwiseOwnershipOutcome.md)
 
-Defined in: world/PlanarLayerValidator.ts:773
+Defined in: world/PlanarLayerValidator.ts:778
 
 Exhaustive, Antisymmetric Pairwise Ownership Policy (v5):
 Given two intersecting surface features A and B and their geometric containment flags

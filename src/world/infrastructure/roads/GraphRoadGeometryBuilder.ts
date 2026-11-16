@@ -599,6 +599,7 @@ interface ResolvedEdgeSubSegment {
 }
 
 interface PlacedRoadFootprint {
+  orderIdx: number;
   id: string;
   isPath: boolean;
   minX: number;
@@ -606,6 +607,133 @@ interface PlacedRoadFootprint {
   minZ: number;
   maxZ: number;
   poly: MultiPolygonCoords;
+}
+
+const ROAD_SPATIAL_GRID_CELL_SIZE = 32;
+const ROAD_SPATIAL_CELL_OFFSET = 32768;
+const ROAD_SPATIAL_CELL_STRIDE = 65536;
+const ROAD_SPATIAL_MAX_CELLS_PER_ITEM = 4096;
+
+class RoadFootprintSpatialGrid {
+  private readonly cellSize = ROAD_SPATIAL_GRID_CELL_SIZE;
+  private readonly cells = new Map<number, number[]>();
+  private readonly oversized: number[] = [];
+  private seenStamp = new Int32Array(1024);
+  private currentStamp = 1;
+
+  private ensureStampCapacity(id: number): void {
+    if (id < this.seenStamp.length) return;
+    let nextCap = this.seenStamp.length * 2;
+    while (nextCap <= id) nextCap *= 2;
+    const next = new Int32Array(nextCap);
+    next.set(this.seenStamp);
+    this.seenStamp = next;
+  }
+
+  insert(orderIdx: number, minX: number, maxX: number, minZ: number, maxZ: number): void {
+    this.ensureStampCapacity(orderIdx);
+    const minCx = Math.floor(minX / this.cellSize);
+    const maxCx = Math.floor(maxX / this.cellSize);
+    const minCz = Math.floor(minZ / this.cellSize);
+    const maxCz = Math.floor(maxZ / this.cellSize);
+    if (
+      !Number.isFinite(minCx) ||
+      !Number.isFinite(maxCx) ||
+      !Number.isFinite(minCz) ||
+      !Number.isFinite(maxCz) ||
+      minCx < -ROAD_SPATIAL_CELL_OFFSET ||
+      maxCx >= ROAD_SPATIAL_CELL_OFFSET ||
+      minCz < -ROAD_SPATIAL_CELL_OFFSET ||
+      maxCz >= ROAD_SPATIAL_CELL_OFFSET ||
+      (maxCx - minCx + 1) * (maxCz - minCz + 1) > ROAD_SPATIAL_MAX_CELLS_PER_ITEM
+    ) {
+      this.oversized.push(orderIdx);
+      return;
+    }
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cz = minCz; cz <= maxCz; cz++) {
+        const key =
+          (cx + ROAD_SPATIAL_CELL_OFFSET) * ROAD_SPATIAL_CELL_STRIDE +
+          (cz + ROAD_SPATIAL_CELL_OFFSET);
+        let bucket = this.cells.get(key);
+        if (!bucket) {
+          bucket = [];
+          this.cells.set(key, bucket);
+        }
+        bucket.push(orderIdx);
+      }
+    }
+  }
+
+  query(minX: number, maxX: number, minZ: number, maxZ: number, out: number[]): void {
+    out.length = 0;
+    if (
+      !Number.isFinite(minX) ||
+      !Number.isFinite(maxX) ||
+      !Number.isFinite(minZ) ||
+      !Number.isFinite(maxZ)
+    ) {
+      return;
+    }
+    this.currentStamp++;
+    if (this.currentStamp >= 0x7fffffff) {
+      this.seenStamp.fill(0);
+      this.currentStamp = 1;
+    }
+    const stamp = this.currentStamp;
+
+    for (let k = 0; k < this.oversized.length; k++) {
+      const id = this.oversized[k];
+      if (this.seenStamp[id] !== stamp) {
+        this.seenStamp[id] = stamp;
+        out.push(id);
+      }
+    }
+
+    const minCx = Math.floor(minX / this.cellSize);
+    const maxCx = Math.floor(maxX / this.cellSize);
+    const minCz = Math.floor(minZ / this.cellSize);
+    const maxCz = Math.floor(maxZ / this.cellSize);
+
+    if (
+      minCx < -ROAD_SPATIAL_CELL_OFFSET ||
+      maxCx >= ROAD_SPATIAL_CELL_OFFSET ||
+      minCz < -ROAD_SPATIAL_CELL_OFFSET ||
+      maxCz >= ROAD_SPATIAL_CELL_OFFSET ||
+      (maxCx - minCx + 1) * (maxCz - minCz + 1) > ROAD_SPATIAL_MAX_CELLS_PER_ITEM
+    ) {
+      this.cells.forEach((bucket) => {
+        for (let k = 0; k < bucket.length; k++) {
+          const id = bucket[k];
+          if (this.seenStamp[id] !== stamp) {
+            this.seenStamp[id] = stamp;
+            out.push(id);
+          }
+        }
+      });
+    } else {
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        for (let cz = minCz; cz <= maxCz; cz++) {
+          const key =
+            (cx + ROAD_SPATIAL_CELL_OFFSET) * ROAD_SPATIAL_CELL_STRIDE +
+            (cz + ROAD_SPATIAL_CELL_OFFSET);
+          const bucket = this.cells.get(key);
+          if (!bucket) continue;
+          for (let k = 0; k < bucket.length; k++) {
+            const id = bucket[k];
+            if (this.seenStamp[id] !== stamp) {
+              this.seenStamp[id] = stamp;
+              out.push(id);
+            }
+          }
+        }
+      }
+    }
+
+    if (out.length > 1) {
+      out.sort((a, b) => a - b);
+    }
+  }
 }
 
 function snapCoord(v: number): number {
@@ -2933,6 +3061,8 @@ export function buildGraphAtGradeRoadGeometries(
 
   // 4. Track 2D polygon footprints of placed junctions and road ribbons for Boolean clipping
   const placedRoadFootprints: PlacedRoadFootprint[] = [];
+  const roadFootprintGrid = new RoadFootprintSpatialGrid();
+  const gridQueryCandidates: number[] = [];
 
   // Track exactly the final polygonal surface, including disconnected components and holes.
   // Registering only the outer ring (or skipping a component) makes subsequent Boolean
@@ -2953,7 +3083,9 @@ export function buildGraphAtGradeRoadGeometries(
       }
     }
     if (minX < maxX && minZ < maxZ) {
-      placedRoadFootprints.push({ id, isPath, minX, maxX, minZ, maxZ, poly });
+      const orderIdx = placedRoadFootprints.length;
+      placedRoadFootprints.push({ orderIdx, id, isPath, minX, maxX, minZ, maxZ, poly });
+      roadFootprintGrid.insert(orderIdx, minX, maxX, minZ, maxZ);
     }
   };
 
@@ -3000,13 +3132,22 @@ export function buildGraphAtGradeRoadGeometries(
           }
         }
       }
-      const blockers = placedRoadFootprints.filter((fp) =>
+      roadFootprintGrid.query(minX, maxX, minZ, maxZ, gridQueryCandidates);
+      const blockers: PlacedRoadFootprint[] = [];
+      for (let ci = 0; ci < gridQueryCandidates.length; ci++) {
+        const fp = placedRoadFootprints[gridQueryCandidates[ci]];
         // Other path ribbons have not been emitted yet. Only pre-existing
         // path *junction* patches should block neighboring path patches.
-        (!fp.isPath || fp.id.startsWith('path-junction-')) &&
-        fp.maxX > minX && fp.minX < maxX &&
-        fp.maxZ > minZ && fp.minZ < maxZ
-      );
+        if (
+          (!fp.isPath || fp.id.startsWith('path-junction-')) &&
+          fp.maxX > minX &&
+          fp.minX < maxX &&
+          fp.maxZ > minZ &&
+          fp.minZ < maxZ
+        ) {
+          blockers.push(fp);
+        }
+      }
       if (blockers.length > 0) {
         try {
           visibleJunctionPoly = filterDegenerateBooleanArtifacts(
@@ -3282,16 +3423,35 @@ export function buildGraphAtGradeRoadGeometries(
           }
 
           const tClipStart = performance.now();
-          const ptsOnSurface = stroke.flatMap((polygon) => polygon.flat());
-          const minX = Math.min(...ptsOnSurface.map((p) => p[0]));
-          const maxX = Math.max(...ptsOnSurface.map((p) => p[0]));
-          const minZ = Math.min(...ptsOnSurface.map((p) => p[1]));
-          const maxZ = Math.max(...ptsOnSurface.map((p) => p[1]));
-          stats.candidateBlockerCheckCount += placedRoadFootprints.length;
-          const blockers = placedRoadFootprints.filter((fp) =>
-            (isPath || !fp.isPath) && fp.maxX > minX && fp.minX < maxX &&
-            fp.maxZ > minZ && fp.minZ < maxZ
-          );
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          for (let pi = 0; pi < stroke.length; pi++) {
+            const polygon = stroke[pi];
+            for (let ri = 0; ri < polygon.length; ri++) {
+              const ring = polygon[ri];
+              for (let vi = 0; vi < ring.length; vi++) {
+                const pt = ring[vi];
+                if (pt[0] < minX) minX = pt[0];
+                if (pt[0] > maxX) maxX = pt[0];
+                if (pt[1] < minZ) minZ = pt[1];
+                if (pt[1] > maxZ) maxZ = pt[1];
+              }
+            }
+          }
+          roadFootprintGrid.query(minX, maxX, minZ, maxZ, gridQueryCandidates);
+          stats.candidateBlockerCheckCount += gridQueryCandidates.length;
+          const blockers: PlacedRoadFootprint[] = [];
+          for (let ci = 0; ci < gridQueryCandidates.length; ci++) {
+            const fp = placedRoadFootprints[gridQueryCandidates[ci]];
+            if (
+              (isPath || !fp.isPath) &&
+              fp.maxX > minX &&
+              fp.minX < maxX &&
+              fp.maxZ > minZ &&
+              fp.minZ < maxZ
+            ) {
+              blockers.push(fp);
+            }
+          }
           stats.overlappingBlockerCount += blockers.length;
           try {
             if (blockers.length > 0) {
@@ -3439,8 +3599,10 @@ export function buildGraphAtGradeRoadGeometries(
             if (pt[1] + halfMargin > pMaxZ) pMaxZ = pt[1] + halfMargin;
           }
 
+          roadFootprintGrid.query(pMinX, pMaxX, pMinZ, pMaxZ, gridQueryCandidates);
           const candidateFootprints: PlacedRoadFootprint[] = [];
-          for (const fp of placedRoadFootprints) {
+          for (let ci = 0; ci < gridQueryCandidates.length; ci++) {
+            const fp = placedRoadFootprints[gridQueryCandidates[ci]];
             if (!isPath && fp.isPath) continue;
             // Skip footprints that share an exact 1D unclamped portal with this sub-segment
             if (!isPath && sub.exemptFootprintIds.has(fp.id)) continue;
@@ -3618,7 +3780,26 @@ export function buildGraphAtGradeRoadGeometries(
                     continue;
                   }
                   let overlapsExisting = false;
-                  for (const fp of placedRoadFootprints) {
+                  let sMinX = Infinity, sMaxX = -Infinity, sMinZ = Infinity, sMaxZ = -Infinity;
+                  for (let ri = 0; ri < subOutline.length; ri++) {
+                    const ring = subOutline[ri];
+                    for (let vi = 0; vi < ring.length; vi++) {
+                      const pt = ring[vi];
+                      if (pt[0] < sMinX) sMinX = pt[0];
+                      if (pt[0] > sMaxX) sMaxX = pt[0];
+                      if (pt[1] < sMinZ) sMinZ = pt[1];
+                      if (pt[1] > sMaxZ) sMaxZ = pt[1];
+                    }
+                  }
+                  roadFootprintGrid.query(
+                    sMinX - 1e-4,
+                    sMaxX + 1e-4,
+                    sMinZ - 1e-4,
+                    sMaxZ + 1e-4,
+                    gridQueryCandidates
+                  );
+                  for (let ci = 0; ci < gridQueryCandidates.length; ci++) {
+                    const fp = placedRoadFootprints[gridQueryCandidates[ci]];
                     if (!isPath && fp.isPath) continue;
                     try {
                       const subInter = polygonClipping.intersection(

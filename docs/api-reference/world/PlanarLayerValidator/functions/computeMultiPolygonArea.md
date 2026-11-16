@@ -8,7 +8,7 @@
 
 > **computeMultiPolygonArea**(`mp`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:375
+Defined in: world/PlanarLayerValidator.ts:380
 
 ## Parameters
 

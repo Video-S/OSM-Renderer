@@ -8,7 +8,7 @@
 
 > **computeRingPerimeter**(`ring`): `number`
 
-Defined in: world/PlanarLayerValidator.ts:328
+Defined in: world/PlanarLayerValidator.ts:333
 
 ## Parameters
 

@@ -8,7 +8,7 @@
 
 > **generateStepTreads**(`points`, `width`, `yElev`): `BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>
 
-Defined in: world/GeometryBuilder.ts:1706
+Defined in: world/GeometryBuilder.ts:1721
 
 Generates transverse raised 3D step treads along a `highway=steps` stairway polyline.
 

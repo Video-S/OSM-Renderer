@@ -8,6 +8,6 @@
 
 > `const` **MAX\_ALLOWED\_SURFACE\_FILL\_OVERLAP\_AREA**: `0.0001` = `1e-4`
 
-Defined in: world/PlanarLayerValidator.ts:90
+Defined in: world/PlanarLayerValidator.ts:95
 
 Tolerance for resolved mutually exclusive surface fill overlap (1 cm² = 1e-4 m²)

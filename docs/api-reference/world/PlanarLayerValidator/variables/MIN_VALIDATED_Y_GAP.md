@@ -8,4 +8,4 @@
 
 > `const` **MIN\_VALIDATED\_Y\_GAP**: `0.006` = `0.006`
 
-Defined in: world/PlanarLayerValidator.ts:104
+Defined in: world/PlanarLayerValidator.ts:109

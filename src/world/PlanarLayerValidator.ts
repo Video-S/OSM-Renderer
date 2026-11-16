@@ -86,6 +86,11 @@ export interface PlanarValidationReport {
   violations: PlanarValidationViolation[];
 }
 
+export interface ResolvePlanarPolygonsOptions {
+  /** Whether to run Stage 4 post-resolution pairwise mutual-exclusion audit (default: true). */
+  runPostResolutionAudit?: boolean;
+}
+
 /** Tolerance for resolved mutually exclusive surface fill overlap (1 cm² = 1e-4 m²) */
 export const MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA = 1e-4;
 
@@ -923,6 +928,344 @@ function bufferPolylineToMultiPolygon(
   return conditionPolygonToMultiPolygon([ring]);
 }
 
+const PLANAR_SPATIAL_GRID_CELL_SIZE = 64;
+const PLANAR_SPATIAL_CELL_OFFSET = 32768;
+const PLANAR_SPATIAL_CELL_STRIDE = 65536;
+const PLANAR_SPATIAL_MAX_CELLS_PER_ITEM = 4096;
+
+interface PolygonComponentMeta {
+  poly: [number, number][][];
+  bbox: PlanarBoundingBox;
+  holeBBoxes: PlanarBoundingBox[];
+}
+
+function computeRingBBoxFast(ring: [number, number][]): PlanarBoundingBox {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const pt = ring[i];
+    if (pt[0] < minX) minX = pt[0];
+    if (pt[0] > maxX) maxX = pt[0];
+    if (pt[1] < minZ) minZ = pt[1];
+    if (pt[1] > maxZ) maxZ = pt[1];
+  }
+  if (!Number.isFinite(minX)) {
+    return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
+function buildMultiPolygonComponentMeta(mp: MultiPolygonCoords): PolygonComponentMeta[] {
+  const metas: PolygonComponentMeta[] = [];
+  for (let c = 0; c < mp.length; c++) {
+    const poly = mp[c];
+    if (!poly || poly.length === 0 || !poly[0] || poly[0].length < 3) continue;
+    const bbox = computeRingBBoxFast(poly[0]);
+    const holeBBoxes: PlanarBoundingBox[] = [];
+    for (let h = 1; h < poly.length; h++) {
+      holeBBoxes.push(computeRingBBoxFast(poly[h]));
+    }
+    metas.push({ poly, bbox, holeBBoxes });
+  }
+  return metas;
+}
+
+function clipRingEdgeAxis(
+  ring: [number, number][],
+  axis: 0 | 1,
+  bound: number,
+  keepGte: boolean
+): [number, number][] {
+  if (ring.length === 0) return [];
+  const out: [number, number][] = [];
+  let prev = ring[ring.length - 1];
+  let prevInside = keepGte ? prev[axis] >= bound : prev[axis] <= bound;
+  for (let i = 0; i < ring.length; i++) {
+    const curr = ring[i];
+    const currInside = keepGte ? curr[axis] >= bound : curr[axis] <= bound;
+    if (currInside) {
+      if (!prevInside) {
+        const denom = curr[axis] - prev[axis];
+        const t = denom === 0 ? 0 : (bound - prev[axis]) / denom;
+        const otherAxis: 0 | 1 = axis === 0 ? 1 : 0;
+        const ix = prev[otherAxis] + t * (curr[otherAxis] - prev[otherAxis]);
+        out.push(axis === 0 ? [bound, ix] : [ix, bound]);
+      }
+      out.push(curr);
+    } else if (prevInside) {
+      const denom = curr[axis] - prev[axis];
+      const t = denom === 0 ? 0 : (bound - prev[axis]) / denom;
+      const otherAxis: 0 | 1 = axis === 0 ? 1 : 0;
+      const ix = prev[otherAxis] + t * (curr[otherAxis] - prev[otherAxis]);
+      out.push(axis === 0 ? [bound, ix] : [ix, bound]);
+    }
+    prev = curr;
+    prevInside = currInside;
+  }
+  return out;
+}
+
+function clipClosedRingToBBox(
+  closedRing: [number, number][],
+  bbox: PlanarBoundingBox
+): [number, number][] | null {
+  if (closedRing.length < 4) return null;
+  // Pass unclosed vertex list into Sutherland-Hodgman
+  let pts: [number, number][] = closedRing.slice(0, closedRing.length - 1);
+  pts = clipRingEdgeAxis(pts, 0, bbox.minX, true);
+  if (pts.length < 3) return null;
+  pts = clipRingEdgeAxis(pts, 0, bbox.maxX, false);
+  if (pts.length < 3) return null;
+  pts = clipRingEdgeAxis(pts, 1, bbox.minZ, true);
+  if (pts.length < 3) return null;
+  pts = clipRingEdgeAxis(pts, 1, bbox.maxZ, false);
+  if (pts.length < 3) return null;
+  pts.push([pts[0][0], pts[0][1]]);
+  return pts;
+}
+
+function isBBoxInsideBBox(inner: PlanarBoundingBox, outer: PlanarBoundingBox): boolean {
+  return (
+    inner.minX >= outer.minX &&
+    inner.maxX <= outer.maxX &&
+    inner.minZ >= outer.minZ &&
+    inner.maxZ <= outer.maxZ
+  );
+}
+
+function prepareCompForClipBox(
+  comp: PolygonComponentMeta,
+  clipBox: PlanarBoundingBox
+): [number, number][][] | null {
+  const outer = comp.poly[0];
+  let clippedOuter: [number, number][] | null = outer;
+  if (outer.length > 16 && !isBBoxInsideBBox(comp.bbox, clipBox)) {
+    clippedOuter = clipClosedRingToBBox(outer, clipBox);
+    if (!clippedOuter) return null;
+  }
+
+  if (comp.holeBBoxes.length === 0) {
+    return [clippedOuter];
+  }
+
+  const rings: [number, number][][] = [clippedOuter];
+  for (let h = 0; h < comp.holeBBoxes.length; h++) {
+    const hb = comp.holeBBoxes[h];
+    if (
+      hb.maxX >= clipBox.minX &&
+      hb.minX <= clipBox.maxX &&
+      hb.maxZ >= clipBox.minZ &&
+      hb.minZ <= clipBox.maxZ
+    ) {
+      const hole = comp.poly[h + 1];
+      if (hole.length > 16 && !isBBoxInsideBBox(hb, clipBox)) {
+        const clippedHole = clipClosedRingToBBox(hole, clipBox);
+        if (clippedHole) rings.push(clippedHole);
+      } else {
+        rings.push(hole);
+      }
+    }
+  }
+  return rings;
+}
+
+function computeClippedIntersectionAreaWithMeta(
+  aMp: MultiPolygonCoords,
+  aComps: PolygonComponentMeta[],
+  bMp: MultiPolygonCoords,
+  bComps: PolygonComponentMeta[]
+): number {
+  if (
+    aComps.length === 1 &&
+    bComps.length === 1 &&
+    aComps[0].holeBBoxes.length === 0 &&
+    bComps[0].holeBBoxes.length === 0 &&
+    aComps[0].poly[0].length <= 16 &&
+    bComps[0].poly[0].length <= 16
+  ) {
+    const inter = polygonClipping.intersection(
+      aMp as polygonClipping.Geom,
+      bMp as polygonClipping.Geom
+    ) as unknown as MultiPolygonCoords;
+    return computeMultiPolygonArea(inter);
+  }
+
+  let totalArea = 0;
+  for (let ac = 0; ac < aComps.length; ac++) {
+    const aComp = aComps[ac];
+    for (let bc = 0; bc < bComps.length; bc++) {
+      const bComp = bComps[bc];
+      if (!doBoundingBoxesOverlap(aComp.bbox, bComp.bbox)) continue;
+      const paddedInterBBox: PlanarBoundingBox = {
+        minX: Math.max(aComp.bbox.minX, bComp.bbox.minX) - 0.05,
+        maxX: Math.min(aComp.bbox.maxX, bComp.bbox.maxX) + 0.05,
+        minZ: Math.max(aComp.bbox.minZ, bComp.bbox.minZ) - 0.05,
+        maxZ: Math.min(aComp.bbox.maxZ, bComp.bbox.maxZ) + 0.05,
+      };
+      const prunedA = prepareCompForClipBox(aComp, paddedInterBBox);
+      if (!prunedA) continue;
+      const prunedB = prepareCompForClipBox(bComp, paddedInterBBox);
+      if (!prunedB) continue;
+      const inter = polygonClipping.intersection(
+        [prunedA] as polygonClipping.Geom,
+        [prunedB] as polygonClipping.Geom
+      ) as unknown as MultiPolygonCoords;
+      totalArea += computeMultiPolygonArea(inter);
+    }
+  }
+  return totalArea;
+}
+
+class PlanarSpatialGrid {
+  private readonly cellSize: number;
+  private readonly cells = new Map<number, number[]>();
+  private readonly oversized: number[] = [];
+  private readonly seenStamp: Int32Array;
+  private currentStamp = 1;
+
+  constructor(maxIdCount: number, cellSize: number = PLANAR_SPATIAL_GRID_CELL_SIZE) {
+    this.cellSize = cellSize;
+    this.seenStamp = new Int32Array(Math.max(1, maxIdCount));
+  }
+
+  private getCellRange(bbox: PlanarBoundingBox): {
+    minCx: number;
+    maxCx: number;
+    minCz: number;
+    maxCz: number;
+    oversized: boolean;
+  } {
+    const minCx = Math.floor(bbox.minX / this.cellSize);
+    const maxCx = Math.floor(bbox.maxX / this.cellSize);
+    const minCz = Math.floor(bbox.minZ / this.cellSize);
+    const maxCz = Math.floor(bbox.maxZ / this.cellSize);
+    if (
+      !Number.isFinite(minCx) ||
+      !Number.isFinite(maxCx) ||
+      !Number.isFinite(minCz) ||
+      !Number.isFinite(maxCz) ||
+      minCx < -PLANAR_SPATIAL_CELL_OFFSET ||
+      maxCx >= PLANAR_SPATIAL_CELL_OFFSET ||
+      minCz < -PLANAR_SPATIAL_CELL_OFFSET ||
+      maxCz >= PLANAR_SPATIAL_CELL_OFFSET
+    ) {
+      return { minCx: 0, maxCx: -1, minCz: 0, maxCz: -1, oversized: true };
+    }
+    const spanX = maxCx - minCx + 1;
+    const spanZ = maxCz - minCz + 1;
+    if (spanX * spanZ > PLANAR_SPATIAL_MAX_CELLS_PER_ITEM) {
+      return { minCx, maxCx, minCz, maxCz, oversized: true };
+    }
+    return { minCx, maxCx, minCz, maxCz, oversized: false };
+  }
+
+  insert(id: number, bbox: PlanarBoundingBox): {
+    minCx: number;
+    maxCx: number;
+    minCz: number;
+    maxCz: number;
+    oversized: boolean;
+  } {
+    const range = this.getCellRange(bbox);
+    if (range.oversized) {
+      this.oversized.push(id);
+      return range;
+    }
+    for (let cx = range.minCx; cx <= range.maxCx; cx++) {
+      for (let cz = range.minCz; cz <= range.maxCz; cz++) {
+        const key = (cx + PLANAR_SPATIAL_CELL_OFFSET) * PLANAR_SPATIAL_CELL_STRIDE + (cz + PLANAR_SPATIAL_CELL_OFFSET);
+        let bucket = this.cells.get(key);
+        if (!bucket) {
+          bucket = [];
+          this.cells.set(key, bucket);
+        }
+        bucket.push(id);
+      }
+    }
+    return range;
+  }
+
+  queryAfter(minExclusiveId: number, bbox: PlanarBoundingBox, out: number[]): void {
+    out.length = 0;
+    this.currentStamp++;
+    if (this.currentStamp >= 0x7fffffff) {
+      this.seenStamp.fill(0);
+      this.currentStamp = 1;
+    }
+    const stamp = this.currentStamp;
+
+    for (let k = 0; k < this.oversized.length; k++) {
+      const id = this.oversized[k];
+      if (id > minExclusiveId && this.seenStamp[id] !== stamp) {
+        this.seenStamp[id] = stamp;
+        out.push(id);
+      }
+    }
+
+    const range = this.getCellRange(bbox);
+    if (range.oversized) {
+      this.cells.forEach((bucket) => {
+        for (let k = 0; k < bucket.length; k++) {
+          const id = bucket[k];
+          if (id > minExclusiveId && this.seenStamp[id] !== stamp) {
+            this.seenStamp[id] = stamp;
+            out.push(id);
+          }
+        }
+      });
+    } else {
+      for (let cx = range.minCx; cx <= range.maxCx; cx++) {
+        for (let cz = range.minCz; cz <= range.maxCz; cz++) {
+          const key = (cx + PLANAR_SPATIAL_CELL_OFFSET) * PLANAR_SPATIAL_CELL_STRIDE + (cz + PLANAR_SPATIAL_CELL_OFFSET);
+          const bucket = this.cells.get(key);
+          if (!bucket) continue;
+          for (let k = 0; k < bucket.length; k++) {
+            const id = bucket[k];
+            if (id > minExclusiveId && this.seenStamp[id] !== stamp) {
+              this.seenStamp[id] = stamp;
+              out.push(id);
+            }
+          }
+        }
+      }
+    }
+
+    if (out.length > 1) {
+      out.sort((a, b) => a - b);
+    }
+  }
+}
+
+function canPossiblyBeContainedByAreaAndBBox(
+  innerArea: number,
+  innerPerim: number,
+  innerBBox: PlanarBoundingBox,
+  outerBBox: PlanarBoundingBox,
+  interArea: number
+): boolean {
+  const maxAllowedArea = Math.min(2.5, Math.max(0.02, 0.05 * innerPerim));
+  const approxOutsideArea = innerArea - interArea;
+  if (approxOutsideArea > maxAllowedArea + 0.05) {
+    return false;
+  }
+  if (approxOutsideArea > 1e-3) {
+    if (
+      innerBBox.minX < outerBBox.minX - 0.26 ||
+      innerBBox.maxX > outerBBox.maxX + 0.26 ||
+      innerBBox.minZ < outerBBox.minZ - 0.26 ||
+      innerBBox.maxZ > outerBBox.maxZ + 0.26
+    ) {
+      return false;
+    }
+    if (computeBBoxContainmentRatio(innerBBox, outerBBox) <= 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 interface InternalSurfaceNode {
   id: string;
   sourceFeatureIds: string[];
@@ -938,6 +1281,7 @@ interface InternalSurfaceNode {
   name?: string;
   osmTags?: Record<string, unknown>;
   mp: MultiPolygonCoords;
+  compMeta: PolygonComponentMeta[];
   area: number;
   perimeter: number;
   bbox: PlanarBoundingBox;
@@ -956,11 +1300,13 @@ export function resolveAndValidatePlanarPolygons(
   landuse: LanduseFeature[],
   parks: ParkFeature[],
   waterBodies: WaterBodyFeature[] = [],
-  linearWaterways: LinearWaterwayFeature[] = []
+  linearWaterways: LinearWaterwayFeature[] = [],
+  options: ResolvePlanarPolygonsOptions = {}
 ): {
   resolvedById: Map<string, ResolvedPlanarLayer>;
   report: PlanarValidationReport;
 } {
+  const runPostResolutionAudit = options.runPostResolutionAudit !== false;
   const nodes: InternalSurfaceNode[] = [];
 
   for (const item of landuse || []) {
@@ -988,6 +1334,7 @@ export function resolveAndValidatePlanarPolygons(
       name: item.name,
       osmTags: item.osmTags,
       mp,
+      compMeta: buildMultiPolygonComponentMeta(mp),
       area,
       perimeter,
       bbox,
@@ -1019,6 +1366,7 @@ export function resolveAndValidatePlanarPolygons(
       name: item.name,
       osmTags: item.osmTags,
       mp,
+      compMeta: buildMultiPolygonComponentMeta(mp),
       area,
       perimeter,
       bbox,
@@ -1051,6 +1399,7 @@ export function resolveAndValidatePlanarPolygons(
       name: item.name,
       osmTags: item.osmTags,
       mp,
+      compMeta: buildMultiPolygonComponentMeta(mp),
       area,
       perimeter,
       bbox,
@@ -1058,12 +1407,12 @@ export function resolveAndValidatePlanarPolygons(
   }
 
   // Also include surface linear waterways as water replacement footprints so ground cover is cut back along canals/streams
-  const waterwayFootprints: MultiPolygonCoords[] = [];
+  const waterwayFootprints: Array<{ mp: MultiPolygonCoords; bbox: PlanarBoundingBox }> = [];
   for (const ww of linearWaterways || []) {
     if (ww.isTunnel || (ww.layer !== undefined && ww.layer < 0)) continue;
     const wwMp = bufferPolylineToMultiPolygon(ww.points, ww.width || 10.0);
     if (wwMp.length > 0) {
-      waterwayFootprints.push(wwMp);
+      waterwayFootprints.push({ mp: wwMp, bbox: computeMultiPolygonBBox(wwMp) });
     }
   }
 
@@ -1074,71 +1423,125 @@ export function resolveAndValidatePlanarPolygons(
   let conflictsResolved = 0;
 
   // ============================================================================
-  // STAGE 1: Intra-Type Deduplication & Logical Fragment Union
+  // STAGE 1: Intra-Type Deduplication & Logical Fragment Union (Spatial Grid)
   // ============================================================================
   const n = nodes.length;
+  const stage1Buckets = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
-    const a = nodes[i];
-    if (a.mergedIntoId) continue;
+    const key = `${nodes[i].category}::${nodes[i].subtype}`;
+    let bucket = stage1Buckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      stage1Buckets.set(key, bucket);
+    }
+    bucket.push(i);
+  }
 
-    for (let j = i + 1; j < n; j++) {
-      const b = nodes[j];
-      if (b.mergedIntoId) continue;
-      if (a.category !== b.category || a.subtype !== b.subtype) continue;
-      if (!doBoundingBoxesOverlap(a.bbox, b.bbox)) continue;
+  const stage1Candidates: number[] = [];
+  const stage1ExtraCandidates: number[] = [];
+  stage1Buckets.forEach((bucketIndices) => {
+    if (bucketIndices.length <= 1) return;
+    const stage1Grid = new PlanarSpatialGrid(n);
+    for (let bi = 0; bi < bucketIndices.length; bi++) {
+      const idx = bucketIndices[bi];
+      stage1Grid.insert(idx, nodes[idx].bbox);
+    }
 
-      let interArea = 0;
-      try {
-        const inter = polygonClipping.intersection(
-          a.mp as polygonClipping.Geom,
-          b.mp as polygonClipping.Geom
-        ) as unknown as MultiPolygonCoords;
-        interArea = computeMultiPolygonArea(inter);
-      } catch {
-        interArea = 0;
-      }
-      if (interArea <= MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA) continue;
+    for (let bi = 0; bi < bucketIndices.length; bi++) {
+      const i = bucketIndices[bi];
+      const a = nodes[i];
+      if (a.mergedIntoId) continue;
 
-      const isDup = isConfirmedDuplicateSurface(a, b);
-      const bothUnnamedSameSubtype =
-        !a.name &&
-        !b.name &&
-        !a.osmTags?.name &&
-        !b.osmTags?.name &&
-        (a.osmTags?.amenity || '') === (b.osmTags?.amenity || '') &&
-        a.semanticClass !== 'SPORTS_PITCH' &&
-        a.semanticClass !== 'PARKING_SPACE_DECAL';
+      stage1Grid.queryAfter(i, a.bbox, stage1Candidates);
+      if (stage1Candidates.length === 0) continue;
 
-      if (isDup || bothUnnamedSameSubtype) {
+      // Track candidates already queued in sorted ascending order so expanding `a.bbox`
+      // never misses or re-visits any candidate `k > j`.
+      const queuedSet = new Set<number>(stage1Candidates);
+      for (let cIdx = 0; cIdx < stage1Candidates.length; cIdx++) {
+        const j = stage1Candidates[cIdx];
+        const b = nodes[j];
+        if (b.mergedIntoId) continue;
+        if (!doBoundingBoxesOverlap(a.bbox, b.bbox)) continue;
+
+        let interArea = 0;
         try {
-          const unioned = polygonClipping.union(
-            a.mp as polygonClipping.Geom,
-            b.mp as polygonClipping.Geom
-          ) as unknown as MultiPolygonCoords;
-          const cleaned = filterDegenerateBooleanArtifacts(unioned);
-          if (cleaned.length > 0) {
-            a.mp = cleaned;
-            a.area = computeMultiPolygonArea(cleaned);
-            a.perimeter = computeMultiPolygonPerimeter(cleaned);
-            a.bbox = computeMultiPolygonBBox(cleaned);
-            for (const sid of b.sourceFeatureIds) {
-              if (!a.sourceFeatureIds.includes(sid)) a.sourceFeatureIds.push(sid);
-            }
-            b.mergedIntoId = a.id;
-            b.mp = [];
-            if (isDup) deduplicatedCount++;
-            else unionedCount++;
-            conflictsResolved++;
-          }
+          interArea = computeClippedIntersectionAreaWithMeta(
+            a.mp,
+            a.compMeta,
+            b.mp,
+            b.compMeta
+          );
         } catch {
-          // Fall through to Stage 2 pairwise ownership difference if union fails
+          interArea = 0;
+        }
+        if (interArea <= MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA) continue;
+
+        const maxAllowedSymArea = Math.min(2.0, Math.max(0.08, 0.04 * Math.max(a.perimeter, b.perimeter)));
+        const approxSymArea = a.area + b.area - 2 * interArea;
+        const isDup =
+          approxSymArea <= maxAllowedSymArea + 0.05 && isConfirmedDuplicateSurface(a, b);
+        const bothUnnamedSameSubtype =
+          !a.name &&
+          !b.name &&
+          !a.osmTags?.name &&
+          !b.osmTags?.name &&
+          (a.osmTags?.amenity || '') === (b.osmTags?.amenity || '') &&
+          a.semanticClass !== 'SPORTS_PITCH' &&
+          a.semanticClass !== 'PARKING_SPACE_DECAL';
+
+        if (isDup || bothUnnamedSameSubtype) {
+          try {
+            const unioned = polygonClipping.union(
+              a.mp as polygonClipping.Geom,
+              b.mp as polygonClipping.Geom
+            ) as unknown as MultiPolygonCoords;
+            const cleaned = filterDegenerateBooleanArtifacts(unioned);
+            if (cleaned.length > 0) {
+              a.mp = cleaned;
+              a.compMeta = buildMultiPolygonComponentMeta(cleaned);
+              a.area = computeMultiPolygonArea(cleaned);
+              a.perimeter = computeMultiPolygonPerimeter(cleaned);
+              a.bbox = computeMultiPolygonBBox(cleaned);
+              for (const sid of b.sourceFeatureIds) {
+                if (!a.sourceFeatureIds.includes(sid)) a.sourceFeatureIds.push(sid);
+              }
+              b.mergedIntoId = a.id;
+              b.mp = [];
+              b.compMeta = [];
+              if (isDup) deduplicatedCount++;
+              else unionedCount++;
+              conflictsResolved++;
+
+              // Re-query expanded `a.bbox` for any newly overlapped `k > j`
+              stage1Grid.queryAfter(j, a.bbox, stage1ExtraCandidates);
+              let addedAny = false;
+              for (let ek = 0; ek < stage1ExtraCandidates.length; ek++) {
+                const candK = stage1ExtraCandidates[ek];
+                if (!queuedSet.has(candK)) {
+                  queuedSet.add(candK);
+                  stage1Candidates.push(candK);
+                  addedAny = true;
+                }
+              }
+              if (addedAny) {
+                const tail = stage1Candidates.slice(cIdx + 1).sort((x, y) => x - y);
+                stage1Candidates.length = cIdx + 1;
+                for (let tk = 0; tk < tail.length; tk++) {
+                  stage1Candidates.push(tail[tk]);
+                }
+              }
+            }
+          } catch {
+            // Fall through to Stage 2 pairwise ownership difference if union fails
+          }
         }
       }
     }
-  }
+  });
 
   // ============================================================================
-  // STAGE 2: Exhaustive Pairwise Ownership Classification
+  // STAGE 2: Exhaustive Pairwise Ownership Classification (Spatial Grid + Guards)
   // ============================================================================
   const activeIndices: number[] = [];
   for (let i = 0; i < n; i++) {
@@ -1155,11 +1558,20 @@ export function resolveAndValidatePlanarPolygons(
     precedences.set(idx, []);
   }
 
+  const stage2Grid = new PlanarSpatialGrid(activeIndices.length);
+  for (let ai = 0; ai < activeIndices.length; ai++) {
+    stage2Grid.insert(ai, nodes[activeIndices[ai]].bbox);
+  }
+  const stage2Candidates: number[] = [];
+  const stage2NonZeroOverlapPairKeys = new Set<number>();
+
   for (let ai = 0; ai < activeIndices.length; ai++) {
     const i = activeIndices[ai];
     const a = nodes[i];
 
-    for (let bi = ai + 1; bi < activeIndices.length; bi++) {
+    stage2Grid.queryAfter(ai, a.bbox, stage2Candidates);
+    for (let ci = 0; ci < stage2Candidates.length; ci++) {
+      const bi = stage2Candidates[ci];
       const j = activeIndices[bi];
       const b = nodes[j];
 
@@ -1167,22 +1579,66 @@ export function resolveAndValidatePlanarPolygons(
 
       let interArea = 0;
       try {
-        const inter = polygonClipping.intersection(
-          a.mp as polygonClipping.Geom,
-          b.mp as polygonClipping.Geom
-        ) as unknown as MultiPolygonCoords;
-        interArea = computeMultiPolygonArea(inter);
+        interArea = computeClippedIntersectionAreaWithMeta(
+          a.mp,
+          a.compMeta,
+          b.mp,
+          b.compMeta
+        );
       } catch {
         interArea = 0;
+      }
+
+      if (interArea > 0) {
+        stage2NonZeroOverlapPairKeys.add(i * n + j);
       }
 
       if (interArea <= MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA) continue;
       overlappingPairsChecked++;
 
-      const aInB = isGeometricallyContained(a.mp, b.mp, a.perimeter);
-      const bInA = isGeometricallyContained(b.mp, a.mp, b.perimeter);
+      let outcome: PairwiseOwnershipOutcome;
+      if (a.semanticClass === 'PARKING_SPACE_DECAL' || b.semanticClass === 'PARKING_SPACE_DECAL') {
+        outcome = 'INTENTIONAL_OVERLAY';
+      } else {
+        const baseOutcome = resolvePairwiseOutcome(a, b, false, false, false);
+        const aInBOutcome: PairwiseOwnershipOutcome =
+          a.semanticClass === 'MACRO_LANDUSE' && b.semanticClass !== 'MACRO_LANDUSE'
+            ? 'B_REPLACES_A'
+            : 'A_REPLACES_B';
+        const bInAOutcome: PairwiseOwnershipOutcome =
+          b.semanticClass === 'MACRO_LANDUSE' && a.semanticClass !== 'MACRO_LANDUSE'
+            ? 'A_REPLACES_B'
+            : 'B_REPLACES_A';
 
-      const outcome = resolvePairwiseOutcome(a, b, aInB, bInA, false);
+        const aMatters = aInBOutcome !== baseOutcome;
+        const bMatters = bInAOutcome !== baseOutcome;
+
+        if (!aMatters && !bMatters) {
+          outcome = baseOutcome;
+        } else {
+          const evalAInB = () =>
+            canPossiblyBeContainedByAreaAndBBox(a.area, a.perimeter, a.bbox, b.bbox, interArea) &&
+            isGeometricallyContained(a.mp, b.mp, a.perimeter);
+          const evalBInA = () =>
+            canPossiblyBeContainedByAreaAndBBox(b.area, b.perimeter, b.bbox, a.bbox, interArea) &&
+            isGeometricallyContained(b.mp, a.mp, b.perimeter);
+
+          let aInB = false;
+          let bInA = false;
+          if (aMatters && !bMatters) {
+            aInB = evalAInB();
+            if (aInB) bInA = evalBInA();
+          } else if (!aMatters && bMatters) {
+            bInA = evalBInA();
+            if (bInA) aInB = evalAInB();
+          } else {
+            aInB = evalAInB();
+            bInA = evalBInA();
+          }
+          outcome = resolvePairwiseOutcome(a, b, aInB, bInA, false);
+        }
+      }
+
       if (outcome === 'A_REPLACES_B') {
         replacersOf.get(j)!.push(i);
         precedences.get(j)!.push(i);
@@ -1266,6 +1722,16 @@ export function resolveAndValidatePlanarPolygons(
   // ============================================================================
   const resolvedById = new Map<string, ResolvedPlanarLayer>();
 
+  const waterwayGrid =
+    waterwayFootprints.length > 0 ? new PlanarSpatialGrid(waterwayFootprints.length) : null;
+  if (waterwayGrid) {
+    for (let w = 0; w < waterwayFootprints.length; w++) {
+      waterwayGrid.insert(w, waterwayFootprints[w].bbox);
+    }
+  }
+  const wwCandidates: number[] = [];
+  const stage3Modified = new Uint8Array(n);
+
   for (let i = 0; i < n; i++) {
     const node = nodes[i];
     if (node.mergedIntoId) {
@@ -1305,12 +1771,13 @@ export function resolveAndValidatePlanarPolygons(
     if (
       node.semanticClass !== 'WATER_BODY' &&
       node.semanticClass !== 'PARKING_SPACE_DECAL' &&
-      waterwayFootprints.length > 0
+      waterwayGrid
     ) {
-      for (const wwMp of waterwayFootprints) {
-        const wwBBox = computeMultiPolygonBBox(wwMp);
-        if (doBoundingBoxesOverlap(node.bbox, wwBBox)) {
-          clipGeoms.push(wwMp as polygonClipping.Geom);
+      waterwayGrid.queryAfter(-1, node.bbox, wwCandidates);
+      for (let wi = 0; wi < wwCandidates.length; wi++) {
+        const ww = waterwayFootprints[wwCandidates[wi]];
+        if (doBoundingBoxesOverlap(node.bbox, ww.bbox)) {
+          clipGeoms.push(ww.mp as polygonClipping.Geom);
         }
       }
     }
@@ -1333,6 +1800,7 @@ export function resolveAndValidatePlanarPolygons(
           higherUnionMp as polygonClipping.Geom
         ) as unknown as MultiPolygonCoords;
         finalMp = filterDegenerateBooleanArtifacts(diff);
+        stage3Modified[i] = 1;
         booleanSubtractionsCount++;
       } catch {
         finalMp = node.mp;
@@ -1372,50 +1840,124 @@ export function resolveAndValidatePlanarPolygons(
 
   // ============================================================================
   // STAGE 4: Post-Resolution Surface Fill Mutual-Exclusion Audit
+  //          (Component-Level Spatial Grid + Interior Hole BBox Pruning)
   // ============================================================================
-  const activeResolved = Array.from(resolvedById.values()).filter(
-    (l) => !l.isDeduplicatedInto && l.resolvedMultiPolygon.length > 0
-  );
-
   const violations: PlanarValidationViolation[] = [];
   let maxResidualOverlap = 0;
 
-  for (let i = 0; i < activeResolved.length; i++) {
-    const a = activeResolved[i];
-    if (a.semanticClass === 'PARKING_SPACE_DECAL') continue;
+  if (runPostResolutionAudit) {
+    const activeResolved: ResolvedPlanarLayer[] = [];
+    const activeNodeIndex: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const layer = resolvedById.get(nodes[i].id);
+      if (layer && !layer.isDeduplicatedInto && layer.resolvedMultiPolygon.length > 0) {
+        activeResolved.push(layer);
+        activeNodeIndex.push(i);
+      }
+    }
 
-    for (let j = i + 1; j < activeResolved.length; j++) {
-      const b = activeResolved[j];
-      if (b.semanticClass === 'PARKING_SPACE_DECAL') continue;
-      if (!doBoundingBoxesOverlap(a.bbox, b.bbox)) continue;
+    const auditableIndices: number[] = [];
+    const compMetasByLayer = new Map<number, PolygonComponentMeta[]>();
+    interface CompEntry {
+      layerIdx: number;
+      meta: PolygonComponentMeta;
+    }
+    const allComps: CompEntry[] = [];
+    const compOffsets = new Int32Array(activeResolved.length + 1);
 
-      let residualArea = 0;
-      try {
-        const inter = polygonClipping.intersection(
-          a.resolvedMultiPolygon as polygonClipping.Geom,
-          b.resolvedMultiPolygon as polygonClipping.Geom
-        ) as unknown as MultiPolygonCoords;
-        residualArea = computeMultiPolygonArea(inter);
-      } catch {
-        residualArea = 0;
+    for (let i = 0; i < activeResolved.length; i++) {
+      compOffsets[i] = allComps.length;
+      if (activeResolved[i].semanticClass === 'PARKING_SPACE_DECAL') continue;
+      auditableIndices.push(i);
+      const metas = buildMultiPolygonComponentMeta(activeResolved[i].resolvedMultiPolygon);
+      compMetasByLayer.set(i, metas);
+      for (let c = 0; c < metas.length; c++) {
+        allComps.push({ layerIdx: i, meta: metas[c] });
+      }
+    }
+    compOffsets[activeResolved.length] = allComps.length;
+
+    const compGrid = new PlanarSpatialGrid(allComps.length);
+    for (let cId = 0; cId < allComps.length; cId++) {
+      compGrid.insert(cId, allComps[cId].meta.bbox);
+    }
+
+    const candCompIds: number[] = [];
+    const candLayerPairs: number[] = [];
+    const seenLayerStamp = new Int32Array(Math.max(1, activeResolved.length));
+    let layerStamp = 1;
+
+    for (let ai = 0; ai < auditableIndices.length; ai++) {
+      const i = auditableIndices[ai];
+      const a = activeResolved[i];
+      const aNodeIdx = activeNodeIndex[i];
+      const aMetas = compMetasByLayer.get(i)!;
+      const startC = compOffsets[i];
+      const endC = compOffsets[i + 1];
+
+      layerStamp++;
+      candLayerPairs.length = 0;
+      const minCompExclusive = endC - 1;
+
+      for (let cId = startC; cId < endC; cId++) {
+        compGrid.queryAfter(minCompExclusive, allComps[cId].meta.bbox, candCompIds);
+        for (let k = 0; k < candCompIds.length; k++) {
+          const bCompId = candCompIds[k];
+          const bLayerIdx = allComps[bCompId].layerIdx;
+          if (bLayerIdx > i && seenLayerStamp[bLayerIdx] !== layerStamp) {
+            const bNodeIdx = activeNodeIndex[bLayerIdx];
+            if (stage3Modified[aNodeIdx] === 0 && stage3Modified[bNodeIdx] === 0) {
+              const pairKey = aNodeIdx < bNodeIdx ? aNodeIdx * n + bNodeIdx : bNodeIdx * n + aNodeIdx;
+              if (!stage2NonZeroOverlapPairKeys.has(pairKey)) continue;
+            }
+            if (doBoundingBoxesOverlap(allComps[cId].meta.bbox, allComps[bCompId].meta.bbox)) {
+              seenLayerStamp[bLayerIdx] = layerStamp;
+              candLayerPairs.push(bLayerIdx);
+            }
+          }
+        }
       }
 
-      if (residualArea > maxResidualOverlap) {
-        maxResidualOverlap = residualArea;
+      if (candLayerPairs.length === 0) continue;
+      if (candLayerPairs.length > 1) {
+        candLayerPairs.sort((x, y) => x - y);
       }
 
-      if (residualArea > MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA) {
-        violations.push({
-          polygonAId: a.id,
-          polygonBId: b.id,
-          subtypeA: a.subtype,
-          subtypeB: b.subtype,
-          elevationA: a.elevationY,
-          elevationB: b.elevationY,
-          separationMeters: Math.abs(a.elevationY - b.elevationY),
-          overlapAreaSqMeters: residualArea,
-          reason: `Resolved surface fills ${a.id} (${a.subtype}) and ${b.id} (${b.subtype}) still overlap by ${residualArea.toFixed(5)} m² (> ${MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA} m²)`,
-        });
+      for (let k = 0; k < candLayerPairs.length; k++) {
+        const j = candLayerPairs[k];
+        const b = activeResolved[j];
+        if (!doBoundingBoxesOverlap(a.bbox, b.bbox)) continue;
+
+        const bMetas = compMetasByLayer.get(j)!;
+        let residualArea = 0;
+        try {
+          residualArea = computeClippedIntersectionAreaWithMeta(
+            a.resolvedMultiPolygon,
+            aMetas,
+            b.resolvedMultiPolygon,
+            bMetas
+          );
+        } catch {
+          residualArea = 0;
+        }
+
+        if (residualArea > maxResidualOverlap) {
+          maxResidualOverlap = residualArea;
+        }
+
+        if (residualArea > MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA) {
+          violations.push({
+            polygonAId: a.id,
+            polygonBId: b.id,
+            subtypeA: a.subtype,
+            subtypeB: b.subtype,
+            elevationA: a.elevationY,
+            elevationB: b.elevationY,
+            separationMeters: Math.abs(a.elevationY - b.elevationY),
+            overlapAreaSqMeters: residualArea,
+            reason: `Resolved surface fills ${a.id} (${a.subtype}) and ${b.id} (${b.subtype}) still overlap by ${residualArea.toFixed(5)} m² (> ${MAX_ALLOWED_SURFACE_FILL_OVERLAP_AREA} m²)`,
+          });
+        }
       }
     }
   }

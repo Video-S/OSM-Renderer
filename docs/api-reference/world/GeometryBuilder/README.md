@@ -16,6 +16,7 @@
 - [CategorizedRoadOverlapDefect](interfaces/CategorizedRoadOverlapDefect.md)
 - [FaceFeatureRange](interfaces/FaceFeatureRange.md)
 - [GeometryBuilderOptions](interfaces/GeometryBuilderOptions.md)
+- [LegacyRoadRenderStats](interfaces/LegacyRoadRenderStats.md)
 - [RoadRibbonOptions](interfaces/RoadRibbonOptions.md)
 - [SurfaceCoverageDefect](interfaces/SurfaceCoverageDefect.md)
 - [SurfaceFirstCoverageValidationReport](interfaces/SurfaceFirstCoverageValidationReport.md)

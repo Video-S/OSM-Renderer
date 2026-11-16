@@ -8,7 +8,7 @@
 
 > **validatePlanarLayering**(`layers`, `overlappingPairsChecked?`, `conflictsResolved?`, `maxStackDepth?`): [`PlanarValidationReport`](../interfaces/PlanarValidationReport.md)
 
-Defined in: world/PlanarLayerValidator.ts:1446
+Defined in: world/PlanarLayerValidator.ts:1988
 
 Validates a list of resolved planar layers.
 Checks both:

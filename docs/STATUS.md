@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, General Performance Benchmarking Infrastructure `TKT-016`, Benchmark Reliability & Windows Compatibility `TKT-017`, & Regional Rendering Scalability Assessment `TKT-019` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; `TKT-018` full-test-suite memory investigation & `TKT-020` planar/road spatial-index optimization `open`; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, General Performance Benchmarking Infrastructure `TKT-016`, Benchmark Reliability & Windows Compatibility `TKT-017`, Regional Rendering Scalability Assessment `TKT-019`, & Planar Surface / Road Blocker Scaling Optimization `TKT-020` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; `TKT-018` full-test-suite memory investigation remains `open`; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -66,7 +66,13 @@
 
 ---
 
-## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), M2.3-E3-A2 (`TKT-011` — `closed`), M2.3-E3-B (`TKT-012` — `closed`), M2.3-E4-A (`TKT-013` — `closed`), Benchmarking Infrastructure (`TKT-016` & `TKT-017` — `closed`), & Regional Scalability Assessment (`TKT-019` — `closed`)
+## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), M2.3-E3-A2 (`TKT-011` — `closed`), M2.3-E3-B (`TKT-012` — `closed`), M2.3-E4-A (`TKT-013` — `closed`), Benchmarking Infrastructure (`TKT-016` & `TKT-017` — `closed`), Regional Scalability Assessment (`TKT-019` — `closed`), & Planar/Road Scaling Optimization (`TKT-020` — `closed`)
+
+- **Planar Surface Resolution, Road Blocker Spatial Indexing & Scaling Benchmark Reliability (`TKT-020` — Closed)**:
+   - Eliminated superlinear planar polygon resolution (`src/world/PlanarLayerValidator.ts`) via `64 m` deterministic `PlanarSpatialGrid` indexing, exact Stage 2 containment short-circuits, component-level Stage 4 spatial indexing, `stage3Modified` tracking, and Sutherland-Hodgman `0.05 m`-padded clip-box ring clipping (`prepareCompForClipBox`), plus optional `ResolvePlanarPolygonsOptions` (`runPostResolutionAudit`). Reduced container planar resolution by **`90.2%` at `S3`** (`5,078.6 ms` $\to$ `498.2 ms`) and **`95.4%` at `S4`** (`23,242.0 ms` $\to$ `1,063.1 ms`; also `-75.7%` at `S3` and `-89.5%` at `S4` vs. the Windows `i7-14650HX` `production-legacy` baseline) with **100% identical** MultiPolygon geometries, SHA-256 checksums, conflicts, unions, subtractions, and violation counts (`0` / `3` / `13` / `46`).
+   - Replaced quadratic `placedRoadFootprints` scans (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`) with a `32 m` `RoadFootprintSpatialGrid` (monotonic `orderIdx` sorting + zero-alloc `seenStamp` deduplication) and zero-allocation nested `stroke` bounding-box traversal, cutting `surface-first-e2plus-rplus` `candidateBlockerCheckCount` from `2,254,714` to **`18,139` at `S3` (`-99.20%`)** and from `14,418,060` to **`40,196` at `S4` (`-99.72%`)** while keeping **100% bit-identical** mesh buffers, `faceRanges`, `overlappingBlockerCount` (`517`, `2,015`, `6,523`, `15,888`), polygons, holes, and triangles.
+   - Fixed scaling worker reliability (`src/world/GeometryBuilder.ts`, `benchmarks/scalingWorker.ts`, `benchmarks/scalingRunner.ts`, `benchmarks/environment.ts`): removed duplicate standalone planar/railway calls per iteration, separated non-overlapping `primitiveConstructionMs` vs. `polygonUnionMs` (`roadSubStagesMs: null` + `disabled_by_config` for `graph-e2-e3`), forwarded `--expose-gc` / `--max-old-space-size` via `NODE_OPTIONS` (`gcInvokedBeforeRun: true`), and preserved `iteration_partial` samples on worker timeout.
+   - Verified on bounded `S1`–`S4` scaling run (`benchmarks/results/tkt020-hengelo-scaling.json`, `docs/tkt020-hengelo-scaling-report.md`): **`12/12` workloads completed** with `0` disposal leaks (`S4` full scene: `9,771.0 ms` Legacy, `5,442.7 ms` E2, `8,669.7 ms` E2+), resolving the previous `120 s` `S4` timeouts on E2 and E2+. Added `8` automated regression tests across `PlanarAndRoadSpatialIndex.test.ts` (`5`) and `RegionalScalabilityBenchmark.test.ts` (`3`).
 
 - **Regional Rendering Scalability Assessment (`TKT-019` — Closed)**:
    - Extracted deterministic real-world Hengelo scaling series (`S1` `250 m` through `S5` `4 km`, `957` to `96,836` features) from Geofabrik Overijssel PBF (`overijssel-261114.osm.pbf`) with SHA-256 manifest verification (`benchmarks/datasets/hengelo-scaling/manifest.json`).
@@ -111,18 +117,19 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-15 — TKT-017 & TKT-019 Closed, TKT-020 Proposed)
+## Verified Test & Build Results (2026-11-16 — TKT-020 Closed)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Benchmark & Scaling Suites (`TKT-016`, `TKT-017`, `TKT-019`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts src/world/RegionalScalabilityBenchmark.test.ts` | **26 / 26 passed** (`21` suites, `0` failures) |
-| **Core & Railway/Topology Batches 1–2 (10 files)** | `npx tsx --test --test-concurrency=1 ...` | **135 / 135 passed** (`0` failures); full `npm test` Windows 16 GB RAM resource investigation tracked separately in `TKT-018` |
+| **Focused Scaling, Road, & Benchmark Suites (10 files)** | `npx tsx --test src/world/PlanarAndRoadSpatialIndex.test.ts src/world/GraphRoadRendering.test.ts src/world/SurfaceFirstRoadRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts src/world/RegionalScalabilityBenchmark.test.ts src/world/ElevationAndZIndex.test.ts src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts src/world/FeatureCoverage.test.ts src/world/GeometryBuilder.test.ts` | **116 / 116 passed** (`23` suites, `0` failures); full `npm test` remains deferred under open `TKT-018` |
+| **Bounded `S1`–`S4` Hengelo Scaling Suite (`TKT-020`)** | `npx tsx benchmarks/scalingRunner.ts --max-scale=S4 --warmup=1 --iterations=3 --max-rss-mb=3072 --max-old-space-size-mb=2048 --timeout-ms=120000 --validator-max-edges=250 --out=benchmarks/results/tkt020-hengelo-scaling.json --md-out=docs/tkt020-hengelo-scaling-report.md` | **12 / 12 completed** (`gcInvokedBeforeRun: true`, `0` disposal leaks; `S4` `9.77 s` Legacy, `5.44 s` E2, `8.67 s` E2+) |
+| **Quick CPU Benchmark Smoke Check** | `npx tsx benchmarks/cpuRunner.ts --quick --no-save` | **Successful** (`4/4` quick workloads, `0` disposal leaks) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (`0` errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
-| **Owner Windows Hengelo S1–S5 Scaling Suite (`TKT-019`)** | `npx tsx benchmarks/scalingRunner.ts` (`commit dc422d200874`, `gitDirty: true`, Windows i7-14650HX) | **Verified** (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`: Legacy completed `S1`–`S4` at `14.45 s` / `1.11 GB` RSS; E2 & E2+ completed `S1`–`S3`; `0` disposal leaks across all `10` completed workloads) |
-| **Owner Windows RTX 4060 Ti Hardware Verification (`TKT-017`)** | `npx tsx benchmarks/browserRunner.ts --quick --require-hardware` (`commit ea5848e52e51`, `gitDirty: true`) | **Verified** (`NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11, `20/20` `--quick` scenarios, `238/240` valid GPU timer samples + `2` `pending`, `4/4` lifecycle audits with `0` WebGL leaks, `12/12` CPU workloads with `0` leaks) |
-| **Container SwiftShader Browser Benchmark (`v1.1.0`)** | `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** (`benchmarks/baselines/browser-baseline.json`, explicitly labeled `isSoftwareRenderer: true`) |
-| **Benchmark Comparison CLI** | `npx tsx benchmarks/compare.ts ...` | **Successful** (`COMPATIBLE`, `0` regressions on `cpu-baseline.json` and `browser-baseline.json`) |
+| **Owner Windows Hengelo S1–S5 Baseline (`TKT-019`)** | `npx tsx benchmarks/scalingRunner.ts` (`commit dc422d200874`, `gitDirty: true`, Windows i7-14650HX) | **Verified** (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`) |
+| **Owner Windows RTX 4060 Ti Hardware Verification (`TKT-017`)** | `npx tsx benchmarks/browserRunner.ts --quick --require-hardware` (`commit ea5848e52e51`, `gitDirty: true`) | **Verified** (`NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11, `20/20` `--quick` scenarios, `238/240` valid GPU timer samples, `0` WebGL leaks) |
+| **Container SwiftShader Browser Benchmark (`v1.1.0`)** | `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** (`benchmarks/baselines/browser-baseline.json`, `isSoftwareRenderer: true`) |
+| **Benchmark Comparison CLI** | `npx tsx benchmarks/compare.ts ...` | **Successful** (`COMPATIBLE`, `0` regressions) |
 
 *(Historical baselines preserved: `TKT-016` on 2026-11-13: `331 / 331 passed` across 24 test files; Stage E4-T2 on 2026-11-11: `280 / 280 passed`; Stage E4-T on 2026-11-11: `264 / 264 passed`; Stage E4-A on 2026-11-10: `246 / 246 passed`; Stage E3-B on 2026-11-10: `235 / 235 passed`; Stage E3-A2 on 2026-11-10: `227 / 227 passed`; Stage E3-A1 on 2026-11-09: `221 / 221 passed`; E2+ Baseline on 2026-11-09: `203 / 203 passed`; Stage E2 & Developer Tools `TKT-009` on 2026-11-07: `184 / 184 passed`; Stage E2 `M2.3-E2` on 2026-11-06: `161 / 161 passed`; M2.3-E1 closeout on 2026-11-06: `145 / 145 passed`; M2.3-D closeout on 2026-11-06: `135 / 135 passed`; M2.3-C closeout on 2026-11-05: `126 / 126 passed`; M2.3-B closeout on 2026-11-05: `108 / 108 passed`; M2.2 closeout on 2026-11-04: `92 / 92 passed`.)*
 
@@ -147,8 +154,9 @@
 | Specialized road/surface regression suites (`AdjacentServiceJunctions`, `BuswayRendering`, `PathJunctionCornerSmoothing`, `PizzaSlicePathJunctions`, `SurfaceVisibilityPolicy`) | 40 |
 | `BenchmarkInfrastructure.test.ts` (`TKT-016`) | 11 |
 | `BenchmarkReliability.test.ts` (`TKT-017`) | 10 |
-| `RegionalScalabilityBenchmark.test.ts` (`TKT-019`) | 5 |
-| **Total (`it` declarations / total subtests across 26 files)** | **335 (`346` with suite subtests)** |
+| `RegionalScalabilityBenchmark.test.ts` (`TKT-019`, `TKT-020`) | 8 |
+| `PlanarAndRoadSpatialIndex.test.ts` (`TKT-020`) | 5 |
+| **Total (`it` / `test` declarations across 27 files)** | **343 (`354` with suite subtests)** |
 
 ---
 

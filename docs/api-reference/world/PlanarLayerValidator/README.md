@@ -12,6 +12,7 @@
 - [PlanarValidationReport](interfaces/PlanarValidationReport.md)
 - [PlanarValidationViolation](interfaces/PlanarValidationViolation.md)
 - [ResolvedPlanarLayer](interfaces/ResolvedPlanarLayer.md)
+- [ResolvePlanarPolygonsOptions](interfaces/ResolvePlanarPolygonsOptions.md)
 
 ## Type Aliases
 

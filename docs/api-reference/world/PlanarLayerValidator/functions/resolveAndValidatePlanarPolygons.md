@@ -6,9 +6,9 @@
 
 # Function: resolveAndValidatePlanarPolygons()
 
-> **resolveAndValidatePlanarPolygons**(`landuse`, `parks`, `waterBodies?`, `linearWaterways?`): `object`
+> **resolveAndValidatePlanarPolygons**(`landuse`, `parks`, `waterBodies?`, `linearWaterways?`, `options?`): `object`
 
-Defined in: world/PlanarLayerValidator.ts:955
+Defined in: world/PlanarLayerValidator.ts:1299
 
 Resolves all planar surface polygons (`landuse`, `parks`, and `waterBodies`/`linearWaterways`)
 using the v5 4-Stage Semantic Surface Resolution Engine:
@@ -34,6 +34,10 @@ using the v5 4-Stage Semantic Surface Resolution Engine:
 ### linearWaterways?
 
 [`LinearWaterwayFeature`](../../../types/MapFeature/interfaces/LinearWaterwayFeature.md)[] = `[]`
+
+### options?
+
+[`ResolvePlanarPolygonsOptions`](../interfaces/ResolvePlanarPolygonsOptions.md) = `{}`
 
 ## Returns
 

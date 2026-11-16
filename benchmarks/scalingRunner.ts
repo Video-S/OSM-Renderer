@@ -32,6 +32,7 @@ import {
   ScalingResourceLimits,
   ScalingWorkloadResult,
 } from './types';
+import type { ScalingIterationPartialPayload } from './scalingWorker';
 
 const execFileAsync = promisify(execFile);
 
@@ -306,6 +307,22 @@ export interface RunIsolatedWorkloadOptions {
   cwd?: string;
 }
 
+export function buildWorkerNodeOptions(
+  baseNodeOptions: string | undefined,
+  maxOldSpaceSizeMB: number
+): string {
+  const existingTokens = (baseNodeOptions ?? '')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(
+      (token) =>
+        token.length > 0 &&
+        !token.startsWith('--max-old-space-size') &&
+        token !== '--expose-gc'
+    );
+  return [...existingTokens, '--expose-gc', `--max-old-space-size=${maxOldSpaceSizeMB}`].join(' ');
+}
+
 /**
  * Executes a single `(dataset, config)` workload inside an isolated, memory- and time-bounded
  * child Node process with live RSS polling and cross-platform process tree teardown.
@@ -320,8 +337,6 @@ export async function runIsolatedScalingWorkload(
   const workloadKey = `${options.dataset.descriptor.id}::${options.rendererConfig.id}`;
 
   const childArgs = [
-    '--expose-gc',
-    `--max-old-space-size=${limits.maxOldSpaceSizeMB}`,
     tsxCli,
     workerScriptPath,
     `--manifest=${path.resolve(options.manifestPath)}`,
@@ -333,14 +348,17 @@ export async function runIsolatedScalingWorkload(
     ...(options.extraWorkerArgs ?? []),
   ];
 
+  const workerEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_OPTIONS: buildWorkerNodeOptions(process.env.NODE_OPTIONS, limits.maxOldSpaceSizeMB),
+  };
+
   const startTime = performance.now();
   const child = spawn(process.execPath, childArgs, {
     cwd,
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: {
-      ...process.env,
-    },
+    env: workerEnv,
   });
 
   let stderrTail = '';
@@ -356,6 +374,7 @@ export async function runIsolatedScalingWorkload(
   let lastHeartbeatStage: string | null = null;
   let lastHeartbeatElapsedMs: number | null = null;
   let workerResult: ScalingWorkloadResult | null = null;
+  let latestPartial: ScalingIterationPartialPayload | null = null;
   let workerErrorMsg: string | null = null;
   let abortStatus: 'failed_timeout' | 'failed_memory_limit' | null = null;
   let abortReason = '';
@@ -381,6 +400,8 @@ export async function runIsolatedScalingWorkload(
       if (typeof msg.stage === 'string') lastHeartbeatStage = msg.stage;
       if (typeof msg.elapsedMs === 'number') lastHeartbeatElapsedMs = msg.elapsedMs;
       if (typeof msg.rssMB === 'number') updatePeakRss(msg.rssMB);
+    } else if (msg.type === 'iteration_partial' && msg.partial) {
+      latestPartial = msg.partial as ScalingIterationPartialPayload;
     } else if (msg.type === 'result' && msg.result) {
       workerResult = msg.result as ScalingWorkloadResult;
     } else if (msg.type === 'error' && msg.error) {
@@ -421,6 +442,45 @@ export async function runIsolatedScalingWorkload(
       const wallClockMs = Number((performance.now() - startTime).toFixed(2));
 
       if (abortStatus) {
+        if (latestPartial && latestPartial.completedMeasuredIterations > 0) {
+          const partialMemory = latestPartial.memory;
+          partialMemory.processRssMB.parentPolledPeakMB = peakPolledRssMB;
+          if (
+            peakPolledRssMB !== null &&
+            peakPolledRssMB > partialMemory.processRssMB.workerPeakObservedMB
+          ) {
+            partialMemory.processRssMB.workerPeakObservedMB = peakPolledRssMB;
+          }
+          resolve({
+            workloadKey,
+            dataset: options.dataset.descriptor,
+            rendererConfig: options.rendererConfig,
+            status: abortStatus,
+            statusReason: `${abortReason} Preserved ${latestPartial.completedMeasuredIterations}/${options.measuredIterations} completed measured iteration(s).`,
+            workerWallClockMs: wallClockMs,
+            lastHeartbeatStage,
+            lastHeartbeatElapsedMs,
+            warmupIterations: options.warmupIterations,
+            measuredIterations: options.measuredIterations,
+            completedMeasuredIterations: latestPartial.completedMeasuredIterations,
+            timingsMs: latestPartial.timingsMs,
+            memory: partialMemory,
+            sceneGeometry: latestPartial.sceneGeometry,
+            operations: latestPartial.operations,
+            completenessAndCorrectness: null,
+            unsupportedMetrics: latestPartial.unsupportedMetrics,
+            errors: [
+              {
+                phase: abortStatus,
+                datasetId: options.dataset.descriptor.id,
+                configId: options.rendererConfig.id,
+                message: abortReason,
+              },
+            ],
+          });
+          return;
+        }
+
         resolve({
           workloadKey,
           dataset: options.dataset.descriptor,
@@ -432,6 +492,7 @@ export async function runIsolatedScalingWorkload(
           lastHeartbeatElapsedMs,
           warmupIterations: options.warmupIterations,
           measuredIterations: options.measuredIterations,
+          completedMeasuredIterations: 0,
           timingsMs: null,
           memory: null,
           sceneGeometry: null,

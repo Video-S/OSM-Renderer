@@ -8,7 +8,7 @@
 
 > **computeRingMetrics**(`ring`): `object`
 
-Defined in: world/PlanarLayerValidator.ts:343
+Defined in: world/PlanarLayerValidator.ts:348
 
 ## Parameters
 

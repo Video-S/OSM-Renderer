@@ -8,6 +8,6 @@
 
 > `const` **MIN\_PLANAR\_Y\_SEPARATION**: `0.008` = `0.008`
 
-Defined in: world/PlanarLayerValidator.ts:102
+Defined in: world/PlanarLayerValidator.ts:107
 
 Legacy constants preserved for test compatibility

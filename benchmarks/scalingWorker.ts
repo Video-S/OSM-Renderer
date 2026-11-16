@@ -12,7 +12,6 @@ import {
   requiresInfrastructureGraphPreview,
 } from '../src/world/GeometryBuilder';
 import {
-  buildRailwayInfrastructure,
   RailwayBuildProfile,
   RailwayPrototypeStats,
 } from '../src/world/infrastructure/railways/RailwayGeometryBuilder';
@@ -30,7 +29,6 @@ import {
 } from '../src/world/infrastructure/rendering/InfrastructureRenderAdapter';
 import {
   PlanarValidationReport,
-  resolveAndValidatePlanarPolygons,
 } from '../src/world/PlanarLayerValidator';
 import { validateRoadNetworkGeometry } from '../src/world/ZFightingValidator';
 import { resolveRendererConfigs } from './scenarios';
@@ -41,11 +39,22 @@ import {
 import { computeSampleStatistics } from './stats';
 import type {
   BenchmarkErrorRecord,
+  CpuStageTimingBreakdown,
   ScalingCompletenessAndCorrectnessMetrics,
+  ScalingMemoryMetrics,
   ScalingOperationCounts,
   ScalingWorkloadResult,
   UnsupportedMetricNotice,
 } from './types';
+
+export interface ScalingIterationPartialPayload {
+  completedMeasuredIterations: number;
+  timingsMs: CpuStageTimingBreakdown;
+  memory: ScalingMemoryMetrics;
+  sceneGeometry: ScalingWorkloadResult['sceneGeometry'];
+  operations: ScalingOperationCounts | null;
+  unsupportedMetrics: UnsupportedMetricNotice[];
+}
 
 function tryTriggerGc(): boolean {
   const gcFn = (globalThis as any).gc;
@@ -250,6 +259,7 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
   const isGraphPreviewActive = requiresInfrastructureGraphPreview(renderOptions);
   const isGraphRoadActive =
     renderOptions.roads === 'graph' || renderOptions.roads === 'graph-surface';
+  const isSurfaceFirstRoadActive = renderOptions.roads === 'graph-surface';
 
   const unsupportedMetrics: UnsupportedMetricNotice[] = [];
   const errors: BenchmarkErrorRecord[] = [];
@@ -271,12 +281,12 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
       }
     );
   }
-  if (!isGraphRoadActive) {
+  if (!isSurfaceFirstRoadActive) {
     unsupportedMetrics.push({
       metricId: `${workloadKey}::roadSubStagesMs`,
       reason: 'disabled_by_config',
       explanation:
-        'Graph road sub-stage timing (footprint, union, clipping, triangulation) is only emitted when roads use "graph" or "graph-surface".',
+        'Surface-first road sub-stage timing (primitiveConstructionMs, polygonUnionMs, ownershipClippingMs, triangulationAndValidationMs) is only emitted when roads use "graph-surface".',
     });
   }
 
@@ -322,6 +332,7 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
   const adapterSamples: number[] = [];
   const planarSamples: number[] = [];
   const roadTotalSamples: number[] = [];
+  const roadPrimitiveSamples: number[] = [];
   const roadFootprintSamples: number[] = [];
   const roadUnionSamples: number[] = [];
   const roadClipSamples: number[] = [];
@@ -342,6 +353,70 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
   let capturedCompleteness: ScalingCompletenessAndCorrectnessMetrics | null = null;
   let lastOwnedGeosAfterDispose = 0;
   let lastOwnedMatsAfterDispose = 0;
+  let completedMeasuredIterations = 0;
+
+  const buildTimingsBreakdown = (): CpuStageTimingBreakdown => ({
+    geojsonParseAndClassifyMs: computeSampleStatistics(parseSamples),
+    infrastructureGraphBuildMs:
+      graphSamples.length > 0 ? computeSampleStatistics(graphSamples) : null,
+    graphToRendererAdapterMs:
+      adapterSamples.length > 0 ? computeSampleStatistics(adapterSamples) : null,
+    planarSurfaceResolutionMs:
+      planarSamples.length > 0 ? computeSampleStatistics(planarSamples) : null,
+    roadGeometryGenerationMs:
+      roadTotalSamples.length > 0 ? computeSampleStatistics(roadTotalSamples) : null,
+    roadSubStagesMs:
+      isSurfaceFirstRoadActive && roadTotalSamples.length > 0
+        ? {
+            primitiveConstructionMs: computeSampleStatistics(roadPrimitiveSamples),
+            footprintConstructionMs: computeSampleStatistics(roadFootprintSamples),
+            polygonUnionMs: computeSampleStatistics(roadUnionSamples),
+            ownershipClippingMs: computeSampleStatistics(roadClipSamples),
+            triangulationAndValidationMs: computeSampleStatistics(roadTriSamples),
+          }
+        : null,
+    railwayGeometryGenerationMs:
+      railGenSamples.length > 0 ? computeSampleStatistics(railGenSamples) : null,
+    fullSceneGeometryGenerationMs: computeSampleStatistics(fullSceneSamples),
+    sceneResourceDisposalMs: computeSampleStatistics(disposeSamples),
+  });
+
+  const buildMemoryMetrics = (memAfterSnapshot: NodeJS.MemoryUsage): ScalingMemoryMetrics => {
+    const netLeakedGeometries = lastOwnedGeosAfterDispose - warmedUpOwnedGeos;
+    const netLeakedMaterials = lastOwnedMatsAfterDispose - warmedUpOwnedMats;
+    const disposalVerified =
+      lastOwnedGeosAfterDispose === 0 &&
+      lastOwnedMatsAfterDispose === 0 &&
+      netLeakedGeometries === 0 &&
+      netLeakedMaterials === 0;
+    return {
+      cpuBufferMemory: capturedCpuBufferMemory,
+      workerV8Heap: {
+        gcInvokedBeforeRun,
+        heapUsedBeforeMB: toMB(memBefore.heapUsed),
+        heapUsedPeakMB: toMB(peakHeapUsedBytes),
+        heapUsedAfterDisposeMB: toMB(memAfterSnapshot.heapUsed),
+        heapDeltaAfterDisposeMB: toMB(memAfterSnapshot.heapUsed - memBefore.heapUsed),
+        externalMB: toMB(memAfterSnapshot.external),
+        arrayBuffersMB: toMB(memAfterSnapshot.arrayBuffers),
+      },
+      processRssMB: {
+        workerInitialMB: toMB(workerInitialRssBytes),
+        workerPeakObservedMB: toMB(peakRssBytes.value),
+        workerAfterDisposeMB: toMB(memAfterSnapshot.rss),
+        parentPolledPeakMB: null,
+      },
+      lifecycleAudit: {
+        warmupIterations: args.warmupIterations,
+        measuredIterations: completedMeasuredIterations,
+        ownedGeometriesAfterDispose: lastOwnedGeosAfterDispose,
+        ownedMaterialsAfterDispose: lastOwnedMatsAfterDispose,
+        netLeakedGeometries,
+        netLeakedMaterials,
+        disposalVerified,
+      },
+    };
+  };
 
   const capturedWarnings = new Set<string>();
   const origWarn = console.warn;
@@ -369,19 +444,7 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
       parseSamples.push(performance.now() - tParse0);
       updatePeakRss();
 
-      // 2. Standalone Planar Surface Timing (isolated stage timing)
-      sendHeartbeat(`iter_${i + 1}_planar`, startMs, peakRssBytes);
-      const tPlanar0 = performance.now();
-      resolveAndValidatePlanarPolygons(
-        parsedData.landuse || [],
-        parsedData.parks || [],
-        parsedData.waterBodies || [],
-        parsedData.linearWaterways || []
-      );
-      planarSamples.push(performance.now() - tPlanar0);
-      updatePeakRss();
-
-      // 3. Infrastructure Graph + Adapter (when enabled by config)
+      // 2. Infrastructure Graph + Adapter (when enabled by config; passed into buildScene to avoid double execution)
       let previewForScene: InfrastructureRenderPreviewResult | null = null;
       if (isGraphPreviewActive && parsedData.topologySource) {
         sendHeartbeat(`iter_${i + 1}_graph_adapter`, startMs, peakRssBytes);
@@ -393,24 +456,7 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
         updatePeakRss();
       }
 
-      // 4. Isolated Railway Geometry Generation Timing
-      sendHeartbeat(`iter_${i + 1}_railway`, startMs, peakRssBytes);
-      const railData = dataset.parseInput();
-      const railDescriptors = isGraphPreviewActive
-        ? previewForScene?.descriptors ?? undefined
-        : undefined;
-      const tRail0 = performance.now();
-      const railIsolated = buildRailwayInfrastructure(railData, theme, 8.0, {
-        renderSource: renderOptions.railways,
-        descriptors: railDescriptors,
-        switchPolicy: renderOptions.railwaySwitchPolicy,
-        ballastStrategy: renderOptions.railwayBallastStrategy,
-      });
-      railGenSamples.push(performance.now() - tRail0);
-      railIsolated.dispose();
-      updatePeakRss();
-
-      // 5. Full Scene Generation
+      // 3. Full Scene Generation (single pass — planar & railway timings measured inline inside buildScene)
       sendHeartbeat(`iter_${i + 1}_scene_build`, startMs, peakRssBytes);
       const builder = new GeometryBuilder({
         buildingHeightMultiplier: rendererConfig.buildingHeightMultiplier,
@@ -428,16 +474,28 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
       const memDuring = process.memoryUsage();
       if (memDuring.heapUsed > peakHeapUsedBytes) peakHeapUsedBytes = memDuring.heapUsed;
 
+      const planarMs = builtScene.landuseGroup.userData?.planarResolutionTimingMs;
+      if (typeof planarMs === 'number' && Number.isFinite(planarMs)) {
+        planarSamples.push(planarMs);
+      }
+      const railMs = builtScene.railwaysGroup.userData?.railwayGenerationTimingMs;
+      if (typeof railMs === 'number' && Number.isFinite(railMs)) {
+        railGenSamples.push(railMs);
+      }
+
       if (isGraphRoadActive) {
         const rTiming = builtScene.roadsGroup.userData?.graphRoadTiming as
           | GraphRoadGenerationTiming
           | undefined;
         if (rTiming) {
           roadTotalSamples.push(rTiming.totalRoadGenerationTimeMs);
-          roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
-          roadUnionSamples.push(rTiming.polygonUnionTimeMs);
-          roadClipSamples.push(rTiming.ownershipClippingTimeMs);
-          roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
+          if (isSurfaceFirstRoadActive) {
+            roadPrimitiveSamples.push(rTiming.primitiveConstructionTimeMs);
+            roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
+            roadUnionSamples.push(rTiming.polygonUnionTimeMs);
+            roadClipSamples.push(rTiming.ownershipClippingTimeMs);
+            roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
+          }
         }
       } else {
         const legacyMs = builtScene.roadsGroup.userData?.legacyRoadTimingMs;
@@ -446,8 +504,10 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
         }
       }
 
-      if (isFinalAuditIteration) {
-        sendHeartbeat(`iter_${i + 1}_audit`, startMs, peakRssBytes);
+      if (i === 0 || isFinalAuditIteration) {
+        if (isFinalAuditIteration) {
+          sendHeartbeat(`iter_${i + 1}_audit`, startMs, peakRssBytes);
+        }
         capturedCpuBufferMemory = builtScene.resources.getCpuBufferMemoryStats();
 
         const computeGroupTris = (g: THREE.Group): { verts: number; tris: number } => {
@@ -607,8 +667,9 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
           },
         };
 
-        // Completeness & Topology Audit
-        const provAudit = auditSceneProvenanceAndVertices(builtScene);
+        if (isFinalAuditIteration) {
+          // Completeness & Topology Audit
+          const provAudit = auditSceneProvenanceAndVertices(builtScene);
         const meshAudit = auditGraphRoadMeshIntegrity(builtScene.roadsGroup);
 
         // Topology audit (reuse preview graph if built, otherwise run audit graph on parsedData outside render timing)
@@ -821,17 +882,39 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
             surfaceFirstValidation,
           },
           capturedWarnings: Array.from(capturedWarnings),
-        };
+          };
+        }
       }
 
-      // 6. Scene Resource Disposal
+      // 4. Scene Resource Disposal
       sendHeartbeat(`iter_${i + 1}_dispose`, startMs, peakRssBytes);
       const tDisp0 = performance.now();
       builtScene.dispose();
       disposeSamples.push(performance.now() - tDisp0);
       lastOwnedGeosAfterDispose = builtScene.resources.ownedGeometriesCount;
       lastOwnedMatsAfterDispose = builtScene.resources.ownedMaterialsCount;
+      completedMeasuredIterations = i + 1;
       updatePeakRss();
+
+      if (typeof process.send === 'function') {
+        try {
+          const partialMemSnapshot = process.memoryUsage();
+          const partialPayload: ScalingIterationPartialPayload = {
+            completedMeasuredIterations,
+            timingsMs: buildTimingsBreakdown(),
+            memory: buildMemoryMetrics(partialMemSnapshot),
+            sceneGeometry: capturedSceneGeometry,
+            operations: capturedOperations,
+            unsupportedMetrics: [...unsupportedMetrics],
+          };
+          process.send({
+            type: 'iteration_partial',
+            partial: partialPayload,
+          });
+        } catch {
+          // Ignore broken IPC pipe if parent already aborted
+        }
+      }
     }
   } finally {
     console.warn = origWarn;
@@ -842,15 +925,8 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
   const memAfter = process.memoryUsage();
   updatePeakRss();
 
-  const netLeakedGeometries = lastOwnedGeosAfterDispose - warmedUpOwnedGeos;
-  const netLeakedMaterials = lastOwnedMatsAfterDispose - warmedUpOwnedMats;
-  const disposalVerified =
-    lastOwnedGeosAfterDispose === 0 &&
-    lastOwnedMatsAfterDispose === 0 &&
-    netLeakedGeometries === 0 &&
-    netLeakedMaterials === 0;
-
-  if (!disposalVerified) {
+  const finalMemory = buildMemoryMetrics(memAfter);
+  if (!finalMemory.lifecycleAudit.disposalVerified) {
     errors.push({
       phase: 'scene_resource_disposal',
       datasetId: dataset.descriptor.id,
@@ -873,55 +949,9 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
     lastHeartbeatElapsedMs: Number((performance.now() - startMs).toFixed(1)),
     warmupIterations: args.warmupIterations,
     measuredIterations: args.measuredIterations,
-    timingsMs: {
-      geojsonParseAndClassifyMs: computeSampleStatistics(parseSamples),
-      infrastructureGraphBuildMs:
-        graphSamples.length > 0 ? computeSampleStatistics(graphSamples) : null,
-      graphToRendererAdapterMs:
-        adapterSamples.length > 0 ? computeSampleStatistics(adapterSamples) : null,
-      planarSurfaceResolutionMs: computeSampleStatistics(planarSamples),
-      roadGeometryGenerationMs:
-        roadTotalSamples.length > 0 ? computeSampleStatistics(roadTotalSamples) : null,
-      roadSubStagesMs:
-        isGraphRoadActive && roadTotalSamples.length > 0
-          ? {
-              footprintConstructionMs: computeSampleStatistics(roadFootprintSamples),
-              polygonUnionMs: computeSampleStatistics(roadUnionSamples),
-              ownershipClippingMs: computeSampleStatistics(roadClipSamples),
-              triangulationAndValidationMs: computeSampleStatistics(roadTriSamples),
-            }
-          : null,
-      railwayGeometryGenerationMs: computeSampleStatistics(railGenSamples),
-      fullSceneGeometryGenerationMs: computeSampleStatistics(fullSceneSamples),
-      sceneResourceDisposalMs: computeSampleStatistics(disposeSamples),
-    },
-    memory: {
-      cpuBufferMemory: capturedCpuBufferMemory,
-      workerV8Heap: {
-        gcInvokedBeforeRun,
-        heapUsedBeforeMB: toMB(memBefore.heapUsed),
-        heapUsedPeakMB: toMB(peakHeapUsedBytes),
-        heapUsedAfterDisposeMB: toMB(memAfter.heapUsed),
-        heapDeltaAfterDisposeMB: toMB(memAfter.heapUsed - memBefore.heapUsed),
-        externalMB: toMB(memAfter.external),
-        arrayBuffersMB: toMB(memAfter.arrayBuffers),
-      },
-      processRssMB: {
-        workerInitialMB: toMB(workerInitialRssBytes),
-        workerPeakObservedMB: toMB(peakRssBytes.value),
-        workerAfterDisposeMB: toMB(memAfter.rss),
-        parentPolledPeakMB: null,
-      },
-      lifecycleAudit: {
-        warmupIterations: args.warmupIterations,
-        measuredIterations: args.measuredIterations,
-        ownedGeometriesAfterDispose: lastOwnedGeosAfterDispose,
-        ownedMaterialsAfterDispose: lastOwnedMatsAfterDispose,
-        netLeakedGeometries,
-        netLeakedMaterials,
-        disposalVerified,
-      },
-    },
+    completedMeasuredIterations,
+    timingsMs: buildTimingsBreakdown(),
+    memory: finalMemory,
     sceneGeometry: capturedSceneGeometry,
     operations: capturedOperations,
     completenessAndCorrectness: capturedCompleteness,

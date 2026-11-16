@@ -249,7 +249,9 @@ export const STANDARD_METRIC_DEFINITIONS: Readonly<Record<string, string>> = Obj
   planarSurfaceResolutionMs:
     'Wall-clock CPU time (ms) in resolveAndValidatePlanarPolygons performing 2D Boolean ownership resolution and elevation separation for landuse, parks, and water.',
   roadGeometryGenerationMs:
-    'Wall-clock CPU time (ms) in buildGraphAtGradeRoadGeometries constructing at-grade road and junction BufferGeometries.',
+    'Wall-clock CPU time (ms) generating at-grade road and junction BufferGeometries (GraphRoadGeometryBuilder for graph/graph-surface, inline legacy road builder for legacy).',
+  roadSubStagesMs:
+    'Non-overlapping surface-first road sub-stage timings: primitiveConstructionMs + polygonUnionMs (together reported as parent footprintConstructionMs), ownershipClippingMs, and triangulationAndValidationMs.',
   railwayGeometryGenerationMs:
     'Wall-clock CPU time (ms) in buildRailwayInfrastructure constructing ballast, 3D instanced sleepers/bearers, 3D rails, and procedural UV ribbons.',
   fullSceneGeometryGenerationMs:

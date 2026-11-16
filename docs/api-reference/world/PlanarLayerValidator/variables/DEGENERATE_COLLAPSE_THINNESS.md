@@ -8,6 +8,6 @@
 
 > `const` **DEGENERATE\_COLLAPSE\_THINNESS**: `0.0005` = `0.0005`
 
-Defined in: world/PlanarLayerValidator.ts:99
+Defined in: world/PlanarLayerValidator.ts:104
 
 Degenerate numerical collapse thinness threshold: Area / Perimeter < 0.5 mm (0.0005 m)

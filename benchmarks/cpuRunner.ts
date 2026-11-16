@@ -70,6 +70,7 @@ function executeSingleCpuWorkload(
 
   const isGraphRoadActive =
     renderOptions.roads === 'graph' || renderOptions.roads === 'graph-surface';
+  const isSurfaceFirstRoadActive = renderOptions.roads === 'graph-surface';
 
   if (!isGraphRoadActive) {
     unsupportedMetrics.push({
@@ -77,6 +78,14 @@ function executeSingleCpuWorkload(
       reason: 'disabled_by_config',
       explanation:
         'Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is "graph" or "graph-surface"; in "legacy" mode road meshing executes inline inside GeometryBuilder.buildScene.',
+    });
+  }
+  if (!isSurfaceFirstRoadActive) {
+    unsupportedMetrics.push({
+      metricId: `${dataset.metadata.id}::${rendererConfig.id}::roadSubStagesMs`,
+      reason: 'disabled_by_config',
+      explanation:
+        'Surface-first road sub-stage timing is only emitted when infrastructureRenderOptions.roads is "graph-surface".',
     });
   }
 
@@ -123,6 +132,7 @@ function executeSingleCpuWorkload(
   const adapterSamples: number[] = [];
   const planarSamples: number[] = [];
   const roadTotalSamples: number[] = [];
+  const roadPrimitiveSamples: number[] = [];
   const roadFootprintSamples: number[] = [];
   const roadUnionSamples: number[] = [];
   const roadClipSamples: number[] = [];
@@ -219,10 +229,13 @@ function executeSingleCpuWorkload(
       | undefined;
     if (rTiming && isGraphRoadActive) {
       roadTotalSamples.push(rTiming.totalRoadGenerationTimeMs);
-      roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
-      roadUnionSamples.push(rTiming.polygonUnionTimeMs);
-      roadClipSamples.push(rTiming.ownershipClippingTimeMs);
-      roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
+      if (isSurfaceFirstRoadActive) {
+        roadPrimitiveSamples.push(rTiming.primitiveConstructionTimeMs);
+        roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
+        roadUnionSamples.push(rTiming.polygonUnionTimeMs);
+        roadClipSamples.push(rTiming.ownershipClippingTimeMs);
+        roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
+      }
     }
 
     const memDuringScene = process.memoryUsage();
@@ -316,8 +329,9 @@ function executeSingleCpuWorkload(
       roadGeometryGenerationMs:
         roadTotalSamples.length > 0 ? computeSampleStatistics(roadTotalSamples) : null,
       roadSubStagesMs:
-        roadTotalSamples.length > 0
+        isSurfaceFirstRoadActive && roadTotalSamples.length > 0
           ? {
+              primitiveConstructionMs: computeSampleStatistics(roadPrimitiveSamples),
               footprintConstructionMs: computeSampleStatistics(roadFootprintSamples),
               polygonUnionMs: computeSampleStatistics(roadUnionSamples),
               ownershipClippingMs: computeSampleStatistics(roadClipSamples),

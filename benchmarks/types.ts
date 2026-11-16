@@ -154,8 +154,9 @@ export interface CpuStageTimingBreakdown {
   planarSurfaceResolutionMs: SampleStatistics | null;
   /** Direct measurement of road geometry generation (GraphRoadGeometryBuilder / SurfaceFirstRoadFootprints when active) */
   roadGeometryGenerationMs: SampleStatistics | null;
-  /** Optional sub-stage breakdown for graph / surface-first road geometry generation */
+  /** Non-overlapping sub-stage breakdown for surface-first ("graph-surface") road geometry generation (footprintConstructionMs = primitiveConstructionMs + polygonUnionMs) */
   roadSubStagesMs?: {
+    primitiveConstructionMs?: SampleStatistics | null;
     footprintConstructionMs: SampleStatistics;
     polygonUnionMs: SampleStatistics;
     ownershipClippingMs: SampleStatistics;
@@ -671,6 +672,7 @@ export interface ScalingWorkloadResult {
   lastHeartbeatElapsedMs: number | null;
   warmupIterations: number;
   measuredIterations: number;
+  completedMeasuredIterations?: number;
   timingsMs: CpuStageTimingBreakdown | null;
   memory: ScalingMemoryMetrics | null;
   sceneGeometry: {

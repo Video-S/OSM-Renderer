@@ -95,7 +95,9 @@ export function formatScalingMarkdownReport(report: RegionalScalingReport): stri
         ? `${fmtMs(t.infrastructureGraphBuildMs)} + ${fmtMs(t.graphToRendererAdapterMs)}`
         : 'N/A (legacy)';
     const roadSub = t?.roadSubStagesMs
-      ? ` (fp ${fmtMs(t.roadSubStagesMs.footprintConstructionMs)}, un ${fmtMs(t.roadSubStagesMs.polygonUnionMs)}, cl ${fmtMs(t.roadSubStagesMs.ownershipClippingMs)}, tri ${fmtMs(t.roadSubStagesMs.triangulationAndValidationMs)})`
+      ? t.roadSubStagesMs.primitiveConstructionMs
+        ? ` (prim ${fmtMs(t.roadSubStagesMs.primitiveConstructionMs)}, un ${fmtMs(t.roadSubStagesMs.polygonUnionMs)}, cl ${fmtMs(t.roadSubStagesMs.ownershipClippingMs)}, tri ${fmtMs(t.roadSubStagesMs.triangulationAndValidationMs)})`
+        : ` (fp ${fmtMs(t.roadSubStagesMs.footprintConstructionMs)}, un ${fmtMs(t.roadSubStagesMs.polygonUnionMs)}, cl ${fmtMs(t.roadSubStagesMs.ownershipClippingMs)}, tri ${fmtMs(t.roadSubStagesMs.triangulationAndValidationMs)})`
       : '';
     const roadStr = `${fmtMs(t?.roadGeometryGenerationMs)}${roadSub}`;
     const rssStr = r.memory
@@ -108,9 +110,15 @@ export function formatScalingMarkdownReport(report: RegionalScalingReport): stri
         ? '0 (OK)'
         : `${r.memory.lifecycleAudit.netLeakedGeometries}g / ${r.memory.lifecycleAudit.netLeakedMaterials}m`
       : '—';
+    const partialBadge =
+      typeof r.completedMeasuredIterations === 'number' &&
+      r.completedMeasuredIterations < r.measuredIterations &&
+      r.completedMeasuredIterations > 0
+        ? ` (${r.completedMeasuredIterations}/${r.measuredIterations})`
+        : '';
 
     lines.push(
-      `| ${r.dataset.level} | \`${r.rendererConfig.id}\` | \`${r.status}\` | ${fmtMs(t?.fullSceneGeometryGenerationMs)} | ${fmtMs(t?.geojsonParseAndClassifyMs)} | ${graphAdapterStr} | ${fmtMs(t?.planarSurfaceResolutionMs)} | ${roadStr} | ${fmtMs(t?.railwayGeometryGenerationMs)} | ${rssStr} | ${fmtNum(r.memory?.cpuBufferMemory.totalMB, 2)} | ${fmtNum(r.sceneGeometry?.renderedTrianglesWithInstances)} | ${fmtNum(r.sceneGeometry?.constructedMeshesCount)} | ${leakStr} |`
+      `| ${r.dataset.level} | \`${r.rendererConfig.id}\` | \`${r.status}\`${partialBadge} | ${fmtMs(t?.fullSceneGeometryGenerationMs)} | ${fmtMs(t?.geojsonParseAndClassifyMs)} | ${graphAdapterStr} | ${fmtMs(t?.planarSurfaceResolutionMs)} | ${roadStr} | ${fmtMs(t?.railwayGeometryGenerationMs)} | ${rssStr} | ${fmtNum(r.memory?.cpuBufferMemory.totalMB, 2)} | ${fmtNum(r.sceneGeometry?.renderedTrianglesWithInstances)} | ${fmtNum(r.sceneGeometry?.constructedMeshesCount)} | ${leakStr} |`
     );
   }
   lines.push('');
@@ -122,7 +130,7 @@ export function formatScalingMarkdownReport(report: RegionalScalingReport): stri
   );
   lines.push('| :--- | :--- | :--- | :--- | :--- | :--- | ---: | :--- |');
   for (const r of report.results) {
-    if (r.status !== 'completed' || !r.operations) continue;
+    if (!r.operations) continue;
     const p = r.operations.planarSurface;
     const rd = r.operations.roads;
     const rl = r.operations.railways;

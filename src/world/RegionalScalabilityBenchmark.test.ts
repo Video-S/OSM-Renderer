@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import {
+  buildWorkerNodeOptions,
   formatScalingMarkdownReport,
   loadHengeloScalingDatasets,
   loadScalingDatasetManifest,
@@ -311,3 +312,154 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
     assert.equal(timeoutRes.lastHeartbeatStage, 'sleeping_test');
   });
 });
+
+describe('TKT-020 Phase 1: Benchmark Measurement Reliability & Partial Timeout Recovery', () => {
+  it('constructs worker NODE_OPTIONS with --expose-gc and explicit --max-old-space-size without duplication', () => {
+    assert.equal(
+      buildWorkerNodeOptions(undefined, 2048),
+      '--expose-gc --max-old-space-size=2048'
+    );
+    assert.equal(
+      buildWorkerNodeOptions('--no-warnings --max-old-space-size=512 --expose-gc', 3072),
+      '--no-warnings --expose-gc --max-old-space-size=3072'
+    );
+  });
+
+  it('forwards --expose-gc to worker, emits null roadSubStagesMs for graph-e2-e3, and non-overlapping roadSubStagesMs for E2+', async () => {
+    const { datasets } = loadHengeloScalingDatasets({
+      levelsOrIds: ['S1'],
+      verifyHashes: true,
+    });
+    const [graphCfg, sfCfg] = resolveRendererConfigs(['graph-e2-e3', 'surface-first-e2plus-rplus']);
+    const manifestPath = path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json');
+    const limits = {
+      maxRssMB: 2048,
+      maxOldSpaceSizeMB: 2048,
+      timeoutMs: 60_000,
+      validatorMaxEdges: 500,
+      rssPollIntervalMs: 100,
+    };
+
+    const graphRes = await runIsolatedScalingWorkload({
+      dataset: datasets[0],
+      rendererConfig: graphCfg,
+      manifestPath,
+      warmupIterations: 0,
+      measuredIterations: 1,
+      resourceLimits: limits,
+    });
+
+    assert.equal(graphRes.status, 'completed', graphRes.statusReason);
+    assert.equal(graphRes.memory?.workerV8Heap.gcInvokedBeforeRun, true);
+    assert.equal(graphRes.completedMeasuredIterations, 1);
+    assert.ok(graphRes.timingsMs !== null);
+    assert.equal(graphRes.timingsMs.roadSubStagesMs, null);
+    assert.ok(
+      graphRes.unsupportedMetrics.some(
+        (u) => u.metricId.endsWith('::roadSubStagesMs') && u.reason === 'disabled_by_config'
+      )
+    );
+    assert.ok(
+      (graphRes.timingsMs.planarSurfaceResolutionMs?.median ?? 0) +
+        (graphRes.timingsMs.roadGeometryGenerationMs?.median ?? 0) +
+        (graphRes.timingsMs.railwayGeometryGenerationMs?.median ?? 0) <=
+        graphRes.timingsMs.fullSceneGeometryGenerationMs.median + 5.0
+    );
+
+    const sfRes = await runIsolatedScalingWorkload({
+      dataset: datasets[0],
+      rendererConfig: sfCfg,
+      manifestPath,
+      warmupIterations: 0,
+      measuredIterations: 1,
+      resourceLimits: limits,
+    });
+
+    assert.equal(sfRes.status, 'completed', sfRes.statusReason);
+    assert.equal(sfRes.memory?.workerV8Heap.gcInvokedBeforeRun, true);
+    const sub = sfRes.timingsMs?.roadSubStagesMs;
+    assert.ok(sub !== null && sub !== undefined);
+    assert.ok(sub.primitiveConstructionMs !== null && sub.primitiveConstructionMs !== undefined);
+    const nonOverlappingSum =
+      sub.primitiveConstructionMs!.median +
+      sub.polygonUnionMs.median +
+      sub.ownershipClippingMs.median +
+      sub.triangulationAndValidationMs.median;
+    assert.ok(
+      nonOverlappingSum <= sfRes.timingsMs!.roadGeometryGenerationMs!.median + 0.5,
+      `Non-overlapping road substages (${nonOverlappingSum.toFixed(2)} ms) exceeded total (${sfRes.timingsMs!.roadGeometryGenerationMs!.median.toFixed(2)} ms)`
+    );
+  });
+
+  it('preserves completed iteration_partial timings and operations when a later iteration times out', async () => {
+    const tmpDir = createTempDir('tkt020-partial-timeout-');
+    const partialWorker = path.join(tmpDir, 'partial-timeout-worker.ts');
+    fs.writeFileSync(
+      partialWorker,
+      `
+      if (process.send) {
+        process.send({ type: 'heartbeat', stage: 'iter_1_scene_build', rssMB: 64, heapUsedMB: 32, elapsedMs: 25 });
+        process.send({
+          type: 'iteration_partial',
+          partial: {
+            completedMeasuredIterations: 1,
+            timingsMs: {
+              geojsonParseAndClassifyMs: { sampleCount: 1, min: 10, max: 10, mean: 10, median: 10, p95: 10, p99: 10, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [10] },
+              infrastructureGraphBuildMs: null,
+              graphToRendererAdapterMs: null,
+              planarSurfaceResolutionMs: { sampleCount: 1, min: 20, max: 20, mean: 20, median: 20, p95: 20, p99: 20, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [20] },
+              roadGeometryGenerationMs: { sampleCount: 1, min: 15, max: 15, mean: 15, median: 15, p95: 15, p99: 15, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [15] },
+              roadSubStagesMs: null,
+              railwayGeometryGenerationMs: { sampleCount: 1, min: 5, max: 5, mean: 5, median: 5, p95: 5, p99: 5, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [5] },
+              fullSceneGeometryGenerationMs: { sampleCount: 1, min: 60, max: 60, mean: 60, median: 60, p95: 60, p99: 60, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [60] },
+              sceneResourceDisposalMs: { sampleCount: 1, min: 2, max: 2, mean: 2, median: 2, p95: 2, p99: 2, stdDev: 0, iqr: 0, coefficientOfVariation: 0, samples: [2] }
+            },
+            memory: {
+              cpuBufferMemory: { geometryCount: 10, attributeBytes: 1024, indexBytes: 512, totalBytes: 1536, totalMB: 0.001 },
+              workerV8Heap: { gcInvokedBeforeRun: true, heapUsedBeforeMB: 30, heapUsedPeakMB: 50, heapUsedAfterDisposeMB: 32, heapDeltaAfterDisposeMB: 2, externalMB: 1, arrayBuffersMB: 1 },
+              processRssMB: { workerInitialMB: 50, workerPeakObservedMB: 70, workerAfterDisposeMB: 65, parentPolledPeakMB: null },
+              lifecycleAudit: { warmupIterations: 0, measuredIterations: 1, ownedGeometriesAfterDispose: 0, ownedMaterialsAfterDispose: 0, netLeakedGeometries: 0, netLeakedMaterials: 0, disposalVerified: true }
+            },
+            sceneGeometry: { constructedMeshesCount: 12, totalVertices: 100, totalTriangles: 50, renderedVerticesWithInstances: 100, renderedTrianglesWithInstances: 50, renderedFeaturesCount: 10, forestTreesCount: 0 },
+            operations: null,
+            unsupportedMetrics: []
+          }
+        });
+        process.send({ type: 'heartbeat', stage: 'iter_2_scene_build', rssMB: 66, heapUsedMB: 34, elapsedMs: 40 });
+      }
+      setTimeout(() => {}, 15000);
+      `,
+      'utf8'
+    );
+
+    const { datasets } = loadHengeloScalingDatasets({ levelsOrIds: ['S1'], verifyHashes: false });
+    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+
+    const timeoutRes = await runIsolatedScalingWorkload({
+      dataset: datasets[0],
+      rendererConfig: legacyCfg,
+      manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
+      warmupIterations: 0,
+      measuredIterations: 3,
+      workerScriptPath: partialWorker,
+      resourceLimits: {
+        maxRssMB: 1024,
+        maxOldSpaceSizeMB: 512,
+        timeoutMs: 1200,
+        rssPollIntervalMs: 50,
+        validatorMaxEdges: 100,
+      },
+    });
+
+    assert.equal(timeoutRes.status, 'failed_timeout');
+    assert.equal(timeoutRes.lastHeartbeatStage, 'iter_2_scene_build');
+    assert.equal(timeoutRes.completedMeasuredIterations, 1);
+    assert.equal(timeoutRes.measuredIterations, 3);
+    assert.ok(timeoutRes.statusReason.includes('Preserved 1/3 completed measured iteration(s)'));
+    assert.equal(timeoutRes.timingsMs?.fullSceneGeometryGenerationMs.sampleCount, 1);
+    assert.equal(timeoutRes.timingsMs?.fullSceneGeometryGenerationMs.median, 60);
+    assert.equal(timeoutRes.memory?.workerV8Heap.gcInvokedBeforeRun, true);
+    assert.equal(timeoutRes.sceneGeometry?.constructedMeshesCount, 12);
+  });
+});
+

@@ -2117,6 +2117,7 @@ export class GeometryBuilder {
     // ==========================================================================
     // 2. SEMANTIC SURFACE RESOLUTION & LANDUSE / PARKING AREAS
     // ==========================================================================
+    const tPlanarResolution0 = performance.now();
     const { resolvedById: resolvedPlanarById, report: planarValidationReport } =
       resolveAndValidatePlanarPolygons(
         data.landuse || [],
@@ -2124,6 +2125,7 @@ export class GeometryBuilder {
         data.waterBodies || [],
         data.linearWaterways || []
       );
+    const planarResolutionTimingMs = performance.now() - tPlanarResolution0;
 
     if (data.diagnostics) {
       data.diagnostics.planarValidation = {
@@ -2136,6 +2138,7 @@ export class GeometryBuilder {
       };
     }
     landuseGroup.userData.planarValidationReport = planarValidationReport;
+    landuseGroup.userData.planarResolutionTimingMs = planarResolutionTimingMs;
 
     const planarPolygonRingsById = new Map<string, [number, number][][]>();
     for (const lu of data.landuse) {
@@ -2828,6 +2831,7 @@ export class GeometryBuilder {
         infrastructureRenderPreview?.descriptors?.railwayEdges &&
         infrastructureRenderPreview.descriptors.railwayEdges.length > 0);
 
+    const tRailwayGen0 = performance.now();
     if (hasRailways) {
       railwayInfrastructureResult = buildRailwayInfrastructure(
         data,
@@ -2860,6 +2864,9 @@ export class GeometryBuilder {
       railwaysGroup.userData.portalGroundCutoutPolygons =
         railwayInfrastructureResult.portalGroundCutoutPolygons ?? [];
     }
+    railwaysGroup.userData.railwayGenerationTimingMs = hasRailways
+      ? performance.now() - tRailwayGen0
+      : 0;
 
     const bridgeSubstructureItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
     const bridgeParapetItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];

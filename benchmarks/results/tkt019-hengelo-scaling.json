@@ -1,0 +1,5354 @@
+{
+  "schemaVersion": "1.0.0",
+  "suite": "regional-scaling",
+  "benchmarkName": "OSM 3D Renderer — TKT-019 Hengelo S1–S5 Regional Scalability Assessment",
+  "generatedAtIso": "2026-11-15T22:26:27.230Z",
+  "environment": {
+    "gitCommitSha": "dc422d200874",
+    "gitDirty": true,
+    "gitBranch": "main",
+    "gitMetadataStatus": "available",
+    "timestampIso": "2026-11-15T22:26:27.361Z",
+    "nodeVersion": "v22.16.0",
+    "v8Version": "12.4.254.21-node.26",
+    "platform": "win32",
+    "osRelease": "10.0.26200",
+    "arch": "x64",
+    "cpuModel": "Intel(R) Core(TM) i7-14650HX",
+    "cpuLogicalCores": 24,
+    "totalSystemMemoryMB": 16017,
+    "gcExposed": false
+  },
+  "datasetSeries": {
+    "studyArea": "Hengelo, Overijssel, Netherlands (Progressive S1–S5 Regional Scaling Series)",
+    "sourceFileName": "overijssel-261114.osm.pbf",
+    "sourceSha256": "53d1f2d0b6c9461b4d752610c5c348bb48d1c1ac77838e75b934bf676a980243",
+    "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+    "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract",
+    "datasets": [
+      {
+        "level": "S1",
+        "id": "hengelo-s1-250m",
+        "name": "Hengelo Center S1 (250 × 250 m)",
+        "areaKm2": 0.0625,
+        "widthMeters": 250,
+        "depthMeters": 250,
+        "halfExtentMeters": 125,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7916653,
+          "minLat": 52.2613771,
+          "maxLon": 6.7953347,
+          "maxLat": 52.2636229
+        },
+        "osmElementCounts": {
+          "nodes": 3998,
+          "ways": 374,
+          "relations": 5,
+          "total": 4377
+        },
+        "geoJsonFeatureCount": 957,
+        "geoJsonSha256": "e248b33015e6e97b02659244589904a9791de9272e9438ff909a4d0c74499f70",
+        "gzipFileSha256": "5e0a8198254b5e600a8613527d0e6632c27cf9fafb2ee5471a6f02140bf0bcb6",
+        "gzipBytes": 68371,
+        "uncompressedBytes": 406896,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      {
+        "level": "S2",
+        "id": "hengelo-s2-500m",
+        "name": "Hengelo Center S2 (500 × 500 m)",
+        "areaKm2": 0.25,
+        "widthMeters": 500,
+        "depthMeters": 500,
+        "halfExtentMeters": 250,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7898307,
+          "minLat": 52.2602542,
+          "maxLon": 6.7971693,
+          "maxLat": 52.2647458
+        },
+        "osmElementCounts": {
+          "nodes": 10611,
+          "ways": 1166,
+          "relations": 9,
+          "total": 11786
+        },
+        "geoJsonFeatureCount": 2757,
+        "geoJsonSha256": "2132987af7effe637ac067c9bd2b66e746b24d37101e9b28aeeee9bfbdd18470",
+        "gzipFileSha256": "9b08ccab2249de8ce1a2dea45494254e740bcd8d780862cb3caaae54ede0d7c7",
+        "gzipBytes": 171311,
+        "uncompressedBytes": 1068304,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      {
+        "level": "S3",
+        "id": "hengelo-s3-1km",
+        "name": "Hengelo Center S3 (1 × 1 km)",
+        "areaKm2": 1,
+        "widthMeters": 1000,
+        "depthMeters": 1000,
+        "halfExtentMeters": 500,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7861614,
+          "minLat": 52.2580084,
+          "maxLon": 6.8008386,
+          "maxLat": 52.2669916
+        },
+        "osmElementCounts": {
+          "nodes": 34093,
+          "ways": 4318,
+          "relations": 13,
+          "total": 38424
+        },
+        "geoJsonFeatureCount": 9738,
+        "geoJsonSha256": "5039cb96a99f71d13b18a43a6b19129b750d947ee62b9a12200ee0d03e3415c7",
+        "gzipFileSha256": "9177e6c5b277a30248cca9fff89c6795e2383bd3054772b0a315e1c2341b0af1",
+        "gzipBytes": 524367,
+        "uncompressedBytes": 3531619,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      {
+        "level": "S4",
+        "id": "hengelo-s4-2km",
+        "name": "Hengelo Center S4 (2 × 2 km)",
+        "areaKm2": 4,
+        "widthMeters": 2000,
+        "depthMeters": 2000,
+        "halfExtentMeters": 1000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7788227,
+          "minLat": 52.2535168,
+          "maxLon": 6.8081773,
+          "maxLat": 52.2714832
+        },
+        "osmElementCounts": {
+          "nodes": 134951,
+          "ways": 18794,
+          "relations": 18,
+          "total": 153763
+        },
+        "geoJsonFeatureCount": 36669,
+        "geoJsonSha256": "0922f276347a9650bcf152c1ad23ff77defe2b20f6d8e259beb3a291d702b68a",
+        "gzipFileSha256": "a7064d39851e087dc510d6a41b27cfba061ec743da7eb56da4f832d8a9a8b26d",
+        "gzipBytes": 1815964,
+        "uncompressedBytes": 13075665,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      {
+        "level": "S5",
+        "id": "hengelo-s5-4km",
+        "name": "Hengelo Center S5 (4 × 4 km)",
+        "areaKm2": 16,
+        "widthMeters": 4000,
+        "depthMeters": 4000,
+        "halfExtentMeters": 2000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7641454,
+          "minLat": 52.2445337,
+          "maxLon": 6.8228546,
+          "maxLat": 52.2804663
+        },
+        "osmElementCounts": {
+          "nodes": 358552,
+          "ways": 52142,
+          "relations": 67,
+          "total": 410761
+        },
+        "geoJsonFeatureCount": 96836,
+        "geoJsonSha256": "f0cea8ccd22ba17f936483871ada21d8d4defdbfebea29d81d0186dbdc0b35b1",
+        "gzipFileSha256": "e03b2b18ece549b5a25b4dc1c74f11df151aba1fef8435cf6015a04988635ad4",
+        "gzipBytes": 4781803,
+        "uncompressedBytes": 34351545,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      }
+    ]
+  },
+  "resourceLimits": {
+    "maxRssMB": 3072,
+    "maxOldSpaceSizeMB": 2048,
+    "timeoutMs": 120000,
+    "validatorMaxEdges": 250,
+    "rssPollIntervalMs": 250
+  },
+  "methodology": {
+    "warmupIterations": 1,
+    "measuredIterations": 3,
+    "executionModel": "Sequential isolated child Node.js processes (--expose-gc, --max-old-space-size, active RSS polling, wall-clock timeout, cross-platform tree kill, automatic progression halt on threshold breach).",
+    "metricDefinitions": {
+      "geojsonParseAndClassifyMs": "Wall-clock CPU time (ms) in LocalGeoJsonProvider.parseGeoJson to classify OSM tags, project WGS84 coordinates to local meters, clip to region bounds, and extract pre-chaining topologySource.",
+      "infrastructureGraphBuildMs": "Wall-clock CPU time (ms) in buildInfrastructureGraph to construct RoadNetwork, RailwayNetwork, and CrossModalAnalyzer connectivity relations.",
+      "graphToRendererAdapterMs": "Wall-clock CPU time (ms) in adaptInfrastructureGraphToRenderDescriptors and validateInfrastructureRenderDescriptors.",
+      "planarSurfaceResolutionMs": "Wall-clock CPU time (ms) in resolveAndValidatePlanarPolygons performing 2D Boolean ownership resolution and elevation separation for landuse, parks, and water.",
+      "roadGeometryGenerationMs": "Wall-clock CPU time (ms) in buildGraphAtGradeRoadGeometries constructing at-grade road and junction BufferGeometries.",
+      "railwayGeometryGenerationMs": "Wall-clock CPU time (ms) in buildRailwayInfrastructure constructing ballast, 3D instanced sleepers/bearers, 3D rails, and procedural UV ribbons.",
+      "fullSceneGeometryGenerationMs": "Wall-clock CPU time (ms) in GeometryBuilder.buildScene generating all 3D scene groups, materials, and spatial chunks.",
+      "sceneResourceDisposalMs": "Wall-clock CPU time (ms) in BuiltSceneGeometry.dispose() releasing all owned Three.js BufferGeometries, Materials, and Textures.",
+      "cpuBufferMemoryMB": "Exact deterministic sum (MB) of JavaScript TypedArray byteLengths across all active BufferGeometry vertex attributes, index buffers, and InstancedMesh matrices.",
+      "frameIntervalMs": "Wall-clock interval (ms) between consecutive completed WebGL gl.render() calls measured post-render across the scenario. Distinct from synchronous CPU render duration and asynchronous GPU pass time.",
+      "effectiveMedianFps": "Steady-state frame cadence derived strictly from median frameIntervalMs (1000 / medianFrameIntervalMs).",
+      "cpuFrameRenderTimeMs": "Synchronous CPU main-thread execution duration (ms) of Three.js WebGLRenderer.render(scene, camera) per frame.",
+      "gpuFrameRenderTimeMs": "Asynchronous GPU command execution duration (ms) measured via WebGL2 EXT_disjoint_timer_query_webgl2 when supported and non-disjoint; explicitly null with valid/pending/disjoint/unsupported status counts when unavailable or running on software rasterizers.",
+      "webglDrawCallsPerFrame": "Actual WebGL draw calls issued per frame recorded from Three.js gl.info.render.calls immediately after gl.render().",
+      "renderedTrianglesPerFrame": "Actual triangles submitted to WebGL per frame recorded from Three.js gl.info.render.triangles immediately after gl.render().",
+      "railwayVisibility": "Static scene railway counts (staticRailwayMeshes, staticRailwayTriangles) computed once at scene commit, plus deterministic stride-sampled frustum visibility metrics (activeRailwayMeshes, frustumCulledRailwayMeshes, frustumVisibleRailwayTriangles) over a zero-traversal cached index. Null when unavailable.",
+      "instrumentationOverheadMs": "Measured CPU bookkeeping duration (ms) of the post-render benchmark telemetry collector itself per frame.",
+      "workerPeakObservedMB": "Peak process resident set size (RSS) observed by parent OS polling (/proc on Linux, tasklist on Windows) or child IPC heartbeat."
+    },
+    "memoryMeasurementNotes": [
+      "cpuBufferMemoryMB measures exact TypedArray byteLengths allocated on owned Three.js BufferGeometries and InstancedMesh instance matrices; it is 100% deterministic across runs.",
+      "v8HeapMemory (process.memoryUsage) and browser performance.memory reflect V8 garbage collector timing, JIT compilation caches, and allocator fragmentation. Even when Node.js is launched with --expose-gc, V8 heap deltas are approximate indicators rather than strict byte-accurate allocations.",
+      "lifecycleAudit (ownedGeometriesAfterDispose, ownedMaterialsAfterDispose, and WebGL gl.info.memory.geometries) provides the authoritative deterministic check for Three.js / WebGL resource leaks.",
+      "Each (dataset, config) pair executes in a fresh OS process to eliminate cross-workload V8 heap contamination and protect 16 GB developer machines."
+    ]
+  },
+  "configSummaries": [
+    {
+      "configId": "production-legacy",
+      "configLabel": "Production Default (Legacy Roads + Candidate B Railways)",
+      "highestCompletedLevel": "S4",
+      "stoppedAtLevel": "S5",
+      "stopReason": "failed_timeout: Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_1_scene_build\").",
+      "completedLevelsCount": 4,
+      "skippedLevelsCount": 0,
+      "failedLevelsCount": 1
+    },
+    {
+      "configId": "graph-e2-e3",
+      "configLabel": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+      "highestCompletedLevel": "S3",
+      "stoppedAtLevel": "S4",
+      "stopReason": "failed_timeout: Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "completedLevelsCount": 3,
+      "skippedLevelsCount": 1,
+      "failedLevelsCount": 1
+    },
+    {
+      "configId": "surface-first-e2plus-rplus",
+      "configLabel": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+      "highestCompletedLevel": "S3",
+      "stoppedAtLevel": "S4",
+      "stopReason": "failed_timeout: Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "completedLevelsCount": 3,
+      "skippedLevelsCount": 1,
+      "failedLevelsCount": 1
+    }
+  ],
+  "results": [
+    {
+      "workloadKey": "hengelo-s1-250m::production-legacy",
+      "dataset": {
+        "level": "S1",
+        "id": "hengelo-s1-250m",
+        "name": "Hengelo Center S1 (250 × 250 m)",
+        "areaKm2": 0.0625,
+        "widthMeters": 250,
+        "depthMeters": 250,
+        "halfExtentMeters": 125,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7916653,
+          "minLat": 52.2613771,
+          "maxLon": 6.7953347,
+          "maxLat": 52.2636229
+        },
+        "osmElementCounts": {
+          "nodes": 3998,
+          "ways": 374,
+          "relations": 5,
+          "total": 4377
+        },
+        "geoJsonFeatureCount": 957,
+        "geoJsonSha256": "e248b33015e6e97b02659244589904a9791de9272e9438ff909a4d0c74499f70",
+        "gzipFileSha256": "5e0a8198254b5e600a8613527d0e6632c27cf9fafb2ee5471a6f02140bf0bcb6",
+        "gzipBytes": 68371,
+        "uncompressedBytes": 406896,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 1848.23,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 861.4,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 14.849,
+          "max": 20.318,
+          "mean": 17.061,
+          "median": 16.015,
+          "p95": 19.888,
+          "p99": 20.232,
+          "stdDev": 2.88,
+          "iqr": 2.734,
+          "coefficientOfVariation": 0.169,
+          "samples": [
+            20.318,
+            14.849,
+            16.015
+          ]
+        },
+        "infrastructureGraphBuildMs": null,
+        "graphToRendererAdapterMs": null,
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 30.69,
+          "max": 32.456,
+          "mean": 31.566,
+          "median": 31.553,
+          "p95": 32.366,
+          "p99": 32.438,
+          "stdDev": 0.883,
+          "iqr": 0.883,
+          "coefficientOfVariation": 0.028,
+          "samples": [
+            32.456,
+            30.69,
+            31.553
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 20.406,
+          "max": 25.3,
+          "mean": 22.602,
+          "median": 22.1,
+          "p95": 24.98,
+          "p99": 25.236,
+          "stdDev": 2.485,
+          "iqr": 2.447,
+          "coefficientOfVariation": 0.11,
+          "samples": [
+            25.3,
+            22.1,
+            20.406
+          ]
+        },
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 16.129,
+          "max": 37.504,
+          "mean": 23.285,
+          "median": 16.223,
+          "p95": 35.376,
+          "p99": 37.078,
+          "stdDev": 12.314,
+          "iqr": 10.688,
+          "coefficientOfVariation": 0.529,
+          "samples": [
+            37.504,
+            16.129,
+            16.223
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 86.271,
+          "max": 97.482,
+          "mean": 90.053,
+          "median": 86.405,
+          "p95": 96.375,
+          "p99": 97.261,
+          "stdDev": 6.434,
+          "iqr": 5.606,
+          "coefficientOfVariation": 0.071,
+          "samples": [
+            97.482,
+            86.405,
+            86.271
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.044,
+          "max": 0.06,
+          "mean": 0.053,
+          "median": 0.055,
+          "p95": 0.06,
+          "p99": 0.06,
+          "stdDev": 0.008,
+          "iqr": 0.008,
+          "coefficientOfVariation": 0.153,
+          "samples": [
+            0.044,
+            0.06,
+            0.055
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 48,
+          "attributeBytes": 1051608,
+          "indexBytes": 72252,
+          "totalBytes": 1123860,
+          "totalMB": 1.072
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 75.635,
+          "heapUsedPeakMB": 120.628,
+          "heapUsedAfterDisposeMB": 120.317,
+          "heapDeltaAfterDisposeMB": 44.682,
+          "externalMB": 20.219,
+          "arrayBuffersMB": 11.309
+        },
+        "processRssMB": {
+          "workerInitialMB": 162.301,
+          "workerPeakObservedMB": 256.773,
+          "workerAfterDisposeMB": 243.75,
+          "parentPolledPeakMB": 256.773
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 49,
+        "totalVertices": 84256,
+        "totalTriangles": 20516,
+        "renderedVerticesWithInstances": 127296,
+        "renderedTrianglesWithInstances": 57156,
+        "renderedFeaturesCount": 399,
+        "forestTreesCount": 63
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 60,
+          "overlappingPairsChecked": 49,
+          "conflictsResolved": 50,
+          "deduplicatedCount": 0,
+          "unionedCount": 1,
+          "booleanSubtractionsCount": 13,
+          "maxResidualFillOverlapSqMeters": 0.000088,
+          "violationsCount": 0,
+          "isValid": true
+        },
+        "roads": {
+          "mode": "legacy",
+          "atGradeInputCount": 147,
+          "renderedPrimitivesOrRibbonsCount": 146,
+          "renderedJunctionCount": 60,
+          "candidateBlockerCheckCount": 289,
+          "overlappingBlockerCount": 41,
+          "polygonUnionOperationCount": null,
+          "polygonIntersectionOperationCount": 1755,
+          "polygonDifferenceOperationCount": 31,
+          "rejectedOrDegenerateCount": null,
+          "fullySubtractedCount": 0,
+          "roundedBufferFailureCount": null,
+          "flatRibbonFallbackCount": 1,
+          "surfaceClipFailureCount": 2,
+          "emptyShapeCount": null,
+          "invalidTriangleGeometryCount": null,
+          "outputPolygonCount": null,
+          "outputHoleRingCount": null,
+          "outputTriangleCount": null
+        },
+        "railways": {
+          "renderSource": "legacy",
+          "totalTracksProcessed": 22,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 2153,
+          "switchCount": null,
+          "chunkCount": 2,
+          "overlappingPairsCount": 92302,
+          "clippedSleepersCount": 94,
+          "spatialIndexCellCount": 492,
+          "spatialIndexEntries": 196,
+          "subStagesMs": {
+            "ballastMs": 1.59,
+            "sleepersMs": 12.93,
+            "railsMs": 0.69,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 0.99,
+            "totalMs": 16.89
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 957,
+        "sourceFeaturesClassified": 520,
+        "totalFeaturesParsed": 456,
+        "parsedFeaturePartsTotal": 458,
+        "parsedByCategory": {
+          "buildings": 67,
+          "roads": 122,
+          "railways": 22,
+          "waterBodies": 2,
+          "linearWaterways": 4,
+          "parks": 33,
+          "landuse": 25,
+          "barriers": 20,
+          "landmarks": 161
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 437,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 301
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 39
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 22
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 17
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 13
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 6
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 5
+            },
+            {
+              "tag": "barrier=retaining_wall",
+              "count": 3
+            },
+            {
+              "tag": "highway=pedestrian:polygon",
+              "count": 2
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 2
+            },
+            {
+              "tag": "railway=railway_crossing:point",
+              "count": 2
+            }
+          ],
+          "clippedByBoundaryCount": 115,
+          "omittedOutsideBoundaryCount": 64,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 6,
+          "chainedFeaturesCount": 17,
+          "featuresFullySubtractedCount": 1,
+          "clippingFailuresCount": 2,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "path_boolean_clipping_failed": 1
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 399,
+          "coverageVsClassifiedRatio": 0.7673,
+          "builtSceneRenderedFeaturesCount": 399,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 177,
+          "roadEdgeCount": 178,
+          "railwayNodeCount": 24,
+          "railwayEdgeCount": 22,
+          "railwayConfirmedSwitchCount": 10,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 0,
+          "gradeTransitionCount": 17,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 0,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 0,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 7,
+            "auditedTriangleCount": 1641,
+            "upwardTriangleCount": 1474,
+            "negativelyWoundCount": 167,
+            "storedNormalMismatchCount": 167,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "executed",
+            "overlapConflictCount": 61,
+            "overlapAreaSqMeters": 69.2949,
+            "continuityDefectCount": 13
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"legacy\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "hengelo-s1-250m::production-legacy::infrastructureGraphBuildMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration skips runtime InfrastructureGraph construction during scene build."
+        },
+        {
+          "metricId": "hengelo-s1-250m::production-legacy::graphToRendererAdapterMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration does not run adaptInfrastructureGraphToRenderDescriptors during scene build."
+        },
+        {
+          "metricId": "hengelo-s1-250m::production-legacy::roadSubStagesMs",
+          "reason": "disabled_by_config",
+          "explanation": "Graph road sub-stage timing (footprint, union, clipping, triangulation) is only emitted when roads use \"graph\" or \"graph-surface\"."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s2-500m::production-legacy",
+      "dataset": {
+        "level": "S2",
+        "id": "hengelo-s2-500m",
+        "name": "Hengelo Center S2 (500 × 500 m)",
+        "areaKm2": 0.25,
+        "widthMeters": 500,
+        "depthMeters": 500,
+        "halfExtentMeters": 250,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7898307,
+          "minLat": 52.2602542,
+          "maxLon": 6.7971693,
+          "maxLat": 52.2647458
+        },
+        "osmElementCounts": {
+          "nodes": 10611,
+          "ways": 1166,
+          "relations": 9,
+          "total": 11786
+        },
+        "geoJsonFeatureCount": 2757,
+        "geoJsonSha256": "2132987af7effe637ac067c9bd2b66e746b24d37101e9b28aeeee9bfbdd18470",
+        "gzipFileSha256": "9b08ccab2249de8ce1a2dea45494254e740bcd8d780862cb3caaae54ede0d7c7",
+        "gzipBytes": 171311,
+        "uncompressedBytes": 1068304,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 4321.59,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 3308,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 34.726,
+          "max": 48.057,
+          "mean": 40.152,
+          "median": 37.671,
+          "p95": 47.019,
+          "p99": 47.85,
+          "stdDev": 7.003,
+          "iqr": 6.665,
+          "coefficientOfVariation": 0.174,
+          "samples": [
+            48.057,
+            37.671,
+            34.726
+          ]
+        },
+        "infrastructureGraphBuildMs": null,
+        "graphToRendererAdapterMs": null,
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 262.442,
+          "max": 268.71,
+          "mean": 266.274,
+          "median": 267.669,
+          "p95": 268.606,
+          "p99": 268.689,
+          "stdDev": 3.359,
+          "iqr": 3.134,
+          "coefficientOfVariation": 0.013,
+          "samples": [
+            267.669,
+            262.442,
+            268.71
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 93.226,
+          "max": 96.074,
+          "mean": 94.942,
+          "median": 95.525,
+          "p95": 96.019,
+          "p99": 96.063,
+          "stdDev": 1.511,
+          "iqr": 1.424,
+          "coefficientOfVariation": 0.016,
+          "samples": [
+            93.226,
+            96.074,
+            95.525
+          ]
+        },
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 31.532,
+          "max": 52.329,
+          "mean": 39.375,
+          "median": 34.263,
+          "p95": 50.522,
+          "p99": 51.968,
+          "stdDev": 11.302,
+          "iqr": 10.399,
+          "coefficientOfVariation": 0.287,
+          "samples": [
+            52.329,
+            34.263,
+            31.532
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 436.044,
+          "max": 460.538,
+          "mean": 451.575,
+          "median": 458.144,
+          "p95": 460.298,
+          "p99": 460.49,
+          "stdDev": 13.503,
+          "iqr": 12.247,
+          "coefficientOfVariation": 0.03,
+          "samples": [
+            458.144,
+            460.538,
+            436.044
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.043,
+          "max": 0.063,
+          "mean": 0.053,
+          "median": 0.052,
+          "p95": 0.062,
+          "p99": 0.063,
+          "stdDev": 0.01,
+          "iqr": 0.01,
+          "coefficientOfVariation": 0.189,
+          "samples": [
+            0.043,
+            0.052,
+            0.063
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 73,
+          "attributeBytes": 2848440,
+          "indexBytes": 208590,
+          "totalBytes": 3057030,
+          "totalMB": 2.915
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 105.667,
+          "heapUsedPeakMB": 227.452,
+          "heapUsedAfterDisposeMB": 221.666,
+          "heapDeltaAfterDisposeMB": 115.999,
+          "externalMB": 37.371,
+          "arrayBuffersMB": 28.461
+        },
+        "processRssMB": {
+          "workerInitialMB": 163.914,
+          "workerPeakObservedMB": 370.516,
+          "workerAfterDisposeMB": 370.516,
+          "parentPolledPeakMB": 370.43
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 77,
+        "totalVertices": 329715,
+        "totalTriangles": 60893,
+        "renderedVerticesWithInstances": 417675,
+        "renderedTrianglesWithInstances": 177113,
+        "renderedFeaturesCount": 1404,
+        "forestTreesCount": 303
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 271,
+          "overlappingPairsChecked": 226,
+          "conflictsResolved": 216,
+          "deduplicatedCount": 0,
+          "unionedCount": 2,
+          "booleanSubtractionsCount": 54,
+          "maxResidualFillOverlapSqMeters": 0.000343,
+          "violationsCount": 3,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "legacy",
+          "atGradeInputCount": 506,
+          "renderedPrimitivesOrRibbonsCount": 503,
+          "renderedJunctionCount": 237,
+          "candidateBlockerCheckCount": 1423,
+          "overlappingBlockerCount": 178,
+          "polygonUnionOperationCount": null,
+          "polygonIntersectionOperationCount": 7351,
+          "polygonDifferenceOperationCount": 121,
+          "rejectedOrDegenerateCount": null,
+          "fullySubtractedCount": 2,
+          "roundedBufferFailureCount": null,
+          "flatRibbonFallbackCount": 1,
+          "surfaceClipFailureCount": 3,
+          "emptyShapeCount": null,
+          "invalidTriangleGeometryCount": null,
+          "outputPolygonCount": null,
+          "outputHoleRingCount": null,
+          "outputTriangleCount": null
+        },
+        "railways": {
+          "renderSource": "legacy",
+          "totalTracksProcessed": 46,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 4399,
+          "switchCount": null,
+          "chunkCount": 5,
+          "overlappingPairsCount": 203042,
+          "clippedSleepersCount": 54,
+          "spatialIndexCellCount": 946,
+          "spatialIndexEntries": 416,
+          "subStagesMs": {
+            "ballastMs": 3.4,
+            "sleepersMs": 24.36,
+            "railsMs": 0.63,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 1.73,
+            "totalMs": 31.41
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 2757,
+        "sourceFeaturesClassified": 1639,
+        "totalFeaturesParsed": 1589,
+        "parsedFeaturePartsTotal": 1595,
+        "parsedByCategory": {
+          "buildings": 252,
+          "roads": 365,
+          "railways": 46,
+          "waterBodies": 10,
+          "linearWaterways": 13,
+          "parks": 175,
+          "landuse": 85,
+          "barriers": 82,
+          "landmarks": 561
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 1118,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 861
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 43
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 31
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 31
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 30
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 15
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 15
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 13
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 7
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 5
+            },
+            {
+              "tag": "highway=give_way:point",
+              "count": 5
+            }
+          ],
+          "clippedByBoundaryCount": 188,
+          "omittedOutsideBoundaryCount": 50,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 17,
+          "chainedFeaturesCount": 40,
+          "featuresFullySubtractedCount": 1,
+          "clippingFailuresCount": 3,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "path_boolean_clipping_failed": 1
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 1404,
+          "coverageVsClassifiedRatio": 0.8566,
+          "builtSceneRenderedFeaturesCount": 1404,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 532,
+          "roadEdgeCount": 646,
+          "railwayNodeCount": 43,
+          "railwayEdgeCount": 47,
+          "railwayConfirmedSwitchCount": 17,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 5,
+          "gradeTransitionCount": 27,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 1,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 5,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 11,
+            "auditedTriangleCount": 5659,
+            "upwardTriangleCount": 5461,
+            "negativelyWoundCount": 197,
+            "storedNormalMismatchCount": 197,
+            "degenerateTriangleCount": 1,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (646) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"legacy\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "hengelo-s2-500m::production-legacy::infrastructureGraphBuildMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration skips runtime InfrastructureGraph construction during scene build."
+        },
+        {
+          "metricId": "hengelo-s2-500m::production-legacy::graphToRendererAdapterMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration does not run adaptInfrastructureGraphToRenderDescriptors during scene build."
+        },
+        {
+          "metricId": "hengelo-s2-500m::production-legacy::roadSubStagesMs",
+          "reason": "disabled_by_config",
+          "explanation": "Graph road sub-stage timing (footprint, union, clipping, triangulation) is only emitted when roads use \"graph\" or \"graph-surface\"."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s3-1km::production-legacy",
+      "dataset": {
+        "level": "S3",
+        "id": "hengelo-s3-1km",
+        "name": "Hengelo Center S3 (1 × 1 km)",
+        "areaKm2": 1,
+        "widthMeters": 1000,
+        "depthMeters": 1000,
+        "halfExtentMeters": 500,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7861614,
+          "minLat": 52.2580084,
+          "maxLon": 6.8008386,
+          "maxLat": 52.2669916
+        },
+        "osmElementCounts": {
+          "nodes": 34093,
+          "ways": 4318,
+          "relations": 13,
+          "total": 38424
+        },
+        "geoJsonFeatureCount": 9738,
+        "geoJsonSha256": "5039cb96a99f71d13b18a43a6b19129b750d947ee62b9a12200ee0d03e3415c7",
+        "gzipFileSha256": "9177e6c5b277a30248cca9fff89c6795e2383bd3054772b0a315e1c2341b0af1",
+        "gzipBytes": 524367,
+        "uncompressedBytes": 3531619,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 21985.74,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 20959.7,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 102.211,
+          "max": 136.118,
+          "mean": 116.668,
+          "median": 111.675,
+          "p95": 133.674,
+          "p99": 135.629,
+          "stdDev": 17.496,
+          "iqr": 16.954,
+          "coefficientOfVariation": 0.15,
+          "samples": [
+            136.118,
+            102.211,
+            111.675
+          ]
+        },
+        "infrastructureGraphBuildMs": null,
+        "graphToRendererAdapterMs": null,
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 2289.975,
+          "max": 2388.294,
+          "mean": 2325.274,
+          "median": 2297.554,
+          "p95": 2379.22,
+          "p99": 2386.479,
+          "stdDev": 54.708,
+          "iqr": 49.16,
+          "coefficientOfVariation": 0.024,
+          "samples": [
+            2289.975,
+            2297.554,
+            2388.294
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 526.01,
+          "max": 596.807,
+          "mean": 554.571,
+          "median": 540.895,
+          "p95": 591.216,
+          "p99": 595.689,
+          "stdDev": 37.327,
+          "iqr": 35.399,
+          "coefficientOfVariation": 0.067,
+          "samples": [
+            540.895,
+            526.01,
+            596.807
+          ]
+        },
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 93.278,
+          "max": 109.354,
+          "mean": 100.423,
+          "median": 98.637,
+          "p95": 108.282,
+          "p99": 109.14,
+          "stdDev": 8.186,
+          "iqr": 8.038,
+          "coefficientOfVariation": 0.082,
+          "samples": [
+            109.354,
+            93.278,
+            98.637
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 3077.201,
+          "max": 3188.276,
+          "mean": 3132.384,
+          "median": 3131.676,
+          "p95": 3182.616,
+          "p99": 3187.144,
+          "stdDev": 55.541,
+          "iqr": 55.537,
+          "coefficientOfVariation": 0.018,
+          "samples": [
+            3131.676,
+            3077.201,
+            3188.276
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.068,
+          "max": 0.087,
+          "mean": 0.078,
+          "median": 0.08,
+          "p95": 0.087,
+          "p99": 0.087,
+          "stdDev": 0.01,
+          "iqr": 0.01,
+          "coefficientOfVariation": 0.128,
+          "samples": [
+            0.08,
+            0.068,
+            0.087
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 121,
+          "attributeBytes": 9335864,
+          "indexBytes": 556896,
+          "totalBytes": 9892760,
+          "totalMB": 9.434
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 181.827,
+          "heapUsedPeakMB": 356.221,
+          "heapUsedAfterDisposeMB": 236.599,
+          "heapDeltaAfterDisposeMB": 54.772,
+          "externalMB": 45.817,
+          "arrayBuffersMB": 36.907
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.625,
+          "workerPeakObservedMB": 650.43,
+          "workerAfterDisposeMB": 633.852,
+          "parentPolledPeakMB": 650.43
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 133,
+        "totalVertices": 1234235,
+        "totalTriangles": 189332,
+        "renderedVerticesWithInstances": 1450375,
+        "renderedTrianglesWithInstances": 584922,
+        "renderedFeaturesCount": 5346,
+        "forestTreesCount": 1208
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 857,
+          "overlappingPairsChecked": 723,
+          "conflictsResolved": 713,
+          "deduplicatedCount": 1,
+          "unionedCount": 3,
+          "booleanSubtractionsCount": 134,
+          "maxResidualFillOverlapSqMeters": 0.001259,
+          "violationsCount": 13,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "legacy",
+          "atGradeInputCount": 1662,
+          "renderedPrimitivesOrRibbonsCount": 1657,
+          "renderedJunctionCount": 814,
+          "candidateBlockerCheckCount": 5044,
+          "overlappingBlockerCount": 610,
+          "polygonUnionOperationCount": null,
+          "polygonIntersectionOperationCount": 50453,
+          "polygonDifferenceOperationCount": 394,
+          "rejectedOrDegenerateCount": null,
+          "fullySubtractedCount": 6,
+          "roundedBufferFailureCount": null,
+          "flatRibbonFallbackCount": 6,
+          "surfaceClipFailureCount": 8,
+          "emptyShapeCount": null,
+          "invalidTriangleGeometryCount": null,
+          "outputPolygonCount": null,
+          "outputHoleRingCount": null,
+          "outputTriangleCount": null
+        },
+        "railways": {
+          "renderSource": "legacy",
+          "totalTracksProcessed": 106,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 10808,
+          "switchCount": null,
+          "chunkCount": 13,
+          "overlappingPairsCount": 464806,
+          "clippedSleepersCount": 92,
+          "spatialIndexCellCount": 2016,
+          "spatialIndexEntries": 1184,
+          "subStagesMs": {
+            "ballastMs": 8.87,
+            "sleepersMs": 65.67,
+            "railsMs": 1.62,
+            "bridgesAndTunnelsMs": 0.37,
+            "spatialChunkingMs": 7.19,
+            "totalMs": 87.72
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 9738,
+        "sourceFeaturesClassified": 5855,
+        "totalFeaturesParsed": 5814,
+        "parsedFeaturePartsTotal": 5822,
+        "parsedByCategory": {
+          "buildings": 1632,
+          "roads": 1166,
+          "railways": 106,
+          "waterBodies": 25,
+          "linearWaterways": 28,
+          "parks": 610,
+          "landuse": 220,
+          "barriers": 302,
+          "landmarks": 1725
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 3883,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 3317
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 77
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 77
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 62
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 55
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 49
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 37
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 22
+            },
+            {
+              "tag": "barrier=gate",
+              "count": 22
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 19
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 18
+            },
+            {
+              "tag": "man_made=flagpole",
+              "count": 18
+            }
+          ],
+          "clippedByBoundaryCount": 331,
+          "omittedOutsideBoundaryCount": 41,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 75,
+          "chainedFeaturesCount": 170,
+          "featuresFullySubtractedCount": 3,
+          "clippingFailuresCount": 8,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "path_boolean_clipping_failed": 6
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 5346,
+          "coverageVsClassifiedRatio": 0.9131,
+          "builtSceneRenderedFeaturesCount": 5346,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 1641,
+          "roadEdgeCount": 2108,
+          "railwayNodeCount": 92,
+          "railwayEdgeCount": 95,
+          "railwayConfirmedSwitchCount": 31,
+          "railwayUnresolvedSwitchCount": 2,
+          "railwayFlatCrossingCount": 4,
+          "railwayUnresolvedJunctionCount": 8,
+          "gradeTransitionCount": 56,
+          "unresolvedGradeTransitionCount": 2,
+          "levelCrossingCount": 7,
+          "pedestrianRailCrossingCount": 6,
+          "unresolvedCrossingCount": 9,
+          "gradeSeparatedCrossingCount": 142,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 13,
+            "auditedTriangleCount": 17482,
+            "upwardTriangleCount": 17055,
+            "negativelyWoundCount": 424,
+            "storedNormalMismatchCount": 424,
+            "degenerateTriangleCount": 3,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (2108) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"legacy\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "hengelo-s3-1km::production-legacy::infrastructureGraphBuildMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration skips runtime InfrastructureGraph construction during scene build."
+        },
+        {
+          "metricId": "hengelo-s3-1km::production-legacy::graphToRendererAdapterMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration does not run adaptInfrastructureGraphToRenderDescriptors during scene build."
+        },
+        {
+          "metricId": "hengelo-s3-1km::production-legacy::roadSubStagesMs",
+          "reason": "disabled_by_config",
+          "explanation": "Graph road sub-stage timing (footprint, union, clipping, triangulation) is only emitted when roads use \"graph\" or \"graph-surface\"."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s4-2km::production-legacy",
+      "dataset": {
+        "level": "S4",
+        "id": "hengelo-s4-2km",
+        "name": "Hengelo Center S4 (2 × 2 km)",
+        "areaKm2": 4,
+        "widthMeters": 2000,
+        "depthMeters": 2000,
+        "halfExtentMeters": 1000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7788227,
+          "minLat": 52.2535168,
+          "maxLon": 6.8081773,
+          "maxLat": 52.2714832
+        },
+        "osmElementCounts": {
+          "nodes": 134951,
+          "ways": 18794,
+          "relations": 18,
+          "total": 153763
+        },
+        "geoJsonFeatureCount": 36669,
+        "geoJsonSha256": "0922f276347a9650bcf152c1ad23ff77defe2b20f6d8e259beb3a291d702b68a",
+        "gzipFileSha256": "a7064d39851e087dc510d6a41b27cfba061ec743da7eb56da4f832d8a9a8b26d",
+        "gzipBytes": 1815964,
+        "uncompressedBytes": 13075665,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 95414.55,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 94365,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 357.991,
+          "max": 429.09,
+          "mean": 402.02,
+          "median": 418.978,
+          "p95": 428.079,
+          "p99": 428.887,
+          "stdDev": 38.463,
+          "iqr": 35.549,
+          "coefficientOfVariation": 0.096,
+          "samples": [
+            429.09,
+            418.978,
+            357.991
+          ]
+        },
+        "infrastructureGraphBuildMs": null,
+        "graphToRendererAdapterMs": null,
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 10772.708,
+          "max": 11072.297,
+          "mean": 10955.072,
+          "median": 11020.21,
+          "p95": 11067.088,
+          "p99": 11071.255,
+          "stdDev": 160.064,
+          "iqr": 149.794,
+          "coefficientOfVariation": 0.015,
+          "samples": [
+            10772.708,
+            11020.21,
+            11072.297
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 2785.367,
+          "max": 2877.434,
+          "mean": 2843.55,
+          "median": 2867.848,
+          "p95": 2876.476,
+          "p99": 2877.243,
+          "stdDev": 50.615,
+          "iqr": 46.034,
+          "coefficientOfVariation": 0.018,
+          "samples": [
+            2785.367,
+            2867.848,
+            2877.434
+          ]
+        },
+        "roadSubStagesMs": null,
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 186.891,
+          "max": 211.808,
+          "mean": 199.297,
+          "median": 199.192,
+          "p95": 210.547,
+          "p99": 211.556,
+          "stdDev": 12.459,
+          "iqr": 12.459,
+          "coefficientOfVariation": 0.063,
+          "samples": [
+            199.192,
+            211.808,
+            186.891
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 14257.176,
+          "max": 14700.991,
+          "mean": 14468.74,
+          "median": 14448.054,
+          "p95": 14675.697,
+          "p99": 14695.932,
+          "stdDev": 222.63,
+          "iqr": 221.908,
+          "coefficientOfVariation": 0.015,
+          "samples": [
+            14257.176,
+            14448.054,
+            14700.991
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.089,
+          "max": 0.112,
+          "mean": 0.099,
+          "median": 0.096,
+          "p95": 0.11,
+          "p99": 0.112,
+          "stdDev": 0.012,
+          "iqr": 0.011,
+          "coefficientOfVariation": 0.118,
+          "samples": [
+            0.089,
+            0.096,
+            0.112
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 229,
+          "attributeBytes": 40532192,
+          "indexBytes": 1139748,
+          "totalBytes": 41671940,
+          "totalMB": 39.741
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 321.099,
+          "heapUsedPeakMB": 760.79,
+          "heapUsedAfterDisposeMB": 518.825,
+          "heapDeltaAfterDisposeMB": 197.726,
+          "externalMB": 161.823,
+          "arrayBuffersMB": 152.918
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.035,
+          "workerPeakObservedMB": 1106.125,
+          "workerAfterDisposeMB": 1100.48,
+          "parentPolledPeakMB": 1106.125
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 272,
+        "totalVertices": 2994517,
+        "totalTriangles": 606126,
+        "renderedVerticesWithInstances": 3470297,
+        "renderedTrianglesWithInstances": 1366736,
+        "renderedFeaturesCount": 21692,
+        "forestTreesCount": 2200
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 2102,
+          "overlappingPairsChecked": 1685,
+          "conflictsResolved": 1676,
+          "deduplicatedCount": 1,
+          "unionedCount": 4,
+          "booleanSubtractionsCount": 395,
+          "maxResidualFillOverlapSqMeters": 0.002057,
+          "violationsCount": 46,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "legacy",
+          "atGradeInputCount": 4226,
+          "renderedPrimitivesOrRibbonsCount": 4202,
+          "renderedJunctionCount": 2092,
+          "candidateBlockerCheckCount": 12633,
+          "overlappingBlockerCount": 1669,
+          "polygonUnionOperationCount": null,
+          "polygonIntersectionOperationCount": 242278,
+          "polygonDifferenceOperationCount": 1075,
+          "rejectedOrDegenerateCount": null,
+          "fullySubtractedCount": 40,
+          "roundedBufferFailureCount": null,
+          "flatRibbonFallbackCount": 12,
+          "surfaceClipFailureCount": 23,
+          "emptyShapeCount": null,
+          "invalidTriangleGeometryCount": null,
+          "outputPolygonCount": null,
+          "outputHoleRingCount": null,
+          "outputTriangleCount": null
+        },
+        "railways": {
+          "renderSource": "legacy",
+          "totalTracksProcessed": 170,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 23790,
+          "switchCount": null,
+          "chunkCount": 44,
+          "overlappingPairsCount": 914840,
+          "clippedSleepersCount": 141,
+          "spatialIndexCellCount": 5774,
+          "spatialIndexEntries": 2302,
+          "subStagesMs": {
+            "ballastMs": 14,
+            "sleepersMs": 119.26,
+            "railsMs": 2.52,
+            "bridgesAndTunnelsMs": 0.91,
+            "spatialChunkingMs": 10.59,
+            "totalMs": 156.06
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 36669,
+        "sourceFeaturesClassified": 22475,
+        "totalFeaturesParsed": 22437,
+        "parsedFeaturePartsTotal": 22454,
+        "parsedByCategory": {
+          "buildings": 12700,
+          "roads": 2880,
+          "railways": 170,
+          "waterBodies": 59,
+          "linearWaterways": 88,
+          "parks": 1641,
+          "landuse": 398,
+          "barriers": 535,
+          "landmarks": 3966
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 14194,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 13264
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 117
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 111
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 91
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 88
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 76
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 58
+            },
+            {
+              "tag": "barrier=gate",
+              "count": 40
+            },
+            {
+              "tag": "highway=give_way:point",
+              "count": 36
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 33
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 26
+            },
+            {
+              "tag": "man_made=flagpole",
+              "count": 22
+            }
+          ],
+          "clippedByBoundaryCount": 560,
+          "omittedOutsideBoundaryCount": 36,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 169,
+          "chainedFeaturesCount": 395,
+          "featuresFullySubtractedCount": 16,
+          "clippingFailuresCount": 23,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 2,
+          "rejectedInvalidByReason": {
+            "invalid_self_intersecting_building_polygon": 2,
+            "path_boolean_clipping_failed": 18
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 21692,
+          "coverageVsClassifiedRatio": 0.9652,
+          "builtSceneRenderedFeaturesCount": 21692,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 4040,
+          "roadEdgeCount": 5317,
+          "railwayNodeCount": 159,
+          "railwayEdgeCount": 153,
+          "railwayConfirmedSwitchCount": 44,
+          "railwayUnresolvedSwitchCount": 7,
+          "railwayFlatCrossingCount": 4,
+          "railwayUnresolvedJunctionCount": 9,
+          "gradeTransitionCount": 98,
+          "unresolvedGradeTransitionCount": 6,
+          "levelCrossingCount": 13,
+          "pedestrianRailCrossingCount": 7,
+          "unresolvedCrossingCount": 10,
+          "gradeSeparatedCrossingCount": 172,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 15,
+            "auditedTriangleCount": 42815,
+            "upwardTriangleCount": 42005,
+            "negativelyWoundCount": 799,
+            "storedNormalMismatchCount": 799,
+            "degenerateTriangleCount": 11,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (5317) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"legacy\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [
+        {
+          "metricId": "hengelo-s4-2km::production-legacy::infrastructureGraphBuildMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration skips runtime InfrastructureGraph construction during scene build."
+        },
+        {
+          "metricId": "hengelo-s4-2km::production-legacy::graphToRendererAdapterMs",
+          "reason": "disabled_by_config",
+          "explanation": "Production legacy configuration does not run adaptInfrastructureGraphToRenderDescriptors during scene build."
+        },
+        {
+          "metricId": "hengelo-s4-2km::production-legacy::roadSubStagesMs",
+          "reason": "disabled_by_config",
+          "explanation": "Graph road sub-stage timing (footprint, union, clipping, triangulation) is only emitted when roads use \"graph\" or \"graph-surface\"."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s5-4km::production-legacy",
+      "dataset": {
+        "level": "S5",
+        "id": "hengelo-s5-4km",
+        "name": "Hengelo Center S5 (4 × 4 km)",
+        "areaKm2": 16,
+        "widthMeters": 4000,
+        "depthMeters": 4000,
+        "halfExtentMeters": 2000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7641454,
+          "minLat": 52.2445337,
+          "maxLon": 6.8228546,
+          "maxLat": 52.2804663
+        },
+        "osmElementCounts": {
+          "nodes": 358552,
+          "ways": 52142,
+          "relations": 67,
+          "total": 410761
+        },
+        "geoJsonFeatureCount": 96836,
+        "geoJsonSha256": "f0cea8ccd22ba17f936483871ada21d8d4defdbfebea29d81d0186dbdc0b35b1",
+        "gzipFileSha256": "e03b2b18ece549b5a25b4dc1c74f11df151aba1fef8435cf6015a04988635ad4",
+        "gzipBytes": 4781803,
+        "uncompressedBytes": 34351545,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "production-legacy",
+        "label": "Production Default (Legacy Roads + Candidate B Railways)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "legacy",
+          "railways": "legacy"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "failed_timeout",
+      "statusReason": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_1_scene_build\").",
+      "workerWallClockMs": 120173.64,
+      "lastHeartbeatStage": "iter_1_scene_build",
+      "lastHeartbeatElapsedMs": 116433.4,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": null,
+      "memory": null,
+      "sceneGeometry": null,
+      "operations": null,
+      "completenessAndCorrectness": null,
+      "unsupportedMetrics": [],
+      "errors": [
+        {
+          "phase": "failed_timeout",
+          "datasetId": "hengelo-s5-4km",
+          "configId": "production-legacy",
+          "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_1_scene_build\")."
+        }
+      ]
+    },
+    {
+      "workloadKey": "hengelo-s1-250m::graph-e2-e3",
+      "dataset": {
+        "level": "S1",
+        "id": "hengelo-s1-250m",
+        "name": "Hengelo Center S1 (250 × 250 m)",
+        "areaKm2": 0.0625,
+        "widthMeters": 250,
+        "depthMeters": 250,
+        "halfExtentMeters": 125,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7916653,
+          "minLat": 52.2613771,
+          "maxLon": 6.7953347,
+          "maxLat": 52.2636229
+        },
+        "osmElementCounts": {
+          "nodes": 3998,
+          "ways": 374,
+          "relations": 5,
+          "total": 4377
+        },
+        "geoJsonFeatureCount": 957,
+        "geoJsonSha256": "e248b33015e6e97b02659244589904a9791de9272e9438ff909a4d0c74499f70",
+        "gzipFileSha256": "5e0a8198254b5e600a8613527d0e6632c27cf9fafb2ee5471a6f02140bf0bcb6",
+        "gzipBytes": 68371,
+        "uncompressedBytes": 406896,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 2008.87,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 975.9,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 14.719,
+          "max": 19.85,
+          "mean": 16.634,
+          "median": 15.332,
+          "p95": 19.398,
+          "p99": 19.759,
+          "stdDev": 2.802,
+          "iqr": 2.565,
+          "coefficientOfVariation": 0.168,
+          "samples": [
+            19.85,
+            14.719,
+            15.332
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 6.19,
+          "max": 7.315,
+          "mean": 6.697,
+          "median": 6.586,
+          "p95": 7.242,
+          "p99": 7.3,
+          "stdDev": 0.571,
+          "iqr": 0.563,
+          "coefficientOfVariation": 0.085,
+          "samples": [
+            7.315,
+            6.19,
+            6.586
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 1.342,
+          "max": 1.995,
+          "mean": 1.749,
+          "median": 1.909,
+          "p95": 1.986,
+          "p99": 1.993,
+          "stdDev": 0.355,
+          "iqr": 0.327,
+          "coefficientOfVariation": 0.203,
+          "samples": [
+            1.909,
+            1.995,
+            1.342
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 30.568,
+          "max": 33.63,
+          "mean": 31.778,
+          "median": 31.136,
+          "p95": 33.381,
+          "p99": 33.581,
+          "stdDev": 1.629,
+          "iqr": 1.531,
+          "coefficientOfVariation": 0.051,
+          "samples": [
+            33.63,
+            31.136,
+            30.568
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 40.859,
+          "max": 48.204,
+          "mean": 45.265,
+          "median": 46.731,
+          "p95": 48.057,
+          "p99": 48.175,
+          "stdDev": 3.886,
+          "iqr": 3.672,
+          "coefficientOfVariation": 0.086,
+          "samples": [
+            48.204,
+            40.859,
+            46.731
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 14.36,
+          "max": 30.34,
+          "mean": 19.972,
+          "median": 15.215,
+          "p95": 28.827,
+          "p99": 30.037,
+          "stdDev": 8.989,
+          "iqr": 7.99,
+          "coefficientOfVariation": 0.45,
+          "samples": [
+            30.34,
+            15.215,
+            14.36
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 102.333,
+          "max": 113.926,
+          "mean": 108.862,
+          "median": 110.327,
+          "p95": 113.566,
+          "p99": 113.854,
+          "stdDev": 5.934,
+          "iqr": 5.796,
+          "coefficientOfVariation": 0.055,
+          "samples": [
+            113.926,
+            102.333,
+            110.327
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.04,
+          "max": 0.08,
+          "mean": 0.057,
+          "median": 0.05,
+          "p95": 0.077,
+          "p99": 0.079,
+          "stdDev": 0.02,
+          "iqr": 0.02,
+          "coefficientOfVariation": 0.359,
+          "samples": [
+            0.08,
+            0.04,
+            0.05
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 48,
+          "attributeBytes": 1058880,
+          "indexBytes": 74058,
+          "totalBytes": 1132938,
+          "totalMB": 1.08
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 80.602,
+          "heapUsedPeakMB": 123.496,
+          "heapUsedAfterDisposeMB": 139.92,
+          "heapDeltaAfterDisposeMB": 59.318,
+          "externalMB": 20.22,
+          "arrayBuffersMB": 11.31
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.254,
+          "workerPeakObservedMB": 255.23,
+          "workerAfterDisposeMB": 255.23,
+          "parentPolledPeakMB": 255.219
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 49,
+        "totalVertices": 84559,
+        "totalTriangles": 20817,
+        "renderedVerticesWithInstances": 126799,
+        "renderedTrianglesWithInstances": 57057,
+        "renderedFeaturesCount": 399,
+        "forestTreesCount": 63
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 60,
+          "overlappingPairsChecked": 49,
+          "conflictsResolved": 50,
+          "deduplicatedCount": 0,
+          "unionedCount": 1,
+          "booleanSubtractionsCount": 13,
+          "maxResidualFillOverlapSqMeters": 0.000088,
+          "violationsCount": 0,
+          "isValid": true
+        },
+        "roads": {
+          "mode": "graph",
+          "atGradeInputCount": 169,
+          "renderedPrimitivesOrRibbonsCount": 176,
+          "renderedJunctionCount": 40,
+          "candidateBlockerCheckCount": 0,
+          "overlappingBlockerCount": 0,
+          "polygonUnionOperationCount": 0,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 0,
+          "rejectedOrDegenerateCount": 1,
+          "fullySubtractedCount": 2,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 0,
+          "outputPolygonCount": 224,
+          "outputHoleRingCount": 0,
+          "outputTriangleCount": 1942
+        },
+        "railways": {
+          "renderSource": "graph-switches",
+          "totalTracksProcessed": 22,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 2113,
+          "switchCount": 10,
+          "chunkCount": 2,
+          "overlappingPairsCount": 85370,
+          "clippedSleepersCount": 51,
+          "spatialIndexCellCount": 492,
+          "spatialIndexEntries": 196,
+          "subStagesMs": {
+            "ballastMs": 1.36,
+            "sleepersMs": 10.25,
+            "railsMs": 0.31,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 1.01,
+            "totalMs": 13.7
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 957,
+        "sourceFeaturesClassified": 520,
+        "totalFeaturesParsed": 456,
+        "parsedFeaturePartsTotal": 458,
+        "parsedByCategory": {
+          "buildings": 67,
+          "roads": 122,
+          "railways": 22,
+          "waterBodies": 2,
+          "linearWaterways": 4,
+          "parks": 33,
+          "landuse": 25,
+          "barriers": 20,
+          "landmarks": 161
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 437,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 301
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 39
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 22
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 17
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 13
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 6
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 5
+            },
+            {
+              "tag": "barrier=retaining_wall",
+              "count": 3
+            },
+            {
+              "tag": "highway=pedestrian:polygon",
+              "count": 2
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 2
+            },
+            {
+              "tag": "railway=railway_crossing:point",
+              "count": 2
+            }
+          ],
+          "clippedByBoundaryCount": 115,
+          "omittedOutsideBoundaryCount": 64,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 11,
+          "chainedFeaturesCount": 31,
+          "featuresFullySubtractedCount": 3,
+          "clippingFailuresCount": 1,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "junction_near_reversal_spur_repaired": 7,
+            "junction_polygon_validation_failed": 1,
+            "junction_footprint_union_failed": 1,
+            "ribbon_start_portal_fallback_orthogonal": 1,
+            "path_boolean_clipping_failed": 1,
+            "ribbon_inverted_portal_quad_fallback": 1
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 399,
+          "coverageVsClassifiedRatio": 0.7673,
+          "builtSceneRenderedFeaturesCount": 399,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 177,
+          "roadEdgeCount": 178,
+          "railwayNodeCount": 24,
+          "railwayEdgeCount": 22,
+          "railwayConfirmedSwitchCount": 10,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 0,
+          "gradeTransitionCount": 17,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 0,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 0,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 7,
+            "auditedTriangleCount": 1942,
+            "upwardTriangleCount": 1942,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "executed",
+            "overlapConflictCount": 3,
+            "overlapAreaSqMeters": 1.084,
+            "continuityDefectCount": 0
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"graph\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s2-500m::graph-e2-e3",
+      "dataset": {
+        "level": "S2",
+        "id": "hengelo-s2-500m",
+        "name": "Hengelo Center S2 (500 × 500 m)",
+        "areaKm2": 0.25,
+        "widthMeters": 500,
+        "depthMeters": 500,
+        "halfExtentMeters": 250,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7898307,
+          "minLat": 52.2602542,
+          "maxLon": 6.7971693,
+          "maxLat": 52.2647458
+        },
+        "osmElementCounts": {
+          "nodes": 10611,
+          "ways": 1166,
+          "relations": 9,
+          "total": 11786
+        },
+        "geoJsonFeatureCount": 2757,
+        "geoJsonSha256": "2132987af7effe637ac067c9bd2b66e746b24d37101e9b28aeeee9bfbdd18470",
+        "gzipFileSha256": "9b08ccab2249de8ce1a2dea45494254e740bcd8d780862cb3caaae54ede0d7c7",
+        "gzipBytes": 171311,
+        "uncompressedBytes": 1068304,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 7506.53,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 6469.7,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 38.411,
+          "max": 99.896,
+          "mean": 62.897,
+          "median": 50.384,
+          "p95": 94.945,
+          "p99": 98.905,
+          "stdDev": 32.596,
+          "iqr": 30.742,
+          "coefficientOfVariation": 0.518,
+          "samples": [
+            50.384,
+            38.411,
+            99.896
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 21.971,
+          "max": 50.026,
+          "mean": 35.063,
+          "median": 33.192,
+          "p95": 48.343,
+          "p99": 49.689,
+          "stdDev": 14.121,
+          "iqr": 14.028,
+          "coefficientOfVariation": 0.403,
+          "samples": [
+            21.971,
+            50.026,
+            33.192
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 7.058,
+          "max": 14.65,
+          "mean": 9.911,
+          "median": 8.024,
+          "p95": 13.987,
+          "p99": 14.517,
+          "stdDev": 4.133,
+          "iqr": 3.796,
+          "coefficientOfVariation": 0.417,
+          "samples": [
+            8.024,
+            14.65,
+            7.058
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 288.839,
+          "max": 715.087,
+          "mean": 492.244,
+          "median": 472.806,
+          "p95": 690.859,
+          "p99": 710.241,
+          "stdDev": 213.788,
+          "iqr": 213.124,
+          "coefficientOfVariation": 0.434,
+          "samples": [
+            288.839,
+            472.806,
+            715.087
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 168.515,
+          "max": 433.196,
+          "mean": 339.542,
+          "median": 416.914,
+          "p95": 431.568,
+          "p99": 432.87,
+          "stdDev": 148.337,
+          "iqr": 132.34,
+          "coefficientOfVariation": 0.437,
+          "samples": [
+            168.515,
+            416.914,
+            433.196
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 66.873,
+          "max": 85.035,
+          "mean": 76.726,
+          "median": 78.271,
+          "p95": 84.359,
+          "p99": 84.9,
+          "stdDev": 9.179,
+          "iqr": 9.081,
+          "coefficientOfVariation": 0.12,
+          "samples": [
+            66.873,
+            85.035,
+            78.271
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 555.001,
+          "max": 1404.108,
+          "mean": 1093.289,
+          "median": 1320.757,
+          "p95": 1395.773,
+          "p99": 1402.441,
+          "stdDev": 468.03,
+          "iqr": 424.553,
+          "coefficientOfVariation": 0.428,
+          "samples": [
+            555.001,
+            1320.757,
+            1404.108
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.056,
+          "max": 0.117,
+          "mean": 0.088,
+          "median": 0.092,
+          "p95": 0.114,
+          "p99": 0.116,
+          "stdDev": 0.031,
+          "iqr": 0.03,
+          "coefficientOfVariation": 0.348,
+          "samples": [
+            0.056,
+            0.092,
+            0.117
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 73,
+          "attributeBytes": 2896176,
+          "indexBytes": 218862,
+          "totalBytes": 3115038,
+          "totalMB": 2.971
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 116.236,
+          "heapUsedPeakMB": 215.167,
+          "heapUsedAfterDisposeMB": 151.426,
+          "heapDeltaAfterDisposeMB": 35.19,
+          "externalMB": 21.546,
+          "arrayBuffersMB": 11.794
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.707,
+          "workerPeakObservedMB": 391.91,
+          "workerAfterDisposeMB": 379.008,
+          "parentPolledPeakMB": 391.91
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 77,
+        "totalVertices": 331544,
+        "totalTriangles": 62605,
+        "renderedVerticesWithInstances": 423704,
+        "renderedTrianglesWithInstances": 180925,
+        "renderedFeaturesCount": 1405,
+        "forestTreesCount": 303
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 271,
+          "overlappingPairsChecked": 226,
+          "conflictsResolved": 216,
+          "deduplicatedCount": 0,
+          "unionedCount": 2,
+          "booleanSubtractionsCount": 54,
+          "maxResidualFillOverlapSqMeters": 0.000343,
+          "violationsCount": 3,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "graph",
+          "atGradeInputCount": 627,
+          "renderedPrimitivesOrRibbonsCount": 635,
+          "renderedJunctionCount": 192,
+          "candidateBlockerCheckCount": 0,
+          "overlappingBlockerCount": 0,
+          "polygonUnionOperationCount": 0,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 0,
+          "rejectedOrDegenerateCount": 6,
+          "fullySubtractedCount": 4,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 0,
+          "outputPolygonCount": 838,
+          "outputHoleRingCount": 0,
+          "outputTriangleCount": 6791
+        },
+        "railways": {
+          "renderSource": "graph-switches",
+          "totalTracksProcessed": 47,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 4609,
+          "switchCount": 17,
+          "chunkCount": 5,
+          "overlappingPairsCount": 220557,
+          "clippedSleepersCount": 163,
+          "spatialIndexCellCount": 946,
+          "spatialIndexEntries": 416,
+          "subStagesMs": {
+            "ballastMs": 13.13,
+            "sleepersMs": 103.18,
+            "railsMs": 2.63,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 4.66,
+            "totalMs": 128.19
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 2757,
+        "sourceFeaturesClassified": 1639,
+        "totalFeaturesParsed": 1589,
+        "parsedFeaturePartsTotal": 1595,
+        "parsedByCategory": {
+          "buildings": 252,
+          "roads": 365,
+          "railways": 46,
+          "waterBodies": 10,
+          "linearWaterways": 13,
+          "parks": 175,
+          "landuse": 85,
+          "barriers": 82,
+          "landmarks": 561
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 1118,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 861
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 43
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 31
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 31
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 30
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 15
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 15
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 13
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 7
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 5
+            },
+            {
+              "tag": "highway=give_way:point",
+              "count": 5
+            }
+          ],
+          "clippedByBoundaryCount": 188,
+          "omittedOutsideBoundaryCount": 50,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 25,
+          "chainedFeaturesCount": 60,
+          "featuresFullySubtractedCount": 4,
+          "clippingFailuresCount": 1,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "junction_near_reversal_spur_repaired": 43,
+            "junction_polygon_validation_failed": 6,
+            "junction_footprint_union_failed": 2,
+            "ribbon_start_portal_fallback_orthogonal": 1,
+            "path_boolean_clipping_failed": 1,
+            "ribbon_inverted_portal_quad_fallback": 1
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 1405,
+          "coverageVsClassifiedRatio": 0.8572,
+          "builtSceneRenderedFeaturesCount": 1405,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 532,
+          "roadEdgeCount": 646,
+          "railwayNodeCount": 43,
+          "railwayEdgeCount": 47,
+          "railwayConfirmedSwitchCount": 17,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 5,
+          "gradeTransitionCount": 27,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 1,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 5,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 11,
+            "auditedTriangleCount": 6791,
+            "upwardTriangleCount": 6791,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (646) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"graph\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s3-1km::graph-e2-e3",
+      "dataset": {
+        "level": "S3",
+        "id": "hengelo-s3-1km",
+        "name": "Hengelo Center S3 (1 × 1 km)",
+        "areaKm2": 1,
+        "widthMeters": 1000,
+        "depthMeters": 1000,
+        "halfExtentMeters": 500,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7861614,
+          "minLat": 52.2580084,
+          "maxLon": 6.8008386,
+          "maxLat": 52.2669916
+        },
+        "osmElementCounts": {
+          "nodes": 34093,
+          "ways": 4318,
+          "relations": 13,
+          "total": 38424
+        },
+        "geoJsonFeatureCount": 9738,
+        "geoJsonSha256": "5039cb96a99f71d13b18a43a6b19129b750d947ee62b9a12200ee0d03e3415c7",
+        "gzipFileSha256": "9177e6c5b277a30248cca9fff89c6795e2383bd3054772b0a315e1c2341b0af1",
+        "gzipBytes": 524367,
+        "uncompressedBytes": 3531619,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 32318.15,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 31246.7,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 98.069,
+          "max": 333.33,
+          "mean": 178.145,
+          "median": 103.037,
+          "p95": 310.301,
+          "p99": 328.724,
+          "stdDev": 134.417,
+          "iqr": 117.631,
+          "coefficientOfVariation": 0.755,
+          "samples": [
+            333.33,
+            103.037,
+            98.069
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 69.933,
+          "max": 169.156,
+          "mean": 103.193,
+          "median": 70.489,
+          "p95": 159.289,
+          "p99": 167.183,
+          "stdDev": 57.127,
+          "iqr": 49.611,
+          "coefficientOfVariation": 0.554,
+          "samples": [
+            169.156,
+            70.489,
+            69.933
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 13.762,
+          "max": 107.889,
+          "mean": 46.374,
+          "median": 17.47,
+          "p95": 98.847,
+          "p99": 106.081,
+          "stdDev": 53.306,
+          "iqr": 47.064,
+          "coefficientOfVariation": 1.149,
+          "samples": [
+            107.889,
+            17.47,
+            13.762
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 2359.583,
+          "max": 5541.01,
+          "mean": 3451.764,
+          "median": 2454.699,
+          "p95": 5232.379,
+          "p99": 5479.284,
+          "stdDev": 1809.965,
+          "iqr": 1590.713,
+          "coefficientOfVariation": 0.524,
+          "samples": [
+            5541.01,
+            2454.699,
+            2359.583
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 665.022,
+          "max": 705.911,
+          "mean": 686.604,
+          "median": 688.88,
+          "p95": 704.208,
+          "p99": 705.57,
+          "stdDev": 20.539,
+          "iqr": 20.444,
+          "coefficientOfVariation": 0.03,
+          "samples": [
+            705.911,
+            688.88,
+            665.022
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "stdDev": 0,
+            "iqr": 0,
+            "coefficientOfVariation": 0,
+            "samples": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 96.262,
+          "max": 260.271,
+          "mean": 157.62,
+          "median": 116.327,
+          "p95": 245.876,
+          "p99": 257.392,
+          "stdDev": 89.462,
+          "iqr": 82.004,
+          "coefficientOfVariation": 0.568,
+          "samples": [
+            260.271,
+            96.262,
+            116.327
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 3280.228,
+          "max": 5937.548,
+          "mean": 4180.667,
+          "median": 3324.224,
+          "p95": 5676.215,
+          "p99": 5885.281,
+          "stdDev": 1521.663,
+          "iqr": 1328.66,
+          "coefficientOfVariation": 0.364,
+          "samples": [
+            5937.548,
+            3280.228,
+            3324.224
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.051,
+          "max": 0.078,
+          "mean": 0.062,
+          "median": 0.056,
+          "p95": 0.076,
+          "p99": 0.078,
+          "stdDev": 0.015,
+          "iqr": 0.014,
+          "coefficientOfVariation": 0.239,
+          "samples": [
+            0.056,
+            0.051,
+            0.078
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 121,
+          "attributeBytes": 9420568,
+          "indexBytes": 577782,
+          "totalBytes": 9998350,
+          "totalMB": 9.535
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 219.368,
+          "heapUsedPeakMB": 452.958,
+          "heapUsedAfterDisposeMB": 320.08,
+          "heapDeltaAfterDisposeMB": 100.712,
+          "externalMB": 50.027,
+          "arrayBuffersMB": 41.118
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.184,
+          "workerPeakObservedMB": 710.496,
+          "workerAfterDisposeMB": 706.555,
+          "parentPolledPeakMB": 710.496
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 133,
+        "totalVertices": 1237839,
+        "totalTriangles": 192813,
+        "renderedVerticesWithInstances": 1461619,
+        "renderedTrianglesWithInstances": 592223,
+        "renderedFeaturesCount": 5346,
+        "forestTreesCount": 1208
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 857,
+          "overlappingPairsChecked": 723,
+          "conflictsResolved": 713,
+          "deduplicatedCount": 1,
+          "unionedCount": 3,
+          "booleanSubtractionsCount": 134,
+          "maxResidualFillOverlapSqMeters": 0.001259,
+          "violationsCount": 13,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "graph",
+          "atGradeInputCount": 2074,
+          "renderedPrimitivesOrRibbonsCount": 2113,
+          "renderedJunctionCount": 648,
+          "candidateBlockerCheckCount": 0,
+          "overlappingBlockerCount": 0,
+          "polygonUnionOperationCount": 0,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 0,
+          "rejectedOrDegenerateCount": 38,
+          "fullySubtractedCount": 16,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 0,
+          "outputPolygonCount": 2793,
+          "outputHoleRingCount": 0,
+          "outputTriangleCount": 21023
+        },
+        "railways": {
+          "renderSource": "graph-switches",
+          "totalTracksProcessed": 95,
+          "ballastSegmentCount": null,
+          "ballastBooleanUnionCount": null,
+          "sleeperInstancesCount": 11190,
+          "switchCount": 31,
+          "chunkCount": 13,
+          "overlappingPairsCount": 501223,
+          "clippedSleepersCount": 324,
+          "spatialIndexCellCount": 2016,
+          "spatialIndexEntries": 1184,
+          "subStagesMs": {
+            "ballastMs": 8.44,
+            "sleepersMs": 63.14,
+            "railsMs": 1.61,
+            "bridgesAndTunnelsMs": 0.31,
+            "spatialChunkingMs": 4.99,
+            "totalMs": 83.28
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 9738,
+        "sourceFeaturesClassified": 5855,
+        "totalFeaturesParsed": 5814,
+        "parsedFeaturePartsTotal": 5822,
+        "parsedByCategory": {
+          "buildings": 1632,
+          "roads": 1166,
+          "railways": 106,
+          "waterBodies": 25,
+          "linearWaterways": 28,
+          "parks": 610,
+          "landuse": 220,
+          "barriers": 302,
+          "landmarks": 1725
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 3883,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 3317
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 77
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 77
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 62
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 55
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 49
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 37
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 22
+            },
+            {
+              "tag": "barrier=gate",
+              "count": 22
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 19
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 18
+            },
+            {
+              "tag": "man_made=flagpole",
+              "count": 18
+            }
+          ],
+          "clippedByBoundaryCount": 331,
+          "omittedOutsideBoundaryCount": 41,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 123,
+          "chainedFeaturesCount": 273,
+          "featuresFullySubtractedCount": 16,
+          "clippingFailuresCount": 5,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "junction_polygon_validation_failed": 37,
+            "junction_near_reversal_spur_repaired": 170,
+            "junction_footprint_union_failed": 3,
+            "junction_invalid_full_width_stub": 1,
+            "junction_short_edge_portal_crossover": 1,
+            "ribbon_start_portal_fallback_orthogonal": 2,
+            "path_boolean_clipping_failed": 5,
+            "ribbon_inverted_portal_quad_fallback": 1
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 5346,
+          "coverageVsClassifiedRatio": 0.9131,
+          "builtSceneRenderedFeaturesCount": 5346,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 1641,
+          "roadEdgeCount": 2108,
+          "railwayNodeCount": 92,
+          "railwayEdgeCount": 95,
+          "railwayConfirmedSwitchCount": 31,
+          "railwayUnresolvedSwitchCount": 2,
+          "railwayFlatCrossingCount": 4,
+          "railwayUnresolvedJunctionCount": 8,
+          "gradeTransitionCount": 56,
+          "unresolvedGradeTransitionCount": 2,
+          "levelCrossingCount": 7,
+          "pedestrianRailCrossingCount": 6,
+          "unresolvedCrossingCount": 9,
+          "gradeSeparatedCrossingCount": 142,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 13,
+            "auditedTriangleCount": 21023,
+            "upwardTriangleCount": 21023,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (2108) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "not_applicable",
+            "reason": "Config uses roads=\"graph\" (not \"graph-surface\").",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s4-2km::graph-e2-e3",
+      "dataset": {
+        "level": "S4",
+        "id": "hengelo-s4-2km",
+        "name": "Hengelo Center S4 (2 × 2 km)",
+        "areaKm2": 4,
+        "widthMeters": 2000,
+        "depthMeters": 2000,
+        "halfExtentMeters": 1000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7788227,
+          "minLat": 52.2535168,
+          "maxLon": 6.8081773,
+          "maxLat": 52.2714832
+        },
+        "osmElementCounts": {
+          "nodes": 134951,
+          "ways": 18794,
+          "relations": 18,
+          "total": 153763
+        },
+        "geoJsonFeatureCount": 36669,
+        "geoJsonSha256": "0922f276347a9650bcf152c1ad23ff77defe2b20f6d8e259beb3a291d702b68a",
+        "gzipFileSha256": "a7064d39851e087dc510d6a41b27cfba061ec743da7eb56da4f832d8a9a8b26d",
+        "gzipBytes": 1815964,
+        "uncompressedBytes": 13075665,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "failed_timeout",
+      "statusReason": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "workerWallClockMs": 120175.4,
+      "lastHeartbeatStage": "iter_3_planar",
+      "lastHeartbeatElapsedMs": 96466.1,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": null,
+      "memory": null,
+      "sceneGeometry": null,
+      "operations": null,
+      "completenessAndCorrectness": null,
+      "unsupportedMetrics": [],
+      "errors": [
+        {
+          "phase": "failed_timeout",
+          "datasetId": "hengelo-s4-2km",
+          "configId": "graph-e2-e3",
+          "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\")."
+        }
+      ]
+    },
+    {
+      "workloadKey": "hengelo-s5-4km::graph-e2-e3",
+      "dataset": {
+        "level": "S5",
+        "id": "hengelo-s5-4km",
+        "name": "Hengelo Center S5 (4 × 4 km)",
+        "areaKm2": 16,
+        "widthMeters": 4000,
+        "depthMeters": 4000,
+        "halfExtentMeters": 2000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7641454,
+          "minLat": 52.2445337,
+          "maxLon": 6.8228546,
+          "maxLat": 52.2804663
+        },
+        "osmElementCounts": {
+          "nodes": 358552,
+          "ways": 52142,
+          "relations": 67,
+          "total": 410761
+        },
+        "geoJsonFeatureCount": 96836,
+        "geoJsonSha256": "f0cea8ccd22ba17f936483871ada21d8d4defdbfebea29d81d0186dbdc0b35b1",
+        "gzipFileSha256": "e03b2b18ece549b5a25b4dc1c74f11df151aba1fef8435cf6015a04988635ad4",
+        "gzipBytes": 4781803,
+        "uncompressedBytes": 34351545,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "graph-e2-e3",
+        "label": "Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph",
+          "railways": "graph-switches",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "ribbon"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "skipped_due_to_threshold",
+      "statusReason": "Skipped S5 for config \"graph-e2-e3\" because progression halted at S4: failed_timeout: Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "workerWallClockMs": 0,
+      "lastHeartbeatStage": null,
+      "lastHeartbeatElapsedMs": null,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": null,
+      "memory": null,
+      "sceneGeometry": null,
+      "operations": null,
+      "completenessAndCorrectness": null,
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s1-250m::surface-first-e2plus-rplus",
+      "dataset": {
+        "level": "S1",
+        "id": "hengelo-s1-250m",
+        "name": "Hengelo Center S1 (250 × 250 m)",
+        "areaKm2": 0.0625,
+        "widthMeters": 250,
+        "depthMeters": 250,
+        "halfExtentMeters": 125,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7916653,
+          "minLat": 52.2613771,
+          "maxLon": 6.7953347,
+          "maxLat": 52.2636229
+        },
+        "osmElementCounts": {
+          "nodes": 3998,
+          "ways": 374,
+          "relations": 5,
+          "total": 4377
+        },
+        "geoJsonFeatureCount": 957,
+        "geoJsonSha256": "e248b33015e6e97b02659244589904a9791de9272e9438ff909a4d0c74499f70",
+        "gzipFileSha256": "5e0a8198254b5e600a8613527d0e6632c27cf9fafb2ee5471a6f02140bf0bcb6",
+        "gzipBytes": 68371,
+        "uncompressedBytes": 406896,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 2678.85,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 1663.7,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 14.801,
+          "max": 20.365,
+          "mean": 17.517,
+          "median": 17.385,
+          "p95": 20.067,
+          "p99": 20.305,
+          "stdDev": 2.785,
+          "iqr": 2.782,
+          "coefficientOfVariation": 0.159,
+          "samples": [
+            20.365,
+            14.801,
+            17.385
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 6.25,
+          "max": 6.644,
+          "mean": 6.493,
+          "median": 6.584,
+          "p95": 6.638,
+          "p99": 6.643,
+          "stdDev": 0.212,
+          "iqr": 0.197,
+          "coefficientOfVariation": 0.033,
+          "samples": [
+            6.644,
+            6.584,
+            6.25
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 1.366,
+          "max": 2.022,
+          "mean": 1.595,
+          "median": 1.396,
+          "p95": 1.959,
+          "p99": 2.009,
+          "stdDev": 0.37,
+          "iqr": 0.328,
+          "coefficientOfVariation": 0.232,
+          "samples": [
+            2.022,
+            1.396,
+            1.366
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 30.663,
+          "max": 34.338,
+          "mean": 31.899,
+          "median": 30.695,
+          "p95": 33.973,
+          "p99": 34.265,
+          "stdDev": 2.112,
+          "iqr": 1.837,
+          "coefficientOfVariation": 0.066,
+          "samples": [
+            34.338,
+            30.695,
+            30.663
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 71.893,
+          "max": 72.782,
+          "mean": 72.384,
+          "median": 72.476,
+          "p95": 72.751,
+          "p99": 72.776,
+          "stdDev": 0.452,
+          "iqr": 0.445,
+          "coefficientOfVariation": 0.006,
+          "samples": [
+            71.893,
+            72.782,
+            72.476
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 29.035,
+            "max": 31.844,
+            "mean": 30.7,
+            "median": 31.222,
+            "p95": 31.782,
+            "p99": 31.832,
+            "stdDev": 1.475,
+            "iqr": 1.405,
+            "coefficientOfVariation": 0.048,
+            "samples": [
+              29.035,
+              31.222,
+              31.844
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 27.903,
+            "max": 30.693,
+            "mean": 29.553,
+            "median": 30.063,
+            "p95": 30.63,
+            "p99": 30.68,
+            "stdDev": 1.463,
+            "iqr": 1.395,
+            "coefficientOfVariation": 0.05,
+            "samples": [
+              27.903,
+              30.063,
+              30.693
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 33.554,
+            "max": 33.901,
+            "mean": 33.766,
+            "median": 33.844,
+            "p95": 33.895,
+            "p99": 33.899,
+            "stdDev": 0.186,
+            "iqr": 0.173,
+            "coefficientOfVariation": 0.006,
+            "samples": [
+              33.554,
+              33.844,
+              33.901
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 3.922,
+            "max": 5.745,
+            "mean": 4.835,
+            "median": 4.838,
+            "p95": 5.655,
+            "p99": 5.727,
+            "stdDev": 0.912,
+            "iqr": 0.912,
+            "coefficientOfVariation": 0.189,
+            "samples": [
+              5.745,
+              4.838,
+              3.922
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 27.999,
+          "max": 43.023,
+          "mean": 33.7,
+          "median": 30.08,
+          "p95": 41.728,
+          "p99": 42.764,
+          "stdDev": 8.14,
+          "iqr": 7.512,
+          "coefficientOfVariation": 0.242,
+          "samples": [
+            43.023,
+            30.08,
+            27.999
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 145.129,
+          "max": 155.449,
+          "mean": 149.953,
+          "median": 149.282,
+          "p95": 154.832,
+          "p99": 155.325,
+          "stdDev": 5.193,
+          "iqr": 5.16,
+          "coefficientOfVariation": 0.035,
+          "samples": [
+            155.449,
+            149.282,
+            145.129
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.045,
+          "max": 0.054,
+          "mean": 0.049,
+          "median": 0.048,
+          "p95": 0.053,
+          "p99": 0.053,
+          "stdDev": 0.005,
+          "iqr": 0.005,
+          "coefficientOfVariation": 0.093,
+          "samples": [
+            0.054,
+            0.045,
+            0.048
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 48,
+          "attributeBytes": 1078488,
+          "indexBytes": 82002,
+          "totalBytes": 1160490,
+          "totalMB": 1.107
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 86.856,
+          "heapUsedPeakMB": 130.594,
+          "heapUsedAfterDisposeMB": 217.805,
+          "heapDeltaAfterDisposeMB": 130.948,
+          "externalMB": 20.36,
+          "arrayBuffersMB": 11.45
+        },
+        "processRssMB": {
+          "workerInitialMB": 164.625,
+          "workerPeakObservedMB": 337.348,
+          "workerAfterDisposeMB": 337.348,
+          "parentPolledPeakMB": 337.348
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 49,
+        "totalVertices": 85738,
+        "totalTriangles": 22141,
+        "renderedVerticesWithInstances": 127978,
+        "renderedTrianglesWithInstances": 58381,
+        "renderedFeaturesCount": 398,
+        "forestTreesCount": 63
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 60,
+          "overlappingPairsChecked": 49,
+          "conflictsResolved": 50,
+          "deduplicatedCount": 0,
+          "unionedCount": 1,
+          "booleanSubtractionsCount": 13,
+          "maxResidualFillOverlapSqMeters": 0.000088,
+          "violationsCount": 0,
+          "isValid": true
+        },
+        "roads": {
+          "mode": "graph-surface",
+          "atGradeInputCount": 169,
+          "renderedPrimitivesOrRibbonsCount": 174,
+          "renderedJunctionCount": 0,
+          "candidateBlockerCheckCount": 15567,
+          "overlappingBlockerCount": 517,
+          "polygonUnionOperationCount": 178,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 155,
+          "rejectedOrDegenerateCount": 0,
+          "fullySubtractedCount": 4,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 0,
+          "outputPolygonCount": 183,
+          "outputHoleRingCount": 0,
+          "outputTriangleCount": 3743
+        },
+        "railways": {
+          "renderSource": "graph-R+",
+          "totalTracksProcessed": 22,
+          "ballastSegmentCount": 22,
+          "ballastBooleanUnionCount": 2,
+          "sleeperInstancesCount": 2113,
+          "switchCount": 10,
+          "chunkCount": 2,
+          "overlappingPairsCount": 85370,
+          "clippedSleepersCount": 51,
+          "spatialIndexCellCount": 492,
+          "spatialIndexEntries": 196,
+          "subStagesMs": {
+            "ballastMs": 15.7,
+            "sleepersMs": 9.47,
+            "railsMs": 0.54,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 0.95,
+            "totalMs": 28.22
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 957,
+        "sourceFeaturesClassified": 520,
+        "totalFeaturesParsed": 456,
+        "parsedFeaturePartsTotal": 458,
+        "parsedByCategory": {
+          "buildings": 67,
+          "roads": 122,
+          "railways": 22,
+          "waterBodies": 2,
+          "linearWaterways": 4,
+          "parks": 33,
+          "landuse": 25,
+          "barriers": 20,
+          "landmarks": 161
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 437,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 301
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 39
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 22
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 17
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 13
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 6
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 5
+            },
+            {
+              "tag": "barrier=retaining_wall",
+              "count": 3
+            },
+            {
+              "tag": "highway=pedestrian:polygon",
+              "count": 2
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 2
+            },
+            {
+              "tag": "railway=railway_crossing:point",
+              "count": 2
+            }
+          ],
+          "clippedByBoundaryCount": 115,
+          "omittedOutsideBoundaryCount": 64,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 11,
+          "chainedFeaturesCount": 31,
+          "featuresFullySubtractedCount": 2,
+          "clippingFailuresCount": 0,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {}
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 398,
+          "coverageVsClassifiedRatio": 0.7654,
+          "builtSceneRenderedFeaturesCount": 398,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 177,
+          "roadEdgeCount": 178,
+          "railwayNodeCount": 24,
+          "railwayEdgeCount": 22,
+          "railwayConfirmedSwitchCount": 10,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 0,
+          "gradeTransitionCount": 17,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 0,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 0,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 7,
+            "auditedTriangleCount": 3743,
+            "upwardTriangleCount": 3743,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "executed",
+            "overlapConflictCount": 0,
+            "overlapAreaSqMeters": 0,
+            "continuityDefectCount": 0
+          },
+          "surfaceFirstValidation": {
+            "status": "executed",
+            "coverageDefectCount": 0,
+            "networkCoverageRatio": 0.9994,
+            "unexplainedMissingAreaM2": 7.9625,
+            "overlapDefectCount": 0,
+            "overlapAreaM2": 0,
+            "inconsistentElevationDefectCount": 0,
+            "tinyDisconnectedFragmentCount": 0,
+            "provenanceDefectCount": 3,
+            "overallValid": false
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s2-500m::surface-first-e2plus-rplus",
+      "dataset": {
+        "level": "S2",
+        "id": "hengelo-s2-500m",
+        "name": "Hengelo Center S2 (500 × 500 m)",
+        "areaKm2": 0.25,
+        "widthMeters": 500,
+        "depthMeters": 500,
+        "halfExtentMeters": 250,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7898307,
+          "minLat": 52.2602542,
+          "maxLon": 6.7971693,
+          "maxLat": 52.2647458
+        },
+        "osmElementCounts": {
+          "nodes": 10611,
+          "ways": 1166,
+          "relations": 9,
+          "total": 11786
+        },
+        "geoJsonFeatureCount": 2757,
+        "geoJsonSha256": "2132987af7effe637ac067c9bd2b66e746b24d37101e9b28aeeee9bfbdd18470",
+        "gzipFileSha256": "9b08ccab2249de8ce1a2dea45494254e740bcd8d780862cb3caaae54ede0d7c7",
+        "gzipBytes": 171311,
+        "uncompressedBytes": 1068304,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 8692.11,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 7651.1,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 48.882,
+          "max": 103.521,
+          "mean": 82.891,
+          "median": 96.269,
+          "p95": 102.796,
+          "p99": 103.376,
+          "stdDev": 29.675,
+          "iqr": 27.32,
+          "coefficientOfVariation": 0.358,
+          "samples": [
+            48.882,
+            96.269,
+            103.521
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 22.764,
+          "max": 51.826,
+          "mean": 36.814,
+          "median": 35.851,
+          "p95": 50.228,
+          "p99": 51.506,
+          "stdDev": 14.555,
+          "iqr": 14.531,
+          "coefficientOfVariation": 0.395,
+          "samples": [
+            22.764,
+            51.826,
+            35.851
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 6.097,
+          "max": 10.656,
+          "mean": 8.995,
+          "median": 10.233,
+          "p95": 10.614,
+          "p99": 10.648,
+          "stdDev": 2.519,
+          "iqr": 2.28,
+          "coefficientOfVariation": 0.28,
+          "samples": [
+            6.097,
+            10.656,
+            10.233
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 274.039,
+          "max": 655.217,
+          "mean": 514.069,
+          "median": 612.951,
+          "p95": 650.99,
+          "p99": 654.371,
+          "stdDev": 208.944,
+          "iqr": 190.589,
+          "coefficientOfVariation": 0.406,
+          "samples": [
+            274.039,
+            612.951,
+            655.217
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 314.502,
+          "max": 621.466,
+          "mean": 518.863,
+          "median": 620.62,
+          "p95": 621.382,
+          "p99": 621.449,
+          "stdDev": 176.982,
+          "iqr": 153.482,
+          "coefficientOfVariation": 0.341,
+          "samples": [
+            314.502,
+            621.466,
+            620.62
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 127.65,
+            "max": 258.736,
+            "mean": 212.38,
+            "median": 250.753,
+            "p95": 257.938,
+            "p99": 258.576,
+            "stdDev": 73.486,
+            "iqr": 65.543,
+            "coefficientOfVariation": 0.346,
+            "samples": [
+              127.65,
+              250.753,
+              258.736
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 122.947,
+            "max": 252.945,
+            "mean": 206.323,
+            "median": 243.076,
+            "p95": 251.958,
+            "p99": 252.748,
+            "stdDev": 72.374,
+            "iqr": 64.999,
+            "coefficientOfVariation": 0.351,
+            "samples": [
+              122.947,
+              243.076,
+              252.945
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 155.198,
+            "max": 299.862,
+            "mean": 251.368,
+            "median": 299.043,
+            "p95": 299.78,
+            "p99": 299.846,
+            "stdDev": 83.286,
+            "iqr": 72.332,
+            "coefficientOfVariation": 0.331,
+            "samples": [
+              155.198,
+              299.862,
+              299.043
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 18.969,
+            "max": 44.476,
+            "mean": 32.902,
+            "median": 35.262,
+            "p95": 43.554,
+            "p99": 44.292,
+            "stdDev": 12.916,
+            "iqr": 12.753,
+            "coefficientOfVariation": 0.393,
+            "samples": [
+              18.969,
+              44.476,
+              35.262
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 129.29,
+          "max": 204.507,
+          "mean": 170.677,
+          "median": 178.234,
+          "p95": 201.88,
+          "p99": 203.982,
+          "stdDev": 38.174,
+          "iqr": 37.609,
+          "coefficientOfVariation": 0.224,
+          "samples": [
+            129.29,
+            178.234,
+            204.507
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 771.188,
+          "max": 1586.174,
+          "mean": 1300.167,
+          "median": 1543.139,
+          "p95": 1581.87,
+          "p99": 1585.313,
+          "stdDev": 458.614,
+          "iqr": 407.493,
+          "coefficientOfVariation": 0.353,
+          "samples": [
+            771.188,
+            1543.139,
+            1586.174
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.085,
+          "max": 0.118,
+          "mean": 0.103,
+          "median": 0.106,
+          "p95": 0.116,
+          "p99": 0.117,
+          "stdDev": 0.016,
+          "iqr": 0.016,
+          "coefficientOfVariation": 0.159,
+          "samples": [
+            0.106,
+            0.085,
+            0.118
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 70,
+          "attributeBytes": 3018712,
+          "indexBytes": 258528,
+          "totalBytes": 3277240,
+          "totalMB": 3.125
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 108.252,
+          "heapUsedPeakMB": 222.955,
+          "heapUsedAfterDisposeMB": 140.371,
+          "heapDeltaAfterDisposeMB": 32.119,
+          "externalMB": 20.288,
+          "arrayBuffersMB": 11.378
+        },
+        "processRssMB": {
+          "workerInitialMB": 165.09,
+          "workerPeakObservedMB": 396.391,
+          "workerAfterDisposeMB": 380.773,
+          "parentPolledPeakMB": 396.391
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 74,
+        "totalVertices": 337627,
+        "totalTriangles": 69216,
+        "renderedVerticesWithInstances": 429787,
+        "renderedTrianglesWithInstances": 187536,
+        "renderedFeaturesCount": 1403,
+        "forestTreesCount": 303
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 271,
+          "overlappingPairsChecked": 226,
+          "conflictsResolved": 216,
+          "deduplicatedCount": 0,
+          "unionedCount": 2,
+          "booleanSubtractionsCount": 54,
+          "maxResidualFillOverlapSqMeters": 0.000343,
+          "violationsCount": 3,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "graph-surface",
+          "atGradeInputCount": 627,
+          "renderedPrimitivesOrRibbonsCount": 633,
+          "renderedJunctionCount": 0,
+          "candidateBlockerCheckCount": 203206,
+          "overlappingBlockerCount": 2015,
+          "polygonUnionOperationCount": 639,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 583,
+          "rejectedOrDegenerateCount": 0,
+          "fullySubtractedCount": 6,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 0,
+          "outputPolygonCount": 655,
+          "outputHoleRingCount": 2,
+          "outputTriangleCount": 14702
+        },
+        "railways": {
+          "renderSource": "graph-R+",
+          "totalTracksProcessed": 47,
+          "ballastSegmentCount": 47,
+          "ballastBooleanUnionCount": 1,
+          "sleeperInstancesCount": 4609,
+          "switchCount": 17,
+          "chunkCount": 5,
+          "overlappingPairsCount": 220557,
+          "clippedSleepersCount": 163,
+          "spatialIndexCellCount": 946,
+          "spatialIndexEntries": 416,
+          "subStagesMs": {
+            "ballastMs": 83.72,
+            "sleepersMs": 63.58,
+            "railsMs": 1.51,
+            "bridgesAndTunnelsMs": 0,
+            "spatialChunkingMs": 4.29,
+            "totalMs": 156.4
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 2757,
+        "sourceFeaturesClassified": 1639,
+        "totalFeaturesParsed": 1589,
+        "parsedFeaturePartsTotal": 1595,
+        "parsedByCategory": {
+          "buildings": 252,
+          "roads": 365,
+          "railways": 46,
+          "waterBodies": 10,
+          "linearWaterways": 13,
+          "parks": 175,
+          "landuse": 85,
+          "barriers": 82,
+          "landmarks": 561
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 1118,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 861
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 43
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 31
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 31
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 30
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 15
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 15
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 13
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 11
+            },
+            {
+              "tag": "railway=stop:point",
+              "count": 7
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 5
+            },
+            {
+              "tag": "highway=give_way:point",
+              "count": 5
+            }
+          ],
+          "clippedByBoundaryCount": 188,
+          "omittedOutsideBoundaryCount": 50,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 25,
+          "chainedFeaturesCount": 60,
+          "featuresFullySubtractedCount": 2,
+          "clippingFailuresCount": 0,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {}
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 1403,
+          "coverageVsClassifiedRatio": 0.856,
+          "builtSceneRenderedFeaturesCount": 1403,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 532,
+          "roadEdgeCount": 646,
+          "railwayNodeCount": 43,
+          "railwayEdgeCount": 47,
+          "railwayConfirmedSwitchCount": 17,
+          "railwayUnresolvedSwitchCount": 0,
+          "railwayFlatCrossingCount": 2,
+          "railwayUnresolvedJunctionCount": 5,
+          "gradeTransitionCount": 27,
+          "unresolvedGradeTransitionCount": 0,
+          "levelCrossingCount": 1,
+          "pedestrianRailCrossingCount": 0,
+          "unresolvedCrossingCount": 5,
+          "gradeSeparatedCrossingCount": 44,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 11,
+            "auditedTriangleCount": 14702,
+            "upwardTriangleCount": 14702,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (646) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateSurfaceFirstRoadGeometry because roadEdgeCount (646) exceeds --validator-max-edges=250.",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s3-1km::surface-first-e2plus-rplus",
+      "dataset": {
+        "level": "S3",
+        "id": "hengelo-s3-1km",
+        "name": "Hengelo Center S3 (1 × 1 km)",
+        "areaKm2": 1,
+        "widthMeters": 1000,
+        "depthMeters": 1000,
+        "halfExtentMeters": 500,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7861614,
+          "minLat": 52.2580084,
+          "maxLon": 6.8008386,
+          "maxLat": 52.2669916
+        },
+        "osmElementCounts": {
+          "nodes": 34093,
+          "ways": 4318,
+          "relations": 13,
+          "total": 38424
+        },
+        "geoJsonFeatureCount": 9738,
+        "geoJsonSha256": "5039cb96a99f71d13b18a43a6b19129b750d947ee62b9a12200ee0d03e3415c7",
+        "gzipFileSha256": "9177e6c5b277a30248cca9fff89c6795e2383bd3054772b0a315e1c2341b0af1",
+        "gzipBytes": 524367,
+        "uncompressedBytes": 3531619,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "completed",
+      "statusReason": "Completed within resource and timeout bounds.",
+      "workerWallClockMs": 44274.66,
+      "lastHeartbeatStage": "completed",
+      "lastHeartbeatElapsedMs": 43151.8,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": {
+        "geojsonParseAndClassifyMs": {
+          "sampleCount": 3,
+          "min": 109.403,
+          "max": 312.75,
+          "mean": 239.063,
+          "median": 295.037,
+          "p95": 310.978,
+          "p99": 312.395,
+          "stdDev": 112.638,
+          "iqr": 101.674,
+          "coefficientOfVariation": 0.471,
+          "samples": [
+            312.75,
+            109.403,
+            295.037
+          ]
+        },
+        "infrastructureGraphBuildMs": {
+          "sampleCount": 3,
+          "min": 75.174,
+          "max": 158.121,
+          "mean": 128.245,
+          "median": 151.441,
+          "p95": 157.453,
+          "p99": 157.987,
+          "stdDev": 46.082,
+          "iqr": 41.474,
+          "coefficientOfVariation": 0.359,
+          "samples": [
+            75.174,
+            151.441,
+            158.121
+          ]
+        },
+        "graphToRendererAdapterMs": {
+          "sampleCount": 3,
+          "min": 16.96,
+          "max": 31.933,
+          "mean": 26.303,
+          "median": 30.016,
+          "p95": 31.741,
+          "p99": 31.895,
+          "stdDev": 8.148,
+          "iqr": 7.486,
+          "coefficientOfVariation": 0.31,
+          "samples": [
+            16.96,
+            31.933,
+            30.016
+          ]
+        },
+        "planarSurfaceResolutionMs": {
+          "sampleCount": 3,
+          "min": 3246.693,
+          "max": 5527.035,
+          "mean": 4066.351,
+          "median": 3425.324,
+          "p95": 5316.864,
+          "p99": 5485.001,
+          "stdDev": 1268.139,
+          "iqr": 1140.171,
+          "coefficientOfVariation": 0.312,
+          "samples": [
+            3246.693,
+            3425.324,
+            5527.035
+          ]
+        },
+        "roadGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 917.05,
+          "max": 2359.155,
+          "mean": 1814.106,
+          "median": 2166.112,
+          "p95": 2339.851,
+          "p99": 2355.294,
+          "stdDev": 782.846,
+          "iqr": 721.053,
+          "coefficientOfVariation": 0.432,
+          "samples": [
+            917.05,
+            2359.155,
+            2166.112
+          ]
+        },
+        "roadSubStagesMs": {
+          "footprintConstructionMs": {
+            "sampleCount": 3,
+            "min": 348.827,
+            "max": 862.648,
+            "mean": 674.622,
+            "median": 812.391,
+            "p95": 857.622,
+            "p99": 861.643,
+            "stdDev": 283.263,
+            "iqr": 256.91,
+            "coefficientOfVariation": 0.42,
+            "samples": [
+              348.827,
+              862.648,
+              812.391
+            ]
+          },
+          "polygonUnionMs": {
+            "sampleCount": 3,
+            "min": 339.002,
+            "max": 837.6,
+            "mean": 655.038,
+            "median": 788.512,
+            "p95": 832.691,
+            "p99": 836.618,
+            "stdDev": 274.794,
+            "iqr": 249.299,
+            "coefficientOfVariation": 0.42,
+            "samples": [
+              339.002,
+              837.6,
+              788.512
+            ]
+          },
+          "ownershipClippingMs": {
+            "sampleCount": 3,
+            "min": 484.54,
+            "max": 1237.09,
+            "mean": 946.585,
+            "median": 1118.126,
+            "p95": 1225.194,
+            "p99": 1234.711,
+            "stdDev": 404.54,
+            "iqr": 376.275,
+            "coefficientOfVariation": 0.427,
+            "samples": [
+              484.54,
+              1237.09,
+              1118.126
+            ]
+          },
+          "triangulationAndValidationMs": {
+            "sampleCount": 3,
+            "min": 46.671,
+            "max": 150.898,
+            "mean": 114.158,
+            "median": 144.907,
+            "p95": 150.298,
+            "p99": 150.778,
+            "stdDev": 58.522,
+            "iqr": 52.113,
+            "coefficientOfVariation": 0.513,
+            "samples": [
+              46.671,
+              150.898,
+              144.907
+            ]
+          }
+        },
+        "railwayGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 245.121,
+          "max": 505.407,
+          "mean": 394.394,
+          "median": 432.655,
+          "p95": 498.131,
+          "p99": 503.952,
+          "stdDev": 134.295,
+          "iqr": 130.143,
+          "coefficientOfVariation": 0.341,
+          "samples": [
+            245.121,
+            432.655,
+            505.407
+          ]
+        },
+        "fullSceneGeometryGenerationMs": {
+          "sampleCount": 3,
+          "min": 3595.727,
+          "max": 8991.857,
+          "mean": 6990.384,
+          "median": 8383.567,
+          "p95": 8931.028,
+          "p99": 8979.691,
+          "stdDev": 2955.549,
+          "iqr": 2698.065,
+          "coefficientOfVariation": 0.423,
+          "samples": [
+            3595.727,
+            8991.857,
+            8383.567
+          ]
+        },
+        "sceneResourceDisposalMs": {
+          "sampleCount": 3,
+          "min": 0.061,
+          "max": 0.134,
+          "mean": 0.109,
+          "median": 0.132,
+          "p95": 0.134,
+          "p99": 0.134,
+          "stdDev": 0.041,
+          "iqr": 0.037,
+          "coefficientOfVariation": 0.38,
+          "samples": [
+            0.061,
+            0.132,
+            0.134
+          ]
+        }
+      },
+      "memory": {
+        "cpuBufferMemory": {
+          "geometryCount": 112,
+          "attributeBytes": 9946176,
+          "indexBytes": 728490,
+          "totalBytes": 10674666,
+          "totalMB": 10.18
+        },
+        "workerV8Heap": {
+          "gcInvokedBeforeRun": false,
+          "heapUsedBeforeMB": 226.519,
+          "heapUsedPeakMB": 461.832,
+          "heapUsedAfterDisposeMB": 465.789,
+          "heapDeltaAfterDisposeMB": 239.27,
+          "externalMB": 72.668,
+          "arrayBuffersMB": 63.759
+        },
+        "processRssMB": {
+          "workerInitialMB": 163.77,
+          "workerPeakObservedMB": 726.082,
+          "workerAfterDisposeMB": 723.363,
+          "parentPolledPeakMB": 726.082
+        },
+        "lifecycleAudit": {
+          "warmupIterations": 1,
+          "measuredIterations": 3,
+          "ownedGeometriesAfterDispose": 0,
+          "ownedMaterialsAfterDispose": 0,
+          "netLeakedGeometries": 0,
+          "netLeakedMaterials": 0,
+          "disposalVerified": true
+        }
+      },
+      "sceneGeometry": {
+        "constructedMeshesCount": 124,
+        "totalVertices": 1261330,
+        "totalTriangles": 217931,
+        "renderedVerticesWithInstances": 1485110,
+        "renderedTrianglesWithInstances": 617341,
+        "renderedFeaturesCount": 5343,
+        "forestTreesCount": 1208
+      },
+      "operations": {
+        "planarSurface": {
+          "totalInputPolygons": 857,
+          "overlappingPairsChecked": 723,
+          "conflictsResolved": 713,
+          "deduplicatedCount": 1,
+          "unionedCount": 3,
+          "booleanSubtractionsCount": 134,
+          "maxResidualFillOverlapSqMeters": 0.001259,
+          "violationsCount": 13,
+          "isValid": false
+        },
+        "roads": {
+          "mode": "graph-surface",
+          "atGradeInputCount": 2074,
+          "renderedPrimitivesOrRibbonsCount": 2112,
+          "renderedJunctionCount": 0,
+          "candidateBlockerCheckCount": 2254714,
+          "overlappingBlockerCount": 6523,
+          "polygonUnionOperationCount": 2130,
+          "polygonIntersectionOperationCount": null,
+          "polygonDifferenceOperationCount": 1952,
+          "rejectedOrDegenerateCount": 5,
+          "fullySubtractedCount": 13,
+          "roundedBufferFailureCount": 0,
+          "flatRibbonFallbackCount": 0,
+          "surfaceClipFailureCount": 0,
+          "emptyShapeCount": 0,
+          "invalidTriangleGeometryCount": 5,
+          "outputPolygonCount": 2185,
+          "outputHoleRingCount": 3,
+          "outputTriangleCount": 48045
+        },
+        "railways": {
+          "renderSource": "graph-R+",
+          "totalTracksProcessed": 95,
+          "ballastSegmentCount": 91,
+          "ballastBooleanUnionCount": 3,
+          "sleeperInstancesCount": 11190,
+          "switchCount": 31,
+          "chunkCount": 13,
+          "overlappingPairsCount": 501223,
+          "clippedSleepersCount": 324,
+          "spatialIndexCellCount": 2016,
+          "spatialIndexEntries": 1184,
+          "subStagesMs": {
+            "ballastMs": 250.04,
+            "sleepersMs": 137.42,
+            "railsMs": 3.07,
+            "bridgesAndTunnelsMs": 0.92,
+            "spatialChunkingMs": 11.62,
+            "totalMs": 418.04
+          }
+        }
+      },
+      "completenessAndCorrectness": {
+        "rawGeoJsonFeatures": 9738,
+        "sourceFeaturesClassified": 5855,
+        "totalFeaturesParsed": 5814,
+        "parsedFeaturePartsTotal": 5822,
+        "parsedByCategory": {
+          "buildings": 1632,
+          "roads": 1166,
+          "railways": 106,
+          "waterBodies": 25,
+          "linearWaterways": 28,
+          "parks": 610,
+          "landuse": 220,
+          "barriers": 302,
+          "landmarks": 1725
+        },
+        "exclusionsAndLineage": {
+          "skippedUnsupportedTotal": 3883,
+          "skippedUnsupportedTopTags": [
+            {
+              "tag": "untagged",
+              "count": 3317
+            },
+            {
+              "tag": "highway=crossing:point",
+              "count": 77
+            },
+            {
+              "tag": "highway=traffic_signals:point",
+              "count": 77
+            },
+            {
+              "tag": "railway=signal:point",
+              "count": 62
+            },
+            {
+              "tag": "natural=shrubbery",
+              "count": 55
+            },
+            {
+              "tag": "railway=switch:point",
+              "count": 49
+            },
+            {
+              "tag": "barrier=bollard",
+              "count": 37
+            },
+            {
+              "tag": "man_made=surveillance",
+              "count": 22
+            },
+            {
+              "tag": "barrier=gate",
+              "count": 22
+            },
+            {
+              "tag": "barrier=kerb",
+              "count": 19
+            },
+            {
+              "tag": "highway=bus_stop:point",
+              "count": 18
+            },
+            {
+              "tag": "man_made=flagpole",
+              "count": 18
+            }
+          ],
+          "clippedByBoundaryCount": 331,
+          "omittedOutsideBoundaryCount": 41,
+          "deduplicatedCount": 0,
+          "chainedGroupsCount": 123,
+          "chainedFeaturesCount": 273,
+          "featuresFullySubtractedCount": 3,
+          "clippingFailuresCount": 0,
+          "conflictingPlacementFallbacksCount": 0,
+          "rejectedInvalidTotal": 0,
+          "rejectedInvalidByReason": {
+            "e2plus_invalid_triangles": 5
+          }
+        },
+        "renderedCoverage": {
+          "sourceFeaturesRenderedCount": 5343,
+          "coverageVsClassifiedRatio": 0.9126,
+          "builtSceneRenderedFeaturesCount": 5343,
+          "railwayRendererFallback": null,
+          "unattributedMeshFacesCount": 0,
+          "unattributedInstancedItemsCount": 0,
+          "invalidNanOrNonFiniteVertexCount": 0
+        },
+        "topologyAudit": {
+          "roadNodeCount": 1641,
+          "roadEdgeCount": 2108,
+          "railwayNodeCount": 92,
+          "railwayEdgeCount": 95,
+          "railwayConfirmedSwitchCount": 31,
+          "railwayUnresolvedSwitchCount": 2,
+          "railwayFlatCrossingCount": 4,
+          "railwayUnresolvedJunctionCount": 8,
+          "gradeTransitionCount": 56,
+          "unresolvedGradeTransitionCount": 2,
+          "levelCrossingCount": 7,
+          "pedestrianRailCrossingCount": 6,
+          "unresolvedCrossingCount": 9,
+          "gradeSeparatedCrossingCount": 142,
+          "unresolvedInfrastructurePointsCount": 0,
+          "descriptorValidationPassed": true,
+          "descriptorValidationErrorCount": 0
+        },
+        "geometryValidation": {
+          "graphMeshIntegrity": {
+            "status": "executed",
+            "auditedMeshCount": 13,
+            "auditedTriangleCount": 48045,
+            "upwardTriangleCount": 48045,
+            "negativelyWoundCount": 0,
+            "storedNormalMismatchCount": 0,
+            "degenerateTriangleCount": 0,
+            "invalidPositionCount": 0
+          },
+          "roadNetworkOverlapAndContinuity": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateRoadNetworkGeometry because roadEdgeCount (2108) exceeds --validator-max-edges=250.",
+            "overlapConflictCount": null,
+            "overlapAreaSqMeters": null,
+            "continuityDefectCount": null
+          },
+          "surfaceFirstValidation": {
+            "status": "skipped_due_to_complexity_guard",
+            "reason": "Skipped O(N^2) validateSurfaceFirstRoadGeometry because roadEdgeCount (2108) exceeds --validator-max-edges=250.",
+            "coverageDefectCount": null,
+            "networkCoverageRatio": null,
+            "unexplainedMissingAreaM2": null,
+            "overlapDefectCount": null,
+            "overlapAreaM2": null,
+            "inconsistentElevationDefectCount": null,
+            "tinyDisconnectedFragmentCount": null,
+            "provenanceDefectCount": null,
+            "overallValid": null
+          }
+        },
+        "capturedWarnings": []
+      },
+      "unsupportedMetrics": [],
+      "errors": []
+    },
+    {
+      "workloadKey": "hengelo-s4-2km::surface-first-e2plus-rplus",
+      "dataset": {
+        "level": "S4",
+        "id": "hengelo-s4-2km",
+        "name": "Hengelo Center S4 (2 × 2 km)",
+        "areaKm2": 4,
+        "widthMeters": 2000,
+        "depthMeters": 2000,
+        "halfExtentMeters": 1000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7788227,
+          "minLat": 52.2535168,
+          "maxLon": 6.8081773,
+          "maxLat": 52.2714832
+        },
+        "osmElementCounts": {
+          "nodes": 134951,
+          "ways": 18794,
+          "relations": 18,
+          "total": 153763
+        },
+        "geoJsonFeatureCount": 36669,
+        "geoJsonSha256": "0922f276347a9650bcf152c1ad23ff77defe2b20f6d8e259beb3a291d702b68a",
+        "gzipFileSha256": "a7064d39851e087dc510d6a41b27cfba061ec743da7eb56da4f832d8a9a8b26d",
+        "gzipBytes": 1815964,
+        "uncompressedBytes": 13075665,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "failed_timeout",
+      "statusReason": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "workerWallClockMs": 120180.49,
+      "lastHeartbeatStage": "iter_3_planar",
+      "lastHeartbeatElapsedMs": 98258.3,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": null,
+      "memory": null,
+      "sceneGeometry": null,
+      "operations": null,
+      "completenessAndCorrectness": null,
+      "unsupportedMetrics": [],
+      "errors": [
+        {
+          "phase": "failed_timeout",
+          "datasetId": "hengelo-s4-2km",
+          "configId": "surface-first-e2plus-rplus",
+          "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\")."
+        }
+      ]
+    },
+    {
+      "workloadKey": "hengelo-s5-4km::surface-first-e2plus-rplus",
+      "dataset": {
+        "level": "S5",
+        "id": "hengelo-s5-4km",
+        "name": "Hengelo Center S5 (4 × 4 km)",
+        "areaKm2": 16,
+        "widthMeters": 4000,
+        "depthMeters": 4000,
+        "halfExtentMeters": 2000,
+        "centerLonLat": [
+          6.7935,
+          52.2625
+        ],
+        "bbox": {
+          "minLon": 6.7641454,
+          "minLat": 52.2445337,
+          "maxLon": 6.8228546,
+          "maxLat": 52.2804663
+        },
+        "osmElementCounts": {
+          "nodes": 358552,
+          "ways": 52142,
+          "relations": 67,
+          "total": 410761
+        },
+        "geoJsonFeatureCount": 96836,
+        "geoJsonSha256": "f0cea8ccd22ba17f936483871ada21d8d4defdbfebea29d81d0186dbdc0b35b1",
+        "gzipFileSha256": "e03b2b18ece549b5a25b4dc1c74f11df151aba1fef8435cf6015a04988635ad4",
+        "gzipBytes": 4781803,
+        "uncompressedBytes": 34351545,
+        "osmTimestampIso": "2026-11-14T21:20:41.000Z",
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract"
+      },
+      "rendererConfig": {
+        "id": "surface-first-e2plus-rplus",
+        "label": "Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)",
+        "themeId": "tactical",
+        "railwayPrototypeMode": "production",
+        "infrastructureRenderOptions": {
+          "roads": "graph-surface",
+          "railways": "graph-R+",
+          "railwaySwitchPolicy": "graph",
+          "railwayBallastStrategy": "surface-first"
+        },
+        "buildingHeightMultiplier": 1,
+        "roadWidthMultiplier": 1,
+        "bevelEnabled": false
+      },
+      "status": "skipped_due_to_threshold",
+      "statusReason": "Skipped S5 for config \"surface-first-e2plus-rplus\" because progression halted at S4: failed_timeout: Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\").",
+      "workerWallClockMs": 0,
+      "lastHeartbeatStage": null,
+      "lastHeartbeatElapsedMs": null,
+      "warmupIterations": 1,
+      "measuredIterations": 3,
+      "timingsMs": null,
+      "memory": null,
+      "sceneGeometry": null,
+      "operations": null,
+      "completenessAndCorrectness": null,
+      "unsupportedMetrics": [],
+      "errors": []
+    }
+  ],
+  "errors": [
+    {
+      "phase": "failed_timeout",
+      "datasetId": "hengelo-s5-4km",
+      "configId": "production-legacy",
+      "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_1_scene_build\")."
+    },
+    {
+      "phase": "failed_timeout",
+      "datasetId": "hengelo-s4-2km",
+      "configId": "graph-e2-e3",
+      "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\")."
+    },
+    {
+      "phase": "failed_timeout",
+      "datasetId": "hengelo-s4-2km",
+      "configId": "surface-first-e2plus-rplus",
+      "message": "Worker exceeded wall-clock timeoutMs=120000 ms (last stage: \"iter_3_planar\")."
+    }
+  ]
+}

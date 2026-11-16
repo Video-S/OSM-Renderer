@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, & General Performance Benchmarking Infrastructure `TKT-016` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, Stage E4-T2 `M2.3-E4-T2` / `TKT-015`, & Benchmark Reliability & Windows Compatibility `TKT-017` implemented & `in_progress` pending project-owner review / Windows hardware GPU run; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, General Performance Benchmarking Infrastructure `TKT-016`, Benchmark Reliability & Windows Compatibility `TKT-017`, & Regional Rendering Scalability Assessment `TKT-019` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, & Stage E4-T2 `M2.3-E4-T2` / `TKT-015` implemented & `in_progress` pending project-owner review; `TKT-018` full-test-suite memory investigation & `TKT-020` planar/road spatial-index optimization `open`; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -66,7 +66,18 @@
 
 ---
 
-## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), & General Performance Benchmarking Infrastructure (`TKT-016` — `closed`)
+## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), M2.3-E3-A2 (`TKT-011` — `closed`), M2.3-E3-B (`TKT-012` — `closed`), M2.3-E4-A (`TKT-013` — `closed`), Benchmarking Infrastructure (`TKT-016` & `TKT-017` — `closed`), & Regional Scalability Assessment (`TKT-019` — `closed`)
+
+- **Regional Rendering Scalability Assessment (`TKT-019` — Closed)**:
+   - Extracted deterministic real-world Hengelo scaling series (`S1` `250 m` through `S5` `4 km`, `957` to `96,836` features) from Geofabrik Overijssel PBF (`overijssel-261114.osm.pbf`) with SHA-256 manifest verification (`benchmarks/datasets/hengelo-scaling/manifest.json`).
+   - Completed Windows scaling benchmark (`benchmarks/results/tkt019-hengelo-scaling.json`, `commit dc422d200874`, `gitDirty: true`, `Intel Core i7-14650HX`, 16 GB RAM) and deep-dive root-cause analysis (`docs/tkt019-hengelo-scaling-report.md`):
+     - `production-legacy` completed `S1`–`S4` (`14.45 s` median scene build, `11.02 s` planar resolution, `1.11 GB` peak RSS at `S4`; timed out at `120 s` on `S5`).
+     - `graph-e2-e3` (`3.32 s` at `S3`) and `surface-first-e2plus-rplus` (`8.38 s` at `S3`) completed `S1`–`S3` and timed out at `120 s` during `S4` `iter_3_planar`.
+     - Identified that `85.6%` of `S4` planar time is spent in Stage 4 post-resolution validation (`polygonClipping.intersection` over perforated macro-landuse MultiPolygons with up to `294` holes and `4,060` vertices) and `12.7%` in Stage 2 unconditional `isGeometricallyContained` checks; quantified `2,254,714` (`S3`) and `14,418,060` (`S4`) surface-first road blocker checks (`0.289%` and `0.110%` hit rates); classified all `S2` (`3`), `S3` (`13`), and `S4` (`46`) planar violations; and filed `TKT-020` for geometry-equivalent optimization.
+
+- **Benchmark Infrastructure Reliability & Windows Compatibility (`TKT-017` — Closed)**:
+   - Unified `BenchmarkFrameTelemetry` / `BenchmarkHarnessSnapshot` contracts, post-`gl.render()` frame timing, async `EXT_disjoint_timer_query_webgl2` state machine, zero-traversal railway visibility sampler, imperative camera pose sweeps, deterministic scene-readiness gating, Windows ANGLE Direct3D 11 (`--use-gl=angle --use-angle=d3d11`) default selection, PowerShell-safe CLI parsing, and honest Git metadata resolution.
+   - Verified on project owner's Windows hardware (`NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11, `commit ea5848e52e51`, `gitDirty: true`, `--quick` suite): `20/20` browser scenarios completed, `238/240` valid GPU timer samples (`2` `pending`), `0` errors, `0` unsupported metrics, `4` scene-reload lifecycle audits with `0` WebGL leaks, and `12/12` CPU workloads with `0` disposal leaks.
 
 - **General Performance Benchmarking Infrastructure (`TKT-016` — Closed)**:
    - Implemented `benchmarks/` (`npm run bench:cpu`, `npm run bench:browser`, `npm run bench:compare`) with 4 frozen offline datasets, direct Node.js CPU stage timing and memory/disposal verification (`benchmarks/baselines/cpu-baseline.json`), Playwright + Chromium WebGL rendering scenarios (`benchmarks/baselines/browser-baseline.json`), versioned JSON schema (`1.0.0`) and comparison engine, `11` automated tests in `src/world/BenchmarkInfrastructure.test.ts`, and complete developer documentation in `docs/benchmarking-and-profiling.md`.
@@ -100,16 +111,16 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-15 — TKT-017 Benchmark Infrastructure Reliability, `in_progress` Pending Full Windows Hardware Coverage)
+## Verified Test & Build Results (2026-11-15 — TKT-017 & TKT-019 Closed, TKT-020 Proposed)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Benchmark Suites (`TKT-016` & `TKT-017`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts` | **21 / 21 passed** (`16` suites, `0` failures, `~9.7 s`; `BenchmarkReliability.test.ts` in `~0.19 s`) |
-| **Core & Railway/Topology Batches 1–2 (10 files, prior to final CLI/Git polish)** | `npx tsx --test --test-concurrency=1 ...` | **135 / 135 passed** (`0` failures); full `npm test` Windows 16 GB RAM resource investigation tracked separately in `TKT-018` |
+| **Benchmark & Scaling Suites (`TKT-016`, `TKT-017`, `TKT-019`)** | `npx tsx --test --test-concurrency=1 src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts src/world/RegionalScalabilityBenchmark.test.ts` | **26 / 26 passed** (`21` suites, `0` failures) |
+| **Core & Railway/Topology Batches 1–2 (10 files)** | `npx tsx --test --test-concurrency=1 ...` | **135 / 135 passed** (`0` failures); full `npm test` Windows 16 GB RAM resource investigation tracked separately in `TKT-018` |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (`0` errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
-| **CPU Benchmark Suite (`v1.1.0`)** | `npm run bench:cpu` | **Successful** (`benchmarks/baselines/cpu-baseline.json`, `12/12` workloads, `0` leaks; also verified on owner Windows host) |
-| **Owner Windows RTX 4060 Ti Hardware Smoke Test** | `npx tsx benchmarks/browserRunner.ts` (Windows ANGLE Direct3D 11 smoke test) | **Successful** (`NVIDIA GeForce RTX 4060 Ti`, `59.88 FPS` median, `0.5 ms` CPU render, `0.607 ms` GPU render, `60/60` valid timer samples, `58` meshes, `36` static / `21` sampled railway meshes, `0` errors; full scenario suite pending) |
+| **Owner Windows Hengelo S1–S5 Scaling Suite (`TKT-019`)** | `npx tsx benchmarks/scalingRunner.ts` (`commit dc422d200874`, `gitDirty: true`, Windows i7-14650HX) | **Verified** (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`: Legacy completed `S1`–`S4` at `14.45 s` / `1.11 GB` RSS; E2 & E2+ completed `S1`–`S3`; `0` disposal leaks across all `10` completed workloads) |
+| **Owner Windows RTX 4060 Ti Hardware Verification (`TKT-017`)** | `npx tsx benchmarks/browserRunner.ts --quick --require-hardware` (`commit ea5848e52e51`, `gitDirty: true`) | **Verified** (`NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11, `20/20` `--quick` scenarios, `238/240` valid GPU timer samples + `2` `pending`, `4/4` lifecycle audits with `0` WebGL leaks, `12/12` CPU workloads with `0` leaks) |
 | **Container SwiftShader Browser Benchmark (`v1.1.0`)** | `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** (`benchmarks/baselines/browser-baseline.json`, explicitly labeled `isSoftwareRenderer: true`) |
 | **Benchmark Comparison CLI** | `npx tsx benchmarks/compare.ts ...` | **Successful** (`COMPATIBLE`, `0` regressions on `cpu-baseline.json` and `browser-baseline.json`) |
 
@@ -136,7 +147,8 @@
 | Specialized road/surface regression suites (`AdjacentServiceJunctions`, `BuswayRendering`, `PathJunctionCornerSmoothing`, `PizzaSlicePathJunctions`, `SurfaceVisibilityPolicy`) | 40 |
 | `BenchmarkInfrastructure.test.ts` (`TKT-016`) | 11 |
 | `BenchmarkReliability.test.ts` (`TKT-017`) | 10 |
-| **Total (`it` declarations / total subtests across 25 files)** | **330 (`341` with suite subtests)** |
+| `RegionalScalabilityBenchmark.test.ts` (`TKT-019`) | 5 |
+| **Total (`it` declarations / total subtests across 26 files)** | **335 (`346` with suite subtests)** |
 
 ---
 

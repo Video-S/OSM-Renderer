@@ -8,10 +8,10 @@
 
 > **normalizeInfrastructureRenderOptions**(`options?`): [`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:267
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:203
 
-Normalizes partial or undefined `InfrastructureRenderOptions` so `roads` is guaranteed to be
-`'legacy' | 'graph-preview' | 'graph'` and `railways` is guaranteed to be `'legacy' | 'graph-preview'`.
+Normalizes partial or undefined `InfrastructureRenderOptions` to the canonical production
+`E2+ / R+` architecture while preserving optional tunnel inspection overlay booleans.
 
 ## Parameters
 

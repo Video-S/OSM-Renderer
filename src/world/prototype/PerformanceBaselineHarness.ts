@@ -169,15 +169,8 @@ export function computeGroupGeometryStats(group: THREE.Group): GroupGeometryStat
 
 /**
  * Runs a reproducible CPU & memory benchmark + warmed-up resource lifecycle audit for a dataset and mode.
- * Supports the 4 active benchmark configurations:
- * - `'disabled'`: Non-railway map only (`railways: []`), isolating the baseline cost of the rest of the map.
- * - `'production'`: Current production scene pipeline with the integrated Candidate B hybrid railway renderer.
- * - `'candidateA'`: Non-railway map + Candidate A pure procedural UV railway ribbons.
- * - `'candidateB'`: Non-railway map + Candidate B hybrid 3D close-zoom + procedural railway renderer.
- *
- * Note: Historical Goalpost 1 `'baseline'` measurements cannot be dynamically regenerated because the
- * available project source and git history do not contain the superseded Goalpost 1 railway implementation.
- * Historical Goalpost 1 baseline measurements are preserved as frozen evidence in `docs/m2-1-baseline-data.json`.
+ * Supports `'production'` (full integrated scene with E2+ roads and R+ railways) and `'candidateB'`
+ * (non-railway scene + isolated Candidate B railway builder).
  */
 export function runCpuAndLifecycleBenchmark(
   data: ProcessedMapData,
@@ -188,14 +181,9 @@ export function runCpuAndLifecycleBenchmark(
 ): CpuBenchmarkReport {
   if ((mode as string) === 'baseline') {
     throw new Error(
-      "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer. " +
-      "The available project source and git history do not contain the superseded Goalpost 1 railway implementation, " +
-      "so historical Goalpost 1 baseline measurements cannot be dynamically regenerated. " +
-      "Frozen historical baseline data is preserved in 'docs/m2-1-baseline-data.json'. " +
-      "Use mode: 'production' to benchmark the current Candidate B production renderer."
+      "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer and is frozen in docs/m2-1-baseline-data.json. Current source builds do not contain the superseded Goalpost 1 railway implementation."
     );
   }
-
   const builder = new GeometryBuilder();
   const nonRailData: ProcessedMapData = {
     ...data,
@@ -213,8 +201,8 @@ export function runCpuAndLifecycleBenchmark(
   let lastDisposedScene: BuiltSceneGeometry | null = null;
   for (let c = 0; c < reloadCycles; c++) {
     const cycleScene = builder.buildScene(mode === 'production' ? data : nonRailData, theme);
-    if (mode === 'candidateA' || mode === 'candidateB') {
-      const proto = buildRailwayPrototypeGroup(data, theme, mode, 8.0, prototypeOptions);
+    if (mode === 'candidateB') {
+      const proto = buildRailwayPrototypeGroup(data, theme, 'candidateB', 8.0, prototypeOptions);
       proto.dispose();
     }
     cycleScene.dispose();
@@ -229,43 +217,6 @@ export function runCpuAndLifecycleBenchmark(
     warmedUpOwnedMaterialsAfterDispose;
 
   // 3. Timed measurement run
-  if (mode === 'disabled') {
-    const t0 = performance.now();
-    const scene = builder.buildScene(nonRailData, theme);
-    const nonRailwayBuildTimeMs = Number((performance.now() - t0).toFixed(2));
-    const railStats = computeGroupGeometryStats(scene.railwaysGroup);
-    const roadsGroupStats = computeGroupGeometryStats(scene.roadsGroup);
-    const buildingsGroupStats = computeGroupGeometryStats(scene.buildingsGroup);
-    const baseMem = scene.resources.getCpuBufferMemoryStats();
-
-    const report: CpuBenchmarkReport = {
-      datasetName: data.regionName,
-      mode: 'disabled',
-      buildTimeMs: nonRailwayBuildTimeMs,
-      nonRailwayBuildTimeMs,
-      railwayBuildTimeMs: 0,
-      constructedMeshesCount: scene.stats.totalDrawCalls,
-      totalVertices: scene.stats.totalVertices,
-      totalTriangles: scene.stats.totalTriangles,
-      renderedVerticesWithInstances: scene.stats.totalVertices,
-      renderedTrianglesWithInstances: scene.stats.totalTriangles,
-      cpuBufferBytes: baseMem.totalBytes,
-      cpuBufferMB: baseMem.totalMB,
-      railwayGroupStats: railStats,
-      roadsGroupStats,
-      buildingsGroupStats,
-      lifecycleAudit: {
-        warmedUpOwnedGeometriesAfterDispose,
-        warmedUpOwnedMaterialsAfterDispose,
-        cyclesTested: reloadCycles,
-        netLeakedGeometriesAfterCycles,
-        netLeakedMaterialsAfterCycles,
-      },
-    };
-    scene.dispose();
-    return report;
-  }
-
   if (mode === 'production') {
     const tStart = performance.now();
     const scene = builder.buildScene(data, theme);
@@ -322,12 +273,12 @@ export function runCpuAndLifecycleBenchmark(
     return report;
   }
 
-  // Prototype mode (Candidate A or Candidate B): build non-railway base scene + isolated prototype railway group
+  // Isolated Candidate B benchmark: build non-railway base scene + isolated railway group
   const tNonRail0 = performance.now();
   const nonRailScene = builder.buildScene(nonRailData, theme);
   const nonRailwayBuildTimeMs = Number((performance.now() - tNonRail0).toFixed(2));
 
-  const proto = buildRailwayPrototypeGroup(data, theme, mode, 8.0, prototypeOptions);
+  const proto = buildRailwayPrototypeGroup(data, theme, 'candidateB', 8.0, prototypeOptions);
   const protoRailStats = computeGroupGeometryStats(proto.railwaysGroup);
   const roadsGroupStats = computeGroupGeometryStats(nonRailScene.roadsGroup);
   const buildingsGroupStats = computeGroupGeometryStats(nonRailScene.buildingsGroup);

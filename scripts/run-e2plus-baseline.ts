@@ -586,7 +586,7 @@ function summarizeSamples(samples: number[]) {
 
 function runBaseline() {
   const datasets = loadBenchmarkDatasets();
-  const modes: RoadInfrastructureRenderSource[] = ['legacy', 'graph', 'graph-surface'];
+  const modes: RoadInfrastructureRenderSource[] = ['graph-surface'];
   const warmupRuns = 2;
   const measuredRuns = 7;
 
@@ -596,7 +596,7 @@ function runBaseline() {
     for (const mode of modes) {
       const renderOptions = {
         roads: mode,
-        railways: 'legacy' as const,
+        railways: 'graph-R+' as const,
       };
 
       // Warm-up runs

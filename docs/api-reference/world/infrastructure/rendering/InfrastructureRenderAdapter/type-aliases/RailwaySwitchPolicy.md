@@ -6,11 +6,8 @@
 
 # Type Alias: RailwaySwitchPolicy
 
-> **RailwaySwitchPolicy** = `"heuristic"` \| `"graph"`
+> **RailwaySwitchPolicy** = `"graph"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:79
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:54
 
-Switch policy governing railway turnout bearer sharing and blade tapering (Stage E3-A2).
-
-- `'heuristic'`: Historical Candidate B behavior using `isTurnoutThroatPair` proximity detection.
-- `'graph'`: Graph-informed behavior consuming `RailwayNodeRenderDescriptor.turnoutTopology`.
+Switch policy governing railway turnout bearer sharing and blade tapering (`graph`).

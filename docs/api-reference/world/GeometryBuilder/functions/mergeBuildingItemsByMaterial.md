@@ -8,7 +8,7 @@
 
 > **mergeBuildingItemsByMaterial**(`items`, `resourceManager?`): `object`
 
-Defined in: world/GeometryBuilder.ts:844
+Defined in: world/GeometryBuilder.ts:812
 
 Consolidates a bucket of building geometries by `materialIndex` so each building bucket mesh
 emits at most one contiguous `BufferGeometry` group (and therefore one WebGL draw call per pass)

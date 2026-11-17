@@ -6,17 +6,16 @@
 
 # Function: requiresInfrastructureGraphPreview()
 
-> **requiresInfrastructureGraphPreview**(`options?`): `boolean`
+> **requiresInfrastructureGraphPreview**(`_options?`): `boolean`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:362
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:267
 
-Returns `true` if at least one domain (`roads` or `railways`) requires `InfrastructureGraph`
-and `InfrastructureRenderDescriptorBundle` construction (i.e. `'graph-preview'` or `'graph'`).
-When both domains are `'legacy'`, callers must skip `buildInfrastructureGraph` and adapter execution.
+Returns `true`: the production `E2+ / R+` pipeline always constructs `InfrastructureGraph`
+and `InfrastructureRenderDescriptorBundle`.
 
 ## Parameters
 
-### options?
+### \_options?
 
 #### railways?
 

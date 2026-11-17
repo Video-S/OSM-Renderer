@@ -21,33 +21,27 @@ import { MAP_THEMES } from '../styles/mapThemes';
 import prinsHendrikkadeForkFixture from './prototype/PrinsHendrikkadeForkFixture.json';
 
 describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
-  describe('1. Configuration & Mode Switching', () => {
-    it('normalizes partial and default infrastructure render options cleanly', () => {
+  describe('1. Configuration & Mode Normalization', () => {
+    it('normalizes partial and default infrastructure render options to E2+/R+ production architecture', () => {
       const defaultOpts = normalizeInfrastructureRenderOptions(DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS);
-      assert.equal(defaultOpts.roads, 'legacy');
-      assert.equal(defaultOpts.railways, 'legacy');
+      assert.equal(defaultOpts.roads, 'graph-surface');
+      assert.equal(defaultOpts.railways, 'graph-R+');
+      assert.equal(defaultOpts.railwaySwitchPolicy, 'graph');
+      assert.equal(defaultOpts.railwayBallastStrategy, 'surface-first');
 
-      const graphOpts = normalizeInfrastructureRenderOptions({ roads: 'graph' });
-      assert.equal(graphOpts.roads, 'graph');
-      assert.equal(graphOpts.railways, 'legacy');
-
-      const previewOpts = normalizeInfrastructureRenderOptions({ roads: 'graph-preview', railways: 'graph-preview' });
-      assert.equal(previewOpts.roads, 'graph-preview');
-      assert.equal(previewOpts.railways, 'graph-preview');
+      const graphOpts = normalizeInfrastructureRenderOptions({ roads: 'graph-surface' });
+      assert.equal(graphOpts.roads, 'graph-surface');
+      assert.equal(graphOpts.railways, 'graph-R+');
     });
 
-    it('parses legacy URL query parameters for backwards compatibility', () => {
+    it('parses URL query parameters into permanent E2+/R+ production configuration', () => {
       const opts1 = parseInfrastructureRenderOptionsFromSearch('?topologyRoads=graph&topologyRailways=graph-preview');
-      assert.equal(opts1.roads, 'graph');
-      assert.equal(opts1.railways, 'graph-preview');
-
-      const opts2 = parseInfrastructureRenderOptionsFromSearch('?topologyRoads=graph-preview');
-      assert.equal(opts2.roads, 'graph-preview');
-      assert.equal(opts2.railways, 'legacy');
+      assert.equal(opts1.roads, 'graph-surface');
+      assert.equal(opts1.railways, 'graph-R+');
 
       const emptyOpts = parseInfrastructureRenderOptionsFromSearch('');
-      assert.equal(emptyOpts.roads, 'legacy');
-      assert.equal(emptyOpts.railways, 'legacy');
+      assert.equal(emptyOpts.roads, 'graph-surface');
+      assert.equal(emptyOpts.railways, 'graph-R+');
     });
   });
 
@@ -150,7 +144,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
         null,
         null,
         {
-          infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+          infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
           railwayPrototypeMode: 'production',
           themeId: 'tactical',
           roadWidthMultiplier: 1.0,
@@ -166,7 +160,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
       assert.equal(pkg.formatVersion, '1.0');
       assert.equal(pkg.report.title, 'Acute cycleway junction glitch');
       assert.equal(pkg.report.severity, 'high');
-      assert.equal(pkg.configuration.infrastructureRenderOptions.roads, 'graph');
+      assert.equal(pkg.configuration.infrastructureRenderOptions.roads, 'graph-surface');
       assert.equal(pkg.camera.zoom, 8.0);
       assert.equal(pkg.geoJson.type, 'FeatureCollection');
       assert.ok(pkg.geoJson.features.length > 0);
@@ -222,7 +216,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
         null,
         null,
         {
-          infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+          infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
           railwayPrototypeMode: 'production',
           themeId: 'tactical',
           roadWidthMultiplier: 1.0,
@@ -528,7 +522,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
         selectedFeaturesList[0],
         selectedBox,
         {
-          infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+          infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
           railwayPrototypeMode: 'production',
           themeId: 'tactical',
           roadWidthMultiplier: 1.0,
@@ -588,7 +582,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
       assert.equal(roundTripPkg.focusedFeatureId, 'way/230163947');
       assert.deepEqual(roundTripPkg.selectedArea?.boundsMeters, selectedBox);
       assert.equal(roundTripPkg.camera.zoom, 12.5);
-      assert.equal(roundTripPkg.configuration.infrastructureRenderOptions.roads, 'graph');
+      assert.equal(roundTripPkg.configuration.infrastructureRenderOptions.roads, 'graph-surface');
     });
 
     it('allows clicking and picking underlying road objects inside an active spatial selection rectangle without raycast interception', () => {
@@ -602,7 +596,7 @@ describe('Developer Tools & Reproduction Reporting (TKT-009)', () => {
 
       const builder = new GeometryBuilder({
         roadWidthMultiplier: 1.0,
-        infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+        infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
       });
       const builtScene = builder.buildScene(mapData, MAP_THEMES.tactical);
 

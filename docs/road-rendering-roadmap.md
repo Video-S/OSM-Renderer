@@ -1,16 +1,13 @@
 # Road Rendering Validation & Migration Roadmap
 
-## 1. Current State & Renderer Modes
+## 1. Current State & Renderer Mode (`TKT-026` — Promoted to Production Default)
 
-The 3D OpenStreetMap viewer currently supports three runtime road rendering engines selectable via `InfrastructureRenderOptions.roads` (`?topologyRoads=...` or **Dev Tools → Rendering → Road Infrastructure Engine**):
+As of `TKT-026` (2026-11-17), **E2+ Surface-First Road Rendering (`roads: 'graph-surface'`)** and **R+ Surface-First Ballast Railway Rendering (`railways: 'graph-R+'`)** are the single permanent production infrastructure rendering architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS = { roads: 'graph-surface', railways: 'graph-R+' }`). The obsolete `'legacy'`, `'graph-preview'`, and intermediate `'graph'` (E2) road rendering branches have been retired.
 
 | Mode | Selector | Status | Description |
 | :--- | :--- | :--- | :--- |
-| **Legacy** | `'legacy'` | **Current Production Default** | Pre-M2.3-E2 polyline ribbon & `TopologicalNodeIndex` junction synthesizer (`ADR-0002`). |
-| **Graph (E2)** | `'graph'` | **Implemented (`TKT-008`)** | Graph-driven ribbon & boundary-derived portal-chord junction solver (`solveBoundaryDerivedJunctionNode`). |
-| **Graph Surface (E2+)** | `'graph-surface'` | **Preferred Direction (`ADR-0010`)** | Surface-first rounded 2D stroke union + priority-ordered Boolean ownership clipping (`SurfaceFirstRoadFootprints.ts`). |
-
-*(Note: `'graph-preview'` remains available as the Stage E1 diagnostic mode that builds and validates `InfrastructureRenderDescriptorBundle` while delegating mesh synthesis to `'legacy'`.)*
+| **Graph Surface (E2+)** | `'graph-surface'` | **Permanent Production Architecture (`ADR-0010`, `TKT-026`)** | Surface-first rounded 2D stroke union + spatially indexed priority-ordered Boolean ownership clipping (`SurfaceFirstRoadFootprints.ts`, `GraphRoadGeometryBuilder.ts`). |
+| **Legacy / Graph (E2)** | *(Retired in `TKT-026`)* | **Retired** | Pre-M2.3-E2 polyline ribbon & E2 portal-chord junction solvers removed after E2+ promotion. |
 
 ---
 
@@ -44,12 +41,12 @@ Automated validation in Phase 1 identified three concrete issues in E2+, whose t
 
 ---
 
-## 4. Phase 3: Promotion Criteria for Production Default
+## 4. Phase 3: Promotion to Production Default (`TKT-026` — Complete)
 
-`roads: 'graph-surface'` (E2+) will be promoted to the default road renderer (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.roads = 'graph-surface'`) once:
-1. All three documented issues (provenance split bends, full-subtraction counter, H01 pinched-ring overlap) are resolved or explicitly dispositioned with regression evidence.
-2. Automated validation confirms `0` positive-area coplanar overlaps (`> 1e-3 m²`), `0` winding/normal/degenerate triangle defects, and `100%` provenance attribution across the regression suite.
-3. Project owner signs off on the Phase 2 fix and authorizes default promotion and Stage E5 legacy cleanup.
+`roads: 'graph-surface'` (E2+) and `railways: 'graph-R+'` (R+) have been promoted to the permanent production default (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`) following:
+1. Resolution of all three Phase 2 issues (provenance split bends, full-subtraction counter synchronization, and H01 pinched-ring overlap).
+2. Spatial indexing (`32 m` `RoadFootprintSpatialGrid`, `TKT-020`) and `4 × 4 km` pre-migration benchmark verification (`TKT-026`): frozen Hengelo S5 road generation dropped **`92.3%`** (`38,826.9 ms` $\to$ `2,994.7 ms`) and live Overijssel `r = 2000 m` road generation dropped **`90.3%`** (`79,209.9 ms` $\to$ `7,667.1 ms`).
+3. Retirement of obsolete Legacy and intermediate E2 road/railway rendering paths (`TKT-026`).
 
 
 ## 5. Third Defect — H01 Pinched-Ring Coplanar Overlap (Resolved)

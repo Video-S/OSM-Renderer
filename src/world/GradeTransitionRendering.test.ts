@@ -270,11 +270,11 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
       makeRoad('way/road-east', [[25, 0], [60, 0]], ['n3', 'n4'], { roadClass: 'tertiary', width: 8 }),
     ];
 
-    for (const roadMode of ['graph', 'graph-surface'] as const) {
+    for (const roadMode of ['graph-surface'] as const) {
       const builder = new GeometryBuilder({
         infrastructureRenderOptions: {
           roads: roadMode,
-          railways: 'legacy',
+          railways: 'graph-R+',
         },
       });
       const scene = builder.buildScene(data, defaultTheme);
@@ -364,7 +364,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
       makeRailway('way/rail-east', [[30, 0], [70, 0]], ['rn3', 'rn4']),
     ];
 
-    for (const railMode of ['graph', 'graph-switches', 'graph-R+'] as const) {
+    for (const railMode of ['graph-R+'] as const) {
       const res = buildRailwayInfrastructure(data, defaultTheme, 6.0, {
         renderSource: railMode,
         spatialChunkSizeMeters: 0,
@@ -464,7 +464,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     ];
 
     const res = buildRailwayInfrastructure(data, defaultTheme, 6.0, {
-      renderSource: 'graph-switches',
+      renderSource: 'graph-R+',
       spatialChunkSizeMeters: 0,
     });
 
@@ -603,7 +603,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     ];
 
     const res = buildRailwayInfrastructure(data, defaultTheme, 6.0, {
-      renderSource: 'graph-switches',
+      renderSource: 'graph-R+',
       spatialChunkSizeMeters: 0,
     });
 
@@ -662,7 +662,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     const builder = new GeometryBuilder({
       infrastructureRenderOptions: {
         roads: 'graph-surface',
-        railways: 'graph-switches',
+        railways: 'graph-R+',
       },
     });
     const scene = builder.buildScene(data, defaultTheme);
@@ -803,7 +803,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     const builder = new GeometryBuilder({
       infrastructureRenderOptions: {
         roads: 'graph-surface',
-        railways: 'graph-switches',
+        railways: 'graph-R+',
       },
     });
     const scene = builder.buildScene(data, defaultTheme);
@@ -873,7 +873,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     const builder = new GeometryBuilder({
       infrastructureRenderOptions: {
         roads: 'graph-surface',
-        railways: 'legacy',
+        railways: 'graph-R+',
       },
     });
     const scene = builder.buildScene(data, defaultTheme);
@@ -918,7 +918,7 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     ];
 
     const res = buildRailwayInfrastructure(data, defaultTheme, 6.0, {
-      renderSource: 'graph-switches',
+      renderSource: 'graph-R+',
       spatialChunkSizeMeters: 0,
       showUndergroundTunnelTraces: true,
     });
@@ -1026,11 +1026,11 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
     assert.equal(sceneA.resources.ownedMaterialsCount, 0, 'Expected 0 leaked materials after dispose()');
   });
 
-  it('13. Real-world benchmark fixtures (Station Hengelo & Amsterdam Centraal): resolves real railway bridge transitions without cliffs and preserves legacy defaults', () => {
-    // 1. Default mode remains legacy
+  it('13. Real-world benchmark fixtures (Station Hengelo & Amsterdam Centraal): resolves real railway bridge transitions without cliffs under E2+/R+ production defaults', () => {
+    // 1. Default mode is E2+/R+
     const previewDefault = prepareInfrastructureRenderPreview(createEmptyMapData());
-    assert.equal(previewDefault.options.roads, 'legacy');
-    assert.equal(previewDefault.options.railways, 'legacy');
+    assert.equal(previewDefault.options.roads, 'graph-surface');
+    assert.equal(previewDefault.options.railways, 'graph-R+');
 
     // 2. Load Station Hengelo & Amsterdam Centraal benchmark fixtures
     const extractPath = path.resolve(process.cwd(), 'src/world/prototype/realOsmRailwayExtracts.json');
@@ -1044,35 +1044,27 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
         name: key === 'hengelo' ? 'Station Hengelo' : 'Amsterdam Centraal',
         features: rawRegion.features || rawRegion,
       } as any);
-      const resLegacy = buildRailwayInfrastructure(parsed, defaultTheme, 4.5, {
-        renderSource: 'legacy',
-      });
-      const resGraph = buildRailwayInfrastructure(parsed, defaultTheme, 4.5, {
-        renderSource: 'graph-switches',
-      });
       const resRPlus = buildRailwayInfrastructure(parsed, defaultTheme, 4.5, {
         renderSource: 'graph-R+',
       });
 
-      assert.equal(resLegacy.stats.gradeTransitionDiagnostics?.mode, 'legacy');
-      assert.equal(resGraph.stats.gradeTransitionDiagnostics?.mode, 'graph');
       assert.equal(resRPlus.stats.gradeTransitionDiagnostics?.mode, 'graph');
 
       if (key === 'amsterdamCentraal') {
         assert.ok(
-          (resGraph.stats.gradeTransitionDiagnostics?.confirmedTransitionsConsumed ?? 0) >= 50,
-          `Expected Amsterdam Centraal to consume >= 50 confirmed grade transitions, got ${resGraph.stats.gradeTransitionDiagnostics?.confirmedTransitionsConsumed}`
+          (resRPlus.stats.gradeTransitionDiagnostics?.confirmedTransitionsConsumed ?? 0) >= 50,
+          `Expected Amsterdam Centraal to consume >= 50 confirmed grade transitions, got ${resRPlus.stats.gradeTransitionDiagnostics?.confirmedTransitionsConsumed}`
         );
         assert.ok(
-          (resGraph.stats.gradeTransitionDiagnostics?.confirmedElevatedContinuations ?? 0) >= 250,
-          `Expected Amsterdam Centraal to resolve >= 250 confirmed elevated continuations, got ${resGraph.stats.gradeTransitionDiagnostics?.confirmedElevatedContinuations}`
+          (resRPlus.stats.gradeTransitionDiagnostics?.confirmedElevatedContinuations ?? 0) >= 250,
+          `Expected Amsterdam Centraal to resolve >= 250 confirmed elevated continuations, got ${resRPlus.stats.gradeTransitionDiagnostics?.confirmedElevatedContinuations}`
         );
 
         // Verify the previously reported short portal edges (e.g. way/1009641791 2.41m and way/547532273 3.32m)
         // now start at at-grade ballast elevation (0.060m) at their confirmed transition portal instead of a 2.86m cliff!
         for (const edgeId of ['railway_edge:way/1009641791-0:seg_0', 'railway_edge:way/547532273-0:seg_0']) {
           const verts = extractFeatureVerticesFromGroup(
-            resGraph.railwaysGroup,
+            resRPlus.railwaysGroup,
             (n) => n.startsWith('Railway_Ballast'),
             edgeId
           );
@@ -1086,8 +1078,6 @@ describe('Milestone 2.3 Stage E4-A: Graph-Driven Bridge & Tunnel Transitions (TK
         }
       }
 
-      resLegacy.dispose();
-      resGraph.dispose();
       resRPlus.dispose();
     }
   });

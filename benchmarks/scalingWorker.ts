@@ -7,7 +7,6 @@ import {
   BuiltSceneGeometry,
   FaceFeatureRange,
   GeometryBuilder,
-  LegacyRoadRenderStats,
   prepareInfrastructureRenderPreview,
   requiresInfrastructureGraphPreview,
 } from '../src/world/GeometryBuilder';
@@ -257,38 +256,12 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
   const renderOptions = rendererConfig.infrastructureRenderOptions;
 
   const isGraphPreviewActive = requiresInfrastructureGraphPreview(renderOptions);
-  const isGraphRoadActive =
-    renderOptions.roads === 'graph' || renderOptions.roads === 'graph-surface';
-  const isSurfaceFirstRoadActive = renderOptions.roads === 'graph-surface';
+  const isGraphRoadActive = true;
+  const isSurfaceFirstRoadActive = true;
 
   const unsupportedMetrics: UnsupportedMetricNotice[] = [];
   const errors: BenchmarkErrorRecord[] = [];
   const workloadKey = `${dataset.descriptor.id}::${rendererConfig.id}`;
-
-  if (!isGraphPreviewActive) {
-    unsupportedMetrics.push(
-      {
-        metricId: `${workloadKey}::infrastructureGraphBuildMs`,
-        reason: 'disabled_by_config',
-        explanation:
-          'Production legacy configuration skips runtime InfrastructureGraph construction during scene build.',
-      },
-      {
-        metricId: `${workloadKey}::graphToRendererAdapterMs`,
-        reason: 'disabled_by_config',
-        explanation:
-          'Production legacy configuration does not run adaptInfrastructureGraphToRenderDescriptors during scene build.',
-      }
-    );
-  }
-  if (!isSurfaceFirstRoadActive) {
-    unsupportedMetrics.push({
-      metricId: `${workloadKey}::roadSubStagesMs`,
-      reason: 'disabled_by_config',
-      explanation:
-        'Surface-first road sub-stage timing (primitiveConstructionMs, polygonUnionMs, ownershipClippingMs, triangulationAndValidationMs) is only emitted when roads use "graph-surface".',
-    });
-  }
 
   const updatePeakRss = () => {
     const rss = process.memoryUsage().rss;
@@ -483,25 +456,16 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
         railGenSamples.push(railMs);
       }
 
-      if (isGraphRoadActive) {
-        const rTiming = builtScene.roadsGroup.userData?.graphRoadTiming as
-          | GraphRoadGenerationTiming
-          | undefined;
-        if (rTiming) {
-          roadTotalSamples.push(rTiming.totalRoadGenerationTimeMs);
-          if (isSurfaceFirstRoadActive) {
-            roadPrimitiveSamples.push(rTiming.primitiveConstructionTimeMs);
-            roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
-            roadUnionSamples.push(rTiming.polygonUnionTimeMs);
-            roadClipSamples.push(rTiming.ownershipClippingTimeMs);
-            roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
-          }
-        }
-      } else {
-        const legacyMs = builtScene.roadsGroup.userData?.legacyRoadTimingMs;
-        if (typeof legacyMs === 'number' && Number.isFinite(legacyMs)) {
-          roadTotalSamples.push(legacyMs);
-        }
+      const rTiming = builtScene.roadsGroup.userData?.graphRoadTiming as
+        | GraphRoadGenerationTiming
+        | undefined;
+      if (rTiming) {
+        roadTotalSamples.push(rTiming.totalRoadGenerationTimeMs);
+        roadPrimitiveSamples.push(rTiming.primitiveConstructionTimeMs);
+        roadFootprintSamples.push(rTiming.footprintConstructionTimeMs);
+        roadUnionSamples.push(rTiming.polygonUnionTimeMs);
+        roadClipSamples.push(rTiming.ownershipClippingTimeMs);
+        roadTriSamples.push(rTiming.triangulationAndValidationTimeMs);
       }
 
       if (i === 0 || isFinalAuditIteration) {
@@ -572,9 +536,6 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
         const graphRoadStats = builtScene.roadsGroup.userData?.graphRoadStats as
           | GraphRoadRenderStats
           | undefined;
-        const legacyRoadStats = builtScene.roadsGroup.userData?.legacyRoadStats as
-          | LegacyRoadRenderStats
-          | undefined;
         const railStats = builtScene.railwaysGroup.userData?.railwayStats as
           | RailwayPrototypeStats
           | undefined;
@@ -594,51 +555,27 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
             violationsCount: planarReport?.violations.length ?? 0,
             isValid: planarReport?.isValid ?? true,
           },
-          roads: isGraphRoadActive && graphRoadStats
-            ? {
-                mode: renderOptions.roads,
-                atGradeInputCount: graphRoadStats.atGradeRoadEdgeCount,
-                renderedPrimitivesOrRibbonsCount: graphRoadStats.renderedRoadRibbonCount,
-                renderedJunctionCount: graphRoadStats.renderedJunctionCount,
-                candidateBlockerCheckCount: graphRoadStats.candidateBlockerCheckCount,
-                overlappingBlockerCount: graphRoadStats.overlappingBlockerCount,
-                polygonUnionOperationCount: graphRoadStats.polygonUnionOperationCount,
-                polygonIntersectionOperationCount: null,
-                polygonDifferenceOperationCount: graphRoadStats.polygonDifferenceOperationCount,
-                rejectedOrDegenerateCount: graphRoadStats.rejectedOrDegenerateCount,
-                fullySubtractedCount: graphRoadStats.fullySubtractedCount,
-                roundedBufferFailureCount: graphRoadStats.roundedBufferFailureCount,
-                flatRibbonFallbackCount: graphRoadStats.flatRibbonFallbackCount,
-                surfaceClipFailureCount: graphRoadStats.surfaceClipFailureCount,
-                emptyShapeCount: graphRoadStats.emptyShapeCount,
-                invalidTriangleGeometryCount: graphRoadStats.invalidTriangleGeometryCount,
-                outputPolygonCount: graphRoadStats.outputPolygonCount,
-                outputHoleRingCount: graphRoadStats.outputHoleRingCount,
-                outputTriangleCount: graphRoadStats.outputTriangleCount,
-              }
-            : {
-                mode: renderOptions.roads,
-                atGradeInputCount: legacyRoadStats?.splitAtGradeRoadCount ?? null,
-                renderedPrimitivesOrRibbonsCount: legacyRoadStats?.renderedRoadRibbonCount ?? null,
-                renderedJunctionCount: legacyRoadStats?.renderedJunctionCount ?? null,
-                candidateBlockerCheckCount: legacyRoadStats?.candidateBlockerCheckCount ?? null,
-                overlappingBlockerCount: legacyRoadStats?.overlappingBlockerCount ?? null,
-                polygonUnionOperationCount: null,
-                polygonIntersectionOperationCount:
-                  legacyRoadStats?.polygonIntersectionOperationCount ?? null,
-                polygonDifferenceOperationCount:
-                  legacyRoadStats?.polygonDifferenceOperationCount ?? null,
-                rejectedOrDegenerateCount: null,
-                fullySubtractedCount: legacyRoadStats?.fullySubtractedCount ?? null,
-                roundedBufferFailureCount: null,
-                flatRibbonFallbackCount: legacyRoadStats?.safeFallbackCount ?? null,
-                surfaceClipFailureCount: legacyRoadStats?.clippingFailureCount ?? null,
-                emptyShapeCount: null,
-                invalidTriangleGeometryCount: null,
-                outputPolygonCount: null,
-                outputHoleRingCount: null,
-                outputTriangleCount: null,
-              },
+          roads: {
+            mode: renderOptions.roads,
+            atGradeInputCount: graphRoadStats?.atGradeRoadEdgeCount ?? null,
+            renderedPrimitivesOrRibbonsCount: graphRoadStats?.renderedRoadRibbonCount ?? null,
+            renderedJunctionCount: graphRoadStats?.renderedJunctionCount ?? null,
+            candidateBlockerCheckCount: graphRoadStats?.candidateBlockerCheckCount ?? null,
+            overlappingBlockerCount: graphRoadStats?.overlappingBlockerCount ?? null,
+            polygonUnionOperationCount: graphRoadStats?.polygonUnionOperationCount ?? null,
+            polygonIntersectionOperationCount: null,
+            polygonDifferenceOperationCount: graphRoadStats?.polygonDifferenceOperationCount ?? null,
+            rejectedOrDegenerateCount: graphRoadStats?.rejectedOrDegenerateCount ?? null,
+            fullySubtractedCount: graphRoadStats?.fullySubtractedCount ?? null,
+            roundedBufferFailureCount: graphRoadStats?.roundedBufferFailureCount ?? null,
+            flatRibbonFallbackCount: graphRoadStats?.flatRibbonFallbackCount ?? null,
+            surfaceClipFailureCount: graphRoadStats?.surfaceClipFailureCount ?? null,
+            emptyShapeCount: graphRoadStats?.emptyShapeCount ?? null,
+            invalidTriangleGeometryCount: graphRoadStats?.invalidTriangleGeometryCount ?? null,
+            outputPolygonCount: graphRoadStats?.outputPolygonCount ?? null,
+            outputHoleRingCount: graphRoadStats?.outputHoleRingCount ?? null,
+            outputTriangleCount: graphRoadStats?.outputTriangleCount ?? null,
+          },
           railways: {
             renderSource: railStats?.railwayRenderSource ?? renderOptions.railways,
             totalTracksProcessed: railStats?.renderedRailwaysCount ?? null,
@@ -678,8 +615,10 @@ export function executeScalingWorkerTask(args: ScalingWorkerCliArgs): ScalingWor
         if (!auditGraph && parsedData.topologySource) {
           auditGraph = buildInfrastructureGraph(parsedData);
           const desc = adaptInfrastructureGraphToRenderDescriptors(auditGraph, {
-            roads: 'graph',
-            railways: 'graph-switches',
+            roads: 'graph-surface',
+            railways: 'graph-R+',
+            railwaySwitchPolicy: 'graph',
+            railwayBallastStrategy: 'surface-first',
           });
           auditValidation = validateInfrastructureRenderDescriptors(desc);
         }

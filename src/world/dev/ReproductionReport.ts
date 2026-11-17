@@ -9,6 +9,7 @@ import {
   RoadInfrastructureRenderSource,
   RailwayInfrastructureRenderSource,
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
+  normalizeInfrastructureRenderOptions,
 } from '../infrastructure/rendering/InfrastructureRenderAdapter';
 import { RailwayPrototypeMode } from '../prototype/RailwayPrototypeBuilder';
 import { unprojectToGeo } from '../WorldCoordinates';
@@ -812,8 +813,8 @@ export function buildReproductionPackage(
       createdAt: report.createdAt ?? new Date().toISOString(),
     },
     configuration: {
-      infrastructureRenderOptions: { ...infrastructureRenderOptions },
-      railwayPrototypeMode,
+      infrastructureRenderOptions: normalizeInfrastructureRenderOptions(infrastructureRenderOptions),
+      railwayPrototypeMode: 'production',
       roadWidthMultiplier,
       heightMultiplier,
       themeId,
@@ -918,11 +919,10 @@ export function validateReproductionPackage(data: any): {
       createdAt: data.report?.createdAt || new Date().toISOString(),
     },
     configuration: {
-      infrastructureRenderOptions: {
-        roads: data.configuration?.infrastructureRenderOptions?.roads ?? 'graph',
-        railways: data.configuration?.infrastructureRenderOptions?.railways ?? 'legacy',
-      },
-      railwayPrototypeMode: data.configuration?.railwayPrototypeMode ?? 'production',
+      infrastructureRenderOptions: normalizeInfrastructureRenderOptions(
+        data.configuration?.infrastructureRenderOptions
+      ),
+      railwayPrototypeMode: 'production',
       roadWidthMultiplier:
         typeof data.configuration?.roadWidthMultiplier === 'number'
           ? data.configuration.roadWidthMultiplier

@@ -39,13 +39,13 @@ export {
 export type BuiltRailwayPrototypeResult = RailwayPrototypeResult;
 
 /**
- * Prototype entry point preserved for M2.1 benchmark and regression test compatibility.
- * Delegates directly to the extracted `RailwayGeometryBuilder` without duplicating Candidate B logic.
+ * Compatibility entry point preserved for performance baseline and regression tests.
+ * Delegates directly to `RailwayGeometryBuilder` using the canonical Candidate B (`R+`) hybrid renderer.
  */
 export function buildRailwayPrototypeGroup(
   data: ProcessedMapData,
   theme: MapStyleTheme,
-  mode: 'candidateA' | 'candidateB' = 'candidateB',
+  mode: 'candidateB' = 'candidateB',
   initialZoom: number = 1.0,
   options?: BuildRailwayPrototypeOptions
 ): RailwayPrototypeResult {

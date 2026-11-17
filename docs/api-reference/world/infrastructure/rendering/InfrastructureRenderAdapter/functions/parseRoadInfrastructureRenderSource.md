@@ -6,19 +6,18 @@
 
 # Function: parseRoadInfrastructureRenderSource()
 
-> **parseRoadInfrastructureRenderSource**(`raw`): [`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)
+> **parseRoadInfrastructureRenderSource**(`_raw?`): `"graph-surface"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:128
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:101
 
-Parses a raw string value into a valid `RoadInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
-resolving any absent or unrecognized value safely to `'legacy'`.
+Resolves any road render source input to the canonical `'graph-surface'` (`E2+`) production mode.
 
 ## Parameters
 
-### raw
+### \_raw?
 
 `string`
 
 ## Returns
 
-[`RoadInfrastructureRenderSource`](../type-aliases/RoadInfrastructureRenderSource.md)
+`"graph-surface"`

@@ -143,7 +143,7 @@ describe('E2 adjacent path-junction pizza-slice overlap regression', () => {
         160
       );
       const preview = prepareInfrastructureRenderPreview(data, {
-        roads: 'graph', railways: 'legacy',
+        roads: 'graph-surface', railways: 'graph-R+',
       });
       assert.ok(preview.graph);
       assert.equal(preview.validation?.isValid, true);
@@ -155,7 +155,7 @@ describe('E2 adjacent path-junction pizza-slice overlap regression', () => {
       }
 
       const scene = new GeometryBuilder({
-        infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+        infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
         infrastructureRenderPreview: preview,
       }).buildScene(data, MAP_THEMES.tactical);
       try {

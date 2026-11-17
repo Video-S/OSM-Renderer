@@ -219,7 +219,7 @@ test('TKT-024: Full-scene BVH raycasting matches standard Three.js raycasting 10
   );
   const scene = new GeometryBuilder({
     bevelEnabled: true,
-    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph' },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
   }).buildScene(parsed, MAP_THEMES.tactical);
 
   const root = new THREE.Group();
@@ -393,7 +393,7 @@ test('TKT-024: Hengelo S1 real OSM dataset BVH raycast parity and sub-millisecon
   const parsed = new LocalGeoJsonProvider().parseGeoJson(fc, 'Hengelo S1', [6.7935, 52.2625], 250);
   const scene = new GeometryBuilder({
     bevelEnabled: true,
-    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph' },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
   }).buildScene(parsed, MAP_THEMES.tactical);
 
   const root = new THREE.Group();

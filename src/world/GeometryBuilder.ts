@@ -10,36 +10,29 @@ import {
   ParkFeature,
   PointLandmarkFeature,
   ProcessedMapData,
-  RailwayFeature,
   RawGeoJsonProperties,
   RoadClass,
-  RoadFeature,
-  RoadPortalConnectionSpec,
   WaterBodyFeature,
 } from '../types/MapFeature';
 import {
   ELEVATION_POLICY,
   DEPTH_OFFSET_CONFIG,
   getRoadElevation,
-  getRailwayElevations,
   getLanduseElevationAndOffset,
   hashFeatureId,
   isNonVehicularRoadClass,
 } from './ElevationPolicy';
 import polygonClipping from 'polygon-clipping';
-import { TopologicalNodeIndex } from './TopologicalNodeIndex';
 import { SceneResourceManager } from './SceneResourceManager';
 import {
   buildBridgeProfile3D,
   buildTunnelUndergroundProfile3D,
   calculateTunnelPortalGroundCutouts,
-  computePolylineLength,
   generateBridgeStructureGeometries,
   generateProfiledRibbon3D,
   generateTunnelPortalAndTraceGeometries,
   GradeTransitionRenderDiagnostics,
   resolveGraphGradeSeparatedPlans,
-  trimPolylineByArcLength,
 } from './BridgeAndTunnelBuilder';
 import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
 import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from './SurfaceVisibilityPolicy';
@@ -242,21 +235,6 @@ export interface BuiltSceneGeometry {
   dispose: () => void;
   updateTheme: (theme: MapStyleTheme) => void;
   updateCameraZoom?: (zoom: number) => void;
-}
-
-export interface LegacyRoadRenderStats {
-  rawAtGradeRoadCount: number;
-  splitAtGradeRoadCount: number;
-  skippedRoadConflictsCount: number;
-  renderedJunctionCount: number;
-  renderedRoadRibbonCount: number;
-  candidateBlockerCheckCount: number;
-  overlappingBlockerCount: number;
-  polygonIntersectionOperationCount: number;
-  polygonDifferenceOperationCount: number;
-  clippingFailureCount: number;
-  safeFallbackCount: number;
-  fullySubtractedCount: number;
 }
 
 export interface RoadRibbonOptions {
@@ -760,16 +738,6 @@ export function createShapesFromMultiPolygon(mp: MultiPolygonCoords): THREE.Shap
   return shapes;
 }
 
-interface RoadBranch {
-  road: RoadFeature;
-  endpoint: 'start' | 'end';
-  dir: [number, number];
-  nodePos: [number, number];
-  width: number;
-  roadClass: RoadClass;
-  segmentLength: number;
-}
-
 function getTriangleCount(geom: THREE.BufferGeometry): number {
   if (geom.index) {
     return geom.index.count / 3;
@@ -1179,253 +1147,6 @@ export function cleanPolylineForClipping(points: [number, number][]): [number, n
   return current;
 }
 
-/**
- * Documented safe fallback when sweep-line Boolean clipping fails on a degenerate/self-intersecting path:
- * Clips each individual segment of the path to the exterior of the expanded bounding boxes of all
- * overlapping road footprints, returning only clean, non-self-intersecting exterior sub-polylines
- * that never overlap the conflicting road surface.
- */
-export function buildSafeExteriorSubPolylines(
-  points: [number, number][],
-  width: number,
-  overlappingBoxes: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>
-): [number, number][][] {
-  const cleaned = cleanPolylineForClipping(points);
-  if (cleaned.length < 2) return [];
-  const margin = width * 0.5 + 0.15;
-  const safeSegments: [number, number][][] = [];
-
-  for (let i = 0; i < cleaned.length - 1; i++) {
-    const p0 = cleaned[i];
-    const p1 = cleaned[i + 1];
-    const dx = p1[0] - p0[0];
-    const dz = p1[1] - p0[1];
-    const segLen = Math.hypot(dx, dz);
-    if (segLen < 0.25) continue;
-
-    // Subtract parameter intervals [t0, t1] where the segment intersects each expanded box
-    let intervals: Array<[number, number]> = [[0, 1]];
-    for (const box of overlappingBoxes) {
-      const bMinX = box.minX - margin;
-      const bMaxX = box.maxX + margin;
-      const bMinZ = box.minZ - margin;
-      const bMaxZ = box.maxZ + margin;
-
-      let tEnter = 0;
-      let tExit = 1;
-      const p = [-dx, dx, -dz, dz];
-      const q = [p0[0] - bMinX, bMaxX - p0[0], p0[1] - bMinZ, bMaxZ - p0[1]];
-      let hitsBox = true;
-      for (let k = 0; k < 4; k++) {
-        if (Math.abs(p[k]) < 1e-12) {
-          if (q[k] < 0) {
-            hitsBox = false;
-            break;
-          }
-        } else {
-          const t = q[k] / p[k];
-          if (p[k] < 0) {
-            if (t > tEnter) tEnter = t;
-          } else {
-            if (t < tExit) tExit = t;
-          }
-          if (tEnter > tExit) {
-            hitsBox = false;
-            break;
-          }
-        }
-      }
-
-      if (hitsBox && tExit > tEnter) {
-        const nextIntervals: Array<[number, number]> = [];
-        for (const [a, b] of intervals) {
-          if (tExit <= a || tEnter >= b) {
-            nextIntervals.push([a, b]);
-          } else {
-            if (tEnter > a + 1e-3) nextIntervals.push([a, tEnter]);
-            if (tExit < b - 1e-3) nextIntervals.push([tExit, b]);
-          }
-        }
-        intervals = nextIntervals;
-        if (intervals.length === 0) break;
-      }
-    }
-
-    for (const [ta, tb] of intervals) {
-      if ((tb - ta) * segLen >= 0.4) {
-        safeSegments.push([
-          [p0[0] + dx * ta, p0[1] + dz * ta],
-          [p0[0] + dx * tb, p0[1] + dz * tb],
-        ]);
-      }
-    }
-  }
-
-  return safeSegments;
-}
-
-/**
- * Splits road polylines wherever an interior vertex is shared with another road in the same tier
- * so that all T-junctions and mid-polyline cross-streets are exposed as true endpoints for junction meshing.
- */
-export function splitRoadsAtSharedInteriorNodes(
-  roads: RoadFeature[],
-  topoIndex: TopologicalNodeIndex
-): RoadFeature[] {
-  const nodeUsageCount = new Map<string, number>();
-
-  // Pass 1: Register all vertices in topoIndex so explicit OSM node IDs and coordinate-only vertices
-  // unify symmetrically regardless of feature order, while distinct explicit OSM node IDs stay separate.
-  const rawRoadNodeIds = new Map<string, string[]>();
-  for (const r of roads) {
-    if (!r.points || r.points.length < 2) continue;
-    const isPath = isNonVehicularRoadClass(r.roadClass);
-    const tierScope = isPath ? 'path' : 'veh';
-    const rawIds = r.points.map((pt, idx) => {
-      const existingId =
-        r.nodeIds && r.nodeIds[idx] !== undefined ? String(r.nodeIds[idx]).trim() : '';
-      const isExplicit = existingId.length > 0 && !existingId.startsWith('tn_');
-      return topoIndex.getOrCreateNode(
-        pt[0],
-        pt[1],
-        tierScope,
-        isExplicit ? existingId : undefined
-      );
-    });
-    rawRoadNodeIds.set(r.id, rawIds);
-  }
-
-  // Pass 2: Resolve canonical node keys after any fallback-to-explicit promotions
-  const roadVertexKeys = new Map<string, string[]>();
-  for (const r of roads) {
-    if (!r.points || r.points.length < 2) continue;
-    const isPath = isNonVehicularRoadClass(r.roadClass);
-    const tierPrefix = isPath ? 'path_' : 'veh_';
-    const rawIds = rawRoadNodeIds.get(r.id)!;
-    const canonicalNodeIds = rawIds.map((id) => topoIndex.resolveCanonicalNodeId(id));
-    r.nodeIds = canonicalNodeIds;
-    const keys = canonicalNodeIds.map((cid) => `${tierPrefix}${cid}`);
-    roadVertexKeys.set(r.id, keys);
-    // Count distinct road visits per node
-    const uniqueInRoad = new Set(keys);
-    for (const k of uniqueInRoad) {
-      nodeUsageCount.set(k, (nodeUsageCount.get(k) || 0) + 1);
-    }
-  }
-
-  const result: RoadFeature[] = [];
-  for (const r of roads) {
-    if (!r.points || r.points.length <= 2) {
-      result.push(r);
-      continue;
-    }
-    const keys = roadVertexKeys.get(r.id)!;
-    let startIdx = 0;
-    let subPart = 0;
-
-    for (let i = 1; i < r.points.length - 1; i++) {
-      if ((nodeUsageCount.get(keys[i]) || 0) > 1) {
-        result.push({
-          ...r,
-          id: `${r.id}_seg${subPart++}`,
-          points: r.points.slice(startIdx, i + 1),
-          nodeIds: r.nodeIds ? r.nodeIds.slice(startIdx, i + 1) : undefined,
-        });
-        startIdx = i;
-      }
-    }
-
-    if (startIdx === 0) {
-      result.push(r);
-    } else {
-      result.push({
-        ...r,
-        id: `${r.id}_seg${subPart}`,
-        points: r.points.slice(startIdx),
-        nodeIds: r.nodeIds ? r.nodeIds.slice(startIdx) : undefined,
-      });
-    }
-  }
-
-  return result;
-}
-
-/**
- * Generates a 3D bridge deck substructure with outward-facing side fascia walls and a downward-facing underside.
- */
-function generateBridgeDeckSubstructure(
-  points: [number, number][],
-  width: number,
-  topY: number,
-  deckThickness: number
-): THREE.BufferGeometry | null {
-  const bottomY = topY - deckThickness;
-  const topRibbon = generateRoadRibbon(points, width, bottomY, { roundCaps: false });
-  if (!topRibbon) return null;
-
-  // Flip underside ribbon normals to [0, -1, 0] and reverse triangle winding
-  const positions: number[] = Array.from(topRibbon.positions);
-  const normals: number[] = [];
-  for (let i = 0; i < topRibbon.normals.length; i += 3) {
-    normals.push(0, -1, 0);
-  }
-  const indices: number[] = [];
-  for (let i = 0; i < topRibbon.indices.length; i += 3) {
-    indices.push(topRibbon.indices[i], topRibbon.indices[i + 2], topRibbon.indices[i + 1]);
-  }
-
-  let vOffset = positions.length / 3;
-  const halfW = width / 2;
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i];
-    const p1 = points[i + 1];
-    const dx = p1[0] - p0[0];
-    const dz = p1[1] - p0[1];
-    const len = Math.hypot(dx, dz);
-    if (len < 1e-3) continue;
-    const nx = -dz / len;
-    const nz = dx / len;
-
-    // Left fascia wall (facing +nx, +nz)
-    const l0x = p0[0] + nx * halfW;
-    const l0z = p0[1] + nz * halfW;
-    const l1x = p1[0] + nx * halfW;
-    const l1z = p1[1] + nz * halfW;
-
-    positions.push(
-      l0x, bottomY, l0z,
-      l1x, bottomY, l1z,
-      l1x, topY, l1z,
-      l0x, topY, l0z
-    );
-    for (let k = 0; k < 4; k++) normals.push(nx, 0, nz);
-    indices.push(vOffset, vOffset + 1, vOffset + 2, vOffset, vOffset + 2, vOffset + 3);
-    vOffset += 4;
-
-    // Right fascia wall (facing -nx, -nz)
-    const r0x = p0[0] - nx * halfW;
-    const r0z = p0[1] - nz * halfW;
-    const r1x = p1[0] - nx * halfW;
-    const r1z = p1[1] - nz * halfW;
-
-    positions.push(
-      r1x, bottomY, r1z,
-      r0x, bottomY, r0z,
-      r0x, topY, r0z,
-      r1x, topY, r1z
-    );
-    for (let k = 0; k < 4; k++) normals.push(-nx, 0, -nz);
-    indices.push(vOffset, vOffset + 1, vOffset + 2, vOffset, vOffset + 2, vOffset + 3);
-    vOffset += 4;
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geo.setIndex(indices);
-  return geo;
-}
 
 /**
  * Computes polygon area (m²), centroid [cx, cz], and principal orientation unit vector [ux, uz]
@@ -1474,37 +1195,6 @@ function computePolygonAreaAndPrincipalAxis(ring: [number, number][]): {
   };
 }
 
-/**
- * Appends a flat horizontal quad segment from (x0, z0) to (x1, z1) of width `lineWidth` at elevation `yElev`.
- */
-function appendFlatLineQuad(
-  positions: number[],
-  normals: number[],
-  indices: number[],
-  x0: number,
-  z0: number,
-  x1: number,
-  z1: number,
-  lineWidth: number,
-  yElev: number
-): void {
-  const dx = x1 - x0;
-  const dz = z1 - z0;
-  const len = Math.hypot(dx, dz);
-  if (len < 1e-3) return;
-  const nx = (-dz / len) * (lineWidth * 0.5);
-  const nz = (dx / len) * (lineWidth * 0.5);
-
-  const vBase = positions.length / 3;
-  positions.push(
-    x0 + nx, yElev, z0 + nz,
-    x0 - nx, yElev, z0 - nz,
-    x1 - nx, yElev, z1 - nz,
-    x1 + nx, yElev, z1 + nz
-  );
-  for (let k = 0; k < 4; k++) normals.push(0, 1, 0);
-  indices.push(vBase, vBase + 1, vBase + 2, vBase, vBase + 2, vBase + 3);
-}
 
 /**
  * Builds a closed 2D quad polygon ring for a stroke segment from (x0, z0) to (x1, z1) of width `lineWidth`.
@@ -1942,52 +1632,6 @@ function generatePitchMarkings(
   return triangulateUnionedStrokePolygons(strokePolygons, yElev, higherOverlappingMultiPolygon);
 }
 
-/**
- * Generates transverse raised 3D step treads along a `highway=steps` stairway polyline.
- */
-export function generateStepTreads(
-  points: [number, number][],
-  width: number,
-  yElev: number
-): THREE.BufferGeometry | null {
-  if (!points || points.length < 2) return null;
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-  const halfW = width * 0.44;
-  const treadDepth = 0.22;
-  const stepSpacing = 0.65;
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i];
-    const p1 = points[i + 1];
-    const dx = p1[0] - p0[0];
-    const dz = p1[1] - p0[1];
-    const segLen = Math.hypot(dx, dz);
-    if (segLen < 0.4) continue;
-    const tx = dx / segLen;
-    const tz = dz / segLen;
-    const nx = -tz;
-    const nz = tx;
-
-    for (let d = 0.35; d < segLen - 0.25; d += stepSpacing) {
-      const cx = p0[0] + tx * d;
-      const cz = p0[1] + tz * d;
-      const lx = cx + nx * halfW;
-      const lz = cz + nz * halfW;
-      const rx = cx - nx * halfW;
-      const rz = cz - nz * halfW;
-      appendFlatLineQuad(positions, normals, indices, lx, lz, rx, rz, treadDepth, yElev);
-    }
-  }
-
-  if (indices.length === 0) return null;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geo.setIndex(indices);
-  return geo;
-}
 
 /**
  * Generates an open-air elevated roof slab (`building=roof`, `carport`, `canopy`, `shelter`)
@@ -2277,9 +1921,7 @@ export class GeometryBuilder {
     let infrastructureRenderPreview: InfrastructureRenderPreviewResult | null =
       this.options.infrastructureRenderPreview !== undefined
         ? this.options.infrastructureRenderPreview
-        : requiresInfrastructureGraphPreview(infrastructureRenderOptions)
-          ? prepareInfrastructureRenderPreview(data, infrastructureRenderOptions)
-          : null;
+        : prepareInfrastructureRenderPreview(data, infrastructureRenderOptions);
 
     const buildingsGroup = new THREE.Group();
     buildingsGroup.name = 'BuildingsGroup';
@@ -3067,15 +2709,12 @@ export class GeometryBuilder {
     // 5. RAILWAYS & AERIALWAYS (Delegated to Hybrid Candidate B RailwayGeometryBuilder)
     // ==========================================================================
     let railwayInfrastructureResult: RailwayPrototypeResult | null = null;
-    const isGraphRailway =
-      infrastructureRenderOptions.railways === 'graph' ||
-      infrastructureRenderOptions.railways === 'graph-switches' ||
-      infrastructureRenderOptions.railways === 'graph-R+';
     const hasRailways =
       (data.railways && data.railways.length > 0) ||
-      (isGraphRailway &&
+      Boolean(
         infrastructureRenderPreview?.descriptors?.railwayEdges &&
-        infrastructureRenderPreview.descriptors.railwayEdges.length > 0);
+          infrastructureRenderPreview.descriptors.railwayEdges.length > 0
+      );
 
     const tRailwayGen0 = performance.now();
     if (hasRailways) {
@@ -3131,13 +2770,8 @@ export class GeometryBuilder {
     let roadJunctionsMs = 0;
     let roadAtGradeRibbonsMs = 0;
     let roadsMergeMs = 0;
-    const rawAtGradeRoads: RoadFeature[] = [];
-    const gradeSeparatedRoads: RoadFeature[] = [];
-    const conflictingFallbackRoads: RoadFeature[] = [];
     const atGradeRoadEndpoints: [number, number][] = [];
-    const bridgeRoadEndpoints: Array<{ id: string; pt: [number, number] }> = [];
     const gradeTransitionCoords: [number, number][] = [];
-    let skippedRoadConflicts = 0;
 
     for (const r of data.roads) {
       if (!r.points || r.points.length < 2) continue;
@@ -3152,8 +2786,6 @@ export class GeometryBuilder {
       r.placementClassification = placement;
 
       if (placement.hasConflict) {
-        skippedRoadConflicts++;
-        conflictingFallbackRoads.push(r);
         continue;
       }
 
@@ -3168,20 +2800,10 @@ export class GeometryBuilder {
           r.isTunnel = false;
           r.isBridge = false;
         }
-        rawAtGradeRoads.push(r);
-        if (infrastructureRenderOptions.roads !== 'graph' && infrastructureRenderOptions.roads !== 'graph-surface') {
-          for (const pt of r.points) {
-            atGradeRoadEndpoints.push(pt);
-          }
-        }
       } else {
-        gradeSeparatedRoads.push(r);
         const p0 = r.points[0];
         const pn = r.points[r.points.length - 1];
         gradeTransitionCoords.push(p0, pn);
-        if (placement.isElevatedBridge) {
-          bridgeRoadEndpoints.push({ id: r.id, pt: p0 }, { id: r.id, pt: pn });
-        }
       }
     }
 
@@ -3192,12 +2814,12 @@ export class GeometryBuilder {
       Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
     >();
 
-    if ((infrastructureRenderOptions.roads === 'graph' || infrastructureRenderOptions.roads === 'graph-surface') && infrastructureRenderPreview?.descriptors) {
+    if (infrastructureRenderPreview?.descriptors) {
       const tGraphRoad0 = performance.now();
       const graphRoadResult = buildGraphAtGradeRoadGeometries({
         descriptors: infrastructureRenderPreview.descriptors,
         roadWidthMultiplier: this.options.roadWidthMultiplier,
-        surfaceFirst: infrastructureRenderOptions.roads === 'graph-surface',
+        surfaceFirst: true,
         gradeTransitionCoords,
         resourceManager,
         diagnostics: data.diagnostics,
@@ -3280,991 +2902,36 @@ export class GeometryBuilder {
         }
       }
       roadAtGradeRibbonsMs = performance.now() - tGraphRoad0;
-    } else {
-      const tLegacyRoad0 = performance.now();
-      const legacyStats: LegacyRoadRenderStats = {
-        rawAtGradeRoadCount: rawAtGradeRoads.length,
-        splitAtGradeRoadCount: 0,
-        skippedRoadConflictsCount: skippedRoadConflicts,
-        renderedJunctionCount: 0,
-        renderedRoadRibbonCount: 0,
-        candidateBlockerCheckCount: 0,
-        overlappingBlockerCount: 0,
-        polygonIntersectionOperationCount: 0,
-        polygonDifferenceOperationCount: 0,
-        clippingFailureCount: 0,
-        safeFallbackCount: 0,
-        fullySubtractedCount: 0,
-      };
-      const topoIndex = new TopologicalNodeIndex(0.15);
-
-      const tRoadSplitAndScan0 = performance.now();
-      // Split at-grade roads at any shared interior nodes so mid-polyline intersections are meshed
-      const atGradeRoads = splitRoadsAtSharedInteriorNodes(rawAtGradeRoads, topoIndex);
-      legacyStats.splitAtGradeRoadCount = atGradeRoads.length;
-      const nodeBranches = new Map<string, RoadBranch[]>();
-
-    // A. Gather road branches at at-grade junction nodes
-    for (const road of atGradeRoads) {
-      if (!road.points || road.points.length < 2) continue;
-      const isPath = isNonVehicularRoadClass(road.roadClass);
-      const tierPrefix = isPath ? 'path_' : 'veh_';
-      const w = road.width * this.options.roadWidthMultiplier;
-      const totalPolyLen = computePolylineLength(road.points);
-      const p0 = road.points[0];
-      const p1 = road.points[1];
-      const pn = road.points[road.points.length - 1];
-      const pn_1 = road.points[road.points.length - 2];
-
-      const rawStartId =
-        road.nodeIds && road.nodeIds.length > 0
-          ? topoIndex.resolveCanonicalNodeId(String(road.nodeIds[0]))
-          : topoIndex.getOrCreateNode(p0[0], p0[1], isPath ? 'path' : 'veh');
-      const startNodeId = `${tierPrefix}${rawStartId}`;
-      const dx0 = p1[0] - p0[0];
-      const dz0 = p1[1] - p0[1];
-      const len0 = Math.hypot(dx0, dz0) || 1e-6;
-      const branchStart: RoadBranch = {
-        road,
-        endpoint: 'start',
-        dir: [dx0 / len0, dz0 / len0],
-        nodePos: p0,
-        width: w,
-        roadClass: road.roadClass,
-        segmentLength: Math.max(len0, totalPolyLen),
-      };
-      if (!nodeBranches.has(startNodeId)) nodeBranches.set(startNodeId, []);
-      nodeBranches.get(startNodeId)!.push(branchStart);
-
-      const rawEndId =
-        road.nodeIds && road.nodeIds.length > 0
-          ? topoIndex.resolveCanonicalNodeId(String(road.nodeIds[road.nodeIds.length - 1]))
-          : topoIndex.getOrCreateNode(pn[0], pn[1], isPath ? 'path' : 'veh');
-      const endNodeId = `${tierPrefix}${rawEndId}`;
-      const dxn = pn_1[0] - pn[0];
-      const dzn = pn_1[1] - pn[1];
-      const lenn = Math.hypot(dxn, dzn) || 1e-6;
-      const branchEnd: RoadBranch = {
-        road,
-        endpoint: 'end',
-        dir: [dxn / lenn, dzn / lenn],
-        nodePos: pn,
-        width: w,
-        roadClass: road.roadClass,
-        segmentLength: Math.max(lenn, totalPolyLen),
-      };
-      if (!nodeBranches.has(endNodeId)) nodeBranches.set(endNodeId, []);
-      nodeBranches.get(endNodeId)!.push(branchEnd);
-    }
-
-    const trimmedEndpoints = new Map<
-      string,
-      {
-        start?: [number, number];
-        end?: [number, number];
-        startPortal?: { left: [number, number]; right: [number, number] };
-        endPortal?: { left: [number, number]; right: [number, number] };
-        startTrimDist: number;
-        endTrimDist: number;
-        hasCapStart: boolean;
-        hasCapEnd: boolean;
-      }
-    >();
-    for (const road of atGradeRoads) {
-      const p0 = road.points[0];
-      const pn = road.points[road.points.length - 1];
-      const touchesBridgeOrTunnelStart = gradeTransitionCoords.some(
-        (gt) => Math.hypot(gt[0] - p0[0], gt[1] - p0[1]) <= 0.65
-      );
-      const touchesBridgeOrTunnelEnd = gradeTransitionCoords.some(
-        (gt) => Math.hypot(gt[0] - pn[0], gt[1] - pn[1]) <= 0.65
-      );
-      const touchesOtherAtGradeStart = atGradeRoads.some(
-        (other) =>
-          other.id !== road.id &&
-          other.points.length >= 2 &&
-          (Math.hypot(other.points[0][0] - p0[0], other.points[0][1] - p0[1]) <= 0.25 ||
-            Math.hypot(
-              other.points[other.points.length - 1][0] - p0[0],
-              other.points[other.points.length - 1][1] - p0[1]
-            ) <= 0.25)
-      );
-      const touchesOtherAtGradeEnd = atGradeRoads.some(
-        (other) =>
-          other.id !== road.id &&
-          other.points.length >= 2 &&
-          (Math.hypot(other.points[0][0] - pn[0], other.points[0][1] - pn[1]) <= 0.25 ||
-            Math.hypot(
-              other.points[other.points.length - 1][0] - pn[0],
-              other.points[other.points.length - 1][1] - pn[1]
-            ) <= 0.25)
-      );
-      trimmedEndpoints.set(road.id, {
-        startTrimDist: 0,
-        endTrimDist: 0,
-        hasCapStart: !touchesBridgeOrTunnelStart && !touchesOtherAtGradeStart,
-        hasCapEnd: !touchesBridgeOrTunnelEnd && !touchesOtherAtGradeEnd,
-      });
-    }
-
-    const junctionGeometriesByClass = new Map<
-      RoadClass,
-      Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
-    >();
-
-    // Track 2D polygon footprints of placed at-grade junctions and roads at Y = 0.050m
-    // so crossing paths and unsplit/acute overlapping roads can be Boolean-clipped
-    // for zero coplanar triangle overlap at the uniform 0.050m baseline.
-    interface PlacedRoadFootprint {
-      id: string;
-      isPath: boolean;
-      minX: number;
-      maxX: number;
-      minZ: number;
-      maxZ: number;
-      poly: [number, number][][];
-    }
-    const placedRoadFootprints: PlacedRoadFootprint[] = [];
-
-    const registerRoadFootprint = (id: string, isPath: boolean, ring: [number, number][]) => {
-      if (!ring || ring.length < 3 || hasRingSelfIntersection(ring)) return;
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      const snapped: [number, number][] = [];
-      for (const [x, z] of ring) {
-        const sx = snapCoord(x);
-        const sz = snapCoord(z);
-        if (sx < minX) minX = sx;
-        if (sx > maxX) maxX = sx;
-        if (sz < minZ) minZ = sz;
-        if (sz > maxZ) maxZ = sz;
-        snapped.push([sx, sz]);
-      }
-      if (
-        snapped.length > 0 &&
-        (snapped[0][0] !== snapped[snapped.length - 1][0] ||
-          snapped[0][1] !== snapped[snapped.length - 1][1])
-      ) {
-        snapped.push([snapped[0][0], snapped[0][1]]);
-      }
-      if (snapped.length >= 4 && !hasRingSelfIntersection(snapped)) {
-        placedRoadFootprints.push({
-          id,
-          isPath,
-          minX,
-          maxX,
-          minZ,
-          maxZ,
-          poly: [snapped],
-        });
-      }
-    };
-
-    roadSplitAndEndpointScanMs = performance.now() - tRoadSplitAndScan0;
-    const tRoadJunctions0 = performance.now();
-    // B. Solve each junction node: trim incoming ribbons & synthesize non-overlapping junction polygons
-    for (const [nodeId, branches] of nodeBranches) {
-      if (branches.length < 2) continue;
-
-      let cx = 0;
-      let cz = 0;
-      for (const bBranch of branches) {
-        cx += bBranch.nodePos[0];
-        cz += bBranch.nodePos[1];
-      }
-      cx /= branches.length;
-      cz /= branches.length;
-      const nodeCenter: [number, number] = [cx, cz];
-
-      // Degree 2 collinear / gentle bend connection: share exact mitered portal vertices at nodeCenter
-      if (branches.length === 2) {
-        const b0 = branches[0];
-        const b1 = branches[1];
-        const dot = b0.dir[0] * b1.dir[0] + b0.dir[1] * b1.dir[1];
-        if (dot < -0.92 && Math.abs(b0.width - b1.width) < 0.1) {
-          // Tangent flowing from b0 into nodeCenter and out along b1
-          let tx = -b0.dir[0] + b1.dir[0];
-          let tz = -b0.dir[1] + b1.dir[1];
-          const tLen = Math.hypot(tx, tz) || 1e-6;
-          tx /= tLen;
-          tz /= tLen;
-          const nx = -tz;
-          const nz = tx;
-          const cosHalf = Math.sqrt(Math.max(0.1, (1 - dot) * 0.5));
-          const miterScale = Math.min(1.25, 1.0 / Math.max(0.76, cosHalf));
-          const halfW = (b0.width + b1.width) * 0.25 * miterScale;
-
-          const sharedLeftOutB1: [number, number] = [
-            nodeCenter[0] + nx * halfW,
-            nodeCenter[1] + nz * halfW,
-          ];
-          const sharedRightOutB1: [number, number] = [
-            nodeCenter[0] - nx * halfW,
-            nodeCenter[1] - nz * halfW,
-          ];
-
-          const t0 = trimmedEndpoints.get(b0.road.id)!;
-          const t1 = trimmedEndpoints.get(b1.road.id)!;
-          // Looking outward along b0.dir (opposite t), left is sharedRightOutB1 and right is sharedLeftOutB1
-          if (b0.endpoint === 'start') {
-            t0.start = nodeCenter;
-            t0.startPortal = { left: sharedRightOutB1, right: sharedLeftOutB1 };
-            t0.hasCapStart = false;
-          } else {
-            t0.end = nodeCenter;
-            t0.endPortal = { left: sharedLeftOutB1, right: sharedRightOutB1 };
-            t0.hasCapEnd = false;
-          }
-          // Looking outward along b1.dir (along t), left is sharedLeftOutB1 and right is sharedRightOutB1
-          if (b1.endpoint === 'start') {
-            t1.start = nodeCenter;
-            t1.startPortal = { left: sharedLeftOutB1, right: sharedRightOutB1 };
-            t1.hasCapStart = false;
-          } else {
-            t1.end = nodeCenter;
-            t1.endPortal = { left: sharedRightOutB1, right: sharedLeftOutB1 };
-            t1.hasCapEnd = false;
-          }
-          continue;
-        }
-      }
-
-      // Sort branches CCW around junction node
-      const sortedBranches = [...branches].sort((a, bBranch) => {
-        const angleA = Math.atan2(a.dir[1], a.dir[0]);
-        const angleB = Math.atan2(bBranch.dir[1], bBranch.dir[0]);
-        return angleA - angleB;
-      });
-
-      const k = sortedBranches.length;
-      const branchNormals: [number, number][] = sortedBranches.map((bBranch) => [
-        -bBranch.dir[1],
-        bBranch.dir[0],
-      ]);
-      const maxTrimDists: number[] = sortedBranches.map((bBranch) =>
-        Math.max(0.15, bBranch.segmentLength * 0.45)
-      );
-
-      // Compute corner intersections between adjacent branches
-      const corners: [number, number][] = [];
-      for (let i = 0; i < k; i++) {
-        const next = (i + 1) % k;
-        const bA = sortedBranches[i];
-        const bB = sortedBranches[next];
-        const nA = branchNormals[i];
-        const nB = branchNormals[next];
-
-        const pA: [number, number] = [
-          nodeCenter[0] + nA[0] * (bA.width / 2),
-          nodeCenter[1] + nA[1] * (bA.width / 2),
-        ];
-        const dA = bA.dir;
-
-        const pB: [number, number] = [
-          nodeCenter[0] - nB[0] * (bB.width / 2),
-          nodeCenter[1] - nB[1] * (bB.width / 2),
-        ];
-        const dB = bB.dir;
-
-        const det = dA[0] * dB[1] - dA[1] * dB[0];
-        let cornerX: number;
-        let cornerZ: number;
-
-        if (Math.abs(det) > 1e-4) {
-          const dx = pB[0] - pA[0];
-          const dz = pB[1] - pA[1];
-          const tA = (dx * dB[1] - dz * dB[0]) / det;
-          const tB = (dx * dA[1] - dz * dA[0]) / det;
-
-          if (det > 0 && tA > 0 && tB > 0) {
-            // Convex / acute inner crotch between branch A and branch B:
-            // Preserve the exact curb intersection up to each branch's maxTrimDist so the two
-            // outgoing ribbons are completely separated outside the junction polygon.
-            const clampedTA = Math.min(tA, maxTrimDists[i] * 0.94);
-            const clampedTB = Math.min(tB, maxTrimDists[next] * 0.94);
-            if (clampedTA === tA && clampedTB === tB) {
-              cornerX = pA[0] + tA * dA[0];
-              cornerZ = pA[1] + tA * dA[1];
-            } else {
-              const cAx = pA[0] + clampedTA * dA[0];
-              const cAz = pA[1] + clampedTA * dA[1];
-              const cBx = pB[0] + clampedTB * dB[0];
-              const cBz = pB[1] + clampedTB * dB[1];
-              cornerX = (cAx + cBx) * 0.5;
-              cornerZ = (cAz + cBz) * 0.5;
-            }
-          } else {
-            // Reflex outer corner (angle >= 180°): bevel outer miter so sharp turns never spike outward
-            cornerX = pA[0] + tA * dA[0];
-            cornerZ = pA[1] + tA * dA[1];
-            const cDist = Math.hypot(cornerX - nodeCenter[0], cornerZ - nodeCenter[1]);
-            const maxOuterDist = 1.35 * Math.max(bA.width, bB.width);
-            if (cDist > maxOuterDist && cDist > 1e-4) {
-              const scale = maxOuterDist / cDist;
-              cornerX = nodeCenter[0] + (cornerX - nodeCenter[0]) * scale;
-              cornerZ = nodeCenter[1] + (cornerZ - nodeCenter[1]) * scale;
-            }
-          }
-        } else {
-          cornerX = (pA[0] + pB[0]) / 2;
-          cornerZ = (pA[1] + pB[1]) / 2;
-        }
-
-        corners.push([cornerX, cornerZ]);
-      }
-
-      // Compute trim portals for each branch
-      const portals: Array<{
-        left: [number, number];
-        right: [number, number];
-        center: [number, number];
-      }> = [];
-
-      for (let i = 0; i < k; i++) {
-        const bBranch = sortedBranches[i];
-        const prevCorner = corners[(i - 1 + k) % k];
-        const nextCorner = corners[i];
-        const n = branchNormals[i];
-
-        const projPrev =
-          (prevCorner[0] - nodeCenter[0]) * bBranch.dir[0] +
-          (prevCorner[1] - nodeCenter[1]) * bBranch.dir[1];
-        const projNext =
-          (nextCorner[0] - nodeCenter[0]) * bBranch.dir[0] +
-          (nextCorner[1] - nodeCenter[1]) * bBranch.dir[1];
-
-        let trimDist = Math.max(0.1, projPrev, projNext) + 0.02;
-        trimDist = Math.min(trimDist, maxTrimDists[i]);
-
-        const centerPortal: [number, number] = [
-          nodeCenter[0] + bBranch.dir[0] * trimDist,
-          nodeCenter[1] + bBranch.dir[1] * trimDist,
-        ];
-
-        const leftPortal: [number, number] = [
-          centerPortal[0] + n[0] * (bBranch.width / 2),
-          centerPortal[1] + n[1] * (bBranch.width / 2),
-        ];
-
-        const rightPortal: [number, number] = [
-          centerPortal[0] - n[0] * (bBranch.width / 2),
-          centerPortal[1] - n[1] * (bBranch.width / 2),
-        ];
-
-        portals.push({ left: leftPortal, right: rightPortal, center: centerPortal });
-
-        const tRec = trimmedEndpoints.get(bBranch.road.id)!;
-        if (bBranch.endpoint === 'start') {
-          tRec.start = centerPortal;
-          tRec.startPortal = { left: leftPortal, right: rightPortal };
-          tRec.startTrimDist = Math.max(tRec.startTrimDist, trimDist);
-          tRec.hasCapStart = false;
-        } else {
-          tRec.end = centerPortal;
-          // Looking inward toward nodeCenter (the end of the road), left is rightPortal and right is leftPortal
-          tRec.endPortal = { left: rightPortal, right: leftPortal };
-          tRec.endTrimDist = Math.max(tRec.endTrimDist, trimDist);
-          tRec.hasCapEnd = false;
-        }
-      }
-
-      // Construct closed boundary polygon in CCW order and deduplicate near-coincident vertices
-      const rawPolygonPoints: [number, number][] = [];
-      for (let i = 0; i < k; i++) {
-        rawPolygonPoints.push(portals[i].right);
-        rawPolygonPoints.push(portals[i].left);
-        rawPolygonPoints.push(corners[i]);
-      }
-
-      const polygonPoints: [number, number][] = [];
-      for (let i = 0; i < rawPolygonPoints.length; i++) {
-        const pt = rawPolygonPoints[i];
-        const prev =
-          polygonPoints.length > 0
-            ? polygonPoints[polygonPoints.length - 1]
-            : rawPolygonPoints[rawPolygonPoints.length - 1];
-        if (Math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-3) {
-          polygonPoints.push(pt);
-        }
-      }
-
-      const numPts = polygonPoints.length;
-      if (numPts < 3) continue;
-
-      const ROAD_CLASS_PRIORITY: Record<RoadClass, number> = {
-        runway: 16,
-        taxiway: 15,
-        motorway: 14,
-        trunk: 13,
-        primary: 12,
-        secondary: 11,
-        tertiary: 10,
-        raceway: 9,
-        busway: 9,
-        bus_guideway: 9,
-        residential: 8,
-        living_street: 7,
-        unclassified: 6,
-        service: 5,
-        construction: 5,
-        platform: 4,
-        pier: 4,
-        pedestrian: 4,
-        cycleway: 3,
-        bridleway: 2,
-        track: 2,
-        footway: 2,
-        steps: 1,
-        path: 1,
-        bridge: 0,
-      };
-      let dominantBranch = sortedBranches[0];
-      const junctionSourceIdsSet = new Set<string>();
-      const portalConnections: RoadPortalConnectionSpec[] = [];
-      for (let bIdx = 0; bIdx < k; bIdx++) {
-        const bBranch = sortedBranches[bIdx];
-        const bPortal = portals[bIdx];
-        if (
-          (ROAD_CLASS_PRIORITY[bBranch.roadClass] || 0) >
-          (ROAD_CLASS_PRIORITY[dominantBranch.roadClass] || 0)
-        ) {
-          dominantBranch = bBranch;
-        }
-        const bSids =
-          bBranch.road.sourceFeatureIds && bBranch.road.sourceFeatureIds.length > 0
-            ? bBranch.road.sourceFeatureIds
-            : bBranch.road.sourceFeatureId
-              ? [bBranch.road.sourceFeatureId]
-              : [bBranch.road.id];
-        for (const sid of bSids) {
-          junctionSourceIdsSet.add(sid);
-          renderedSourceIds.add(sid);
-        }
-        portalConnections.push({
-          roadFeatureId: bBranch.road.id,
-          sourceFeatureId: bSids[0],
-          endpoint: bBranch.endpoint,
-          left: bBranch.endpoint === 'start' ? bPortal.left : bPortal.right,
-          right: bBranch.endpoint === 'start' ? bPortal.right : bPortal.left,
-        });
-      }
-      const dominantClass = dominantBranch.roadClass;
-      const junctionSourceIds = Array.from(junctionSourceIdsSet);
-      const domRoad = dominantBranch.road;
-      const junctionFeatureId = `junction-${nodeId}`;
-
-      registerRoadFootprint(
-        junctionFeatureId,
-        isNonVehicularRoadClass(dominantClass),
-        polygonPoints
-      );
-
-      const yElev = getRoadElevation(dominantClass, 0, false, false);
-
-      // Ear-clipping triangulation via THREE.ShapeUtils.triangulateShape to prevent fan fold-overs
-      const contour = polygonPoints.map(([x, z]) => new THREE.Vector2(x, z));
-      if (THREE.ShapeUtils.isClockWise(contour)) {
-        contour.reverse();
-      }
-      const earTriangles = THREE.ShapeUtils.triangulateShape(contour, []);
-
-      const junctionVertices: number[] = [];
-      const junctionIndices: number[] = [];
-      const junctionNormals: number[] = [];
-
-      for (let pIdx = 0; pIdx < contour.length; pIdx++) {
-        junctionVertices.push(contour[pIdx].x, yElev, contour[pIdx].y);
-        junctionNormals.push(0, 1, 0);
-      }
-
-      for (const [i0, i1, i2] of earTriangles) {
-        const ax = contour[i1].x - contour[i0].x;
-        const az = contour[i1].y - contour[i0].y;
-        const bx = contour[i2].x - contour[i0].x;
-        const bz = contour[i2].y - contour[i0].y;
-        const crossY = az * bx - ax * bz;
-        if (crossY > 1e-7) {
-          junctionIndices.push(i0, i1, i2);
-        } else if (crossY < -1e-7) {
-          junctionIndices.push(i0, i2, i1);
-        }
-      }
-
-      if (junctionIndices.length > 0) {
-        legacyStats.renderedJunctionCount++;
-        const junctionGeo = resourceManager.registerGeometry(new THREE.BufferGeometry());
-        junctionGeo.setAttribute(
-          'position',
-          new THREE.Float32BufferAttribute(junctionVertices, 3)
-        );
-        junctionGeo.setAttribute(
-          'normal',
-          new THREE.Float32BufferAttribute(junctionNormals, 3)
-        );
-        junctionGeo.setIndex(junctionIndices);
-
-        if (!junctionGeometriesByClass.has(dominantClass)) {
-          junctionGeometriesByClass.set(dominantClass, []);
-        }
-        junctionGeometriesByClass.get(dominantClass)!.push({
-          geom: junctionGeo,
-          info: {
-            id: junctionFeatureId,
-            sourceFeatureId: domRoad.sourceFeatureId || domRoad.id,
-            sourceFeatureIds: junctionSourceIds,
-            portalConnections,
-            name: domRoad.name ? `${domRoad.name} (Junction)` : domRoad.cartoLabel || 'Road Junction',
-            category: 'Road & Way',
-            cartoLabel: domRoad.cartoLabel || `${dominantClass} Road`,
-            primaryTag: domRoad.primaryTag || `highway=${dominantClass}`,
-            subtype: dominantClass,
-            width: dominantBranch.width,
-            elevation: yElev,
-            layer: 0,
-            isBridge: false,
-            isTunnel: false,
-            osmTags: sanitizeOsmTags(domRoad.osmTags),
-          },
-        });
-      }
-    }
-
-    roadJunctionsMs = performance.now() - tRoadJunctions0;
-    const tRoadAtGradeRibbons0 = performance.now();
-    // C. Build trimmed road ribbons for at-grade roads (Vehicular by priority first, then non-vehicular paths)
-
-    const fullySubtractedRoadIds = new Set<string>();
-
-    const sortedAtGradeRoads = [...atGradeRoads].sort((a, bRoad) => {
-      const aPath = isNonVehicularRoadClass(a.roadClass) ? 1 : 0;
-      const bPath = isNonVehicularRoadClass(bRoad.roadClass) ? 1 : 0;
-      return aPath - bPath;
-    });
-
-    for (const road of sortedAtGradeRoads) {
-      try {
-        const width = road.width * this.options.roadWidthMultiplier;
-        const tInfo = trimmedEndpoints.get(road.id);
-
-        let pts =
-          tInfo && (tInfo.startTrimDist > 0 || tInfo.endTrimDist > 0)
-            ? trimPolylineByArcLength(road.points, tInfo.startTrimDist, tInfo.endTrimDist)
-            : [...road.points];
-        if (tInfo?.start && pts.length >= 2) pts[0] = tInfo.start;
-        if (tInfo?.end && pts.length >= 2) pts[pts.length - 1] = tInfo.end;
-
-        const isExplicitCulvert =
-          !road.isTunnel &&
-          Boolean(
-            road.osmTags?.culvert === 'yes' ||
-              road.osmTags?.tunnel === 'culvert' ||
-              road.osmTags?.bridge === 'culvert' ||
-              road.osmTags?.man_made === 'culvert' ||
-              road.osmTags?.bridge === 'low_water_crossing'
-          );
-        const roadElevation = isExplicitCulvert
-          ? ELEVATION_POLICY.ROAD_SURFACE
-          : getRoadElevation(
-              road.roadClass,
-              road.layer,
-              road.isBridge,
-              road.isTunnel,
-              road.sourceFeatureId || road.id
-            );
-
-        const isPath = isNonVehicularRoadClass(road.roadClass);
-        const portalOpts = {
-          startPortal: tInfo?.startPortal,
-          endPortal: tInfo?.endPortal,
-        };
-        const outlinePoly = buildRoadRibbonOutlineRing(pts, width, portalOpts);
-
-        const sids =
-          road.sourceFeatureIds && road.sourceFeatureIds.length > 0
-            ? road.sourceFeatureIds
-            : road.sourceFeatureId
-              ? [road.sourceFeatureId]
-              : [road.id];
-
-        let geom: THREE.BufferGeometry | null = null;
-        let resolvedClippedPolys: MultiPolygonCoords | null = null;
-
-        // Check whether this road/path overlaps any already-placed junction or road footprint at Y = 0.050m
-        if (placedRoadFootprints.length > 0) {
-          let pMinX = Infinity, pMaxX = -Infinity, pMinZ = Infinity, pMaxZ = -Infinity;
-          const ptsForBBox = outlinePoly && outlinePoly[0] ? outlinePoly[0] : pts;
-          const halfMargin = outlinePoly ? 0 : width * 0.5;
-          for (const pt of ptsForBBox) {
-            if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) continue;
-            if (pt[0] - halfMargin < pMinX) pMinX = pt[0] - halfMargin;
-            if (pt[0] + halfMargin > pMaxX) pMaxX = pt[0] + halfMargin;
-            if (pt[1] - halfMargin < pMinZ) pMinZ = pt[1] - halfMargin;
-            if (pt[1] + halfMargin > pMaxZ) pMaxZ = pt[1] + halfMargin;
-          }
-
-          const candidateFootprints: PlacedRoadFootprint[] = [];
-          for (const fp of placedRoadFootprints) {
-            // Non-vehicular paths clip against vehicular roads/junctions and other paths;
-            // vehicular roads clip against any overlapping vehicular junctions or roads
-            if (!isPath && fp.isPath) continue;
-            if (
-              pMaxX > fp.minX &&
-              pMinX < fp.maxX &&
-              pMaxZ > fp.minZ &&
-              pMinZ < fp.maxZ
-            ) {
-              candidateFootprints.push(fp);
-            }
-          }
-
-          if (candidateFootprints.length > 0) {
-            legacyStats.candidateBlockerCheckCount += candidateFootprints.length;
-            const outlineHasSelfIntersection =
-              !outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0]);
-
-            // For clean vehicular ribbons that meet their junction along a 1D portal edge,
-            // verify whether there is any actual positive-area 2D overlap (> 1e-3 m²) before clipping.
-            let requiresClipping = isPath || outlineHasSelfIntersection;
-            const overlappingPolys: Array<[number, number][][]> = [];
-            const overlappingBoxes: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
-
-            if (!outlineHasSelfIntersection && outlinePoly) {
-              for (const fp of candidateFootprints) {
-                try {
-                  legacyStats.polygonIntersectionOperationCount++;
-                  const inter = polygonClipping.intersection(
-                    outlinePoly as unknown as polygonClipping.Geom,
-                    fp.poly as unknown as polygonClipping.Geom
-                  ) as unknown as MultiPolygonCoords;
-                  const cleanedInter = filterDegenerateBooleanArtifacts(inter);
-                  if (cleanedInter.length > 0) {
-                    requiresClipping = true;
-                    overlappingPolys.push(fp.poly);
-                    overlappingBoxes.push({
-                      minX: fp.minX,
-                      maxX: fp.maxX,
-                      minZ: fp.minZ,
-                      maxZ: fp.maxZ,
-                    });
-                  }
-                } catch {
-                  requiresClipping = true;
-                  overlappingPolys.push(fp.poly);
-                  overlappingBoxes.push({
-                    minX: fp.minX,
-                    maxX: fp.maxX,
-                    minZ: fp.minZ,
-                    maxZ: fp.maxZ,
-                  });
-                }
-              }
-            } else {
-              for (const fp of candidateFootprints) {
-                overlappingPolys.push(fp.poly);
-                overlappingBoxes.push({
-                  minX: fp.minX,
-                  maxX: fp.maxX,
-                  minZ: fp.minZ,
-                  maxZ: fp.maxZ,
-                });
-              }
-            }
-
-            if (requiresClipping && overlappingPolys.length > 0) {
-              legacyStats.overlappingBlockerCount += overlappingPolys.length;
-              let clippedSuccess = false;
-              let diffResult: MultiPolygonCoords = [];
-
-              // Stage 1: Primary Boolean difference (only if outline ring is manifold and self-intersection-free)
-              if (!outlineHasSelfIntersection && outlinePoly) {
-                try {
-                  legacyStats.polygonDifferenceOperationCount++;
-                  const rawDiff = polygonClipping.difference(
-                    outlinePoly as unknown as polygonClipping.Geom,
-                    ...(overlappingPolys as unknown as polygonClipping.Geom[])
-                  ) as unknown as MultiPolygonCoords;
-                  diffResult = filterDegenerateBooleanArtifacts(rawDiff);
-                  clippedSuccess = true;
-                } catch {
-                  clippedSuccess = false;
-                }
-              }
-
-              // Stage 2: Retry after polyline cleanup (spike/duplicate removal) and sequential difference
-              if (!clippedSuccess) {
-                try {
-                  const cleanedPts = cleanPolylineForClipping(pts);
-                  const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width);
-                  if (
-                    cleanedOutline &&
-                    cleanedOutline[0] &&
-                    !hasRingSelfIntersection(cleanedOutline[0])
-                  ) {
-                    let currentGeom: MultiPolygonCoords = [cleanedOutline];
-                    for (const clipPoly of overlappingPolys) {
-                      if (currentGeom.length === 0) break;
-                      legacyStats.polygonDifferenceOperationCount++;
-                      currentGeom = polygonClipping.difference(
-                        currentGeom as unknown as polygonClipping.Geom,
-                        clipPoly as unknown as polygonClipping.Geom
-                      ) as unknown as MultiPolygonCoords;
-                    }
-                    diffResult = filterDegenerateBooleanArtifacts(currentGeom);
-                    clippedSuccess = true;
-                  }
-                } catch {
-                  clippedSuccess = false;
-                }
-              }
-
-              if (clippedSuccess) {
-                resolvedClippedPolys = diffResult;
-                const shapes = createShapesFromMultiPolygon(diffResult);
-                if (shapes.length > 0) {
-                  const shapeGeo = new THREE.ShapeGeometry(shapes);
-                  shapeGeo.rotateX(-Math.PI / 2);
-                  shapeGeo.translate(0, roadElevation, 0);
-                  if (shapeGeo.hasAttribute('uv')) shapeGeo.deleteAttribute('uv');
-                  geom = resourceManager.registerGeometry(shapeGeo);
-                } else {
-                  // Completely subtracted by overlapping road/junction: record diagnostic and do NOT mark as rendered
-                  fullySubtractedRoadIds.add(road.id);
-                  for (const sid of sids) fullySubtractedRoadIds.add(sid);
-                  if (data.diagnostics?.featuresFullySubtracted) {
-                    data.diagnostics.featuresFullySubtracted.count++;
-                    if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
-                      data.diagnostics.featuresFullySubtracted.sampleIds.push(sids[0]);
-                    }
-                  }
-                  continue;
-                }
-              } else {
-                // Stage 3: Explicit clipping failure diagnostic + safe non-overlapping exterior sub-segment fallback
-                legacyStats.clippingFailureCount++;
-                if (data.diagnostics) {
-                  if (!data.diagnostics.clippingFailures) {
-                    data.diagnostics.clippingFailures = { count: 0, sampleIds: [] };
-                  }
-                  data.diagnostics.clippingFailures.count++;
-                  if (data.diagnostics.clippingFailures.sampleIds.length < 10) {
-                    data.diagnostics.clippingFailures.sampleIds.push(sids[0]);
-                  }
-                  if (!data.diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed']) {
-                    data.diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed'] = {
-                      count: 0,
-                      sampleIds: [],
-                    };
-                  }
-                  data.diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed'].count++;
-                  if (
-                    data.diagnostics.rejectedInvalid.byReason['path_boolean_clipping_failed']
-                      .sampleIds.length < 10
-                  ) {
-                    data.diagnostics.rejectedInvalid.byReason[
-                      'path_boolean_clipping_failed'
-                    ].sampleIds.push(sids[0]);
-                  }
-                }
-
-                const exteriorSubPolylines = buildSafeExteriorSubPolylines(
-                  pts,
-                  width,
-                  overlappingBoxes
-                );
-                const subGeos: THREE.BufferGeometry[] = [];
-                for (const subPts of exteriorSubPolylines) {
-                  const subOutline = buildRoadRibbonOutlineRing(subPts, width);
-                  if (!subOutline || !subOutline[0] || hasRingSelfIntersection(subOutline[0])) {
-                    continue;
-                  }
-                  // Verify this exterior sub-segment does not overlap any already-placed road/path footprint
-                  // (including earlier sub-segments of this same self-crossing path)
-                  let overlapsExisting = false;
-                  for (const fp of placedRoadFootprints) {
-                    if (!isPath && fp.isPath) continue;
-                    try {
-                      legacyStats.polygonIntersectionOperationCount++;
-                      const subInter = polygonClipping.intersection(
-                        subOutline as unknown as polygonClipping.Geom,
-                        fp.poly as unknown as polygonClipping.Geom
-                      ) as unknown as MultiPolygonCoords;
-                      if (filterDegenerateBooleanArtifacts(subInter).length > 0) {
-                        overlapsExisting = true;
-                        break;
-                      }
-                    } catch {
-                      overlapsExisting = true;
-                      break;
-                    }
-                  }
-                  if (overlapsExisting) continue;
-
-                  const subRibbon = generateRoadRibbon(subPts, width, roadElevation, {
-                    roundCaps: false,
-                  });
-                  if (subRibbon) {
-                    const g = new THREE.BufferGeometry();
-                    g.setAttribute('position', new THREE.BufferAttribute(subRibbon.positions, 3));
-                    g.setAttribute('normal', new THREE.BufferAttribute(subRibbon.normals, 3));
-                    g.setIndex(new THREE.BufferAttribute(subRibbon.indices, 1));
-                    subGeos.push(g);
-                    registerRoadFootprint(road.id, isPath, subOutline[0]);
-                  }
-                }
-                if (subGeos.length > 0) {
-                  const mergedSafe = mergeGeometries(subGeos, false);
-                  for (const sg of subGeos) sg.dispose();
-                  if (mergedSafe) {
-                    legacyStats.safeFallbackCount++;
-                    geom = resourceManager.registerGeometry(mergedSafe);
-                  }
-                }
-                if (!geom) {
-                  // Do NOT fall back to an overlapping path ribbon and do NOT claim feature was rendered
-                  fullySubtractedRoadIds.add(road.id);
-                  for (const sid of sids) fullySubtractedRoadIds.add(sid);
-                  continue;
-                }
-              }
-            }
-          }
-        }
-
-        if (!geom) {
-          if (!outlinePoly || !outlinePoly[0] || hasRingSelfIntersection(outlinePoly[0])) {
-            const cleanedPts = cleanPolylineForClipping(pts);
-            const cleanedOutline = buildRoadRibbonOutlineRing(cleanedPts, width);
-            if (!cleanedOutline || !cleanedOutline[0] || hasRingSelfIntersection(cleanedOutline[0])) {
-              legacyStats.clippingFailureCount++;
-              if (data.diagnostics) {
-                if (!data.diagnostics.clippingFailures) {
-                  data.diagnostics.clippingFailures = { count: 0, sampleIds: [] };
-                }
-                data.diagnostics.clippingFailures.count++;
-                if (data.diagnostics.clippingFailures.sampleIds.length < 10) {
-                  data.diagnostics.clippingFailures.sampleIds.push(sids[0]);
-                }
-              }
-              continue;
-            }
-            pts = cleanedPts;
-          }
-
-          const ribbon = generateRoadRibbon(pts, width, roadElevation, {
-            roundCaps: true,
-            hasStartCap: tInfo?.hasCapStart ?? true,
-            hasEndCap: tInfo?.hasCapEnd ?? true,
-            startPortal: tInfo?.startPortal,
-            endPortal: tInfo?.endPortal,
-          });
-          if (!ribbon) continue;
-
-          geom = resourceManager.registerGeometry(new THREE.BufferGeometry());
-          geom.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
-          geom.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
-          geom.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
-        }
-
-        if (resolvedClippedPolys) {
-          for (const polyRings of resolvedClippedPolys) {
-            if (polyRings[0]) registerRoadFootprint(road.id, isPath, polyRings[0]);
-          }
-        } else if (outlinePoly && outlinePoly[0]) {
-          registerRoadFootprint(road.id, isPath, outlinePoly[0]);
-        }
-
-        const roadInfo: InspectableFeatureInfo = {
-          id: road.id,
-          sourceFeatureId: sids[0],
-          sourceFeatureIds: sids,
-          name: road.name || road.cartoLabel || `Road (${road.roadClass})`,
-          category: 'Road & Way',
-          cartoLabel: road.cartoLabel || `${road.roadClass} Road`,
-          primaryTag: road.primaryTag || `highway=${road.roadClass}`,
-          subtype: road.roadClass,
-          width: Number(width.toFixed(1)),
-          elevation: roadElevation,
-          layer: road.layer,
-          isBridge: road.isBridge,
-          isTunnel: road.isTunnel,
-          osmTags: sanitizeOsmTags(road.osmTags),
-        };
-
-        if (!roadsByClass.has(road.roadClass)) {
-          roadsByClass.set(road.roadClass, []);
-        }
-        roadsByClass.get(road.roadClass)!.push({
-          geom,
-          info: roadInfo,
-        });
-        legacyStats.renderedRoadRibbonCount++;
-
-        // For stairways (`highway=steps`), generate raised transverse step treads
-        if (road.roadClass === 'steps') {
-          const treadGeo = generateStepTreads(
-            pts,
-            width,
-            roadElevation + ELEVATION_POLICY.STEP_TREAD_OFFSET
-          );
-          if (treadGeo) {
-            resourceManager.registerGeometry(treadGeo);
-            roadsByClass.get(road.roadClass)!.push({ geom: treadGeo, info: roadInfo });
-          }
-        }
-
-        for (const sid of sids) renderedSourceIds.add(sid);
-      } catch (err) {
-        console.warn(`Skipping invalid at-grade road ${road.id}`, err);
-      }
-    }
-
-    legacyStats.fullySubtractedCount = fullySubtractedRoadIds.size;
-    roadsGroup.userData.fullySubtractedRoadIds = Array.from(fullySubtractedRoadIds);
-    roadsGroup.userData.legacyRoadStats = legacyStats;
-    roadsGroup.userData.legacyRoadTimingMs = performance.now() - tLegacyRoad0;
-
-      // Add junction geometries into matching class buffers
-      junctionGeometriesByClass.forEach((items, roadClass) => {
-        if (!roadsByClass.has(roadClass)) {
-          roadsByClass.set(roadClass, []);
-        }
-        roadsByClass.get(roadClass)!.push(...items);
-      });
-      roadAtGradeRibbonsMs = performance.now() - tRoadAtGradeRibbons0;
     }
 
     // D. Build grade-separated roads:
     // - Bridges: 3D sloped approach ramps connecting at-grade roads to elevated bridge decks + substructure + parapets + piers
     // - Tunnels: 3D concrete tunnel portal arches + dark recessed entrance mouths + dashed underground traces
     const tRoadBridgeTunnel0 = performance.now();
-    const isGraphRoadMode =
-      (infrastructureRenderOptions.roads === 'graph' ||
-        infrastructureRenderOptions.roads === 'graph-surface') &&
-      Boolean(infrastructureRenderPreview?.descriptors);
-    const roadGradeSeparatedPlans =
-      isGraphRoadMode && infrastructureRenderPreview?.descriptors
-        ? resolveGraphGradeSeparatedPlans(
-            infrastructureRenderPreview.descriptors,
-            'road',
-            (edge) => {
-              const roadEdge = infrastructureRenderPreview.descriptors!.roadEdgesById.get(edge.id);
-              const roadClass = roadEdge?.roadClass ?? 'residential';
-              const isBridge = edge.placementClassification
-                ? edge.placementClassification.isElevatedBridge
-                : edge.isBridge;
-              const isTunnel = edge.placementClassification
-                ? edge.placementClassification.isSubterraneanTunnel
-                : edge.isTunnel;
-              return getRoadElevation(
-                roadClass,
-                edge.layer,
-                isBridge,
-                isTunnel,
-                edge.sourceFeatureIds[0] || edge.id,
-                edge.placementClassification?.supportingEvidence.maxheightMeters
-              );
-            }
-          )
-        : null;
+    const roadGradeSeparatedPlans = infrastructureRenderPreview?.descriptors
+      ? resolveGraphGradeSeparatedPlans(
+          infrastructureRenderPreview.descriptors,
+          'road',
+          (edge) => {
+            const roadEdge = infrastructureRenderPreview.descriptors!.roadEdgesById.get(edge.id);
+            const roadClass = roadEdge?.roadClass ?? 'residential';
+            const isBridge = edge.placementClassification
+              ? edge.placementClassification.isElevatedBridge
+              : edge.isBridge;
+            const isTunnel = edge.placementClassification
+              ? edge.placementClassification.isSubterraneanTunnel
+              : edge.isTunnel;
+            return getRoadElevation(
+              roadClass,
+              edge.layer,
+              isBridge,
+              isTunnel,
+              edge.sourceFeatureIds[0] || edge.id,
+              edge.placementClassification?.supportingEvidence.maxheightMeters
+            );
+          }
+        )
+      : null;
     const roadGradeTransitionDiagnostics: GradeTransitionRenderDiagnostics =
       roadGradeSeparatedPlans
         ? {
@@ -4281,19 +2948,19 @@ export class GeometryBuilder {
             ),
           }
         : {
-            mode: 'legacy',
+            mode: 'graph',
             confirmedTransitionsConsumed: 0,
             confirmedElevatedContinuations: 0,
             unresolvedTransitionsCount: 0,
             boundaryClippedEndpointsCount: 0,
             intentionallyStandaloneEndpointsCount: 0,
-            legacyFallbacksCount: gradeSeparatedRoads.length,
+            legacyFallbacksCount: 0,
             correctedPortalDiscontinuitiesCount: 0,
             bridgeAndTunnelBuildTimeMs: 0,
             tunnelPortalsEmittedCount: 0,
             undergroundRoadGeometryCount: 0,
             undergroundRailwayGeometryCount: 0,
-            conflictingPlacementSkippedCount: skippedRoadConflicts,
+            conflictingPlacementSkippedCount: 0,
             conflictingPlacementFallbackCount: 0,
             portalGroundCutoutsCount: 0,
             hiddenUndergroundMeshCount: 0,
@@ -4317,7 +2984,7 @@ export class GeometryBuilder {
       }
     };
 
-    if (isGraphRoadMode && infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
+    if (infrastructureRenderPreview?.descriptors && roadGradeSeparatedPlans) {
       const roadLineage = infrastructureRenderPreview.descriptors.roadFeatureLineage;
       for (const edge of infrastructureRenderPreview.descriptors.roadEdges) {
         if (resolveSurfaceVisibility({
@@ -4641,270 +3308,6 @@ export class GeometryBuilder {
           markEdgeRendered();
         } catch (err) {
           console.warn(`Skipping invalid graph grade-separated road ${edge.id}`, err);
-        }
-      }
-    } else {
-      for (const fallbackRoad of conflictingFallbackRoads) {
-        const sids =
-          fallbackRoad.sourceFeatureIds && fallbackRoad.sourceFeatureIds.length > 0
-            ? fallbackRoad.sourceFeatureIds
-            : fallbackRoad.sourceFeatureId
-              ? [fallbackRoad.sourceFeatureId]
-              : [fallbackRoad.id];
-        roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount =
-          (roadGradeTransitionDiagnostics.conflictingPlacementFallbackCount ?? 0) + 1;
-        recordConflictingRoadFallback(sids[0]);
-        const fallbackWidth = fallbackRoad.width * this.options.roadWidthMultiplier;
-        const fallbackRibbon = generateRoadRibbon(
-          fallbackRoad.points,
-          fallbackWidth,
-          ELEVATION_POLICY.ROAD_SURFACE,
-          { roundCaps: false }
-        );
-        if (fallbackRibbon) {
-          const g = resourceManager.registerGeometry(new THREE.BufferGeometry());
-          g.setAttribute('position', new THREE.BufferAttribute(fallbackRibbon.positions, 3));
-          g.setAttribute('normal', new THREE.BufferAttribute(fallbackRibbon.normals, 3));
-          g.setIndex(new THREE.BufferAttribute(fallbackRibbon.indices, 1));
-          const fallbackInfo: InspectableFeatureInfo = {
-            id: fallbackRoad.id,
-            sourceFeatureId: sids[0],
-            sourceFeatureIds: sids,
-            name: fallbackRoad.name || fallbackRoad.cartoLabel || `Road (${fallbackRoad.roadClass})`,
-            category: 'Road & Way',
-            cartoLabel: fallbackRoad.cartoLabel || `${fallbackRoad.roadClass} Road`,
-            primaryTag: fallbackRoad.primaryTag || `highway=${fallbackRoad.roadClass}`,
-            subtype: fallbackRoad.roadClass,
-            width: Number(fallbackWidth.toFixed(1)),
-            elevation: ELEVATION_POLICY.ROAD_SURFACE,
-            layer: 0,
-            isBridge: false,
-            isTunnel: false,
-            placementClassification: fallbackRoad.placementClassification,
-            osmTags: sanitizeOsmTags(fallbackRoad.osmTags),
-          };
-          if (!roadsByClass.has(fallbackRoad.roadClass)) {
-            roadsByClass.set(fallbackRoad.roadClass, []);
-          }
-          roadsByClass.get(fallbackRoad.roadClass)!.push({ geom: g, info: fallbackInfo });
-          for (const sid of sids) renderedSourceIds.add(sid);
-        }
-      }
-
-      for (const road of gradeSeparatedRoads) {
-        try {
-          const width = road.width * this.options.roadWidthMultiplier;
-          const sids =
-            road.sourceFeatureIds && road.sourceFeatureIds.length > 0
-              ? road.sourceFeatureIds
-              : road.sourceFeatureId
-                ? [road.sourceFeatureId]
-                : [road.id];
-
-          const isSubterraneanTunnel = road.placementClassification
-            ? road.placementClassification.isSubterraneanTunnel
-            : road.isTunnel;
-
-          if (isSubterraneanTunnel) {
-            const targetTunnelElev = getRoadElevation(
-              road.roadClass,
-              road.layer,
-              false,
-              true,
-              road.sourceFeatureId || road.id,
-              road.placementClassification?.supportingEvidence.maxheightMeters
-            );
-            const tunnelInfo: InspectableFeatureInfo = {
-              id: road.id,
-              sourceFeatureId: sids[0],
-              sourceFeatureIds: sids,
-              name: road.name || road.cartoLabel || `Tunnel (${road.roadClass})`,
-              category: 'Road & Way',
-              cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Tunnel)` : `${road.roadClass} Tunnel`,
-              primaryTag: road.primaryTag || `highway=${road.roadClass} + tunnel=yes`,
-              subtype: road.roadClass,
-              width: Number(width.toFixed(1)),
-              elevation: targetTunnelElev,
-              layer: road.layer,
-              isBridge: false,
-              isTunnel: true,
-              placementClassification: road.placementClassification,
-              osmTags: sanitizeOsmTags(road.osmTags),
-            };
-
-            const entrance = tunnelEntrances.forFeature(road);
-            const emitStartPortal = entrance.start;
-            const emitEndPortal = entrance.end;
-
-            const {
-              portalStructureGeo,
-              portalMouthGeo,
-              undergroundTraceGeo,
-              portalGroundCutoutPolygons: roadPortalCutouts,
-            } = generateTunnelPortalAndTraceGeometries(
-              road.points,
-              width,
-              isNonVehicularRoadClass(road.roadClass),
-              {
-                emitStartPortal,
-                emitEndPortal,
-                emitUndergroundTrace: Boolean(infrastructureRenderOptions.showUndergroundTunnelTraces),
-                maxheightMeters: road.placementClassification?.supportingEvidence.maxheightMeters,
-                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
-              }
-            );
-            if (roadPortalCutouts.length > 0) {
-              roadPortalGroundCutoutPolygons.push(...roadPortalCutouts);
-              roadGradeTransitionDiagnostics.portalGroundCutoutsCount =
-                (roadGradeTransitionDiagnostics.portalGroundCutoutsCount ?? 0) +
-                roadPortalCutouts.length;
-            }
-            if (portalStructureGeo) {
-              resourceManager.registerGeometry(portalStructureGeo);
-              tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
-              roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount =
-                (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) +
-                (emitStartPortal ? 1 : 0) +
-                (emitEndPortal ? 1 : 0);
-            }
-            if (portalMouthGeo) {
-              resourceManager.registerGeometry(portalMouthGeo);
-              tunnelMouthItems.push({ geom: portalMouthGeo, info: tunnelInfo });
-            }
-            if (undergroundTraceGeo) {
-              resourceManager.registerGeometry(undergroundTraceGeo);
-              tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
-            }
-
-            const canGenerateUnderground = road.placementClassification
-              ? road.placementClassification.canGenerateUndergroundGeometry
-              : true;
-            if (canGenerateUnderground && infrastructureRenderOptions.showHiddenUndergroundGeometry) {
-              const undergroundProf = buildTunnelUndergroundProfile3D({
-                points: road.points,
-                surfaceElevation: ELEVATION_POLICY.ROAD_SURFACE,
-                targetTunnelElevation: targetTunnelElev,
-                emitStartPortal,
-                emitEndPortal,
-              });
-              if (undergroundProf.profile.length >= 2) {
-                const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
-                if (ugRoadGeo) {
-                  resourceManager.registerGeometry(ugRoadGeo);
-                  tunnelUndergroundRoadItems.push({ geom: ugRoadGeo, info: tunnelInfo });
-                  roadGradeTransitionDiagnostics.undergroundRoadGeometryCount =
-                    (roadGradeTransitionDiagnostics.undergroundRoadGeometryCount ?? 0) + 1;
-                }
-              }
-            }
-
-            for (const sid of sids) renderedSourceIds.add(sid);
-            continue;
-          }
-
-          const targetElevation = getRoadElevation(
-            road.roadClass,
-            road.layer,
-            road.isBridge,
-            road.isTunnel,
-            road.sourceFeatureId || road.id
-          );
-
-          const pStart = road.points[0];
-          const pEnd = road.points[road.points.length - 1];
-          const connectsStartAtGrade = atGradeRoadEndpoints.some(
-            (pt) => Math.hypot(pt[0] - pStart[0], pt[1] - pStart[1]) <= 0.8
-          );
-          const connectsEndAtGrade = atGradeRoadEndpoints.some(
-            (pt) => Math.hypot(pt[0] - pEnd[0], pt[1] - pEnd[1]) <= 0.8
-          );
-          const connectsStartBridge = bridgeRoadEndpoints.some(
-            (b) => b.id !== road.id && Math.hypot(b.pt[0] - pStart[0], b.pt[1] - pStart[1]) <= 0.8
-          );
-          const connectsEndBridge = bridgeRoadEndpoints.some(
-            (b) => b.id !== road.id && Math.hypot(b.pt[0] - pEnd[0], b.pt[1] - pEnd[1]) <= 0.8
-          );
-
-          const { profile, peakElevation } = buildBridgeProfile3D({
-            points: road.points,
-            baseElevation: ELEVATION_POLICY.ROAD_SURFACE,
-            targetBridgeElevation: targetElevation,
-            connectsStartAtGrade,
-            connectsEndAtGrade,
-            connectsStartBridge,
-            connectsEndBridge,
-            maxSampleStep: 2.0,
-          });
-
-          const geom =
-            profile.length >= 2
-              ? generateProfiledRibbon3D(profile, width)
-              : (() => {
-                  const ribbon = generateRoadRibbon(road.points, width, targetElevation, {
-                    roundCaps: true,
-                  });
-                  if (!ribbon) return null;
-                  const g = new THREE.BufferGeometry();
-                  g.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
-                  g.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
-                  g.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
-                  return g;
-                })();
-
-          if (!geom) continue;
-          resourceManager.registerGeometry(geom);
-
-          const bridgeInfo: InspectableFeatureInfo = {
-            id: road.id,
-            sourceFeatureId: sids[0],
-            sourceFeatureIds: sids,
-            name: road.name || road.cartoLabel || `Bridge (${road.roadClass})`,
-            category: 'Road & Way',
-            cartoLabel: road.cartoLabel ? `${road.cartoLabel} (Bridge)` : `${road.roadClass} Bridge`,
-            primaryTag: road.primaryTag || `highway=${road.roadClass} + bridge=yes`,
-            subtype: road.roadClass,
-            width: Number(width.toFixed(1)),
-            elevation: peakElevation,
-            layer: road.layer,
-            isBridge: Boolean(road.isBridge || road.layer > 0),
-            isTunnel: road.isTunnel,
-            osmTags: sanitizeOsmTags(road.osmTags),
-          };
-
-          if (!roadsByClass.has(road.roadClass)) {
-            roadsByClass.set(road.roadClass, []);
-          }
-          roadsByClass.get(road.roadClass)!.push({ geom, info: bridgeInfo });
-
-          // Generate 3D bridge deck substructure (fascia + soffit + ramp embankments), side parapets, and support piers
-          if (profile.length >= 2) {
-            const { substructureGeo, parapetGeo, piersGeo } = generateBridgeStructureGeometries(
-              profile,
-              width,
-              peakElevation,
-              0.36,
-              {
-                suppressStartAbutmentHeadwall: connectsStartBridge,
-                suppressEndAbutmentHeadwall: connectsEndBridge,
-              }
-            );
-            if (substructureGeo) {
-              resourceManager.registerGeometry(substructureGeo);
-              bridgeSubstructureItems.push({ geom: substructureGeo, info: bridgeInfo });
-            }
-            if (parapetGeo) {
-              resourceManager.registerGeometry(parapetGeo);
-              bridgeParapetItems.push({ geom: parapetGeo, info: bridgeInfo });
-            }
-            if (piersGeo) {
-              resourceManager.registerGeometry(piersGeo);
-              bridgePierItems.push({ geom: piersGeo, info: bridgeInfo });
-            }
-          }
-
-          for (const sid of sids) renderedSourceIds.add(sid);
-        } catch (err) {
-          console.warn(`Skipping invalid grade-separated road ${road.id}`, err);
         }
       }
     }
@@ -5998,8 +4401,6 @@ export class GeometryBuilder {
     const round3 = (v: number) => Number(Math.max(0, v).toFixed(3));
     const roadGeometryMs =
       roadClassificationMs +
-      roadSplitAndEndpointScanMs +
-      roadJunctionsMs +
       roadAtGradeRibbonsMs +
       roadBridgesAndTunnelsMs;
     const geometryMergingMs =
@@ -6013,8 +4414,8 @@ export class GeometryBuilder {
       roadGeometryMs: round3(roadGeometryMs),
       roadSubTimingsMs: {
         classificationMs: round3(roadClassificationMs),
-        splitAndEndpointScanMs: round3(roadSplitAndEndpointScanMs),
-        junctionsMs: round3(roadJunctionsMs),
+        splitAndEndpointScanMs: 0,
+        junctionsMs: 0,
         atGradeRibbonsAndClippingMs: round3(roadAtGradeRibbonsMs),
         bridgesAndTunnelsMs: round3(roadBridgesAndTunnelsMs),
       },

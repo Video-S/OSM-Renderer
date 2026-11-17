@@ -68,26 +68,8 @@ function executeSingleCpuWorkload(
   const unsupportedMetrics: UnsupportedMetricNotice[] = [];
   const errors: BenchmarkErrorRecord[] = [];
 
-  const isGraphRoadActive =
-    renderOptions.roads === 'graph' || renderOptions.roads === 'graph-surface';
-  const isSurfaceFirstRoadActive = renderOptions.roads === 'graph-surface';
-
-  if (!isGraphRoadActive) {
-    unsupportedMetrics.push({
-      metricId: `${dataset.metadata.id}::${rendererConfig.id}::roadGeometryGenerationMs`,
-      reason: 'disabled_by_config',
-      explanation:
-        'Direct stage-isolated road geometry timing (GraphRoadGenerationTiming) is only emitted when infrastructureRenderOptions.roads is "graph" or "graph-surface"; in "legacy" mode road meshing executes inline inside GeometryBuilder.buildScene.',
-    });
-  }
-  if (!isSurfaceFirstRoadActive) {
-    unsupportedMetrics.push({
-      metricId: `${dataset.metadata.id}::${rendererConfig.id}::roadSubStagesMs`,
-      reason: 'disabled_by_config',
-      explanation:
-        'Surface-first road sub-stage timing is only emitted when infrastructureRenderOptions.roads is "graph-surface".',
-    });
-  }
+  const isGraphRoadActive = true;
+  const isSurfaceFirstRoadActive = true;
 
   // 1. Warm-up executions (prevents JIT cold-start contamination and establishes warmed-up resource baseline)
   let warmedUpOwnedGeosAfterDispose = 0;

@@ -177,7 +177,7 @@ async function main() {
   const theme = MAP_THEMES.tactical;
 
   const N = 5;
-  const modes = ['disabled', 'production', 'candidateA', 'candidateB'] as const;
+  const modes = ['candidateB'] as const;
 
   const resultsByMode: Record<string, any> = {};
 
@@ -322,7 +322,6 @@ async function main() {
       }
     }
 
-    const resA = buildRailwayPrototypeGroup(parsed, theme, 'candidateA', 8.0);
     const resBUnopt = buildRailwayPrototypeGroup(parsed, theme, 'candidateB', 8.0, {
       useSpatialGridIndex: false,
       adaptiveBridgeSampling: false,
@@ -351,13 +350,6 @@ async function main() {
       untaggedServiceOrUsageCount: untaggedServiceOrUsage,
       shortChainedWaysUnder2mCount: shortWaysUnder2m,
       sampleOsmWayIds: sampleWayIds,
-      candidateA: {
-        buildTimeMs: resA.stats.buildTimeMs,
-        totalVertices: resA.stats.totalVertices,
-        totalTriangles: resA.stats.totalTriangles,
-        drawCalls: resA.stats.drawCalls,
-        cpuBufferKB: Number((resA.stats.cpuBufferBytes / 1024).toFixed(1)),
-      },
       candidateB_unoptimized: {
         buildTimeMs: resBUnopt.stats.buildTimeMs,
         totalVertices: resBUnopt.stats.totalVertices,
@@ -383,7 +375,6 @@ async function main() {
       },
     };
 
-    resA.dispose();
     resBUnopt.dispose();
     resBOpt.dispose();
   }
@@ -470,31 +461,9 @@ async function main() {
   const amsConfigs: Array<{
     key: string;
     label: string;
-    mode: 'disabled' | 'production' | 'candidateA' | 'candidateB';
+    mode: 'candidateB';
     options?: BuildRailwayPrototypeOptions;
   }> = [
-    {
-      key: 'configA_disabled',
-      label: 'A. Railway Rendering Disabled (Non-Railway Map Only)',
-      mode: 'disabled',
-    },
-    {
-      key: 'configB_production',
-      label: 'B. Production Railway Renderer (Candidate B)',
-      mode: 'production',
-    },
-    {
-      key: 'configC_candidateA_global',
-      label: 'C1. Candidate A (Procedural UV Ribbons, Global Merge)',
-      mode: 'candidateA',
-      options: { useSpatialGridIndex: true, adaptiveBridgeSampling: true, spatialChunkSizeMeters: 0 },
-    },
-    {
-      key: 'configC_candidateA_chunked128m',
-      label: 'C2. Candidate A (Procedural UV Ribbons, 128m Spatial Chunks)',
-      mode: 'candidateA',
-      options: { useSpatialGridIndex: true, adaptiveBridgeSampling: true, spatialChunkSizeMeters: 128 },
-    },
     {
       key: 'configD_candidateB_unoptimized',
       label: 'D1. Candidate B Unoptimized (Pre-Investigation: Linear Scan + 0.35m Bridge + Merged Sleepers + Global Mesh)',
@@ -527,7 +496,7 @@ async function main() {
     const rep = runCpuAndLifecycleBenchmark(amsFullData, theme, cfg.mode, 1, cfg.options);
     let frustumOverview = null;
     let frustumThroatClose = null;
-    if (cfg.mode === 'candidateA' || cfg.mode === 'candidateB') {
+    if (cfg.mode === 'candidateB') {
       const protoClose = buildRailwayPrototypeGroup(amsFullData, theme, cfg.mode, 8.0, cfg.options);
       frustumThroatClose = evaluateFrustumAndRaycastAtPose(
         protoClose.railwaysGroup,
@@ -714,11 +683,6 @@ async function main() {
   }
 
   // Experiment E: Detailed LOD breakdown (Close 3D vs Medium/Far Procedural Ribbon memory & active triangles)
-  const protoCandAFull = buildRailwayPrototypeGroup(amsFullData, theme, 'candidateA', 8.0, {
-    useSpatialGridIndex: true,
-    adaptiveBridgeSampling: true,
-    spatialChunkSizeMeters: 128,
-  });
   const protoCandBFull = buildRailwayPrototypeGroup(amsFullData, theme, 'candidateB', 8.0, {
     useSpatialGridIndex: true,
     adaptiveBridgeSampling: true,
@@ -732,12 +696,6 @@ async function main() {
 
   const experimentELodAnalysis = {
     closeZoomThreshold: 4.5,
-    candidateA_proceduralOnly: {
-      cpuBufferKB: Number((protoCandAFull.stats.cpuBufferBytes / 1024).toFixed(1)),
-      cpuBufferMB: protoCandAFull.stats.cpuBufferMB,
-      visibleMeshes: protoCandAFull.stats.drawCalls,
-      visibleRenderedTriangles: protoCandAFull.stats.renderedTrianglesWithInstances,
-    },
     candidateB_atCloseZoom8_0: {
       activeRepresentation: '3D Instanced Sleepers + 3D Extruded Rails + Ballast + Bridges/Tunnels (Procedural Sleeper/Rail Ribbons hidden via visible=false)',
       totalRetainedCpuBufferKB: Number((protoCandBFull.stats.cpuBufferBytes / 1024).toFixed(1)),
@@ -756,14 +714,7 @@ async function main() {
       hiddenLodMeshesCulledByVisibleFlag: candBMedStats.meshCount - candBMedStats.visibleMeshCount,
       visibleRenderedTriangles: candBMedStats.visibleRenderedTriangles,
     },
-    dualRepresentationMemoryOverheadKB: Number(
-      ((protoCandBFull.stats.cpuBufferBytes - protoCandAFull.stats.cpuBufferBytes) / 1024).toFixed(1)
-    ),
-    dualRepresentationMemoryOverheadMB: Number(
-      (protoCandBFull.stats.cpuBufferMB - protoCandAFull.stats.cpuBufferMB).toFixed(3)
-    ),
   };
-  protoCandAFull.dispose();
   protoCandBFull.dispose();
 
   }

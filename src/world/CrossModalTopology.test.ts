@@ -1556,15 +1556,6 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
       name: 'Station Hengelo',
       features: JSON.parse(JSON.stringify(realOsmExtracts.regions.hengelo.features)),
     };
-    let nodeCounter = 700000;
-    for (const feat of hengeloFc.features) {
-      if (feat.geometry?.type === 'LineString' && Array.isArray(feat.geometry.coordinates)) {
-        feat.properties = {
-          ...(feat.properties || {}),
-          _nodeIds: feat.geometry.coordinates.map(() => String(++nodeCounter)),
-        };
-      }
-    }
 
     const amsterdamFc: any = {
       type: 'FeatureCollection',
@@ -1582,12 +1573,12 @@ describe('M2.3-D Cross-Modal Connectivity, Level Crossings & Grade Transitions (
     assert.deepEqual(
       hengeloPost.roads,
       hengeloPre.roads,
-      'Legacy mapData.roads must remain 100% identical after Stage D ingestion & graph build'
+      'mapData.roads must remain 100% identical after Stage D ingestion & graph build'
     );
     assert.deepEqual(
       hengeloPost.railways,
       hengeloPre.railways,
-      'Legacy mapData.railways must remain 100% identical after Stage D ingestion & graph build'
+      'mapData.railways must remain 100% identical after Stage D ingestion & graph build'
     );
 
     const scenePre = new GeometryBuilder().buildScene(hengeloPre, MAP_THEMES.tactical);

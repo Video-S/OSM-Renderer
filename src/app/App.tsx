@@ -54,12 +54,6 @@ import { DeveloperReproductionPackage } from '../world/dev/ReproductionReport';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { detectWebGLSupport } from '../utils/webglCheck';
 import {
-  buildRailwayPrototypeGroup,
-  BuildRailwayPrototypeOptions,
-  BuiltRailwayPrototypeResult,
-  RailwayPrototypeMode,
-} from '../world/prototype/RailwayPrototypeBuilder';
-import {
   createRailwayPrototypeFixtureData,
   RAILWAY_PROTOTYPE_ZONE_PRESETS,
   RailwayPrototypeZoneId,
@@ -121,25 +115,12 @@ export default function App() {
   const [bevelEnabled, setBevelEnabled] = useState<boolean>(true);
   const [wireframe, setWireframe] = useState<boolean>(false);
 
-  // Milestone 2.2 Production Railway state ('production' | 'candidateA' | 'candidateB' | 'disabled')
-  const [railwayPrototypeMode, setRailwayPrototypeMode] =
-    useState<RailwayPrototypeMode>('production');
-  const [prototypeOptions, setPrototypeOptions] = useState<BuildRailwayPrototypeOptions>({
-    useSpatialGridIndex: true,
-    adaptiveBridgeSampling: true,
-    multiIntervalClip: true,
-    sleeper3DMode: 'instanced',
-    spatialChunkSizeMeters: 128,
-  });
   const [activePrototypeZone, setActivePrototypeZone] =
     useState<RailwayPrototypeZoneId>('overview');
-  const [builtPrototypeRailways, setBuiltPrototypeRailways] =
-    useState<BuiltRailwayPrototypeResult | null>(null);
-  const activePrototypeRef = useRef<BuiltRailwayPrototypeResult | null>(null);
   const currentCameraZoomRef = useRef<number>(1.0);
   const latestTelemetryRef = useRef<LiveWebGLTelemetrySnapshot | null>(null);
 
-  // Milestone 2.3 Stage E1 independent graph-to-renderer preview switches (default 'legacy')
+  // Permanent production infrastructure configuration (E2+ surface-first roads + E3-B R+ railways)
   const [infrastructureRenderOptions, setInfrastructureRenderOptions] =
     useState<InfrastructureRenderOptions>(() =>
       typeof window !== 'undefined'
@@ -165,21 +146,17 @@ export default function App() {
   >([]);
   const activeLocationIdRef = useRef<string>(activeLocationId);
   const mapDataRef = useRef<ProcessedMapData | null>(mapData);
-  const railwayPrototypeModeRef = useRef<RailwayPrototypeMode>(railwayPrototypeMode);
   const infrastructureRenderOptionsRef = useRef<InfrastructureRenderOptions>(
     infrastructureRenderOptions
   );
   const selectedThemeIdRef = useRef<string>(selectedThemeId);
-  const prototypeOptionsRef = useRef<BuildRailwayPrototypeOptions>(prototypeOptions);
   const activePrototypeZoneRef = useRef<RailwayPrototypeZoneId>(activePrototypeZone);
   const infrastructureRenderPreviewRef = useRef<any>(null);
 
   activeLocationIdRef.current = activeLocationId;
   mapDataRef.current = mapData;
-  railwayPrototypeModeRef.current = railwayPrototypeMode;
   infrastructureRenderOptionsRef.current = infrastructureRenderOptions;
   selectedThemeIdRef.current = selectedThemeId;
-  prototypeOptionsRef.current = prototypeOptions;
   activePrototypeZoneRef.current = activePrototypeZone;
 
   // Layer visibility toggles
@@ -282,7 +259,7 @@ export default function App() {
       rendererConfig: {
         roadsMode: infrastructureRenderOptionsRef.current.roads,
         railwaysMode: infrastructureRenderOptionsRef.current.railways,
-        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        railwayPrototypeMode: 'production',
         themeId: selectedThemeIdRef.current,
       },
     });
@@ -332,7 +309,7 @@ export default function App() {
       rendererConfig: {
         roadsMode: infrastructureRenderOptionsRef.current.roads,
         railwaysMode: infrastructureRenderOptionsRef.current.railways,
-        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        railwayPrototypeMode: 'production',
         themeId: selectedThemeIdRef.current,
       },
     });
@@ -425,8 +402,6 @@ export default function App() {
     const targetRenderOpts = pkg.configuration?.infrastructureRenderOptions
       ? normalizeInfrastructureRenderOptions(pkg.configuration.infrastructureRenderOptions)
       : infrastructureRenderOptionsRef.current;
-    const targetProtoMode =
-      pkg.configuration?.railwayPrototypeMode ?? railwayPrototypeModeRef.current;
     const targetThemeId =
       pkg.configuration?.themeId && MAP_THEMES[pkg.configuration.themeId]
         ? pkg.configuration.themeId
@@ -440,7 +415,7 @@ export default function App() {
       rendererConfig: {
         roadsMode: targetRenderOpts.roads,
         railwaysMode: targetRenderOpts.railways,
-        railwayPrototypeMode: targetProtoMode,
+        railwayPrototypeMode: 'production',
         themeId: targetThemeId,
       },
     });
@@ -472,9 +447,6 @@ export default function App() {
         setInfrastructureRenderOptions(
           normalizeInfrastructureRenderOptions(pkg.configuration.infrastructureRenderOptions)
         );
-      }
-      if (pkg.configuration?.railwayPrototypeMode) {
-        setRailwayPrototypeMode(pkg.configuration.railwayPrototypeMode);
       }
       if (pkg.configuration?.themeId && MAP_THEMES[pkg.configuration.themeId]) {
         setSelectedThemeId(pkg.configuration.themeId);
@@ -627,7 +599,7 @@ export default function App() {
       rendererConfig: {
         roadsMode: infrastructureRenderOptionsRef.current.roads,
         railwaysMode: infrastructureRenderOptionsRef.current.railways,
-        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        railwayPrototypeMode: 'production',
         themeId: selectedThemeIdRef.current,
       },
     });
@@ -710,26 +682,7 @@ export default function App() {
     initialMountLoadStartedRef.current = true;
 
     const params = new URLSearchParams(window.location.search);
-    const protoParam = params.get('prototype') as RailwayPrototypeMode | null;
-    if (
-      protoParam === 'disabled' ||
-      protoParam === 'production' ||
-      protoParam === 'candidateA' ||
-      protoParam === 'candidateB'
-    ) {
-      railwayPrototypeModeRef.current = protoParam;
-      setRailwayPrototypeMode(protoParam);
-    } else if ((protoParam as string) === 'baseline') {
-      railwayPrototypeModeRef.current = 'production';
-      setRailwayPrototypeMode('production');
-    }
-    // The isolated junction lab is specifically for E2 graph-road visuals.
-    // Keep an explicit topologyRoads query value authoritative for A/B comparison.
-    const isForkFixture = params.get('fixture') === 'prins-fork';
-    const initialRenderOpts =
-      isForkFixture && !params.has('topologyRoads')
-        ? { roads: 'graph' as const, railways: 'legacy' as const }
-        : parseInfrastructureRenderOptionsFromSearch(window.location.search);
+    const initialRenderOpts = parseInfrastructureRenderOptionsFromSearch(window.location.search);
     infrastructureRenderOptionsRef.current = initialRenderOpts;
     setInfrastructureRenderOptions(initialRenderOpts);
 
@@ -794,11 +747,7 @@ export default function App() {
     return MAP_THEMES[selectedThemeId] || MAP_THEMES.tactical;
   }, [selectedThemeId]);
 
-  const useProductionSceneRailways =
-    railwayPrototypeMode === 'production' || (railwayPrototypeMode as string) === 'baseline';
-
-  // Milestone 2.3-E1: Build one shared InfrastructureGraph + render descriptor bundle per dataset
-  // when either road or railway preview mode is active; completely skipped in default 'legacy' mode.
+  // Build one shared InfrastructureGraph + render descriptor bundle per dataset.
   const infrastructureRenderPreview = useMemo(() => {
     const requestId = mapData ? mapDataRequestIdRef.current.get(mapData) : undefined;
     const trackPrep =
@@ -850,29 +799,8 @@ export default function App() {
       infrastructureRenderPreview,
     });
 
-    const sceneData: ProcessedMapData = useProductionSceneRailways
-      ? mapData
-      : {
-          ...mapData,
-          railways: [],
-          diagnostics: mapData.diagnostics
-            ? {
-                ...mapData.diagnostics,
-                geometryPartsGenerated: { ...mapData.diagnostics.geometryPartsGenerated },
-                skippedUnsupported: {
-                  ...mapData.diagnostics.skippedUnsupported,
-                  byTag: { ...mapData.diagnostics.skippedUnsupported.byTag },
-                },
-                rejectedInvalid: {
-                  ...mapData.diagnostics.rejectedInvalid,
-                  byReason: { ...mapData.diagnostics.rejectedInvalid.byReason },
-                },
-              }
-            : undefined!,
-        };
-
     const t0 = performance.now();
-    const scene = builder.buildScene(sceneData, currentTheme);
+    const scene = builder.buildScene(mapData, currentTheme);
     const rawBuildElapsedMs = performance.now() - t0;
     const buildElapsedMs = Number(rawBuildElapsedMs.toFixed(2));
     latestCpuBuildTimeMsRef.current = buildElapsedMs;
@@ -895,7 +823,6 @@ export default function App() {
       pending.datasetId === activeLocationIdRef.current &&
       pending.roadsMode === infrastructureRenderOptions.roads &&
       pending.railwaysMode === infrastructureRenderOptions.railways &&
-      pending.railwayPrototypeMode === railwayPrototypeMode &&
       pending.themeId === selectedThemeIdRef.current;
 
     const revision = matchesPending ? pending!.revision : ++transitionRevisionRef.current;
@@ -908,7 +835,7 @@ export default function App() {
       datasetId: activeLocationIdRef.current,
       roadsMode: infrastructureRenderOptions.roads,
       railwaysMode: infrastructureRenderOptions.railways,
-      railwayPrototypeMode,
+      railwayPrototypeMode: 'production',
       themeId: selectedThemeIdRef.current,
       hasFeatures,
       webglFramesRendered: 0,
@@ -924,7 +851,7 @@ export default function App() {
         rendererConfig: {
           roadsMode: infrastructureRenderOptions.roads,
           railwaysMode: infrastructureRenderOptions.railways,
-          railwayPrototypeMode,
+          railwayPrototypeMode: 'production',
           themeId: selectedThemeIdRef.current,
         },
         triangles: scene.stats.totalTriangles,
@@ -940,61 +867,20 @@ export default function App() {
     heightMultiplier,
     roadWidthMultiplier,
     bevelEnabled,
-    useProductionSceneRailways,
     infrastructureRenderOptions,
     infrastructureRenderPreview,
   ]);
-
-  // Build or dispose the isolated M2.1 Railway Prototype group when mode, options, or mapData changes
-  useEffect(() => {
-    if (activePrototypeRef.current) {
-      activePrototypeRef.current.dispose();
-      activePrototypeRef.current = null;
-    }
-    if (
-      !mapData ||
-      railwayPrototypeMode === 'production' ||
-      (railwayPrototypeMode as string) === 'baseline' ||
-      railwayPrototypeMode === 'disabled'
-    ) {
-      setBuiltPrototypeRailways(null);
-      return;
-    }
-    const tProto0 = performance.now();
-    const proto = buildRailwayPrototypeGroup(
-      mapData,
-      currentTheme,
-      railwayPrototypeMode,
-      currentCameraZoomRef.current,
-      prototypeOptions
-    );
-    const tProto1 = performance.now();
-    const requestId = mapDataRequestIdRef.current.get(mapData);
-    if (requestId !== undefined && !mapLoadTrackerRef.current.hasFinalizedPresentation(requestId)) {
-      mapLoadTrackerRef.current.addPrototypeRailwayBuildMs(requestId, tProto1 - tProto0, tProto1);
-    }
-    activePrototypeRef.current = proto;
-    setBuiltPrototypeRailways(proto);
-  }, [mapData, railwayPrototypeMode, prototypeOptions]);
-
 
   // Separate material theme updates from geometry regeneration (zero GPU re-allocations)
   useEffect(() => {
     if (activeSceneRef.current) {
       activeSceneRef.current.updateTheme(currentTheme);
     }
-    if (activePrototypeRef.current) {
-      activePrototypeRef.current.updateTheme(currentTheme);
-    }
   }, [currentTheme]);
 
   // Clean unmount disposal
   useEffect(() => {
     return () => {
-      if (activePrototypeRef.current) {
-        activePrototypeRef.current.dispose();
-        activePrototypeRef.current = null;
-      }
       if (activeSceneRef.current) {
         activeSceneRef.current.dispose();
         activeSceneRef.current = null;
@@ -1005,8 +891,6 @@ export default function App() {
   // Helper reading live refs directly so benchmark snapshots are never poisoned by stale React closures
   const buildLiveHarnessSnapshot = (): BenchmarkHarnessSnapshot & Record<string, any> => {
     const liveScene = activeSceneRef.current;
-    const liveProto = activePrototypeRef.current;
-    const liveMode = railwayPrototypeModeRef.current;
     const liveRenderOpts = infrastructureRenderOptionsRef.current;
     const livePreview = infrastructureRenderPreviewRef.current;
     const liveMap = mapDataRef.current;
@@ -1014,54 +898,27 @@ export default function App() {
       (liveScene?.groundMesh?.userData?.__sceneMeta as SceneRevisionConfigMeta | undefined) || null;
     const renderedMeta = latestRenderedMetaRef.current;
 
-    const railStats =
-      liveMode === 'disabled'
-        ? {
-            meshCount: 0,
-            visibleMeshCount: 0,
-            vertexCount: 0,
-            triangleCount: 0,
-            renderedVerticesWithInstances: 0,
-            renderedTrianglesWithInstances: 0,
-            visibleRenderedTriangles: 0,
-            cpuBufferBytes: 0,
-            cpuBufferMB: 0,
-          }
-        : liveProto
-          ? computeGroupGeometryStats(liveProto.railwaysGroup)
-          : liveScene
-            ? computeGroupGeometryStats(liveScene.railwaysGroup)
-            : null;
+    const railStats = liveScene ? computeGroupGeometryStats(liveScene.railwaysGroup) : null;
     const cpuMem = liveScene?.resources.getCpuBufferMemoryStats() || null;
-    const protoCpuBytes = liveProto?.stats.cpuBufferBytes ?? 0;
-    const totalCpuBufferMB = Number(
-      (((cpuMem?.totalBytes ?? 0) + protoCpuBytes) / (1024 * 1024)).toFixed(3)
-    );
-    const totalSceneVertices =
-      (liveScene?.stats.totalVertices ?? 0) +
-      (liveProto?.stats.renderedVerticesWithInstances ?? 0);
-    const totalSceneTriangles =
-      (liveScene?.stats.totalTriangles ?? 0) +
-      (liveProto?.stats.renderedTrianglesWithInstances ?? 0);
-    const totalSceneMeshes =
-      (liveScene?.stats.totalDrawCalls ?? 0) + (liveProto?.stats.drawCalls ?? 0);
+    const totalCpuBufferMB = Number(((cpuMem?.totalBytes ?? 0) / (1024 * 1024)).toFixed(3));
+    const totalSceneVertices = liveScene?.stats.totalVertices ?? 0;
+    const totalSceneTriangles = liveScene?.stats.totalTriangles ?? 0;
+    const totalSceneMeshes = liveScene?.stats.totalDrawCalls ?? 0;
 
     const webglFramesRenderedForRevision =
       sceneMeta && renderedMeta && renderedMeta.revision === sceneMeta.revision
         ? renderedMeta.webglFramesRendered
         : (sceneMeta?.webglFramesRendered ?? 0);
-    const needsPrototype = liveMode === 'candidateA' || liveMode === 'candidateB';
     const isSceneReady = Boolean(
       liveScene &&
         sceneMeta &&
-        webglFramesRenderedForRevision >= 1 &&
-        (!needsPrototype || liveProto)
+        webglFramesRenderedForRevision >= 1
     );
 
     return {
       locationId: sceneMeta?.datasetId ?? activeLocationIdRef.current,
       regionName: liveMap?.regionName,
-      prototypeMode: sceneMeta?.railwayPrototypeMode ?? liveMode,
+      prototypeMode: 'production',
       infrastructureRenderOptions: sceneMeta
         ? {
             ...liveRenderOpts,
@@ -1082,15 +939,21 @@ export default function App() {
             railwayNodeCount: livePreview.validation?.railwayNodeCount ?? 0,
           }
         : null,
-      prototypeOptions: prototypeOptionsRef.current,
+      prototypeOptions: {
+        useSpatialGridIndex: true,
+        adaptiveBridgeSampling: true,
+        multiIntervalClip: true,
+        sleeper3DMode: 'instanced',
+        spatialChunkSizeMeters: 128,
+      },
       activeZone: activePrototypeZoneRef.current,
       themeId: sceneMeta?.themeId ?? selectedThemeIdRef.current,
       sceneRevision: sceneMeta?.revision ?? null,
       webglFramesRenderedForRevision,
       isSceneReady,
       cpuBuildTimeMs: latestCpuBuildTimeMsRef.current,
-      prototypeBuildTimeMs: liveProto?.stats.buildTimeMs ?? null,
-      prototypeBuildProfile: liveProto?.profile ?? null,
+      prototypeBuildTimeMs: null,
+      prototypeBuildProfile: liveScene?.railwaysGroup?.userData?.railwayProfile ?? null,
       constructedMeshesCount: totalSceneMeshes,
       sceneVertices: totalSceneVertices,
       sceneTriangles: totalSceneTriangles,
@@ -1098,7 +961,7 @@ export default function App() {
       cpuBufferMemoryStats: cpuMem,
       bvhMemoryStats: liveScene?.resources?.getBvhMemoryStats?.() ?? null,
       sceneStageTimingsMs: liveScene?.stageTimingsMs ?? null,
-      legacyRoadStats: liveScene?.roadsGroup?.userData?.legacyRoadStats ?? null,
+      legacyRoadStats: null,
       planarValidationReport: liveScene?.landuseGroup?.userData?.planarValidationReport ?? null,
       jsHeapMemory:
         typeof performance !== 'undefined' && (performance as any).memory
@@ -1181,10 +1044,7 @@ export default function App() {
   // Expose deterministic M2.1 Prototype Lab & Benchmark Harness API on window
   useEffect(() => {
     (window as any).__M21_LAB__ = {
-      setMode: (mode: RailwayPrototypeMode) => {
-        railwayPrototypeModeRef.current = mode;
-        setRailwayPrototypeMode(mode);
-      },
+      setMode: () => {},
       setInfrastructureRenderOptions: (opts: Partial<InfrastructureRenderOptions>) =>
         setInfrastructureRenderOptions((prev) => {
           const next = normalizeInfrastructureRenderOptions({ ...prev, ...opts });
@@ -1193,9 +1053,14 @@ export default function App() {
         }),
       getInfrastructureRenderOptions: () => infrastructureRenderOptionsRef.current,
       getInfrastructureRenderPreview: () => infrastructureRenderPreviewRef.current,
-      setPrototypeOptions: (opts: Partial<BuildRailwayPrototypeOptions>) =>
-        setPrototypeOptions((prev) => ({ ...prev, ...opts })),
-      getPrototypeOptions: () => prototypeOptionsRef.current,
+      setPrototypeOptions: () => {},
+      getPrototypeOptions: () => ({
+        useSpatialGridIndex: true,
+        adaptiveBridgeSampling: true,
+        multiIntervalClip: true,
+        sleeper3DMode: 'instanced' as const,
+        spatialChunkSizeMeters: 128,
+      }),
       setTheme: (themeId: string) => {
         selectedThemeIdRef.current = themeId;
         setSelectedThemeId(themeId);
@@ -1435,14 +1300,13 @@ export default function App() {
         return canvas ? canvas.toDataURL('image/png') : null;
       },
       capturePose: (
-        mode: RailwayPrototypeMode,
+        _mode: string,
         themeId: string,
         zone: RailwayPrototypeZoneId,
         zoom: number,
         dockCollapsed: boolean = true
       ) =>
         new Promise<string | null>((resolve) => {
-          setRailwayPrototypeMode(mode);
           setSelectedThemeId(themeId);
           setIsDockCollapsed(dockCollapsed);
           if (!dockCollapsed) {
@@ -1464,7 +1328,7 @@ export default function App() {
         infrastructureRenderOptions?: Partial<InfrastructureRenderOptions>;
         roadsMode?: InfrastructureRenderOptions['roads'];
         railwaysMode?: InfrastructureRenderOptions['railways'];
-        railwayPrototypeMode?: RailwayPrototypeMode;
+        railwayPrototypeMode?: 'production' | 'candidateB';
         themeId?: string;
         target?: [number, number, number];
         zoom?: number;
@@ -1474,20 +1338,12 @@ export default function App() {
         const tTotalStart = performance.now();
         const targetRevision = ++transitionRevisionRef.current;
 
-        const targetPrototypeMode =
-          params.railwayPrototypeMode ?? railwayPrototypeModeRef.current;
-        const targetRenderOpts = params.infrastructureRenderOptions
-          ? normalizeInfrastructureRenderOptions({
-              ...infrastructureRenderOptionsRef.current,
-              ...params.infrastructureRenderOptions,
-            })
-          : params.roadsMode || params.railwaysMode
-            ? normalizeInfrastructureRenderOptions({
-                roads: params.roadsMode ?? infrastructureRenderOptionsRef.current.roads,
-                railways:
-                  params.railwaysMode ?? infrastructureRenderOptionsRef.current.railways,
-              })
-            : infrastructureRenderOptionsRef.current;
+        const targetRenderOpts = normalizeInfrastructureRenderOptions({
+          ...infrastructureRenderOptionsRef.current,
+          ...params.infrastructureRenderOptions,
+          ...(params.roadsMode ? { roads: params.roadsMode } : {}),
+          ...(params.railwaysMode ? { railways: params.railwaysMode } : {}),
+        });
         const targetThemeId =
           params.themeId && MAP_THEMES[params.themeId]
             ? params.themeId
@@ -1501,7 +1357,7 @@ export default function App() {
           rendererConfig: {
             roadsMode: targetRenderOpts.roads,
             railwaysMode: targetRenderOpts.railways,
-            railwayPrototypeMode: targetPrototypeMode,
+            railwayPrototypeMode: 'production',
             themeId: targetThemeId,
           },
         });
@@ -1551,13 +1407,11 @@ export default function App() {
           datasetId: params.datasetId,
           roadsMode: targetRenderOpts.roads,
           railwaysMode: targetRenderOpts.railways,
-          railwayPrototypeMode: targetPrototypeMode,
+          railwayPrototypeMode: 'production',
           themeId: targetThemeId,
           hasFeatures,
         };
 
-        railwayPrototypeModeRef.current = targetPrototypeMode;
-        setRailwayPrototypeMode(targetPrototypeMode);
         infrastructureRenderOptionsRef.current = targetRenderOpts;
         setInfrastructureRenderOptions(targetRenderOpts);
         selectedThemeIdRef.current = targetThemeId;
@@ -1588,7 +1442,7 @@ export default function App() {
             datasetId: params.datasetId,
             roadsMode: targetRenderOpts.roads,
             railwaysMode: targetRenderOpts.railways,
-            railwayPrototypeMode: targetPrototypeMode,
+            railwayPrototypeMode: 'production',
             themeId: targetThemeId,
             expectNonEmptyScene: hasFeatures,
             minWebglFramesRendered: 1,
@@ -1624,7 +1478,6 @@ export default function App() {
       unloadDataset: async () => {
         const targetRevision = ++transitionRevisionRef.current;
         const curOpts = infrastructureRenderOptionsRef.current;
-        const curProto = railwayPrototypeModeRef.current;
         const curTheme = selectedThemeIdRef.current;
 
         setHoveredFeature(null);
@@ -1644,7 +1497,7 @@ export default function App() {
           datasetId: 'benchmark_unloaded',
           roadsMode: curOpts.roads,
           railwaysMode: curOpts.railways,
-          railwayPrototypeMode: curProto,
+          railwayPrototypeMode: 'production',
           themeId: curTheme,
           hasFeatures: false,
         };
@@ -1658,7 +1511,7 @@ export default function App() {
           datasetId: 'benchmark_unloaded',
           roadsMode: curOpts.roads,
           railwaysMode: curOpts.railways,
-          railwayPrototypeMode: curProto,
+          railwayPrototypeMode: 'production',
           themeId: curTheme,
           expectNonEmptyScene: false,
           minWebglFramesRendered: 1,
@@ -1669,15 +1522,12 @@ export default function App() {
   }, [
     activeLocationId,
     mapData,
-    railwayPrototypeMode,
     infrastructureRenderOptions,
     infrastructureRenderPreview,
-    prototypeOptions,
     activePrototypeZone,
     selectedThemeId,
     cpuBuildTimeMs,
     builtGeometry,
-    builtPrototypeRailways,
     liveTelemetry,
   ]);
 
@@ -1721,7 +1571,7 @@ export default function App() {
       rendererConfig: {
         roadsMode: infrastructureRenderOptionsRef.current.roads,
         railwaysMode: infrastructureRenderOptionsRef.current.railways,
-        railwayPrototypeMode: railwayPrototypeModeRef.current,
+        railwayPrototypeMode: 'production',
         themeId: selectedThemeIdRef.current,
       },
     });
@@ -1975,15 +1825,9 @@ export default function App() {
 
                 <MapScene
                   builtGeometry={builtGeometry}
-                  railwayGroupOverride={
-                    railwayPrototypeMode === 'disabled'
-                      ? null
-                      : builtPrototypeRailways?.railwaysGroup || null
-                  }
                   onCameraZoomChange={(z) => {
                     currentCameraZoomRef.current = z;
                     activeSceneRef.current?.updateCameraZoom?.(z);
-                    activePrototypeRef.current?.updateCameraZoom(z);
                   }}
                   onSceneRevisionRendered={handleSceneRevisionRendered}
                   onTelemetryUpdate={(snap) => {
@@ -1998,7 +1842,7 @@ export default function App() {
                   theme={currentTheme}
                   showBuildings={showBuildings}
                   showRoads={showRoads}
-                  showRailways={showRailways && railwayPrototypeMode !== 'disabled'}
+                  showRailways={showRailways}
                   showWater={showWater}
                   showParks={showParks}
                   showLanduse={showLanduse}
@@ -2660,119 +2504,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* M2.1 Isolated Railway Renderer Comparison Controls */}
+                  {/* Switchyard Zone & Zoom Presets */}
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <Train className="w-3.5 h-3.5 text-purple-400" />
-                        <span className="text-xs font-semibold text-slate-200">
-                          M2.1 Railway Renderer Configuration:
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(
-                          [
-                            { id: 'disabled', label: 'A. Railways Disabled' },
-                            { id: 'production', label: 'B. Production (Candidate B)' },
-                            { id: 'candidateA', label: 'C. Candidate A (Procedural)' },
-                            { id: 'candidateB', label: 'D. Candidate B Prototype' },
-                          ] as const
-                        ).map((m) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            data-testid={`proto-mode-${m.id}`}
-                            onClick={() => setRailwayPrototypeMode(m.id)}
-                            className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition cursor-pointer ${
-                              railwayPrototypeMode === m.id
-                                ? 'bg-purple-950/80 border-purple-400 text-purple-200 font-semibold'
-                                : 'bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Candidate B Controlled Optimization Toggles */}
-                    {railwayPrototypeMode === 'candidateB' && (
-                      <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800/70 text-[11px]">
-                        <span className="text-slate-400 font-semibold">Candidate B Opts:</span>
-                        <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={prototypeOptions.useSpatialGridIndex ?? true}
-                            onChange={(e) =>
-                              setPrototypeOptions((prev) => ({
-                                ...prev,
-                                useSpatialGridIndex: e.target.checked,
-                              }))
-                            }
-                            className="rounded border-slate-700 bg-slate-800 text-purple-500"
-                          />
-                          <span>Spatial Grid Index</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={prototypeOptions.adaptiveBridgeSampling ?? true}
-                            onChange={(e) =>
-                              setPrototypeOptions((prev) => ({
-                                ...prev,
-                                adaptiveBridgeSampling: e.target.checked,
-                              }))
-                            }
-                            className="rounded border-slate-700 bg-slate-800 text-purple-500"
-                          />
-                          <span>Adaptive Bridge Sampling</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={prototypeOptions.multiIntervalClip ?? true}
-                            onChange={(e) =>
-                              setPrototypeOptions((prev) => ({
-                                ...prev,
-                                multiIntervalClip: e.target.checked,
-                              }))
-                            }
-                            className="rounded border-slate-700 bg-slate-800 text-purple-500"
-                          />
-                          <span>Multi-Interval Clip</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={prototypeOptions.sleeper3DMode === 'instanced'}
-                            onChange={(e) =>
-                              setPrototypeOptions((prev) => ({
-                                ...prev,
-                                sleeper3DMode: e.target.checked ? 'instanced' : 'merged',
-                              }))
-                            }
-                            className="rounded border-slate-700 bg-slate-800 text-purple-500"
-                          />
-                          <span>Instanced 3D Sleepers</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={(prototypeOptions.spatialChunkSizeMeters ?? 0) > 0}
-                            onChange={(e) =>
-                              setPrototypeOptions((prev) => ({
-                                ...prev,
-                                spatialChunkSizeMeters: e.target.checked ? 128 : 0,
-                              }))
-                            }
-                            className="rounded border-slate-700 bg-slate-800 text-purple-500"
-                          />
-                          <span>128m Spatial Chunks</span>
-                        </label>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/70">
                       <div className="flex flex-wrap items-center gap-1">
                         <span className="text-[11px] text-slate-400 mr-1">Switchyard Zones:</span>
                         {Object.values(RAILWAY_PROTOTYPE_ZONE_PRESETS).map((zp) => (
@@ -2874,7 +2608,6 @@ export default function App() {
                       <span className="text-slate-400 block text-[10px]">2. Offline Build</span>
                       <span className="text-xs font-bold font-mono tabular-nums text-cyan-300">
                         {cpuBuildTimeMs} ms
-                        {builtPrototypeRailways ? ` (+${builtPrototypeRailways.stats.buildTimeMs}ms)` : ''}
                       </span>
                       <span className="text-[9px] text-slate-500 block">
                         Raycast: {liveTelemetry?.hoverRaycastTimeMs ?? 0}ms
@@ -2914,11 +2647,7 @@ export default function App() {
                     <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
                       <span className="text-slate-400 block text-[10px]">5. Triangles & Vertices</span>
                       <span className="text-xs font-bold font-mono tabular-nums text-cyan-300">
-                        {(
-                          (builtGeometry?.stats.totalTriangles ?? 0) +
-                          (builtPrototypeRailways?.stats.renderedTrianglesWithInstances ?? 0)
-                        ).toLocaleString()}{' '}
-                        tris
+                        {(builtGeometry?.stats.totalTriangles ?? 0).toLocaleString()} tris
                       </span>
                       <span className="text-[9px] text-slate-500 block">
                         {(liveTelemetry?.activeFrustumVisibleRailwayTriangles ?? 0).toLocaleString()} vis rail tris
@@ -2930,8 +2659,7 @@ export default function App() {
                       <span className="text-slate-400 block text-[10px]">6. CPU Buffer Memory</span>
                       <span className="text-xs font-bold font-mono tabular-nums text-purple-300">
                         {(
-                          ((builtGeometry?.resources.getCpuBufferMemoryStats().totalBytes ?? 0) +
-                            (builtPrototypeRailways?.stats.cpuBufferBytes ?? 0)) /
+                          (builtGeometry?.resources.getCpuBufferMemoryStats().totalBytes ?? 0) /
                           (1024 * 1024)
                         ).toFixed(2)}{' '}
                         MB
@@ -3099,8 +2827,6 @@ export default function App() {
             normalizeInfrastructureRenderOptions({ ...prev, ...opts })
           )
         }
-        railwayPrototypeMode={railwayPrototypeMode}
-        onChangeRailwayPrototypeMode={(mode) => setRailwayPrototypeMode(mode)}
         wireframe={wireframe}
         onToggleWireframe={() => setWireframe((v) => !v)}
         showGraphOverlay={showGraphOverlay}

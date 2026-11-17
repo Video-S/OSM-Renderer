@@ -6,36 +6,8 @@ import {
 
 export const BENCHMARK_RENDERER_CONFIGS: readonly BenchmarkRendererConfig[] = Object.freeze([
   {
-    id: 'production-legacy',
-    label: 'Production Default (Legacy Roads + Candidate B Railways)',
-    themeId: 'tactical',
-    railwayPrototypeMode: 'production',
-    infrastructureRenderOptions: {
-      roads: 'legacy',
-      railways: 'legacy',
-    },
-    buildingHeightMultiplier: 1.0,
-    roadWidthMultiplier: 1.0,
-    bevelEnabled: false,
-  },
-  {
-    id: 'graph-e2-e3',
-    label: 'Graph-Driven Topology (E2 Graph Roads + E3-A2 Graph Switches)',
-    themeId: 'tactical',
-    railwayPrototypeMode: 'production',
-    infrastructureRenderOptions: {
-      roads: 'graph',
-      railways: 'graph-switches',
-      railwaySwitchPolicy: 'graph',
-      railwayBallastStrategy: 'ribbon',
-    },
-    buildingHeightMultiplier: 1.0,
-    roadWidthMultiplier: 1.0,
-    bevelEnabled: false,
-  },
-  {
     id: 'surface-first-e2plus-rplus',
-    label: 'Surface-First Topology (E2+ Road Footprints + E3-B R+ Ballast)',
+    label: 'Production Architecture (E2+ Surface-First Roads + E3-B R+ Railways)',
     themeId: 'tactical',
     railwayPrototypeMode: 'production',
     infrastructureRenderOptions: {

@@ -6,22 +6,22 @@
 
 # Function: parseRailwayBallastStrategy()
 
-> **parseRailwayBallastStrategy**(`raw`, `renderSource?`): [`RailwayBallastStrategy`](../type-aliases/RailwayBallastStrategy.md)
+> **parseRailwayBallastStrategy**(`_raw?`, `_renderSource?`): `"surface-first"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:177
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:129
 
-Parses a raw string value into a valid `RailwayBallastStrategy` (`'ribbon' | 'surface-first'`).
+Resolves any ballast strategy input to the canonical `'surface-first'` production strategy.
 
 ## Parameters
 
-### raw
+### \_raw?
 
 `string`
 
-### renderSource?
+### \_renderSource?
 
-[`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
+`"graph-R+"`
 
 ## Returns
 
-[`RailwayBallastStrategy`](../type-aliases/RailwayBallastStrategy.md)
+`"surface-first"`

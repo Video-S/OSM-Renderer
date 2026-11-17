@@ -6,19 +6,18 @@
 
 # Function: parseRailwayInfrastructureRenderSource()
 
-> **parseRailwayInfrastructureRenderSource**(`raw`): [`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
+> **parseRailwayInfrastructureRenderSource**(`_raw?`): `"graph-R+"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:143
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:110
 
-Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph' | 'graph-switches'`),
-resolving any absent or unrecognized value safely to `'legacy'`.
+Resolves any railway render source input to the canonical `'graph-R+'` (`R+`) production mode.
 
 ## Parameters
 
-### raw
+### \_raw?
 
 `string`
 
 ## Returns
 
-[`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
+`"graph-R+"`

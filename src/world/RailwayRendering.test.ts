@@ -833,7 +833,7 @@ test('M2.2 Railway tunnel: underground track elevation profile, portals, mouths,
   };
   const mapData = createBaseMapData([westSurface, tunnelRailway, eastSurface]);
   const builder = new GeometryBuilder({
-    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+', showUndergroundTunnelTraces: true },
   });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 
@@ -956,7 +956,7 @@ test('M2.2 Railway bridge and tunnel: 4-theme in-place material updates and dete
   };
   const mapData = createBaseMapData([bridgeRailway, tunnelWestSurface, tunnelRailway, tunnelEastSurface]);
   const builder = new GeometryBuilder({
-    infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy', showUndergroundTunnelTraces: true },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+', showUndergroundTunnelTraces: true },
   });
   const scene = builder.buildScene(mapData, MAP_THEMES.tactical);
 

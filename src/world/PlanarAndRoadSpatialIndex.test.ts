@@ -228,7 +228,7 @@ describe('TKT-020 Phase 3: Road Blocker Spatial Grid & Geometry Equivalence', ()
       maxScale: 'S3',
       verifyHashes: false,
     });
-    const [graphCfg, sfCfg] = resolveRendererConfigs(['graph-e2-e3', 'surface-first-e2plus-rplus']);
+    const [sfCfg] = resolveRendererConfigs(['surface-first-e2plus-rplus']);
 
     const expectedSf: Record<
       string,
@@ -246,23 +246,23 @@ describe('TKT-020 Phase 3: Road Blocker Spatial Grid & Geometry Equivalence', ()
         overlappingBlockerCount: 517,
         outputPolygonCount: 183,
         outputHoleRingCount: 0,
-        outputTriangleCount: 3743,
+        outputTriangleCount: 3589,
         renderedRoadRibbonCount: 174,
       },
       S2: {
         maxChecks: 15_000,
-        overlappingBlockerCount: 2015,
+        overlappingBlockerCount: 2017,
         outputPolygonCount: 655,
         outputHoleRingCount: 2,
-        outputTriangleCount: 14702,
+        outputTriangleCount: 14530,
         renderedRoadRibbonCount: 633,
       },
       S3: {
         maxChecks: 45_000,
-        overlappingBlockerCount: 6523,
+        overlappingBlockerCount: 6525,
         outputPolygonCount: 2185,
         outputHoleRingCount: 3,
-        outputTriangleCount: 48045,
+        outputTriangleCount: 47623,
         renderedRoadRibbonCount: 2112,
       },
     };
@@ -288,18 +288,6 @@ describe('TKT-020 Phase 3: Road Blocker Spatial Grid & Geometry Equivalence', ()
       assert.equal(sfStats.outputTriangleCount, exp.outputTriangleCount, `${lvl} outputTriangleCount`);
       assert.equal(sfStats.renderedRoadRibbonCount, exp.renderedRoadRibbonCount, `${lvl} renderedRoadRibbonCount`);
       sfScene.dispose();
-
-      if (lvl === 'S2') {
-        const gPreview = prepareInfrastructureRenderPreview(input, graphCfg.infrastructureRenderOptions);
-        const gScene = new GeometryBuilder({
-          infrastructureRenderOptions: graphCfg.infrastructureRenderOptions,
-          infrastructureRenderPreview: gPreview,
-        }).buildScene(input, MAP_THEMES.tactical);
-        const gStats = gScene.roadsGroup.userData.graphRoadStats as GraphRoadRenderStats;
-        assert.equal(gStats.outputPolygonCount, 838);
-        assert.equal(gStats.outputTriangleCount, 6791);
-        gScene.dispose();
-      }
     }
   });
 
@@ -444,26 +432,20 @@ describe('TKT-020 Phase 3: Road Blocker Spatial Grid & Geometry Equivalence', ()
       },
     };
 
-    for (const surfaceFirst of [true, false]) {
-      const renderOpts = surfaceFirst
-        ? { roads: 'graph-surface' as const, railways: 'legacy' as const }
-        : { roads: 'graph' as const, railways: 'legacy' as const };
-      const preview = prepareInfrastructureRenderPreview(mapData, renderOpts);
-      assert.ok(preview.descriptors);
-      const rm = new SceneResourceManager();
-      const res = buildGraphAtGradeRoadGeometries({
-        descriptors: preview.descriptors,
-        roadWidthMultiplier: 1,
-        surfaceFirst,
-        resourceManager: rm,
-      });
-      assert.ok(res.stats.renderedRoadRibbonCount >= 3);
-      assert.ok(res.stats.outputTriangleCount > 0);
-      if (surfaceFirst) {
-        assert.ok(res.stats.overlappingBlockerCount >= 2);
-      }
-      rm.dispose();
-    }
+    const renderOpts = { roads: 'graph-surface' as const, railways: 'graph-R+' as const };
+    const preview = prepareInfrastructureRenderPreview(mapData, renderOpts);
+    assert.ok(preview.descriptors);
+    const rm = new SceneResourceManager();
+    const res = buildGraphAtGradeRoadGeometries({
+      descriptors: preview.descriptors,
+      roadWidthMultiplier: 1,
+      surfaceFirst: true,
+      resourceManager: rm,
+    });
+    assert.ok(res.stats.renderedRoadRibbonCount >= 3);
+    assert.ok(res.stats.outputTriangleCount > 0);
+    assert.ok(res.stats.overlappingBlockerCount >= 2);
+    rm.dispose();
   });
 });
 

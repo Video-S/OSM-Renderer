@@ -84,7 +84,6 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
       'S1,',
       'S2',
       '--configs',
-      'production-legacy',
       'surface-first-e2plus-rplus',
       '--max-scale=S4',
       '--warmup=1',
@@ -98,7 +97,7 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
     ]);
 
     assert.deepEqual(parsed.datasetIds, ['S1', 'S2']);
-    assert.deepEqual(parsed.configIds, ['production-legacy', 'surface-first-e2plus-rplus']);
+    assert.deepEqual(parsed.configIds, ['surface-first-e2plus-rplus']);
     assert.equal(parsed.maxScale, 'S4');
     assert.equal(parsed.warmupIterations, 1);
     assert.equal(parsed.measuredIterations, 2);
@@ -129,11 +128,11 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
       levelsOrIds: ['S1'],
       verifyHashes: true,
     });
-    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+    const [sfCfg] = resolveRendererConfigs(['surface-first-e2plus-rplus']);
 
     const res = await runIsolatedScalingWorkload({
       dataset: datasets[0],
-      rendererConfig: legacyCfg,
+      rendererConfig: sfCfg,
       manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
       warmupIterations: 0,
       measuredIterations: 1,
@@ -148,10 +147,8 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
 
     assert.equal(res.status, 'completed', `Unexpected status: ${res.status} (${res.statusReason})`);
     assert.ok(res.timingsMs !== null);
-    assert.equal(res.timingsMs.infrastructureGraphBuildMs, null);
-    assert.ok(
-      res.unsupportedMetrics.some((u) => u.metricId.endsWith('infrastructureGraphBuildMs') && u.reason === 'disabled_by_config')
-    );
+    assert.notEqual(res.timingsMs.infrastructureGraphBuildMs, null);
+    assert.notEqual(res.timingsMs.graphToRendererAdapterMs, null);
     assert.ok(res.timingsMs.fullSceneGeometryGenerationMs.median >= 0);
     assert.ok(res.timingsMs.roadGeometryGenerationMs !== null);
 
@@ -216,8 +213,8 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
       },
       configSummaries: [
         {
-          configId: legacyCfg.id,
-          configLabel: legacyCfg.label,
+          configId: sfCfg.id,
+          configLabel: sfCfg.label,
           highestCompletedLevel: 'S1',
           stoppedAtLevel: null,
           stopReason: null,
@@ -234,7 +231,7 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
     assert.ok(fs.existsSync(jsonOut));
     const md = formatScalingMarkdownReport(report);
     assert.ok(md.includes('250 × 250 m'));
-    assert.ok(md.includes('production-legacy'));
+    assert.ok(md.includes('surface-first-e2plus-rplus'));
   });
 
   it('enforces RSS memory limit, wall-clock timeout, and halts larger-scale progression with skipped_due_to_threshold', async () => {
@@ -257,7 +254,7 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
 
     const reportMemFail = await runRegionalScalingBenchmarks({
       datasetIds: ['S1', 'S2'],
-      configIds: ['production-legacy'],
+      configIds: ['surface-first-e2plus-rplus'],
       warmupIterations: 0,
       measuredIterations: 1,
       quiet: true,
@@ -290,11 +287,11 @@ describe('TKT-019 Regional Scalability Benchmark Infrastructure', () => {
     );
 
     const { datasets } = loadHengeloScalingDatasets({ levelsOrIds: ['S1'], verifyHashes: false });
-    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+    const [sfCfg] = resolveRendererConfigs(['surface-first-e2plus-rplus']);
 
     const timeoutRes = await runIsolatedScalingWorkload({
       dataset: datasets[0],
-      rendererConfig: legacyCfg,
+      rendererConfig: sfCfg,
       manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
       warmupIterations: 0,
       measuredIterations: 1,
@@ -325,12 +322,12 @@ describe('TKT-020 Phase 1: Benchmark Measurement Reliability & Partial Timeout R
     );
   });
 
-  it('forwards --expose-gc to worker, emits null roadSubStagesMs for graph-e2-e3, and non-overlapping roadSubStagesMs for E2+', async () => {
+  it('forwards --expose-gc to worker and emits non-overlapping roadSubStagesMs for E2+', async () => {
     const { datasets } = loadHengeloScalingDatasets({
       levelsOrIds: ['S1'],
       verifyHashes: true,
     });
-    const [graphCfg, sfCfg] = resolveRendererConfigs(['graph-e2-e3', 'surface-first-e2plus-rplus']);
+    const [sfCfg] = resolveRendererConfigs(['surface-first-e2plus-rplus']);
     const manifestPath = path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json');
     const limits = {
       maxRssMB: 2048,
@@ -339,32 +336,6 @@ describe('TKT-020 Phase 1: Benchmark Measurement Reliability & Partial Timeout R
       validatorMaxEdges: 500,
       rssPollIntervalMs: 100,
     };
-
-    const graphRes = await runIsolatedScalingWorkload({
-      dataset: datasets[0],
-      rendererConfig: graphCfg,
-      manifestPath,
-      warmupIterations: 0,
-      measuredIterations: 1,
-      resourceLimits: limits,
-    });
-
-    assert.equal(graphRes.status, 'completed', graphRes.statusReason);
-    assert.equal(graphRes.memory?.workerV8Heap.gcInvokedBeforeRun, true);
-    assert.equal(graphRes.completedMeasuredIterations, 1);
-    assert.ok(graphRes.timingsMs !== null);
-    assert.equal(graphRes.timingsMs.roadSubStagesMs, null);
-    assert.ok(
-      graphRes.unsupportedMetrics.some(
-        (u) => u.metricId.endsWith('::roadSubStagesMs') && u.reason === 'disabled_by_config'
-      )
-    );
-    assert.ok(
-      (graphRes.timingsMs.planarSurfaceResolutionMs?.median ?? 0) +
-        (graphRes.timingsMs.roadGeometryGenerationMs?.median ?? 0) +
-        (graphRes.timingsMs.railwayGeometryGenerationMs?.median ?? 0) <=
-        graphRes.timingsMs.fullSceneGeometryGenerationMs.median + 5.0
-    );
 
     const sfRes = await runIsolatedScalingWorkload({
       dataset: datasets[0],
@@ -377,6 +348,14 @@ describe('TKT-020 Phase 1: Benchmark Measurement Reliability & Partial Timeout R
 
     assert.equal(sfRes.status, 'completed', sfRes.statusReason);
     assert.equal(sfRes.memory?.workerV8Heap.gcInvokedBeforeRun, true);
+    assert.equal(sfRes.completedMeasuredIterations, 1);
+    assert.ok(sfRes.timingsMs !== null);
+    assert.ok(
+      (sfRes.timingsMs.planarSurfaceResolutionMs?.median ?? 0) +
+        (sfRes.timingsMs.roadGeometryGenerationMs?.median ?? 0) +
+        (sfRes.timingsMs.railwayGeometryGenerationMs?.median ?? 0) <=
+        sfRes.timingsMs.fullSceneGeometryGenerationMs.median + 5.0
+    );
     const sub = sfRes.timingsMs?.roadSubStagesMs;
     assert.ok(sub !== null && sub !== undefined);
     assert.ok(sub.primitiveConstructionMs !== null && sub.primitiveConstructionMs !== undefined);
@@ -433,11 +412,11 @@ describe('TKT-020 Phase 1: Benchmark Measurement Reliability & Partial Timeout R
     );
 
     const { datasets } = loadHengeloScalingDatasets({ levelsOrIds: ['S1'], verifyHashes: false });
-    const [legacyCfg] = resolveRendererConfigs(['production-legacy']);
+    const [sfCfg] = resolveRendererConfigs(['surface-first-e2plus-rplus']);
 
     const timeoutRes = await runIsolatedScalingWorkload({
       dataset: datasets[0],
-      rendererConfig: legacyCfg,
+      rendererConfig: sfCfg,
       manifestPath: path.resolve('benchmarks/datasets/hengelo-scaling/manifest.json'),
       warmupIterations: 0,
       measuredIterations: 3,

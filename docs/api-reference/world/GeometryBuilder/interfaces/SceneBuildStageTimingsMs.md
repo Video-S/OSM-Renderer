@@ -6,7 +6,7 @@
 
 # Interface: SceneBuildStageTimingsMs
 
-Defined in: world/GeometryBuilder.ts:187
+Defined in: world/GeometryBuilder.ts:180
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:187
 
 > **barriersAndFoliageGeometryMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:199
+Defined in: world/GeometryBuilder.ts:192
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:199
 
 > **buildingGeometryMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:200
+Defined in: world/GeometryBuilder.ts:193
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/GeometryBuilder.ts:200
 
 > **bvhConstructionMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:208
+Defined in: world/GeometryBuilder.ts:201
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/GeometryBuilder.ts:208
 
 > **bvhSubTimingsMs**: `object`
 
-Defined in: world/GeometryBuilder.ts:209
+Defined in: world/GeometryBuilder.ts:202
 
 #### buildingsMs
 
@@ -62,7 +62,7 @@ Defined in: world/GeometryBuilder.ts:209
 
 > **geometryMergingMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:201
+Defined in: world/GeometryBuilder.ts:194
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/GeometryBuilder.ts:201
 
 > **mergeSubTimingsMs**: `object`
 
-Defined in: world/GeometryBuilder.ts:202
+Defined in: world/GeometryBuilder.ts:195
 
 #### barriersAndLandmarksMs
 
@@ -94,7 +94,7 @@ Defined in: world/GeometryBuilder.ts:202
 
 > **planarResolutionMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:188
+Defined in: world/GeometryBuilder.ts:181
 
 ***
 
@@ -102,7 +102,7 @@ Defined in: world/GeometryBuilder.ts:188
 
 > **planarSurfaceGeometryMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:189
+Defined in: world/GeometryBuilder.ts:182
 
 ***
 
@@ -110,7 +110,7 @@ Defined in: world/GeometryBuilder.ts:189
 
 > **railwayGeometryMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:190
+Defined in: world/GeometryBuilder.ts:183
 
 ***
 
@@ -118,7 +118,7 @@ Defined in: world/GeometryBuilder.ts:190
 
 > **roadGeometryMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:191
+Defined in: world/GeometryBuilder.ts:184
 
 ***
 
@@ -126,7 +126,7 @@ Defined in: world/GeometryBuilder.ts:191
 
 > **roadSubTimingsMs**: `object`
 
-Defined in: world/GeometryBuilder.ts:192
+Defined in: world/GeometryBuilder.ts:185
 
 #### atGradeRibbonsAndClippingMs
 
@@ -154,4 +154,4 @@ Defined in: world/GeometryBuilder.ts:192
 
 > **totalBuildSceneMs**: `number`
 
-Defined in: world/GeometryBuilder.ts:215
+Defined in: world/GeometryBuilder.ts:208

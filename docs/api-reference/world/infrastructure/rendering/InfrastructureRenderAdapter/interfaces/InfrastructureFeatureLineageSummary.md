@@ -6,7 +6,7 @@
 
 # Interface: InfrastructureFeatureLineageSummary
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:789
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:693
 
 Pre-computed source-feature lineage maps derived from `EdgeProvenance` for downstream E2/E3 diagnostic accounting.
 
@@ -16,7 +16,7 @@ Pre-computed source-feature lineage maps derived from `EdgeProvenance` for downs
 
 > **chainingMap**: `Record`\<`string`, `string`[]\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:791
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:695
 
 Maps simplified multi-segment `edge.id` to the ordered list of constituent `sourceFeatureId`s.
 
@@ -26,6 +26,6 @@ Maps simplified multi-segment `edge.id` to the ordered list of constituent `sour
 
 > **deduplicatedMap**: `Record`\<`string`, `string`[]\>
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:793
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:697
 
 Maps canonical `sourceFeatureId` to exact-duplicate `sourceFeatureId`s collapsed into it.

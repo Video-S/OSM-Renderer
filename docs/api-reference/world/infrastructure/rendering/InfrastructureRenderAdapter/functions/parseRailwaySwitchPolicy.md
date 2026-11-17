@@ -6,22 +6,22 @@
 
 # Function: parseRailwaySwitchPolicy()
 
-> **parseRailwaySwitchPolicy**(`raw`, `renderSource?`): [`RailwaySwitchPolicy`](../type-aliases/RailwaySwitchPolicy.md)
+> **parseRailwaySwitchPolicy**(`_raw?`, `_renderSource?`): `"graph"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:159
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:119
 
-Parses a raw string value into a valid `RailwaySwitchPolicy` (`'heuristic' | 'graph'`).
+Resolves any switch policy input to the canonical `'graph'` production policy.
 
 ## Parameters
 
-### raw
+### \_raw?
 
 `string`
 
-### renderSource?
+### \_renderSource?
 
-[`RailwayInfrastructureRenderSource`](../type-aliases/RailwayInfrastructureRenderSource.md)
+`"graph-R+"`
 
 ## Returns
 
-[`RailwaySwitchPolicy`](../type-aliases/RailwaySwitchPolicy.md)
+`"graph"`

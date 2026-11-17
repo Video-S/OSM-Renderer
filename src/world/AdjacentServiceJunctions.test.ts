@@ -75,12 +75,12 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
     }, 'Road-Class Ownership Regression', [6.7895, 52.2632], 120);
 
     const preview = prepareInfrastructureRenderPreview(data, {
-      roads: 'graph', railways: 'legacy',
+      roads: 'graph-surface', railways: 'graph-R+',
     });
     assert.ok(preview.graph);
     assert.equal(preview.validation?.isValid, true);
     const scene = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
       infrastructureRenderPreview: preview,
     }).buildScene(data, MAP_THEMES.tactical);
     try {
@@ -175,7 +175,7 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
     }
 
     const preview = prepareInfrastructureRenderPreview(data, {
-      roads: 'graph', railways: 'legacy',
+      roads: 'graph-surface', railways: 'graph-R+',
     });
     assert.ok(preview.graph);
     assert.equal(preview.validation?.isValid, true);
@@ -186,7 +186,7 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
       return node;
     });
     const scene = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
       infrastructureRenderPreview: preview,
     }).buildScene(data, MAP_THEMES.tactical);
     try {
@@ -196,16 +196,22 @@ describe('E2 deterministic road-surface ownership and adjacent T-junction regres
       const mainRanges = main.userData.faceRanges as Array<{
         info: { id: string; sourceFeatureIds: string[]; subtype: string };
       }>;
+      const aisleRanges = aisle.userData.faceRanges as Array<{
+        info: { id: string; sourceFeatureIds: string[]; subtype: string };
+      }>;
+      assert.ok(mainRanges.some((r) => r.info.sourceFeatureIds.includes('way/1507428766')));
+      assert.ok(aisleRanges.some((r) => r.info.sourceFeatureIds.includes('way/1444115768')));
+      assert.ok(aisleRanges.some((r) => r.info.sourceFeatureIds.includes('way/1444115769')));
       for (const node of junctionNodes) {
-        const patch = mainRanges.find((r) => r.info.id === 'junction-' + node.id);
-        assert.ok(patch,
-          `No main-road junction patch for ${node.rawOsmNodeId} (${node.id}). ` +
-          `Observed junction patches: ${JSON.stringify(mainRanges.filter((r) => r.info.id.startsWith('junction-')).map((r) => r.info.id))}. ` +
-          `E2 geometry stats: ${JSON.stringify(scene.roadsGroup.userData.graphRoadStats)}. ` +
-          `Geometry rejection reasons: ${JSON.stringify(data.diagnostics.rejectedInvalid.byReason)}`);
-        assert.ok(patch.info.sourceFeatureIds.includes('way/1507428766'));
-        assert.ok(patch.info.sourceFeatureIds.some((id) =>
-          id === 'way/1444115768' || id === 'way/1444115769'));
+        assert.ok(
+          meshCoversPointXZ(main, node.x, node.z),
+          `Main road must continuously cover T-junction node ${node.rawOsmNodeId} (${node.id})`
+        );
+        assert.equal(
+          meshCoversPointXZ(aisle, node.x, node.z),
+          false,
+          `Parking aisle must be Boolean-clipped against main road at T-junction node ${node.rawOsmNodeId}`
+        );
       }
       const report = auditGraphRoadMeshIntegrity(scene.roadsGroup);
       assert.ok(report.auditedTriangleCount > 0);

@@ -8,7 +8,7 @@
 
 > **generateExtrudedBarrierRibbon**(`points`, `width`, `height`, `baseY?`): `BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>
 
-Defined in: world/GeometryBuilder.ts:595
+Defined in: world/GeometryBuilder.ts:573
 
 Generates a 3D volumetric wall/hedge extrusion along a polyline (top surface + side walls).
 

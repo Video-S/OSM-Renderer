@@ -8,7 +8,7 @@
 
 > **buildInfrastructureGraph**(`input`): [`InfrastructureGraph`](../../types/interfaces/InfrastructureGraph.md)
 
-Defined in: world/infrastructure/topology/InfrastructureGraph.ts:660
+Defined in: world/infrastructure/topology/InfrastructureGraph.ts:680
 
 Pure, deterministic top-level Infrastructure Graph builder (`ADR-0009` Stages B–D).
 Constructs `RoadNetwork`, `RailwayNetwork`, `GradeTransitionRelation[]`,

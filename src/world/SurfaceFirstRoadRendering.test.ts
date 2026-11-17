@@ -453,7 +453,7 @@ function createSyntheticDataset(
 function buildSurfaceFirstScene(data: ProcessedMapData, roadWidthMultiplier = 1.0) {
   const options = {
     roads: 'graph-surface' as const,
-    railways: 'legacy' as const,
+    railways: 'graph-R+' as const,
   };
   const preview = prepareInfrastructureRenderPreview(data, options);
   const builder = new GeometryBuilder({
@@ -465,11 +465,16 @@ function buildSurfaceFirstScene(data: ProcessedMapData, roadWidthMultiplier = 1.
 }
 
 describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance Instrumentation', () => {
-  it('parses graph-surface road mode while keeping legacy default', () => {
+  it('parses graph-surface road mode and graph-R+ railway mode as permanent defaults', () => {
     assert.equal(parseRoadInfrastructureRenderSource('graph-surface'), 'graph-surface');
     assert.deepEqual(
       parseInfrastructureRenderOptionsFromSearch('?topologyRoads=graph-surface'),
-      { roads: 'graph-surface', railways: 'legacy' }
+      {
+        roads: 'graph-surface',
+        railways: 'graph-R+',
+        railwaySwitchPolicy: 'graph',
+        railwayBallastStrategy: 'surface-first',
+      }
     );
   });
 
@@ -1146,28 +1151,6 @@ describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance In
       assert.equal(diffWidthVal.overlaps.totalPositiveAreaOverlapCount, 0);
     } finally {
       diffWidthScene.dispose();
-    }
-
-    // 7. E2 ('graph') and Legacy ('legacy') rendering remain completely unaffected
-    const e2Options = { roads: 'graph' as const, railways: 'legacy' as const };
-    const e2Builder = new GeometryBuilder({
-      infrastructureRenderOptions: e2Options,
-      infrastructureRenderPreview: prepareInfrastructureRenderPreview(bentForwardData, e2Options),
-    });
-    const e2Scene = e2Builder.buildScene(bentForwardData, MAP_THEMES.tactical);
-    const legacyBuilder = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
-    });
-    const legacyScene = legacyBuilder.buildScene(bentForwardData, MAP_THEMES.tactical);
-    try {
-      const e2Stats: GraphRoadRenderStats = e2Scene.roadsGroup.userData.graphRoadStats;
-      assert.equal(e2Stats.generatedCapDiskPrimitiveCount, 0);
-      assert.equal(e2Stats.generatedRectanglePrimitiveCount, 0);
-      assert.equal(legacyScene.roadsGroup.userData.graphRoadStats, undefined);
-      assert.ok(legacyScene.roadsGroup.children.length > 0);
-    } finally {
-      e2Scene.dispose();
-      legacyScene.dispose();
     }
 
     // Negative validator check: stripping the internal bend cap triangles from way/bent-chain-b

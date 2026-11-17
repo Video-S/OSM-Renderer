@@ -8,7 +8,7 @@
 
 > **sanitizeOsmTags**(`raw?`): `Record`\<`string`, `string` \| `number` \| `boolean`\>
 
-Defined in: world/GeometryBuilder.ts:319
+Defined in: world/GeometryBuilder.ts:297
 
 ## Parameters
 

@@ -8,11 +8,10 @@
 
 > **parseInfrastructureRenderOptionsFromSearch**(`search`): [`InfrastructureRenderOptions`](../interfaces/InfrastructureRenderOptions.md)
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:315
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:232
 
-Parses independent `topologyRoads` and `topologyRailways` developer switches
-from a URL query string (e.g. `?topologyRoads=graph&topologyRailways=legacy`)
-or `URLSearchParams` instance. Invalid or missing parameters resolve to `'legacy'`.
+Parses optional inspection flags (`showUndergroundTunnelTraces`, `showHiddenUndergroundGeometry`)
+from URL search parameters while always resolving render engines to canonical `E2+ / R+`.
 
 ## Parameters
 

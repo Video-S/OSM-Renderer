@@ -16,7 +16,6 @@
 - [CategorizedRoadOverlapDefect](interfaces/CategorizedRoadOverlapDefect.md)
 - [FaceFeatureRange](interfaces/FaceFeatureRange.md)
 - [GeometryBuilderOptions](interfaces/GeometryBuilderOptions.md)
-- [LegacyRoadRenderStats](interfaces/LegacyRoadRenderStats.md)
 - [RoadRibbonOptions](interfaces/RoadRibbonOptions.md)
 - [SceneBuildStageTimingsMs](interfaces/SceneBuildStageTimingsMs.md)
 - [SurfaceCoverageDefect](interfaces/SurfaceCoverageDefect.md)
@@ -45,7 +44,6 @@
 
 - [buildIndependentAnalyticalRoadCorridor](functions/buildIndependentAnalyticalRoadCorridor.md)
 - [buildRoadRibbonOutlineRing](functions/buildRoadRibbonOutlineRing.md)
-- [buildSafeExteriorSubPolylines](functions/buildSafeExteriorSubPolylines.md)
 - [cleanPolylineForClipping](functions/cleanPolylineForClipping.md)
 - [createShapeFromRings](functions/createShapeFromRings.md)
 - [createShapesFromMultiPolygon](functions/createShapesFromMultiPolygon.md)
@@ -53,13 +51,11 @@
 - [generateParkingStallMarkings](functions/generateParkingStallMarkings.md)
 - [generateProfiledBarrierRibbon3D](functions/generateProfiledBarrierRibbon3D.md)
 - [generateRoadRibbon](functions/generateRoadRibbon.md)
-- [generateStepTreads](functions/generateStepTreads.md)
 - [hasRingSelfIntersection](functions/hasRingSelfIntersection.md)
 - [mergeBuildingItemsByMaterial](functions/mergeBuildingItemsByMaterial.md)
 - [resolveBarrierStructuralContexts](functions/resolveBarrierStructuralContexts.md)
 - [resolveInspectedFeature](functions/resolveInspectedFeature.md)
 - [sanitizeOsmTags](functions/sanitizeOsmTags.md)
-- [splitRoadsAtSharedInteriorNodes](functions/splitRoadsAtSharedInteriorNodes.md)
 - [validateSurfaceFirstRoadGeometry](functions/validateSurfaceFirstRoadGeometry.md)
 
 ## References

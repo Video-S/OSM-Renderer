@@ -174,25 +174,23 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // 1. DESCRIPTOR PARSING & ADAPTER TRANSFORMATION
   // ==========================================================================
   describe('1. Descriptor Parsing & Adapter Transformation', () => {
-    it('parses topologyRailways options with graph support', () => {
-      assert.equal(parseRailwayInfrastructureRenderSource('legacy'), 'legacy');
-      assert.equal(parseRailwayInfrastructureRenderSource('graph-preview'), 'graph-preview');
-      assert.equal(parseRailwayInfrastructureRenderSource('graph'), 'graph');
-      assert.equal(parseRailwayInfrastructureRenderSource('unknown'), 'legacy');
-      assert.equal(parseRailwayInfrastructureRenderSource(null), 'legacy');
-      assert.equal(parseRailwayInfrastructureRenderSource(undefined), 'legacy');
+    it('normalizes topologyRailways options to permanent graph-R+ production contract', () => {
+      assert.equal(parseRailwayInfrastructureRenderSource('graph-R+'), 'graph-R+');
+      assert.equal(parseRailwayInfrastructureRenderSource('unknown'), 'graph-R+');
+      assert.equal(parseRailwayInfrastructureRenderSource(null), 'graph-R+');
+      assert.equal(parseRailwayInfrastructureRenderSource(undefined), 'graph-R+');
 
       const parsedOpts = parseInfrastructureRenderOptionsFromSearch(
-        '?topologyRoads=legacy&topologyRailways=graph'
+        '?topologyRoads=graph-surface&topologyRailways=graph-R+'
       );
-      assert.equal(parsedOpts.roads, 'legacy');
-      assert.equal(parsedOpts.railways, 'graph');
+      assert.equal(parsedOpts.roads, 'graph-surface');
+      assert.equal(parsedOpts.railways, 'graph-R+');
 
       const normalized = normalizeInfrastructureRenderOptions({
-        roads: 'legacy',
-        railways: 'graph',
+        roads: 'graph-surface',
+        railways: 'graph-R+',
       });
-      assert.equal(normalized.railways, 'graph');
+      assert.equal(normalized.railways, 'graph-R+');
     });
 
     it('adaptRailwayEdgeDescriptorsToFeatures transforms descriptors preserving geometry and full provenance', () => {
@@ -307,7 +305,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // 2. OBSERVABLE FALLBACK CONTRACT
   // ==========================================================================
   describe('2. Observable Fallback Contract', () => {
-    it('gracefully falls back to legacy railways when graph descriptors are missing or empty', () => {
+    it('gracefully falls back to raw railway features when graph descriptors are explicitly null and no topologySource exists', () => {
       const tracks = [
         createSyntheticRailwayTrack('way/1', [
           [0, 0],
@@ -316,15 +314,14 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       ];
       const data = createBaseProcessedMapData(tracks);
 
-      // Force renderSource: 'graph' with null descriptors and no topologySource on data
       const result = buildRailwayInfrastructure(data, MAP_THEMES.tactical, 1.0, {
-        renderSource: 'graph',
+        renderSource: 'graph-R+',
         descriptors: null,
         diagnostics: data.diagnostics,
       });
 
       assert.ok(result);
-      assert.equal(result.stats.railwayRenderSource, 'legacy');
+      assert.equal(result.stats.railwayRenderSource, 'graph-R+');
       assert.equal(result.stats.graphFallbackOccurred, true);
       assert.equal(result.stats.graphFallbackReason, 'missing_or_empty_descriptors');
       assert.equal(
@@ -353,7 +350,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       const group = new THREE.Group();
 
       const result = buildRailwayInfrastructure(data, MAP_THEMES.daylight, 1.0, {
-        renderSource: 'graph',
+        renderSource: 'graph-R+',
         descriptors: null,
         resourceManager: resMgr,
         targetGroup: group,
@@ -361,7 +358,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
 
       assert.equal(result.stats.graphFallbackOccurred, true);
       assert.ok(group.children.length > 0);
-      const childCountBefore = group.children.length;
 
       result.dispose();
       assert.equal(group.children.length, 0);
@@ -373,57 +369,31 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // 3. SYNTHETIC SWITCHYARD REGRESSION PARITY
   // ==========================================================================
   describe('3. Synthetic Switchyard Regression Parity', () => {
-    it('produces equivalent physical geometry between Legacy and Graph Candidate B', () => {
+    it('renders 100% of switchyard source ways with 3D sleepers and turnout bearers in Graph R+ Candidate B', () => {
       const switchyardData = createRailwayPrototypeFixtureData();
       assert.ok(switchyardData.railways.length >= 60, 'Switchyard fixture must have >= 60 railway ways');
 
-      // 1. Build Legacy Candidate B
-      const legacyResult = buildRailwayInfrastructure(
-        switchyardData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'legacy' }
-      );
-
-      // 2. Build Graph Candidate B
       const graphResult = buildRailwayInfrastructure(
         switchyardData,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(legacyResult.stats.railwayRenderSource, 'legacy');
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.equal(graphResult.stats.graphFallbackOccurred, false);
 
-      // Verify all 65 source railway ways are represented in renderedSourceIds in both modes
-      assert.equal(
-        legacyResult.renderedSourceIds.size,
-        switchyardData.railways.length,
-        'Legacy must render 100% of switchyard source ways'
-      );
       assert.equal(
         graphResult.renderedSourceIds.size,
         switchyardData.railways.length,
-        'Graph must render 100% of switchyard source ways via provenance'
+        'Graph R+ must render 100% of switchyard source ways via provenance'
       );
 
-      // Measure geometry output
-      assert.ok(legacyResult.stats.totalVertices > 0);
       assert.ok(graphResult.stats.totalVertices > 0);
-      assert.ok(legacyResult.stats.drawCalls > 0);
       assert.ok(graphResult.stats.drawCalls > 0);
-
-      // Sleeper boxes: both modes emit 3D sleeper boxes
-      assert.ok(legacyResult.stats.sleeper3DBoxCount > 500);
       assert.ok(graphResult.stats.sleeper3DBoxCount > 500);
-
-      // Both modes preserve turnout bearers under switches
-      assert.ok(legacyResult.stats.turnoutBearerCount > 0);
       assert.ok(graphResult.stats.turnoutBearerCount > 0);
 
-      legacyResult.dispose();
       graphResult.dispose();
     });
   });
@@ -432,52 +402,27 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // 4. STATION HENGELO REAL OSM EXTRACT REGRESSION
   // ==========================================================================
   describe('4. Station Hengelo Real OSM Extract Regression', () => {
-    it('renders all 67 source ways with accurate provenance and continuous rails in Graph mode', () => {
+    it('renders all 67 source ways with accurate provenance and continuous rails in Graph R+ mode', () => {
       const hengeloData = loadOfflineRailwayExtract('hengelo');
       assert.equal(hengeloData.railways.length, 67, 'Station Hengelo must contain 67 railway features');
-
-      const legacyResult = buildRailwayInfrastructure(
-        hengeloData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'legacy' }
-      );
 
       const graphResult = buildRailwayInfrastructure(
         hengeloData,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(legacyResult.stats.railwayRenderSource, 'legacy');
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.equal(graphResult.stats.graphFallbackOccurred, false);
-
-      // All 67 source ways accounted for in renderedSourceIds
-      assert.equal(legacyResult.renderedSourceIds.size, 67);
       assert.equal(graphResult.renderedSourceIds.size, 67);
 
-      // Intentional architectural difference:
-      // In Graph mode, contiguous ways meeting at degree-2 nodes with identical attributes are simplified
-      // into single continuous topological edges.
-      // Therefore, graphEdgeCount < sourceRailwayCount:
       assert.ok(
         graphResult.stats.graphEdgeCount! < graphResult.stats.sourceRailwayCount!,
         `Graph simplification must contract degree-2 chains (edges=${graphResult.stats.graphEdgeCount}, ways=${graphResult.stats.sourceRailwayCount})`
       );
+      assert.ok(graphResult.stats.sleeper3DBoxCount > 500);
 
-      // Verify sleeper count consistency: within 8% of legacy (difference is purely due to eliminating
-      // artificial endpoint padding at contracted degree-2 chain nodes)
-      const sleeperDiffRatio =
-        Math.abs(graphResult.stats.sleeper3DBoxCount - legacyResult.stats.sleeper3DBoxCount) /
-        legacyResult.stats.sleeper3DBoxCount;
-      assert.ok(
-        sleeperDiffRatio <= 0.08,
-        `Sleeper count diff ratio (${(sleeperDiffRatio * 100).toFixed(2)}%) must be <= 8%`
-      );
-
-      legacyResult.dispose();
       graphResult.dispose();
     });
   });
@@ -494,32 +439,18 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         'Amsterdam Centraal extract must contain 325 railway features'
       );
 
-      const legacyResult = buildRailwayInfrastructure(
-        amsterdamData,
-        MAP_THEMES.daylight,
-        1.0,
-        { renderSource: 'legacy' }
-      );
-
       const graphResult = buildRailwayInfrastructure(
         amsterdamData,
         MAP_THEMES.daylight,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(legacyResult.stats.railwayRenderSource, 'legacy');
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
-
-      // 100% source feature provenance retained
-      assert.equal(legacyResult.renderedSourceIds.size, 325);
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.equal(graphResult.renderedSourceIds.size, 325);
-
-      // Verify that graph mode produces valid draw calls and triangles
       assert.ok(graphResult.stats.totalTriangles > 5000);
       assert.ok(graphResult.stats.drawCalls > 0);
 
-      legacyResult.dispose();
       graphResult.dispose();
     });
   });
@@ -529,7 +460,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // ==========================================================================
   describe('6. Chained Short Railway Ways & Reversed Orientations', () => {
     it('contracts colinear chained ways into a seamless continuous rail extrusion', () => {
-      // Create 3 chained colinear segments
       const track1 = createSyntheticRailwayTrack(
         'way/101',
         [
@@ -561,13 +491,12 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.equal(graphResult.stats.graphEdgeCount, 1, 'All 3 chained ways must contract into 1 simplified edge');
 
-      // Full provenance: all 3 source way IDs must be represented
       assert.ok(graphResult.renderedSourceIds.has('way/101'));
       assert.ok(graphResult.renderedSourceIds.has('way/102'));
       assert.ok(graphResult.renderedSourceIds.has('way/103'));
@@ -576,7 +505,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
     });
 
     it('handles reversed digitized ways seamlessly without tangent flip artifacts', () => {
-      // track1 is digitized forward: 0 -> 25
       const track1 = createSyntheticRailwayTrack(
         'way/201',
         [
@@ -585,7 +513,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         ],
         { nodeIds: ['10', '11'] }
       );
-      // track2 is digitized backward: 50 -> 25 (meeting node 11)
       const track2 = createSyntheticRailwayTrack(
         'way/202',
         [
@@ -601,10 +528,10 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.equal(graphResult.stats.graphEdgeCount, 1);
       assert.ok(graphResult.renderedSourceIds.has('way/201'));
       assert.ok(graphResult.renderedSourceIds.has('way/202'));
@@ -617,8 +544,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // 7. PARALLEL TRACKS, TURNOUTS, AND FLAT CROSSINGS
   // ==========================================================================
   describe('7. Parallel Tracks, Turnouts, and Flat Crossings', () => {
-    it('maintains independent ballast ribbons on standard parallel tracks (spacing >= 3.8m)', () => {
-      // Track A at z = 0, Track B at z = 4.0m (standard Dutch track spacing: 3.8m–4.2m)
+    it('maintains independent ballast footprints on standard parallel tracks (spacing >= 3.8m)', () => {
       const trackA = createSyntheticRailwayTrack('way/p1', [
         [0, 0],
         [60, 0],
@@ -634,7 +560,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
       assert.equal(graphResult.stats.renderedRailwaysCount, 2);
@@ -643,38 +569,31 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       graphResult.dispose();
     });
 
-    it('preserves turnout throat proximity detection under Graph mode', () => {
-      // Mainline track
+    it('preserves turnout throat proximity detection under Graph R+ mode', () => {
       const mainTrack = createSyntheticRailwayTrack('way/m1', [
         [0, 0],
+        [60, 0],
+      ], { nodeIds: ['m_0', 'm_sw'], osmTags: { usage: 'main' } });
+      const mainCont = createSyntheticRailwayTrack('way/m2', [
+        [60, 0],
         [100, 0],
-      ]);
-      // Branch track diverging at a shallow angle from x = 10
+      ], { nodeIds: ['m_sw', 'm_1'], osmTags: { usage: 'main' } });
       const branchTrack = createSyntheticRailwayTrack('way/b1', [
-        [10, 0.1],
-        [50, 6.0],
-      ]);
+        [60, 0],
+        [80, 1.5],
+        [100, 5.0],
+      ], { nodeIds: ['m_sw', 'b_1'], osmTags: { usage: 'branch' } });
 
-      const data = createBaseProcessedMapData([mainTrack, branchTrack]);
-
-      const legacyResult = buildRailwayInfrastructure(
-        data,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'legacy' }
-      );
+      const data = createBaseProcessedMapData([mainTrack, mainCont, branchTrack]);
 
       const graphResult = buildRailwayInfrastructure(
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      // Both modes preserve turnout detection
-      assert.equal(legacyResult.stats.turnoutBearerCount > 0, graphResult.stats.turnoutBearerCount > 0);
-
-      legacyResult.dispose();
+      assert.ok(graphResult.stats.turnoutBearerCount > 0);
       graphResult.dispose();
     });
   });
@@ -698,14 +617,13 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.ok(graphResult.renderedSourceIds.has('way/bridge1'));
       assert.ok(graphResult.stats.totalTriangles > 0);
 
-      // Verify that bridge structure items were placed in group
       let hasBridgeMesh = false;
       graphResult.railwaysGroup.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -726,10 +644,10 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       const data = createBaseProcessedMapData([surfaceWest, tunnelTrack, surfaceEast]);
 
       const graphResult = buildRailwayInfrastructure(
-        data, MAP_THEMES.tactical, 1.0, { renderSource: 'graph' }
+        data, MAP_THEMES.tactical, 1.0, { renderSource: 'graph-R+' }
       );
 
-      assert.equal(graphResult.stats.railwayRenderSource, 'graph');
+      assert.equal(graphResult.stats.railwayRenderSource, 'graph-R+');
       assert.ok(graphResult.renderedSourceIds.has('way/tunnel1'));
       let hasPortal = false;
       let hasTrace = false;
@@ -743,7 +661,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
 
       const debugResult = buildRailwayInfrastructure(
         data, MAP_THEMES.tactical, 1.0,
-        { renderSource: 'graph', showUndergroundTunnelTraces: true }
+        { renderSource: 'graph-R+', showUndergroundTunnelTraces: true }
       );
       let debugHasTrace = false;
       debugResult.railwaysGroup.traverse((obj) => {
@@ -775,13 +693,13 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         dataForward,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
       const resReverse = buildRailwayInfrastructure(
         dataReverse,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
       assert.equal(resForward.stats.totalVertices, resReverse.stats.totalVertices);
@@ -803,7 +721,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph' }
+        { renderSource: 'graph-R+' }
       );
 
       const initialTriangles = result.stats.totalTriangles;
@@ -828,7 +746,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph', targetGroup: group }
+        { renderSource: 'graph-R+', targetGroup: group }
       );
 
       assert.ok(group.children.length > 0);
@@ -848,22 +766,16 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       ]);
       const data = createBaseProcessedMapData([track]);
 
-      const builder = new GeometryBuilder({
-        infrastructureRenderOptions: {
-          roads: 'legacy',
-          railways: 'graph',
-        },
-      });
+      const builder = new GeometryBuilder();
 
       const scene = builder.buildScene(data, MAP_THEMES.tactical);
       assert.ok(scene);
-      assert.equal(scene.infrastructureRenderOptions.railways, 'graph');
+      assert.equal(scene.infrastructureRenderOptions.railways, 'graph-R+');
       assert.ok(scene.infrastructureRenderPreview);
 
-      // Verify that the railways group has railwayRenderSource: 'graph'
       const railwaysGroup = scene.railwaysGroup;
       assert.ok(railwaysGroup);
-      assert.equal(railwaysGroup.userData.railwayRenderSource, 'graph');
+      assert.equal(railwaysGroup.userData.railwayRenderSource, 'graph-R+');
       assert.ok(railwaysGroup.userData.railwayStats);
 
       scene.dispose();
@@ -875,7 +787,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
   // ==========================================================================
   describe('11. Stage E3-A2: Graph-Informed Railway Switch Rendering', () => {
     it('identifies confirmed turnouts and aligns turnout bearers perpendicular to mainline', () => {
-      // Mainline trunk + continuation: (0,0) -> (30,0) -> (60,0)
       const trunkWay = createSyntheticRailwayTrack('way/trunk', [
         [0, 0],
         [30, 0],
@@ -886,7 +797,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         [70, 0],
       ], { nodeIds: ['n_switch', 'n_main_end'], osmTags: { usage: 'main' }, railwayType: 'rail' });
 
-      // Diverging branch curving off to z = 4.0 at (70, 4.0)
       const divergingWay = createSyntheticRailwayTrack('way/div', [
         [30, 0],
         [50, 1.2],
@@ -899,15 +809,14 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.daylight,
         1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+        { renderSource: 'graph-R+', switchPolicy: 'graph' }
       );
 
-      assert.equal(result.stats.railwayRenderSource, 'graph-switches');
+      assert.equal(result.stats.railwayRenderSource, 'graph-R+');
       assert.equal(result.stats.railwaySwitchPolicy, 'graph');
       assert.ok((result.stats.confirmedSwitchCount ?? 0) >= 1, 'Must detect at least 1 confirmed switch');
       assert.ok(result.stats.turnoutBearerCount > 0, 'Must produce turnout bearers');
 
-      // Diverging branch rail must be tapered
       assert.ok(
         (result.stats.graphTaperedBladeCount ?? 0) >= 1,
         'Must apply targeted switch blade tapering on diverging track'
@@ -917,7 +826,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
     });
 
     it('prevents independent parallel tracks (1.60m spacing) from falsely suppressing sleepers or creating turnouts', () => {
-      // Independent parallel tracks closer than 1.68m (1.60m spacing) with no switch connectivity
       const track1 = createSyntheticRailwayTrack('way/p_close1', [
         [0, 0],
         [80, 0],
@@ -934,28 +842,23 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+        { renderSource: 'graph-R+', switchPolicy: 'graph' }
       );
 
-      // In graph mode, independent tracks without topological turnouts must not be classified as switches
       assert.equal(result.stats.confirmedSwitchCount ?? 0, 0);
       assert.equal(result.stats.turnoutBearerCount, 0, 'No turnout bearers on independent parallel tracks');
       assert.equal(result.stats.graphTaperedBladeCount ?? 0, 0, 'No tapering on independent parallel tracks');
-
-      // Both tracks must have full sleeper counts (no false suppression)
       assert.ok(result.stats.sleeper3DBoxCount > 200, 'Both tracks must retain independent sleepers');
 
       result.dispose();
     });
 
     it('treats flat diamond crossings as non-interconnecting and creates no fictitious turnouts', () => {
-      // Track 1: horizontal (-40, 0) -> (40, 0)
       const trackH = createSyntheticRailwayTrack('way/cross_h', [
         [-40, 0],
         [40, 0],
       ], { nodeIds: ['n_h1', 'n_h2'], osmTags: { usage: 'main' }, railwayType: 'rail' });
 
-      // Track 2: diagonal (-30, -30) -> (30, 30) crossing at (0, 0)
       const trackD = createSyntheticRailwayTrack('way/cross_d', [
         [-30, -30],
         [30, 30],
@@ -967,7 +870,7 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.blueprint,
         1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+        { renderSource: 'graph-R+', switchPolicy: 'graph' }
       );
 
       assert.equal(result.stats.confirmedSwitchCount ?? 0, 0, 'Diamond crossing is not a turnout switch');
@@ -1000,17 +903,15 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.daylight,
         1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+        { renderSource: 'graph-R+', switchPolicy: 'graph' }
       );
 
-      // Precisely one diverging blade should be tapered
       assert.equal(result.stats.graphTaperedBladeCount, 1, 'Only the diverging switch blade must taper');
 
       result.dispose();
     });
 
     it('safely falls back to geometric calculations without crashing on unresolved switches', () => {
-      // 3 tracks meeting at a node with symmetric angles (unresolved main vs diverging)
       const t1 = createSyntheticRailwayTrack('way/unres1', [
         [0, 0],
         [30, 0],
@@ -1032,42 +933,23 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         data,
         MAP_THEMES.tactical,
         1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph' }
+        { renderSource: 'graph-R+', switchPolicy: 'graph' }
       );
 
-      // Must complete without error
       assert.ok(result.stats.totalTriangles > 0);
       assert.ok(result.stats.sleeper3DBoxCount > 0);
 
       result.dispose();
     });
-
-    it('preserves complete regression invariance: legacy mode produces 0 graph switches and identical stats', () => {
-      const switchyardData = createRailwayPrototypeFixtureData();
-
-      const legacyResult = buildRailwayInfrastructure(
-        switchyardData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'legacy' }
-      );
-
-      assert.equal(legacyResult.stats.railwayRenderSource, 'legacy');
-      assert.equal(legacyResult.stats.railwaySwitchPolicy, 'heuristic');
-      assert.equal(legacyResult.stats.confirmedSwitchCount, undefined);
-      assert.equal(legacyResult.stats.graphTaperedBladeCount, undefined);
-
-      legacyResult.dispose();
-    });
   });
 
-  describe('Stage E3-B: Experimental Surface-First Railway Ballast (R+)', () => {
-    it('parses graph-R+ render source and surface-first ballast strategy while keeping legacy default', () => {
-      assert.equal(parseRailwayInfrastructureRenderSource(null), 'legacy');
+  describe('Stage E3-B: Production Surface-First Railway Ballast (R+)', () => {
+    it('normalizes render source to graph-R+ and ballast strategy to surface-first', () => {
+      assert.equal(parseRailwayInfrastructureRenderSource(null), 'graph-R+');
       assert.equal(parseRailwayInfrastructureRenderSource('graph-r+'), 'graph-R+');
       assert.equal(parseRailwayInfrastructureRenderSource('graph-R+'), 'graph-R+');
 
-      assert.equal(parseRailwayBallastStrategy(null), 'ribbon');
+      assert.equal(parseRailwayBallastStrategy(null), 'surface-first');
       assert.equal(parseRailwayBallastStrategy('surface-first'), 'surface-first');
       assert.equal(parseRailwayBallastStrategy('r+'), 'surface-first');
       assert.equal(parseRailwayBallastStrategy(null, 'graph-R+'), 'surface-first');
@@ -1078,8 +960,8 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       assert.equal(options.railwaySwitchPolicy, 'graph');
 
       const defaultOptions = normalizeInfrastructureRenderOptions(null);
-      assert.equal(defaultOptions.railways, 'legacy');
-      assert.equal(defaultOptions.railwayBallastStrategy, undefined);
+      assert.equal(defaultOptions.railways, 'graph-R+');
+      assert.equal(defaultOptions.railwayBallastStrategy, 'surface-first');
     });
 
     it('consolidates overlapping at-grade tracks at switches and crossovers into unified components', () => {
@@ -1101,7 +983,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
 
       const data = createBaseProcessedMapData([trunk, main, div]);
 
-      // 1. Build footprints and components directly
       const footprints = buildAtGradeBallastFootprints(data.railways);
       assert.equal(footprints.length, 3, 'All 3 tracks are at-grade');
 
@@ -1115,7 +996,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       assert.ok(unifiedArea < individualArea, 'Consolidated area must be less than sum due to eliminated overlap');
       assert.ok(individualArea - unifiedArea > 10.0, 'Substantial overlap removed at diverging throat');
 
-      // 2. Build via RailwayGeometryBuilder with graph-R+
       const result = buildRailwayInfrastructure(
         data,
         MAP_THEMES.tactical,
@@ -1168,15 +1048,8 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
       result.dispose();
     });
 
-    it('leaves rails, 3D sleepers, turnout switch geometry, and blade tapering identical between ribbon and R+', () => {
+    it('reduces ballast triangles on switchyard while preserving 3D sleepers, turnout bearers, and blade tapering', () => {
       const switchyardData = createRailwayPrototypeFixtureData();
-
-      const ribbonResult = buildRailwayInfrastructure(
-        switchyardData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'graph-switches', switchPolicy: 'graph', ballastStrategy: 'ribbon' }
-      );
 
       const surfaceFirstResult = buildRailwayInfrastructure(
         switchyardData,
@@ -1185,40 +1058,15 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         { renderSource: 'graph-R+', switchPolicy: 'graph', ballastStrategy: 'surface-first' }
       );
 
-      // Rails and 3D sleepers MUST be completely identical
-      assert.equal(
-        surfaceFirstResult.stats.sleeper3DBoxCount,
-        ribbonResult.stats.sleeper3DBoxCount,
-        '3D sleeper box count must be identical'
-      );
-      assert.equal(
-        surfaceFirstResult.stats.turnoutBearerCount,
-        ribbonResult.stats.turnoutBearerCount,
-        'Turnout bearer count must be identical'
-      );
-      assert.equal(
-        surfaceFirstResult.stats.splitMultiSegmentStationsCount,
-        ribbonResult.stats.splitMultiSegmentStationsCount,
-        'Split sleeper station count must be identical'
-      );
-      assert.equal(
-        surfaceFirstResult.stats.confirmedSwitchCount,
-        ribbonResult.stats.confirmedSwitchCount,
-        'Confirmed switch count must be identical'
-      );
-      assert.equal(
-        surfaceFirstResult.stats.graphTaperedBladeCount,
-        ribbonResult.stats.graphTaperedBladeCount,
-        'Graph tapered blade count must be identical'
-      );
-
-      // Ballast triangles are reduced due to consolidation of overlapping ribbons
+      assert.ok(surfaceFirstResult.stats.sleeper3DBoxCount > 500);
+      assert.ok(surfaceFirstResult.stats.turnoutBearerCount > 0);
+      assert.ok((surfaceFirstResult.stats.confirmedSwitchCount ?? 0) > 0);
+      assert.ok((surfaceFirstResult.stats.graphTaperedBladeCount ?? 0) > 0);
       assert.ok(
         (surfaceFirstResult.stats.ballastTriangles ?? 0) < 1154,
-        'R+ ballast triangles should be reduced compared to ribbon ballast (1,154 in switchyard)'
+        'R+ ballast triangles should be reduced compared to legacy ribbon ballast (1,154 in switchyard)'
       );
 
-      ribbonResult.dispose();
       surfaceFirstResult.dispose();
     });
 
@@ -1279,15 +1127,12 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
         { renderSource: 'graph-R+', ballastStrategy: 'surface-first' }
       );
 
-      // Verify theme update runs without error
       assert.doesNotThrow(() => {
         result.updateTheme(MAP_THEMES.tactical);
       });
       assert.doesNotThrow(() => {
         result.updateTheme(MAP_THEMES.blueprint);
       });
-
-      // Verify disposal cleans up cleanly
       assert.doesNotThrow(() => {
         result.dispose();
       });
@@ -1313,32 +1158,6 @@ describe('Milestone 2.3 Stage E3-A1: Railway Graph Descriptor Integration', () =
 
       resManagerA.dispose();
       resManagerB.dispose();
-    });
-
-    it('preserves complete regression invariance: legacy and standard graph modes remain ribbon ballast by default', () => {
-      const switchyardData = createRailwayPrototypeFixtureData();
-
-      const legacyResult = buildRailwayInfrastructure(
-        switchyardData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'legacy' }
-      );
-      assert.equal(legacyResult.stats.railwayBallastStrategy, 'ribbon');
-      assert.equal(legacyResult.stats.ballastFootprintCount, undefined);
-      assert.equal(legacyResult.stats.ballastComponentCount, undefined);
-
-      const graphResult = buildRailwayInfrastructure(
-        switchyardData,
-        MAP_THEMES.tactical,
-        1.0,
-        { renderSource: 'graph' }
-      );
-      assert.equal(graphResult.stats.railwayBallastStrategy, 'ribbon');
-      assert.equal(graphResult.stats.ballastFootprintCount, undefined);
-
-      legacyResult.dispose();
-      graphResult.dispose();
     });
   });
 });

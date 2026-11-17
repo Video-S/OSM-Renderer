@@ -157,10 +157,14 @@ describe('TKT-016: General Performance Benchmarking Infrastructure', () => {
     });
 
     it('resolves renderer configurations and browser scenarios and rejects unknown IDs', () => {
-      const configs = resolveRendererConfigs(['production-legacy', 'graph-e2-e3']);
-      assert.equal(configs.length, 2);
+      const configs = resolveRendererConfigs(['surface-first-e2plus-rplus']);
+      assert.equal(configs.length, 1);
       assert.throws(
         () => resolveRendererConfigs(['unknown-config-id']),
+        /No renderer configurations matched filter/
+      );
+      assert.throws(
+        () => resolveRendererConfigs(['production-legacy']),
         /No renderer configurations matched filter/
       );
 
@@ -174,10 +178,10 @@ describe('TKT-016: General Performance Benchmarking Infrastructure', () => {
   });
 
   describe('3. CPU Benchmark Execution, Direct Stage Measurement & Resource Disposal', () => {
-    it('executes CPU benchmarks directly across legacy and graph stages and verifies zero resource leaks', () => {
+    it('executes CPU benchmarks directly across E2+/R+ production stages and verifies zero resource leaks', () => {
       const report = runCpuBenchmarks({
         datasetIds: ['small-real-europatunnel', 'synthetic-stress-urban-switchyard'],
-        configIds: ['production-legacy', 'surface-first-e2plus-rplus'],
+        configIds: ['surface-first-e2plus-rplus'],
         warmupIterations: 1,
         measuredIterations: 3,
       });
@@ -187,30 +191,29 @@ describe('TKT-016: General Performance Benchmarking Infrastructure', () => {
       assert.equal(report.schemaVersion, BENCHMARK_SCHEMA_VERSION);
       assert.equal(report.suite, 'cpu');
       assert.ok(report.cpuResults);
-      assert.equal(report.cpuResults.length, 4);
+      assert.equal(report.cpuResults.length, 2);
 
-      const legacyWorkload = report.cpuResults.find(
-        (w) =>
-          w.dataset.id === 'small-real-europatunnel' &&
-          w.rendererConfig.id === 'production-legacy'
-      )!;
       const surfaceWorkload = report.cpuResults.find(
         (w) =>
           w.dataset.id === 'small-real-europatunnel' &&
           w.rendererConfig.id === 'surface-first-e2plus-rplus'
       )!;
+      const switchyardWorkload = report.cpuResults.find(
+        (w) =>
+          w.dataset.id === 'synthetic-stress-urban-switchyard' &&
+          w.rendererConfig.id === 'surface-first-e2plus-rplus'
+      )!;
 
-      assert.ok(legacyWorkload);
       assert.ok(surfaceWorkload);
+      assert.ok(switchyardWorkload);
 
       // Verify direct stage measurements and sample counts
-      assert.equal(legacyWorkload.timingsMs.geojsonParseAndClassifyMs?.sampleCount, 3);
-      assert.ok((legacyWorkload.timingsMs.geojsonParseAndClassifyMs?.median ?? -1) >= 0);
-      assert.ok(legacyWorkload.timingsMs.fullSceneGeometryGenerationMs.median > 0);
-      assert.ok(legacyWorkload.timingsMs.sceneResourceDisposalMs.median >= 0);
+      assert.equal(surfaceWorkload.timingsMs.geojsonParseAndClassifyMs?.sampleCount, 3);
+      assert.ok((surfaceWorkload.timingsMs.geojsonParseAndClassifyMs?.median ?? -1) >= 0);
+      assert.ok(surfaceWorkload.timingsMs.fullSceneGeometryGenerationMs.median > 0);
+      assert.ok(surfaceWorkload.timingsMs.sceneResourceDisposalMs.median >= 0);
 
-      // In legacy mode, roadGeometryGenerationMs is null (reported in unsupportedMetrics); in surface-first mode it is populated
-      assert.equal(legacyWorkload.timingsMs.roadGeometryGenerationMs, null);
+      // In E2+/R+ production mode, all graph, adapter, planar, road, and railway stages are populated
       assert.notEqual(surfaceWorkload.timingsMs.roadGeometryGenerationMs, null);
       assert.notEqual(surfaceWorkload.timingsMs.infrastructureGraphBuildMs, null);
       assert.notEqual(surfaceWorkload.timingsMs.graphToRendererAdapterMs, null);
@@ -248,7 +251,7 @@ describe('TKT-016: General Performance Benchmarking Infrastructure', () => {
     it('serializes, saves, loads, and validates benchmark reports accurately', () => {
       const report = runCpuBenchmarks({
         datasetIds: ['small-real-europatunnel'],
-        configIds: ['production-legacy'],
+        configIds: ['surface-first-e2plus-rplus'],
         warmupIterations: 1,
         measuredIterations: 2,
       });
@@ -329,7 +332,7 @@ describe('TKT-016: General Performance Benchmarking Infrastructure', () => {
     it('detects incompatible dataset content hashes and mismatched hardware/software GPU classes', () => {
       const baseline = runCpuBenchmarks({
         datasetIds: ['small-real-europatunnel'],
-        configIds: ['production-legacy'],
+        configIds: ['surface-first-e2plus-rplus'],
         warmupIterations: 1,
         measuredIterations: 2,
       });

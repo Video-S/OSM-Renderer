@@ -145,7 +145,7 @@ describe('Unified surface visibility policy', () => {
     };
     const processed = new LocalGeoJsonProvider().parseGeoJson(geojson as any);
     const builder = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
     });
     const scene = builder.buildScene(processed, MAP_THEMES.tactical);
     assert.equal(scene.roadsGroup.userData.gradeTransitionDiagnostics?.tunnelPortalsEmittedCount, 0);

@@ -20,7 +20,6 @@ import {
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
-  railwayGroupOverride?: THREE.Group | null;
   onCameraZoomChange?: (zoom: number) => void;
   onTelemetryUpdate?: (snapshot: LiveWebGLTelemetrySnapshot) => void;
   onSceneRevisionRendered?: (meta: SceneRevisionConfigMeta) => void;
@@ -90,7 +89,6 @@ const PolylineHighlight: React.FC<{
 
 export const MapScene: React.FC<MapSceneProps> = ({
   builtGeometry,
-  railwayGroupOverride = null,
   onCameraZoomChange,
   onTelemetryUpdate,
   onSceneRevisionRendered,
@@ -141,7 +139,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const lastRenderTrianglesRef = useRef<number>(0);
   const lastDriverProgramsRef = useRef<number>(0);
 
-  const activeRailwaysGroup = railwayGroupOverride || builtGeometry.railwaysGroup;
+  const activeRailwaysGroup = builtGeometry.railwaysGroup;
   const cachedRailwayIndexRef = useRef<CachedRailwayIndex | null>(null);
   const committedBuiltGeometryRef = useRef<BuiltSceneGeometry | null>(null);
   const showRailwaysRef = useRef<boolean>(showRailways);
@@ -157,11 +155,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
   }, [builtGeometry]);
 
   useLayoutEffect(() => {
-    if (railwayGroupOverride) {
-      builtGeometry.resources.enableGroupBvh(railwayGroupOverride);
-    }
     cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
-  }, [activeRailwaysGroup, railwayGroupOverride, builtGeometry]);
+  }, [activeRailwaysGroup, builtGeometry]);
 
   // Enable three-mesh-bvh firstHitOnly optimization and measure actual R3F
   // raycaster.intersectObject(MapRoot, true) execution time so hoverRaycastTimeMs

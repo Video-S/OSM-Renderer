@@ -25,8 +25,8 @@ function buildSceneFromFeatures(
     geometryType?: 'LineString' | 'Polygon';
   }>,
   options?: {
-    roads?: 'legacy' | 'graph' | 'graph-surface';
-    railways?: 'legacy' | 'graph' | 'graph-switches' | 'graph-R+';
+    roads?: 'graph-surface';
+    railways?: 'graph-R+';
   }
 ) {
   const geojson = {

@@ -52,8 +52,8 @@ test('MapLoadTimelineTracker maintains accounted + unaccounted === total, handle
     sourceType: 'preset_live_osm',
     isInitialStartupLoad: true,
     rendererConfig: {
-      roadsMode: 'legacy',
-      railwaysMode: 'legacy',
+      roadsMode: 'graph-surface',
+      railwaysMode: 'graph-R+',
       railwayPrototypeMode: 'production',
       themeId: 'tactical',
     },
@@ -67,7 +67,7 @@ test('MapLoadTimelineTracker maintains accounted + unaccounted === total, handle
     sourceType: 'preset_live_osm',
     rendererConfig: {
       roadsMode: 'graph-surface',
-      railwaysMode: 'legacy',
+      railwaysMode: 'graph-R+',
       railwayPrototypeMode: 'production',
       themeId: 'tactical',
     },
@@ -160,8 +160,8 @@ test('MapLoadTimelineTracker maintains accounted + unaccounted === total, handle
     locationName: 'Bad Coordinates',
     sourceType: 'address_search',
     rendererConfig: {
-      roadsMode: 'legacy',
-      railwaysMode: 'legacy',
+      roadsMode: 'graph-surface',
+      railwaysMode: 'graph-R+',
       railwayPrototypeMode: 'production',
       themeId: 'tactical',
     },
@@ -178,8 +178,8 @@ test('MapLoadTimelineTracker maintains accounted + unaccounted === total, handle
       locationName: `Repeat ${i}`,
       sourceType: 'fixture',
       rendererConfig: {
-        roadsMode: 'legacy',
-        railwaysMode: 'legacy',
+        roadsMode: 'graph-surface',
+        railwaysMode: 'graph-R+',
         railwayPrototypeMode: 'production',
         themeId: 'tactical',
       },
@@ -290,8 +290,8 @@ test('Deterministic local dataset end-to-end instrumentation has negligible over
     radiusMeters: 60,
     sourceType: 'fixture',
     rendererConfig: {
-      roadsMode: 'graph',
-      railwaysMode: 'legacy',
+      roadsMode: 'graph-surface',
+      railwaysMode: 'graph-R+',
       railwayPrototypeMode: 'production',
       themeId: 'tactical',
     },
@@ -322,15 +322,15 @@ test('Deterministic local dataset end-to-end instrumentation has negligible over
 
   const tPrep0 = performance.now();
   const preview = prepareInfrastructureRenderPreview(parsed, {
-    roads: 'graph',
-    railways: 'legacy',
+    roads: 'graph-surface',
+    railways: 'graph-R+',
   });
   const tPrep1 = performance.now();
   tracker.recordInfrastructurePrep(requestId, tPrep0, tPrep1 - tPrep0);
 
   const tEffect0 = performance.now();
   const builder = new GeometryBuilder({
-    infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
     infrastructureRenderPreview: preview,
   });
   const tBuild0 = performance.now();
@@ -359,10 +359,10 @@ test('Deterministic local dataset end-to-end instrumentation has negligible over
 
   // Verify uninstrumented identical scene output
   const uninstrumentedScene = new GeometryBuilder({
-    infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+    infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
     infrastructureRenderPreview: prepareInfrastructureRenderPreview(parsed, {
-      roads: 'graph',
-      railways: 'legacy',
+      roads: 'graph-surface',
+      railways: 'graph-R+',
     }),
   }).buildScene(parsed, MAP_THEMES.tactical);
 

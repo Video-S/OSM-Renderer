@@ -49,7 +49,6 @@ import {
 import {
   computeContinuousTrackPhases,
   HostTrackSpatialIndex,
-  isTurnoutThroatPair,
   RAILWAY_DIMENSION_SPEC,
   SleeperBearerBox3D,
   sortRailwaysMainlineFirst,
@@ -57,7 +56,7 @@ import {
   subtractLateralInterval,
 } from './RailwayTopology';
 
-export type RailwayPrototypeMode = 'disabled' | 'production' | 'candidateA' | 'candidateB';
+export type RailwayPrototypeMode = 'production' | 'candidateB';
 
 export interface BuildRailwayPrototypeOptions {
   /** Enable 8m × 8m uniform spatial grid index for host track queries (default true) */
@@ -76,15 +75,15 @@ export interface BuildRailwayPrototypeOptions {
   resourceManager?: SceneResourceManager;
   /** Optional existing THREE.Group to populate directly (used when integrated into GeometryBuilder) */
   targetGroup?: THREE.Group;
-  /** Railway render source mode ('legacy' | 'graph-preview' | 'graph'). Defaults to 'legacy'. */
+  /** Canonical railway render source mode (`'graph-R+'`). */
   renderSource?: RailwayInfrastructureRenderSource;
   /** Optional pre-built descriptor bundle when available from infrastructureRenderPreview */
   descriptors?: InfrastructureRenderDescriptorBundle | null;
   /** Optional diagnostics container to record fallback events */
   diagnostics?: MapFeatureDiagnostics;
-  /** Switch policy governing turnout bearer sharing and blade tapering (Stage E3-A2). Defaults to 'heuristic'. */
-  switchPolicy?: 'heuristic' | 'graph';
-  /** Ballast rendering strategy ('ribbon' | 'surface-first') (Stage E3-B). Defaults to 'ribbon'. */
+  /** Canonical switch policy governing turnout bearer sharing and blade tapering (`'graph'`). */
+  switchPolicy?: 'graph';
+  /** Canonical ballast rendering strategy (`'surface-first'`). */
   ballastStrategy?: RailwayBallastStrategy;
   /** Whether to display dashed surface tunnel alignment traces (Stage E4-T2). Defaults to false. */
   showUndergroundTunnelTraces?: boolean;
@@ -135,7 +134,7 @@ export interface RailwayBuildProfile {
 }
 
 export interface RailwayPrototypeStats {
-  mode: 'candidateA' | 'candidateB';
+  mode: 'candidateB';
   buildTimeMs: number;
   totalVertices: number;
   totalTriangles: number;
@@ -152,25 +151,25 @@ export interface RailwayPrototypeStats {
   sleeper3DMode: 'merged' | 'instanced';
   spatialChunkSizeMeters: number;
   spatialChunkCount: number;
-  /** Active railway infrastructure render source mode (Stage E3-A1) */
+  /** Active railway infrastructure render source mode (`'graph-R+'`) */
   railwayRenderSource?: RailwayInfrastructureRenderSource;
-  /** True if graph mode fell back to legacy */
+  /** Reserved diagnostic flag (false in canonical graph-R+ pipeline) */
   graphFallbackOccurred?: boolean;
-  /** Explanation for fallback event */
+  /** Optional explanation if descriptors were empty */
   graphFallbackReason?: string;
   /** Number of simplified railway edges in graph mode */
   graphEdgeCount?: number;
   /** Total raw source railway feature count in mapData.railways */
   sourceRailwayCount?: number;
-  /** Active railway switch policy ('heuristic' | 'graph') (Stage E3-A2) */
-  railwaySwitchPolicy?: 'heuristic' | 'graph';
+  /** Active railway switch policy (`'graph'`) */
+  railwaySwitchPolicy?: 'graph';
   /** Number of confirmed switch turnouts in graph mode */
   confirmedSwitchCount?: number;
   /** Number of unresolved switch candidates */
   unresolvedSwitchCount?: number;
   /** Number of switch blades tapered via verified graph topology */
   graphTaperedBladeCount?: number;
-  /** Active railway ballast strategy ('ribbon' | 'surface-first') (Stage E3-B) */
+  /** Active railway ballast strategy (`'surface-first'`) */
   railwayBallastStrategy?: RailwayBallastStrategy;
   /** Number of at-grade ballast footprints generated in R+ mode */
   ballastFootprintCount?: number;
@@ -560,13 +559,12 @@ export function buildExtrudedRail3DGeometry(
 }
 
 /**
- * Core railway geometry synthesis engine supporting both the M2.1 prototype modes (`candidateA`, `candidateB`)
- * and the M2.2 production scene pipeline (`buildRailwayInfrastructure`).
+ * Core railway geometry synthesis engine (`R+` / Candidate B hybrid 3D + surface-first ballast).
  */
 export function buildRailwayGroupInternal(
   data: ProcessedMapData,
   theme: MapStyleTheme,
-  mode: 'candidateA' | 'candidateB',
+  mode: 'candidateB' = 'candidateB',
   initialZoom: number = 1.0,
   options?: BuildRailwayPrototypeOptions
 ): RailwayPrototypeResult {
@@ -628,59 +626,37 @@ export function buildRailwayGroupInternal(
   const showHiddenUndergroundGeometry = Boolean(options?.showHiddenUndergroundGeometry);
   const tunnelEntrances = options?.tunnelEntrances ?? new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
 
-  const requestedSource: RailwayInfrastructureRenderSource =
-    options?.renderSource ?? 'legacy';
-  let effectiveSource: RailwayInfrastructureRenderSource = requestedSource;
+  const effectiveSource: RailwayInfrastructureRenderSource = 'graph-R+';
+  const effectiveSwitchPolicy: 'graph' = 'graph';
+  const effectiveBallastStrategy: RailwayBallastStrategy = 'surface-first';
   let graphFallbackOccurred = false;
   let graphFallbackReason: string | undefined;
   let activeDescriptors: InfrastructureRenderDescriptorBundle | null = options?.descriptors ?? null;
   let graphEdgeCount: number | undefined;
 
-  const isGraphRequested =
-    requestedSource === 'graph' ||
-    requestedSource === 'graph-switches' ||
-    requestedSource === 'graph-R+';
-  const requestedSwitchPolicy: 'heuristic' | 'graph' =
-    options?.switchPolicy ??
-    (requestedSource === 'graph-switches' || requestedSource === 'graph-R+'
-      ? 'graph'
-      : 'heuristic');
-  let effectiveSwitchPolicy: 'heuristic' | 'graph' = 'heuristic';
-
-  const requestedBallastStrategy: RailwayBallastStrategy =
-    options?.ballastStrategy ??
-    (requestedSource === 'graph-R+' ? 'surface-first' : 'ribbon');
-  let effectiveBallastStrategy: RailwayBallastStrategy = requestedBallastStrategy;
+  if (!activeDescriptors && options?.descriptors === undefined) {
+    const preview = prepareInfrastructureRenderPreview(data, {
+      railways: 'graph-R+',
+      railwaySwitchPolicy: 'graph',
+      railwayBallastStrategy: 'surface-first',
+    });
+    activeDescriptors = preview.descriptors;
+  }
 
   let sourceFeatures: RailwayFeature[];
-
-  if (isGraphRequested) {
-    if (!activeDescriptors && options?.descriptors === undefined) {
-      const preview = prepareInfrastructureRenderPreview(data, {
-        railways: requestedSource,
-        railwaySwitchPolicy: requestedSwitchPolicy,
-      });
-      activeDescriptors = preview.descriptors;
-    }
-
-    if (activeDescriptors?.railwayEdges && activeDescriptors.railwayEdges.length > 0) {
-      graphEdgeCount = activeDescriptors.railwayEdges.length;
-      sourceFeatures = adaptRailwayEdgeDescriptorsToFeatures(activeDescriptors.railwayEdges);
-      effectiveSwitchPolicy = requestedSwitchPolicy;
-    } else {
-      // Graceful fallback to legacy
-      effectiveSource = 'legacy';
-      effectiveSwitchPolicy = 'heuristic';
+  if (activeDescriptors?.railwayEdges && activeDescriptors.railwayEdges.length > 0) {
+    graphEdgeCount = activeDescriptors.railwayEdges.length;
+    sourceFeatures = adaptRailwayEdgeDescriptorsToFeatures(activeDescriptors.railwayEdges);
+  } else {
+    graphEdgeCount = activeDescriptors?.railwayEdges?.length ?? 0;
+    sourceFeatures = data.railways || [];
+    if (sourceFeatures.length > 0) {
       graphFallbackOccurred = true;
       graphFallbackReason = 'missing_or_empty_descriptors';
-      sourceFeatures = data.railways || [];
       if (options?.diagnostics) {
         options.diagnostics.railwayRendererFallback = 'legacy_due_to_missing_descriptors';
       }
     }
-  } else {
-    sourceFeatures = data.railways || [];
-    effectiveSwitchPolicy = 'heuristic';
   }
 
   let skippedRailwayConflicts = 0;
@@ -746,13 +722,12 @@ export function buildRailwayGroupInternal(
   const turnoutsByMainEdgeId = new Map<string, GraphConfirmedTurnoutInfo[]>();
   const turnoutsByTrunkEdgeId = new Map<string, GraphConfirmedTurnoutInfo[]>();
   const turnoutPairKeys = new Set<string>();
-  const unresolvedPairKeys = new Set<string>();
   const divergingEdgeIdSet = new Set<string>();
   let confirmedTurnoutCount = 0;
   let unresolvedTurnoutCount = 0;
   let totalGraphTaperedCount = 0;
 
-  if (effectiveSwitchPolicy === 'graph' && activeDescriptors?.railwayNodes) {
+  if (activeDescriptors?.railwayNodes) {
     for (const node of activeDescriptors.railwayNodes) {
       if (
         node.isConfirmedSwitch &&
@@ -796,20 +771,13 @@ export function buildRailwayGroupInternal(
         }
       } else if (node.isUnresolvedSwitch && node.turnoutTopology?.candidateEdgeIds) {
         unresolvedTurnoutCount++;
-        const cands = node.turnoutTopology.candidateEdgeIds;
-        for (let i = 0; i < cands.length; i++) {
-          for (let j = i + 1; j < cands.length; j++) {
-            unresolvedPairKeys.add(`${cands[i]}:${cands[j]}`);
-            unresolvedPairKeys.add(`${cands[j]}:${cands[i]}`);
-          }
-        }
       }
     }
   }
 
   let graphGradeSeparatedPlans: GraphGradeSeparatedResolutionResult | null = null;
   const gradeTransitionDiagnostics: GradeTransitionRenderDiagnostics = {
-    mode: effectiveSource !== 'legacy' && activeDescriptors ? 'graph' : 'legacy',
+    mode: 'graph',
     confirmedTransitionsConsumed: 0,
     confirmedElevatedContinuations: 0,
     unresolvedTransitionsCount: 0,
@@ -829,7 +797,7 @@ export function buildRailwayGroupInternal(
   };
   const railwayEndpointCapPolicy = new Map<string, { capStart: boolean; capEnd: boolean }>();
 
-  if (effectiveSource !== 'legacy' && activeDescriptors) {
+  if (activeDescriptors) {
     graphGradeSeparatedPlans = resolveGraphGradeSeparatedPlans(
       activeDescriptors,
       'railway',
@@ -918,14 +886,12 @@ export function buildRailwayGroupInternal(
         }
       }
     }
-  } else if (graphFallbackOccurred) {
-    gradeTransitionDiagnostics.legacyFallbacksCount++;
   }
 
   const tPhase0 = performance.now();
   const activeRailways = sortRailwaysMainlineFirst(
     sourceFeatures.filter((r) => resolveSurfaceVisibility(r) !== 'concealed_indoor'),
-    effectiveSwitchPolicy === 'graph' ? divergingEdgeIdSet : undefined
+    divergingEdgeIdSet
   );
   const trackPhaseMap = computeContinuousTrackPhases(activeRailways);
 
@@ -1007,7 +973,7 @@ export function buildRailwayGroupInternal(
     options?.closeZoomSleeperPeriodMeters ?? RAILWAY_DIMENSION_SPEC.candidateBCloseSleeperPeriodMeters;
 
   let surfaceFirstBallastResult: SurfaceFirstBallastBuildResult | null = null;
-  if (effectiveBallastStrategy === 'surface-first') {
+  {
     const tBallast0 = performance.now();
     const atGradeElev = getRailwayElevations(0, false, false).ballast;
     surfaceFirstBallastResult = buildSurfaceFirstRailwayBallastGeometries(
@@ -1021,9 +987,6 @@ export function buildRailwayGroupInternal(
       for (const item of surfaceFirstBallastResult.ballastItems) {
         ballastItems.push(item);
       }
-    } else {
-      // Fallback to ribbon ballast if 0 geometries generated
-      effectiveBallastStrategy = 'ribbon';
     }
     uvRibbonAndSwitchTimeMs += performance.now() - tBallast0;
   }
@@ -1074,9 +1037,6 @@ export function buildRailwayGroupInternal(
       const tunnelPlan =
         graphGradeSeparatedPlans?.plansByEdgeId.get(r.id) ??
         (r.sourceFeatureId ? graphGradeSeparatedPlans?.plansByEdgeId.get(r.sourceFeatureId) : undefined);
-      if (!tunnelPlan && effectiveSource === 'legacy') {
-        gradeTransitionDiagnostics.legacyFallbacksCount++;
-      }
       const tunnelPts = tunnelPlan ? tunnelPlan.points : r.points;
       const entrance = {
         start: tunnelEntrances.forEndpoint([r.id, r.sourceFeatureId, ...(r.sourceFeatureIds ?? [])], tunnelPts[0], 'start'),
@@ -1459,7 +1419,7 @@ export function buildRailwayGroupInternal(
     const isAtGrade = r.placementClassification
       ? r.placementClassification.rendersOnSurface
       : !isBridge && !isSubterraneanTunnel && r.layer === 0;
-    const skipRibbonBallast = effectiveBallastStrategy === 'surface-first' && isAtGrade;
+    const skipRibbonBallast = isAtGrade;
 
     if (!skipRibbonBallast) {
       const ballastGeo = buildUvRibbonGeometry3D(profile3D, {
@@ -1517,15 +1477,11 @@ export function buildRailwayGroupInternal(
       return [railProfile3D[0].x, railProfile3D[0].z];
     };
 
-    const [startProbeX, startProbeZ] = sampleRailProfileAt(Math.min(0.45, totalTrackLen * 0.4));
-    const [endProbeX, endProbeZ] = sampleRailProfileAt(
-      Math.max(totalTrackLen - 0.45, totalTrackLen * 0.6)
-    );
     let taperStart = false;
     let taperEnd = false;
     let taperedSideSign: 1 | -1 | 0 = 0;
 
-    if (effectiveSwitchPolicy === 'graph') {
+    {
       const turnout = turnoutsByDivergingEdgeId.get(r.id);
       if (turnout && totalTrackLen >= 1.5) {
         const distToStart = Math.hypot(
@@ -1546,13 +1502,6 @@ export function buildRailwayGroupInternal(
           totalGraphTaperedCount++;
         }
       }
-    } else {
-      taperStart =
-        totalTrackLen >= 1.5 &&
-        currentHostIdx.hasHostTrackStrictlyAlongside(startProbeX, startProbeZ, r.id, 1.8);
-      taperEnd =
-        totalTrackLen >= 1.5 &&
-        currentHostIdx.hasHostTrackStrictlyAlongside(endProbeX, endProbeZ, r.id, 1.8);
     }
     const taperLen = Math.min(
       RAILWAY_DIMENSION_SPEC.switchBladeTaperLengthMeters,
@@ -1561,9 +1510,7 @@ export function buildRailwayGroupInternal(
 
     for (const sideSign of [1, -1] as const) {
       const shouldTaperRail =
-        effectiveSwitchPolicy === 'graph'
-          ? (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign)
-          : (taperStart || taperEnd);
+        (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign);
 
       const railRibbonGeo = buildUvRibbonGeometry3D(railProfile3D, {
         width: railWidth,
@@ -1598,7 +1545,7 @@ export function buildRailwayGroupInternal(
 
     uvRibbonAndSwitchTimeMs += performance.now() - tRib0;
 
-    if (mode === 'candidateB') {
+    {
       const tSlp0 = performance.now();
       const sleeperPeriod = isTram
         ? options?.closeZoomSleeperPeriodMeters
@@ -1615,14 +1562,7 @@ export function buildRailwayGroupInternal(
       const trackSleeperBoxes: SleeperBearerBox3D[] = [];
 
       const rawFirstS = (sleeperPeriod - (startPhaseU % sleeperPeriod)) % sleeperPeriod;
-      const firstS =
-        effectiveSwitchPolicy === 'graph'
-          ? rawFirstS < 0.005
-            ? sleeperPeriod
-            : rawFirstS
-          : rawFirstS < 0.03
-            ? sleeperPeriod * 0.5
-            : rawFirstS;
+      const firstS = rawFirstS < 0.005 ? sleeperPeriod : rawFirstS;
 
       const queryNearbyPlacedBoxes = (qx: number, qz: number): SleeperBearerBox3D[] => {
         const gx = Math.floor(qx / 6);
@@ -1680,36 +1620,9 @@ export function buildRailwayGroupInternal(
         );
         const turnoutPairFlags = new Map<string, boolean>();
         for (const nb of allNeighbors) {
-          let isPair = false;
-          if (effectiveSwitchPolicy === 'graph') {
-            const pairKey = `${r.id}:${nb.trackId}`;
-            if (turnoutPairKeys.has(pairKey)) {
-              isPair = nb.absDist <= 2.28 && nb.cosAngle > 0.72;
-            } else if (unresolvedPairKeys.has(pairKey)) {
-              isPair =
-                nb.cosAngle > 0.86 &&
-                nb.absDist <= 2.28 &&
-                isTurnoutThroatPair(
-                  subdivPts,
-                  scopePtsMap?.get(nb.trackId),
-                  cx,
-                  cz,
-                  nb.absDist
-                );
-            } else {
-              isPair = false;
-            }
-          } else {
-            if (nb.cosAngle > 0.86 && nb.absDist <= 2.28) {
-              isPair = isTurnoutThroatPair(
-                subdivPts,
-                scopePtsMap?.get(nb.trackId),
-                cx,
-                cz,
-                nb.absDist
-              );
-            }
-          }
+          const pairKey = `${r.id}:${nb.trackId}`;
+          const isPair =
+            turnoutPairKeys.has(pairKey) && nb.absDist <= 2.28 && nb.cosAngle > 0.72;
           turnoutPairFlags.set(nb.trackId, isPair);
         }
 
@@ -1721,22 +1634,12 @@ export function buildRailwayGroupInternal(
 
         for (const nb of allNeighbors) {
           const isTurnout = turnoutPairFlags.get(nb.trackId) ?? false;
-          if (effectiveSwitchPolicy === 'graph') {
-            if (isTurnout && nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
-              sharedPartnerTargets.push({
-                trackId: nb.trackId,
-                signedV: nb.signedV,
-                gaugeCenterOffset: nb.gaugeCenterOffset,
-              });
-            }
-          } else {
-            if (nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
-              sharedPartnerTargets.push({
-                trackId: nb.trackId,
-                signedV: nb.signedV,
-                gaugeCenterOffset: nb.gaugeCenterOffset,
-              });
-            }
+          if (isTurnout && nb.absDist <= 1.68 && nb.cosAngle > 0.78) {
+            sharedPartnerTargets.push({
+              trackId: nb.trackId,
+              signedV: nb.signedV,
+              gaugeCenterOffset: nb.gaugeCenterOffset,
+            });
           }
           if (!hostTrackSet.has(nb.trackId) && isTurnout) {
             let reach = Math.min(sleeperHalfW + 2.35, nb.absDist + nb.gaugeCenterOffset + 0.38);
@@ -1821,10 +1724,7 @@ export function buildRailwayGroupInternal(
           if (minDAlong <= sleeperPeriod * 0.62) {
             let hostMinV = Infinity;
             let hostMaxV = -Infinity;
-            let isSharedHost =
-              effectiveSwitchPolicy === 'graph'
-                ? turnoutPairKeys.has(`${r.id}:${hm.trackId}`)
-                : hm.absDist <= 1.68;
+            let isSharedHost = turnoutPairKeys.has(`${r.id}:${hm.trackId}`);
 
             for (const box of nearbyBoxes) {
               if (
@@ -2227,9 +2127,7 @@ export function buildRailwayGroupInternal(
       const tRail3D0 = performance.now();
       for (const sideSign of [1, -1] as const) {
         const shouldTaperRail =
-          effectiveSwitchPolicy === 'graph'
-            ? (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign)
-            : (taperStart || taperEnd);
+          (taperStart || taperEnd) && (taperedSideSign === 0 || sideSign === taperedSideSign);
 
         const rail3DGeo = buildExtrudedRail3DGeometry(
           railProfile3D,
@@ -2427,7 +2325,7 @@ export function buildRailwayGroupInternal(
   let rails3DTarget: THREE.Object3D | null = null;
   let rails3DMat: THREE.MeshStandardMaterial | null = null;
 
-  if (mode === 'candidateB') {
+  {
     sleepers3DMat = resourceManager.registerMaterial(
       new THREE.MeshStandardMaterial({
         color: theme.railwayColors.sleeper || '#64748b',
@@ -2728,7 +2626,7 @@ export function buildRailwayGroupInternal(
     currentCameraZoom = zoom;
     sleepersShaderCtrl?.updateZoom(zoom);
     railsShaderCtrl?.updateZoom(zoom);
-    if (mode === 'candidateB') {
+    {
       const show3D = zoom > RAILWAY_DIMENSION_SPEC.hybridCloseZoomThresholdPxPerMeter;
       if (sleepers3DTarget) sleepers3DTarget.visible = show3D;
       if (rails3DTarget) rails3DTarget.visible = show3D;
@@ -2842,12 +2740,9 @@ export function buildRailwayGroupInternal(
       graphEdgeCount,
       sourceRailwayCount: (data.railways || []).length,
       railwaySwitchPolicy: effectiveSwitchPolicy,
-      confirmedSwitchCount:
-        effectiveSwitchPolicy === 'graph' ? confirmedTurnoutCount : undefined,
-      unresolvedSwitchCount:
-        effectiveSwitchPolicy === 'graph' ? unresolvedTurnoutCount : undefined,
-      graphTaperedBladeCount:
-        effectiveSwitchPolicy === 'graph' ? totalGraphTaperedCount : undefined,
+      confirmedSwitchCount: confirmedTurnoutCount,
+      unresolvedSwitchCount: unresolvedTurnoutCount,
+      graphTaperedBladeCount: totalGraphTaperedCount,
       railwayBallastStrategy: effectiveBallastStrategy,
       ballastFootprintCount: surfaceFirstBallastResult?.stats.footprintCount,
       ballastComponentCount: surfaceFirstBallastResult?.stats.componentCount,

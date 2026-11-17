@@ -37,61 +37,33 @@ import {
 } from '../topology/InfrastructureGraph';
 
 /**
- * Selects the data source mode for road infrastructure rendering in Milestone 2.3 Stage E2.
- *
- * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.roads`
- *   with zero graph construction or adapter overhead when both domains are `'legacy'`.
- * - `'graph-preview'`: Stage E1 preview mode. Builds and validates graph-backed render descriptors
- *   from a single shared `InfrastructureGraph` alongside the legacy road renderer without altering
- *   existing 3D mesh generation.
- * - `'graph'`: Stage E2 graph-driven road rendering mode. Builds and validates `InfrastructureGraph`
- *   and `InfrastructureRenderDescriptorBundle`, then constructs at-grade road ribbons, degree-2
- *   continuity joins, and boundary-derived junction polygons directly from the road render descriptors.
- * - `'graph-surface'`: E2+ experiment: rounded centerline buffers with planar ownership, no junction cuts.
+ * Production road infrastructure render source (`E2+`).
+ * Rounded centerline buffers with planar priority ownership clipping and zero junction cuts.
  */
-export type RoadInfrastructureRenderSource = 'legacy' | 'graph-preview' | 'graph' | 'graph-surface';
+export type RoadInfrastructureRenderSource = 'graph-surface';
 
 /**
- * Selects the data source mode for railway infrastructure rendering in Milestone 2.3 Stage E1–E3.
- *
- * - `'legacy'`: Default production mode. Uses existing `ProcessedMapData.railways`.
- * - `'graph-preview'`: Builds and validates railway render descriptors alongside the legacy railway renderer.
- * - `'graph'`: Stage E3-A1 graph-driven railway rendering mode. Adapts `RailwayEdgeRenderDescriptor`s
- *   into Candidate B inputs preserving baseline heuristic switch geometry.
- * - `'graph-switches'`: Stage E3-A2 graph-informed switch rendering mode. Uses verified
- *   `turnoutTopology` descriptors to govern bearer sharing, sleeper support, and blade tapering.
- * - `'graph-R+'`: Stage E3-B experimental surface-first railway ballast mode. Uses consolidated 2D
- *   ballast footprints while preserving graph-informed rails, sleepers, and switch semantics.
+ * Production railway infrastructure render source (`E3-B` / `R+`).
+ * Consolidated 2D surface-first ballast footprints paired with graph-informed rails, sleepers, and switches.
  */
-export type RailwayInfrastructureRenderSource =
-  | 'legacy'
-  | 'graph-preview'
-  | 'graph'
-  | 'graph-switches'
-  | 'graph-R+';
+export type RailwayInfrastructureRenderSource = 'graph-R+';
 
 /**
- * Switch policy governing railway turnout bearer sharing and blade tapering (Stage E3-A2).
- *
- * - `'heuristic'`: Historical Candidate B behavior using `isTurnoutThroatPair` proximity detection.
- * - `'graph'`: Graph-informed behavior consuming `RailwayNodeRenderDescriptor.turnoutTopology`.
+ * Switch policy governing railway turnout bearer sharing and blade tapering (`graph`).
  */
-export type RailwaySwitchPolicy = 'heuristic' | 'graph';
+export type RailwaySwitchPolicy = 'graph';
 
 /**
- * Strategy governing at-grade railway ballast surface construction (Stage E3-B).
- *
- * - `'ribbon'`: Candidate B continuous track-aligned UV ribbons with overlapping parallel/switch footprints.
- * - `'surface-first'`: Stage E3-B consolidated 2D polygonal ballast footprints unioned per connected component.
+ * Strategy governing at-grade railway ballast surface construction (`surface-first`).
  */
-export type RailwayBallastStrategy = 'ribbon' | 'surface-first';
+export type RailwayBallastStrategy = 'surface-first';
 
 export type InfrastructureRenderSource =
   | RoadInfrastructureRenderSource
   | RailwayInfrastructureRenderSource;
 
 /**
- * Independent developer configuration switches for road and railway topology-to-renderer modes.
+ * Canonical infrastructure render configuration (`E2+` roads + `R+` railways) plus inspection overlays.
  */
 export interface InfrastructureRenderOptions {
   roads: RoadInfrastructureRenderSource;
@@ -113,88 +85,52 @@ export interface InfrastructureRenderOptions {
 }
 
 /**
- * Default infrastructure render configuration (both domains use `'legacy'`).
+ * Default canonical production infrastructure render configuration (`E2+` + `R+`).
  */
 export const DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS: Readonly<InfrastructureRenderOptions> =
   Object.freeze({
-    roads: 'legacy',
-    railways: 'legacy',
+    roads: 'graph-surface',
+    railways: 'graph-R+',
+    railwaySwitchPolicy: 'graph',
+    railwayBallastStrategy: 'surface-first',
   });
 
 /**
- * Parses a raw string value into a valid `RoadInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph'`),
- * resolving any absent or unrecognized value safely to `'legacy'`.
+ * Resolves any road render source input to the canonical `'graph-surface'` (`E2+`) production mode.
  */
 export function parseRoadInfrastructureRenderSource(
-  raw: string | null | undefined
+  _raw?: string | null
 ): RoadInfrastructureRenderSource {
-  if (typeof raw !== 'string') return 'legacy';
-  const normalized = raw.trim();
-  if (normalized === 'graph-preview' || normalized === 'graph' || normalized === 'graph-surface') {
-    return normalized;
-  }
-  return 'legacy';
+  return 'graph-surface';
 }
 
 /**
- * Parses a raw string value into a valid `RailwayInfrastructureRenderSource` (`'legacy' | 'graph-preview' | 'graph' | 'graph-switches'`),
- * resolving any absent or unrecognized value safely to `'legacy'`.
+ * Resolves any railway render source input to the canonical `'graph-R+'` (`R+`) production mode.
  */
 export function parseRailwayInfrastructureRenderSource(
-  raw: string | null | undefined
+  _raw?: string | null
 ): RailwayInfrastructureRenderSource {
-  if (typeof raw !== 'string') return 'legacy';
-  const trimmed = raw.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === 'graph-preview') return 'graph-preview';
-  if (lower === 'graph') return 'graph';
-  if (lower === 'graph-switches') return 'graph-switches';
-  if (lower === 'graph-r+' || lower === 'graph-r ' || lower === 'graph-r') return 'graph-R+';
-  return 'legacy';
+  return 'graph-R+';
 }
 
 /**
- * Parses a raw string value into a valid `RailwaySwitchPolicy` (`'heuristic' | 'graph'`).
+ * Resolves any switch policy input to the canonical `'graph'` production policy.
  */
 export function parseRailwaySwitchPolicy(
-  raw: string | null | undefined,
-  renderSource?: RailwayInfrastructureRenderSource
+  _raw?: string | null,
+  _renderSource?: RailwayInfrastructureRenderSource
 ): RailwaySwitchPolicy {
-  if (typeof raw === 'string') {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized === 'graph') return 'graph';
-    if (normalized === 'heuristic' || normalized === 'legacy') return 'heuristic';
-  }
-  if (renderSource === 'graph-switches' || renderSource === 'graph-R+') {
-    return 'graph';
-  }
-  return 'heuristic';
+  return 'graph';
 }
 
 /**
- * Parses a raw string value into a valid `RailwayBallastStrategy` (`'ribbon' | 'surface-first'`).
+ * Resolves any ballast strategy input to the canonical `'surface-first'` production strategy.
  */
 export function parseRailwayBallastStrategy(
-  raw: string | null | undefined,
-  renderSource?: RailwayInfrastructureRenderSource
+  _raw?: string | null,
+  _renderSource?: RailwayInfrastructureRenderSource
 ): RailwayBallastStrategy {
-  if (typeof raw === 'string') {
-    const normalized = raw.trim().toLowerCase();
-    if (
-      normalized === 'surface-first' ||
-      normalized === 'surface' ||
-      normalized === 'r+' ||
-      normalized === 'r ' ||
-      normalized === 'r'
-    ) {
-      return 'surface-first';
-    }
-    if (normalized === 'ribbon' || normalized === 'legacy') return 'ribbon';
-  }
-  if (renderSource === 'graph-R+') {
-    return 'surface-first';
-  }
-  return 'ribbon';
+  return 'surface-first';
 }
 
 /**
@@ -261,8 +197,8 @@ export function parseInfrastructureRenderSource(
 }
 
 /**
- * Normalizes partial or undefined `InfrastructureRenderOptions` so `roads` is guaranteed to be
- * `'legacy' | 'graph-preview' | 'graph'` and `railways` is guaranteed to be `'legacy' | 'graph-preview'`.
+ * Normalizes partial or undefined `InfrastructureRenderOptions` to the canonical production
+ * `E2+ / R+` architecture while preserving optional tunnel inspection overlay booleans.
  */
 export function normalizeInfrastructureRenderOptions(
   options?: {
@@ -274,73 +210,43 @@ export function normalizeInfrastructureRenderOptions(
     showHiddenUndergroundGeometry?: boolean | null;
   } | null
 ): InfrastructureRenderOptions {
-  if (!options) {
-    return {
-      roads: DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.roads,
-      railways: DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS.railways,
-    };
-  }
-  const railways = parseRailwayInfrastructureRenderSource(options.railways);
   const result: InfrastructureRenderOptions = {
-    roads: parseRoadInfrastructureRenderSource(options.roads),
-    railways,
+    roads: 'graph-surface',
+    railways: 'graph-R+',
+    railwaySwitchPolicy: 'graph',
+    railwayBallastStrategy: 'surface-first',
   };
-  if (
-    options.railwaySwitchPolicy !== undefined ||
-    railways === 'graph-switches' ||
-    railways === 'graph-R+'
-  ) {
-    result.railwaySwitchPolicy = parseRailwaySwitchPolicy(options.railwaySwitchPolicy, railways);
-  }
-  if (options.railwayBallastStrategy !== undefined || railways === 'graph-R+') {
-    result.railwayBallastStrategy = parseRailwayBallastStrategy(
-      options.railwayBallastStrategy,
-      railways
-    );
-  }
-  if (typeof options.showUndergroundTunnelTraces === 'boolean') {
+  if (options && typeof options.showUndergroundTunnelTraces === 'boolean') {
     result.showUndergroundTunnelTraces = options.showUndergroundTunnelTraces;
   }
-  if (typeof options.showHiddenUndergroundGeometry === 'boolean') {
+  if (options && typeof options.showHiddenUndergroundGeometry === 'boolean') {
     result.showHiddenUndergroundGeometry = options.showHiddenUndergroundGeometry;
   }
   return result;
 }
 
 /**
- * Parses independent `topologyRoads` and `topologyRailways` developer switches
- * from a URL query string (e.g. `?topologyRoads=graph&topologyRailways=legacy`)
- * or `URLSearchParams` instance. Invalid or missing parameters resolve to `'legacy'`.
+ * Parses optional inspection flags (`showUndergroundTunnelTraces`, `showHiddenUndergroundGeometry`)
+ * from URL search parameters while always resolving render engines to canonical `E2+ / R+`.
  */
 export function parseInfrastructureRenderOptionsFromSearch(
   search: string | URLSearchParams | null | undefined
 ): InfrastructureRenderOptions {
   if (!search) {
     return {
-      roads: 'legacy',
-      railways: 'legacy',
+      ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
     };
   }
   const params =
     typeof search === 'string'
       ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
       : search;
-  const railways = parseRailwayInfrastructureRenderSource(params.get('topologyRailways'));
-  const rawPolicy = params.get('railwaySwitchPolicy') ?? params.get('railwaySwitches');
-  const rawBallast = params.get('railwayBallastStrategy') ?? params.get('railwayBallast');
   const rawTraces = params.get('showUndergroundTunnelTraces') ?? params.get('tunnelTraces');
   const rawUnderground =
     params.get('showHiddenUndergroundGeometry') ?? params.get('undergroundCutaway');
   const result: InfrastructureRenderOptions = {
-    roads: parseRoadInfrastructureRenderSource(params.get('topologyRoads')),
-    railways,
+    ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
   };
-  if (rawPolicy !== null || railways === 'graph-switches' || railways === 'graph-R+') {
-    result.railwaySwitchPolicy = parseRailwaySwitchPolicy(rawPolicy, railways);
-  }
-  if (rawBallast !== null || railways === 'graph-R+') {
-    result.railwayBallastStrategy = parseRailwayBallastStrategy(rawBallast, railways);
-  }
   if (rawTraces === 'true' || rawTraces === '1') {
     result.showUndergroundTunnelTraces = true;
   } else if (rawTraces === 'false' || rawTraces === '0') {
@@ -355,15 +261,13 @@ export function parseInfrastructureRenderOptionsFromSearch(
 }
 
 /**
- * Returns `true` if at least one domain (`roads` or `railways`) requires `InfrastructureGraph`
- * and `InfrastructureRenderDescriptorBundle` construction (i.e. `'graph-preview'` or `'graph'`).
- * When both domains are `'legacy'`, callers must skip `buildInfrastructureGraph` and adapter execution.
+ * Returns `true`: the production `E2+ / R+` pipeline always constructs `InfrastructureGraph`
+ * and `InfrastructureRenderDescriptorBundle`.
  */
 export function requiresInfrastructureGraphPreview(
-  options?: { roads?: string | null; railways?: string | null } | null
+  _options?: { roads?: string | null; railways?: string | null } | null
 ): boolean {
-  const normalized = normalizeInfrastructureRenderOptions(options);
-  return normalized.roads !== 'legacy' || normalized.railways !== 'legacy';
+  return true;
 }
 
 /**
@@ -1887,34 +1791,14 @@ export function validateInfrastructureRenderDescriptors(
 }
 
 /**
- * Prepares the Stage E1 infrastructure render preview for a dataset.
- *
- * - When both `options.roads` and `options.railways` are `'legacy'` (the default),
- *   returns immediately with `graph: null, descriptors: null` and zero CPU overhead.
- * - When either `options.roads` or `options.railways` is `'graph-preview'`,
- *   builds **one shared `InfrastructureGraph`** for the dataset, adapts it into
- *   `InfrastructureRenderDescriptorBundle`, and validates its contracts.
+ * Prepares the unified `InfrastructureGraph` and `InfrastructureRenderDescriptorBundle`
+ * consumed by the production `E2+ / R+` road and railway geometry builders.
  */
 export function prepareInfrastructureRenderPreview(
   input: ProcessedMapData | TopologySourceData,
   options?: Partial<InfrastructureRenderOptions> | null
 ): InfrastructureRenderPreviewResult {
   const normalizedOptions = normalizeInfrastructureRenderOptions(options);
-  if (!requiresInfrastructureGraphPreview(normalizedOptions)) {
-    return {
-      options: normalizedOptions,
-      graph: null,
-      descriptors: null,
-      validation: null,
-      timing: {
-        graphBuildTimeMs: 0,
-        adapterBuildTimeMs: 0,
-        validationTimeMs: 0,
-        totalPreviewTimeMs: 0,
-      },
-    };
-  }
-
   const tStart = performance.now();
 
   const tGraph0 = performance.now();

@@ -231,7 +231,7 @@ export function parseBrowserRunnerCliArgs(argv: readonly string[]): ParsedBrowse
     if (measuredFramesOverride === undefined) measuredFramesOverride = 12;
     if (reloadCyclesOverride === undefined) reloadCyclesOverride = 2;
     if (!hasConfigFlag) {
-      configAcc.push('production-legacy', 'surface-first-e2plus-rplus');
+      configAcc.push('surface-first-e2plus-rplus');
       hasConfigFlag = true;
     }
     if (!hasDatasetFlag) {
@@ -331,7 +331,7 @@ export function parseCpuRunnerCliArgs(argv: readonly string[]): ParsedCpuCliOpti
     warmupIterations = Math.min(warmupIterations, 1);
     measuredIterations = Math.min(measuredIterations, 3);
     if (!hasConfigFlag) {
-      configAcc.push('production-legacy', 'surface-first-e2plus-rplus');
+      configAcc.push('surface-first-e2plus-rplus');
       hasConfigFlag = true;
     }
     if (!hasDatasetFlag) {

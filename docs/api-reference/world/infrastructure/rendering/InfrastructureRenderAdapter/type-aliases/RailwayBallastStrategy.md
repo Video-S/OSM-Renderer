@@ -6,11 +6,8 @@
 
 # Type Alias: RailwayBallastStrategy
 
-> **RailwayBallastStrategy** = `"ribbon"` \| `"surface-first"`
+> **RailwayBallastStrategy** = `"surface-first"`
 
-Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:87
+Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:59
 
-Strategy governing at-grade railway ballast surface construction (Stage E3-B).
-
-- `'ribbon'`: Candidate B continuous track-aligned UV ribbons with overlapping parallel/switch footprints.
-- `'surface-first'`: Stage E3-B consolidated 2D polygonal ballast footprints unioned per connected component.
+Strategy governing at-grade railway ballast surface construction (`surface-first`).

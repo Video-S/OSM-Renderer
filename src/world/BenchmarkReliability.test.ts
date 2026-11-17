@@ -70,8 +70,8 @@ function makeReadySnapshot(
     regionName: 'Synthetic Stress Urban Switchyard',
     prototypeMode: 'production',
     infrastructureRenderOptions: {
-      roads: 'legacy',
-      railways: 'legacy',
+      roads: 'graph-surface',
+      railways: 'graph-R+',
     },
     themeId: 'tactical',
     sceneRevision: 3,
@@ -345,8 +345,8 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
       const valid = validateSceneReadinessSnapshot(makeReadySnapshot(), {
         expectedRevision: 3,
         datasetId: 'synthetic-stress-urban-switchyard',
-        roadsMode: 'legacy',
-        railwaysMode: 'legacy',
+        roadsMode: 'graph-surface',
+        railwaysMode: 'graph-R+',
         railwayPrototypeMode: 'production',
         themeId: 'tactical',
         expectNonEmptyScene: true,
@@ -365,8 +365,8 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         {
           expectedRevision: 3,
           datasetId: 'synthetic-stress-urban-switchyard',
-          roadsMode: 'legacy',
-          railwaysMode: 'legacy',
+          roadsMode: 'graph-surface',
+          railwaysMode: 'graph-R+',
           railwayPrototypeMode: 'production',
           expectNonEmptyScene: true,
         }
@@ -380,8 +380,8 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         {
           expectedRevision: 3,
           datasetId: 'synthetic-stress-urban-switchyard',
-          roadsMode: 'legacy',
-          railwaysMode: 'legacy',
+          roadsMode: 'graph-surface',
+          railwaysMode: 'graph-R+',
           railwayPrototypeMode: 'production',
           expectNonEmptyScene: true,
           minWebglFramesRendered: 1,
@@ -400,8 +400,8 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         {
           expectedRevision: 3,
           datasetId: 'synthetic-stress-urban-switchyard',
-          roadsMode: 'legacy',
-          railwaysMode: 'legacy',
+          roadsMode: 'graph-surface',
+          railwaysMode: 'graph-R+',
           railwayPrototypeMode: 'production',
           expectNonEmptyScene: false,
         }
@@ -412,32 +412,43 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
 
   describe('4. Stale Snapshot Rejection Across Dataset & Config Transitions', () => {
     it('rejects snapshots from previous datasets, renderer configs, themes, or scene revisions', () => {
-      const legacySmallSnap = makeReadySnapshot({
+      const prevDatasetSnap = makeReadySnapshot({
         locationId: 'small-real-europatunnel',
         sceneRevision: 2,
-        infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
+        infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
         themeId: 'tactical',
       });
 
-      const datasetMismatch = validateSceneReadinessSnapshot(legacySmallSnap, {
+      const datasetMismatch = validateSceneReadinessSnapshot(prevDatasetSnap, {
         expectedRevision: 3,
         datasetId: 'synthetic-stress-urban-switchyard',
-        roadsMode: 'legacy',
-        railwaysMode: 'legacy',
+        roadsMode: 'graph-surface',
+        railwaysMode: 'graph-R+',
         railwayPrototypeMode: 'production',
         expectNonEmptyScene: true,
       });
       assert.equal(datasetMismatch.ready, false);
       assert.match(datasetMismatch.reason || '', /Dataset mismatch/);
 
-      const configTransitionMismatch = validateSceneReadinessSnapshot(legacySmallSnap, {
-        expectedRevision: 2,
-        datasetId: 'small-real-europatunnel',
-        roadsMode: 'graph-surface',
-        railwaysMode: 'graph-R+',
-        railwayPrototypeMode: 'production',
-        expectNonEmptyScene: true,
-      });
+      const configTransitionMismatch = validateSceneReadinessSnapshot(
+        makeReadySnapshot({
+          locationId: 'small-real-europatunnel',
+          sceneRevision: 2,
+          infrastructureRenderOptions: {
+            roads: 'legacy' as unknown as 'graph-surface',
+            railways: 'graph-R+',
+          },
+          themeId: 'tactical',
+        }),
+        {
+          expectedRevision: 2,
+          datasetId: 'small-real-europatunnel',
+          roadsMode: 'graph-surface',
+          railwaysMode: 'graph-R+',
+          railwayPrototypeMode: 'production',
+          expectNonEmptyScene: true,
+        }
+      );
       assert.equal(configTransitionMismatch.ready, false);
       assert.match(configTransitionMismatch.reason || '', /Roads render mode mismatch/);
 
@@ -445,7 +456,10 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         makeReadySnapshot({
           locationId: 'small-real-europatunnel',
           sceneRevision: 2,
-          infrastructureRenderOptions: { roads: 'graph-surface', railways: 'legacy' },
+          infrastructureRenderOptions: {
+            roads: 'graph-surface',
+            railways: 'legacy' as unknown as 'graph-R+',
+          },
         }),
         {
           expectedRevision: 2,
@@ -459,11 +473,11 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
       assert.equal(railwaysTransitionMismatch.ready, false);
       assert.match(railwaysTransitionMismatch.reason || '', /Railways render mode mismatch/);
 
-      const staleRevision = validateSceneReadinessSnapshot(legacySmallSnap, {
+      const staleRevision = validateSceneReadinessSnapshot(prevDatasetSnap, {
         expectedRevision: 5,
         datasetId: 'small-real-europatunnel',
-        roadsMode: 'legacy',
-        railwaysMode: 'legacy',
+        roadsMode: 'graph-surface',
+        railwaysMode: 'graph-R+',
         railwayPrototypeMode: 'production',
         expectNonEmptyScene: true,
       });
@@ -665,8 +679,8 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         'static_overview',
         'automated_pan_sweep',
         '--configs',
-        'production-legacy,',
-        'graph-e2-e3',
+        'surface-first-e2plus-rplus,',
+        'surface-first-e2plus-rplus',
         '--scenario',
         'static_close_junction',
         '--swiftshader',
@@ -677,7 +691,7 @@ describe('TKT-017: Benchmark Infrastructure Reliability & Windows Compatibility'
         'automated_pan_sweep',
         'static_close_junction',
       ]);
-      assert.deepEqual(powershellSplit.configIds, ['production-legacy', 'graph-e2-e3']);
+      assert.deepEqual(powershellSplit.configIds, ['surface-first-e2plus-rplus']);
       assert.equal(powershellSplit.useSwiftShader, true);
       assert.equal(powershellSplit.outputPath, undefined);
 

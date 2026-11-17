@@ -104,52 +104,39 @@ describe('Dedicated busway rendering (E2 isolated extension)', () => {
     assert.ok(buswayLegacy.some((r) => r.primaryTag === 'highway=busway'));
   });
 
-  it('emits inspectable busway surface meshes in legacy, graph-preview, and graph modes', () => {
+  it('emits inspectable busway surface meshes in production graph-surface mode', () => {
     const data = makeBuswayDataset();
-    const legacyScene = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'legacy', railways: 'legacy' },
-    }).buildScene(data, MAP_THEMES.tactical);
-    const preview = prepareInfrastructureRenderPreview(data, {
-      roads: 'graph-preview', railways: 'legacy',
-    });
-    const previewScene = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'graph-preview', railways: 'legacy' },
-      infrastructureRenderPreview: preview,
-    }).buildScene(data, MAP_THEMES.tactical);
     const graphPreview = prepareInfrastructureRenderPreview(data, {
-      roads: 'graph', railways: 'legacy',
+      roads: 'graph-surface', railways: 'graph-R+',
     });
     assert.ok(graphPreview.graph);
     assert.ok(graphPreview.descriptors);
     assert.equal(graphPreview.validation?.isValid, true);
     const graphScene = new GeometryBuilder({
-      infrastructureRenderOptions: { roads: 'graph', railways: 'legacy' },
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
       infrastructureRenderPreview: graphPreview,
     }).buildScene(data, MAP_THEMES.tactical);
     try {
-      for (const scene of [legacyScene, previewScene, graphScene]) {
-        const buswayMesh = scene.roadsGroup.children.find((o) => o.name === 'Roads_busway') as THREE.Mesh | undefined;
-        assert.ok(buswayMesh, 'Dedicated busway must be a rendered road mesh');
-        assert.ok(buswayMesh.geometry.getAttribute('position').count > 0);
-        const ranges = buswayMesh.userData.faceRanges;
-        assert.ok(Array.isArray(ranges));
-        for (const id of ['way/busway-explicit', 'way/busway-two-way', 'way/busway-one-way']) {
-          assert.ok(
-            ranges.some((r: { info: { sourceFeatureId: string } }) => r.info.sourceFeatureId === id),
-            'Busway mesh must preserve source provenance for ' + id
-          );
-        }
-        assert.ok(scene.roadsGroup.children.some((o) => o.name === 'Roads_bus_guideway'));
-        assert.ok(scene.roadsGroup.children.some((o) => o.name === 'Roads_secondary'));
-        assert.ok(!scene.roadsGroup.children.some((o) => o.name === 'Roads_bus_lane'));
+      const buswayMesh = graphScene.roadsGroup.children.find((o) => o.name === 'Roads_busway') as THREE.Mesh | undefined;
+      assert.ok(buswayMesh, 'Dedicated busway must be a rendered road mesh');
+      assert.ok(buswayMesh.geometry.getAttribute('position').count > 0);
+      const ranges = buswayMesh.userData.faceRanges;
+      assert.ok(Array.isArray(ranges));
+      for (const id of ['way/busway-explicit', 'way/busway-two-way', 'way/busway-one-way']) {
+        assert.ok(
+          ranges.some((r: { info: { sourceFeatureId: string } }) => r.info.sourceFeatureId === id),
+          'Busway mesh must preserve source provenance for ' + id
+        );
       }
+      assert.ok(graphScene.roadsGroup.children.some((o) => o.name === 'Roads_bus_guideway'));
+      assert.ok(graphScene.roadsGroup.children.some((o) => o.name === 'Roads_secondary'));
+      assert.ok(!graphScene.roadsGroup.children.some((o) => o.name === 'Roads_bus_lane'));
+
       const report = auditGraphRoadMeshIntegrity(graphScene.roadsGroup);
       assert.ok(report.auditedTriangleCount > 0);
       assert.equal(report.negativelyWoundCount, 0);
       assert.equal(report.storedNormalMismatchCount, 0);
     } finally {
-      legacyScene.dispose();
-      previewScene.dispose();
       graphScene.dispose();
     }
   });

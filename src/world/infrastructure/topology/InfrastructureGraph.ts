@@ -138,7 +138,16 @@ function extractTopologySourceFromInput(
     const sourceId = r.sourceFeatureId || r.id || `feat-${idx + 1}`;
     const hasExplicit = !/^feat-\d+$/.test(sourceId);
     const rawNodeIds: (string | undefined)[] = r.points.map((_, pIdx) => {
-      const nid = r.nodeIds && pIdx < r.nodeIds.length ? r.nodeIds[pIdx] : undefined;
+      const nid =
+        r.nodeIds && r.nodeIds.length === 2 && r.points.length > 2
+          ? pIdx === 0
+            ? r.nodeIds[0]
+            : pIdx === r.points.length - 1
+              ? r.nodeIds[1]
+              : undefined
+          : r.nodeIds && pIdx < r.nodeIds.length
+            ? r.nodeIds[pIdx]
+            : undefined;
       if (nid === undefined || nid === null) return undefined;
       const s = String(nid).trim();
       if (!s || s.startsWith('tn_')) return undefined;
@@ -170,7 +179,16 @@ function extractTopologySourceFromInput(
     const sourceId = rw.sourceFeatureId || rw.id || `feat-${idx + 1}`;
     const hasExplicit = !/^feat-\d+$/.test(sourceId);
     const rawNodeIds: (string | undefined)[] = rw.points.map((_, pIdx) => {
-      const nid = rw.nodeIds && pIdx < rw.nodeIds.length ? rw.nodeIds[pIdx] : undefined;
+      const nid =
+        rw.nodeIds && rw.nodeIds.length === 2 && rw.points.length > 2
+          ? pIdx === 0
+            ? rw.nodeIds[0]
+            : pIdx === rw.points.length - 1
+              ? rw.nodeIds[1]
+              : undefined
+          : rw.nodeIds && pIdx < rw.nodeIds.length
+            ? rw.nodeIds[pIdx]
+            : undefined;
       if (nid === undefined || nid === null) return undefined;
       const s = String(nid).trim();
       if (!s || s.startsWith('tn_')) return undefined;
@@ -198,7 +216,9 @@ function extractTopologySourceFromInput(
       electrified: tags.electrified !== undefined ? String(tags.electrified) : undefined,
       service: tags.service !== undefined ? String(tags.service) : undefined,
       usage: tags.usage !== undefined ? String(tags.usage) : undefined,
-      isSecondaryBranch: false,
+      isSecondaryBranch: Boolean(
+        tags.service || (tags.usage && String(tags.usage).toLowerCase() !== 'main')
+      ),
       osmTags: tags,
     };
   });

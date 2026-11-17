@@ -26,10 +26,7 @@ import {
 } from 'lucide-react';
 import {
   InfrastructureRenderOptions,
-  RoadInfrastructureRenderSource,
-  RailwayInfrastructureRenderSource,
 } from '../world/infrastructure/rendering/InfrastructureRenderAdapter';
-import { RailwayPrototypeMode } from '../world/prototype/RailwayPrototypeBuilder';
 import {
   RAILWAY_PROTOTYPE_ZONE_PRESETS,
   RailwayPrototypeZoneId,
@@ -56,8 +53,6 @@ export interface DevToolsPanelProps {
   // Rendering controls
   infrastructureRenderOptions: InfrastructureRenderOptions;
   onChangeInfrastructureRenderOptions: (opts: Partial<InfrastructureRenderOptions>) => void;
-  railwayPrototypeMode: RailwayPrototypeMode;
-  onChangeRailwayPrototypeMode: (mode: RailwayPrototypeMode) => void;
   wireframe: boolean;
   onToggleWireframe: () => void;
   showGraphOverlay?: boolean;
@@ -105,8 +100,6 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   onClose,
   infrastructureRenderOptions,
   onChangeInfrastructureRenderOptions,
-  railwayPrototypeMode,
-  onChangeRailwayPrototypeMode,
   wireframe,
   onToggleWireframe,
   showGraphOverlay = false,
@@ -151,6 +144,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   const [reportSeverity, setReportSeverity] = useState<'critical' | 'high' | 'medium' | 'low'>('medium');
   const [reportCategory, setReportCategory] = useState<'junction' | 'width' | 'alignment' | 'railway' | 'elevation' | 'other'>('junction');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+  const [exportErrorMsg, setExportErrorMsg] = useState<string | null>(null);
   const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
   const [copiedLoadDiagStatus, setCopiedLoadDiagStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
@@ -159,6 +153,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   if (!isOpen) return null;
 
   const handleExportReproduction = () => {
+    setExportErrorMsg(null);
     try {
       const selectedList =
         selectedFeatures && selectedFeatures.length > 0
@@ -182,7 +177,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
         mapData,
         fullRawGeoJson: currentRawGeoJson,
         infrastructureRenderOptions,
-        railwayPrototypeMode,
+        railwayPrototypeMode: 'production',
         cameraPose: currentCameraPose,
         spatialBoxMeters: selectedBoxMeters ?? undefined,
         roadWidthMultiplier,
@@ -212,7 +207,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
       setTimeout(() => setExportSuccessMsg(null), 4000);
     } catch (err: any) {
       console.error('Failed to export reproduction package:', err);
-      alert(`Export failed: ${err.message}`);
+      setExportErrorMsg(`Export failed: ${err?.message || String(err)}`);
     }
   };
 
@@ -312,12 +307,9 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
           <div>
             <h2 id="dev-tools-heading" className="text-sm font-bold text-slate-100 flex items-center gap-2">
               Developer Tools
-              <span className="px-1.5 py-0.5 text-[10px] uppercase font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded">
-                E2 Active
-              </span>
             </h2>
             <p className="text-[11px] text-slate-400">
-              Runtime renderer switching, inspection & reproduction export
+              Production E2+/R+ diagnostics, inspection & reproduction export
             </p>
           </div>
         </div>
@@ -385,223 +377,34 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
         {/* TAB 1: RENDERING CONTROLS */}
         {activeDevTab === 'rendering' && (
           <div className="space-y-4">
-            {/* Road Renderer Selector */}
+            {/* Production Infrastructure Engine Summary */}
             <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200">Road Infrastructure Engine</span>
-                <span className="text-[10px] font-mono text-cyan-400">
-                  Active: {infrastructureRenderOptions.roads}
+                <span className="text-xs font-bold text-slate-200">Production Engine (E2+ / R+)</span>
+                <span className="text-[10px] font-mono text-emerald-400">
+                  Active
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Switch road technology in-memory without reloading the page.
+                Unified surface-first 2D road footprints + priority Boolean ownership clipping (E2+) and hybrid 3D close-zoom sleepers/rails + unified 2D ballast footprints (R+).
               </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onChangeInfrastructureRenderOptions({ roads: 'legacy' })}
-                  className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                    infrastructureRenderOptions.roads === 'legacy'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Legacy</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Stage 6A–C centerline ribbons</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onChangeInfrastructureRenderOptions({ roads: 'graph' })}
-                  className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                    infrastructureRenderOptions.roads === 'graph'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs flex items-center justify-between">
-                    <span>Graph (E2)</span>
-                    <span className="text-[9px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 rounded">New</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Boundary-derived junctions & miters</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onChangeInfrastructureRenderOptions({ roads: 'graph-surface' })}
-                  className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                    infrastructureRenderOptions.roads === 'graph-surface'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs flex items-center gap-2">
-                    <span>Graph (E2+)</span>
-                    <span className="text-[9px] text-amber-300">Experimental</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Rounded footprints · no junction patches</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onChangeInfrastructureRenderOptions({ roads: 'graph-preview' })}
-                  className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                    infrastructureRenderOptions.roads === 'graph-preview'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Preview (E1)</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Adapter validation alongside legacy</div>
-                </button>
-              </div>
-            </section>
-
-            {/* Railway Renderer Selector */}
-            <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200">Railway Infrastructure Engine</span>
-                <span className="text-[10px] font-mono text-cyan-400">
-                  Mode: {railwayPrototypeMode} · Adapter: {infrastructureRenderOptions.railways}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                M2.2 production implements Candidate B. Stage E3-A1 allows Candidate B to consume graph descriptors directly.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({
-                      railways: 'legacy',
-                      railwaySwitchPolicy: 'heuristic',
-                    });
-                  }}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'production' && infrastructureRenderOptions.railways === 'legacy'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Production (Legacy)</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">3D sleepers & procedural ballast</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({
-                      railways: 'graph',
-                      railwaySwitchPolicy: 'heuristic',
-                    });
-                  }}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'production' &&
-                    infrastructureRenderOptions.railways === 'graph' &&
-                    infrastructureRenderOptions.railwaySwitchPolicy !== 'graph'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Graph-Driven (E3-A1)</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Candidate B via graph descriptors</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({
-                      railways: 'graph-switches',
-                      railwaySwitchPolicy: 'graph',
-                    });
-                  }}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'production' &&
-                    (infrastructureRenderOptions.railways === 'graph-switches' ||
-                      (infrastructureRenderOptions.railways === 'graph' &&
-                        infrastructureRenderOptions.railwaySwitchPolicy === 'graph'))
-                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs flex items-center justify-between">
-                    <span>Graph + Switches (E3-A2)</span>
-                    <span className="text-[9px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 rounded">New</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Verified bearer sharing & blade taper</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({
-                      railways: 'graph-R+',
-                      railwaySwitchPolicy: 'graph',
-                      railwayBallastStrategy: 'surface-first',
-                    });
-                  }}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'production' &&
-                    (infrastructureRenderOptions.railways === 'graph-R+' ||
-                      infrastructureRenderOptions.railwayBallastStrategy === 'surface-first')
-                      ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs flex items-center justify-between">
-                    <span>Graph + R+ (E3-B)</span>
-                    <span className="text-[9px] px-1 py-0.2 bg-purple-500/20 text-purple-300 rounded">R+</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Surface-first unified ballast</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeRailwayPrototypeMode('production');
-                    onChangeInfrastructureRenderOptions({ railways: 'graph-preview' });
-                  }}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    infrastructureRenderOptions.railways === 'graph-preview'
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Graph Topology Preview</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Stage E1 adapter descriptor validation</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onChangeRailwayPrototypeMode('candidateA')}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer ${
-                    railwayPrototypeMode === 'candidateA'
-                      ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Prototype Candidate A</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Continuous UV ribbon prototype</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onChangeRailwayPrototypeMode('disabled')}
-                  className={`p-2 rounded-lg border text-left transition cursor-pointer col-span-2 ${
-                    railwayPrototypeMode === 'disabled'
-                      ? 'bg-rose-500/20 border-rose-400 text-rose-200 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="text-xs">Disabled (Isolate Map)</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Zero railway geometry</div>
-                </button>
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                  <div className="text-[10px] text-slate-500">Roads</div>
+                  <div className="text-emerald-300 font-semibold">{infrastructureRenderOptions.roads}</div>
+                </div>
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                  <div className="text-[10px] text-slate-500">Railways</div>
+                  <div className="text-amber-300 font-semibold">{infrastructureRenderOptions.railways}</div>
+                </div>
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                  <div className="text-[10px] text-slate-500">Switch Policy</div>
+                  <div className="text-cyan-300 font-semibold">{infrastructureRenderOptions.railwaySwitchPolicy ?? 'graph'}</div>
+                </div>
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                  <div className="text-[10px] text-slate-500">Ballast Strategy</div>
+                  <div className="text-purple-300 font-semibold">{infrastructureRenderOptions.railwayBallastStrategy ?? 'surface-first'}</div>
+                </div>
               </div>
             </section>
 
@@ -1340,6 +1143,26 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                   <span>{exportSuccessMsg}</span>
+                </div>
+              )}
+
+              {exportErrorMsg && (
+                <div
+                  role="alert"
+                  className="p-2 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{exportErrorMsg}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExportErrorMsg(null)}
+                    className="text-rose-300 hover:text-white font-bold px-1 cursor-pointer"
+                    aria-label="Dismiss export error"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 

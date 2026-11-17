@@ -5,7 +5,7 @@
 ## Product & Goalpost
 
 - **Product**: Browser-based 3D OpenStreetMap Viewer
-- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, General Performance Benchmarking Infrastructure `TKT-016`, Benchmark Reliability & Windows Compatibility `TKT-017`, Regional Rendering Scalability Assessment `TKT-019`, Planar Surface / Road Blocker Scaling Optimization `TKT-020`, Persistent Offline Overijssel OSM Store `TKT-022`, & Building Draw-Call Optimization `TKT-023` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, Stage E4-T2 `M2.3-E4-T2` / `TKT-015`, & End-to-End Map Loading Investigation `TKT-021` `in_progress` pending owner review/capture; `TKT-018` full-test-suite memory investigation remains `open`; Stages `E4-B` and `E5` require separate explicit approval)
+- **Active Goalpost**: **Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings** (Milestones 2.1 & 2.2 complete; Milestone 2.3 Stage A `M2.3-A` / `TKT-003`, Stage B `M2.3-B` / `TKT-004`, Stage C `M2.3-C` / `TKT-005`, Stage D `M2.3-D` / `TKT-006`, Stage E1 `M2.3-E1` / `TKT-007`, Stage E3-A1 `M2.3-E3-A1` / `TKT-010`, Stage E3-A2 `M2.3-E3-A2` / `TKT-011`, Stage E3-B `M2.3-E3-B` / `TKT-012`, Stage E4-A `M2.3-E4-A` / `TKT-013`, General Performance Benchmarking Infrastructure `TKT-016`, Benchmark Reliability & Windows Compatibility `TKT-017`, Regional Rendering Scalability Assessment `TKT-019`, Planar Surface / Road Blocker Scaling Optimization `TKT-020`, Persistent Offline Overijssel OSM Store `TKT-022`, Building Draw-Call Optimization `TKT-023`, & BVH Hover Raycast Optimization `TKT-024` complete & closed; Stage E2 `M2.3-E2` / `TKT-008`, Stage E4-T `M2.3-E4-T` / `TKT-014`, Stage E4-T2 `M2.3-E4-T2` / `TKT-015`, & End-to-End Map Loading Investigation `TKT-021` `in_progress` pending owner review/capture; `TKT-018` full-test-suite memory investigation remains `open`; Stages `E4-B` and `E5` require separate explicit approval)
 - **Architecture**: React 19 + TypeScript + Three.js r186 + React Three Fiber v9 + Tailwind CSS v4
 
 ---
@@ -44,7 +44,7 @@
    - Full panning, orbiting, zooming, 45 degrees stepped rotation, and bounding-box reframing.
 6. **Interactive Inspection & Styling**:
    - 4 built-in visual themes (`tactical`, `daylight`, `dusk`, `blueprint`) with in-place material updating.
-   - Raycast feature inspection via `faceRanges` binary search and instanced sleeper `instanceInfos` mapping 3D faces/instances back to OSM tags.
+   - BVH-accelerated (`three-mesh-bvh`, `{ indirect: true }`, `TKT-024`) raycast feature inspection via `faceRanges` binary search and instanced sleeper/tree `instanceInfos` mapping 3D faces/instances back to OSM tags in sub-millisecond time (`0.694 ms` median on `983,282`-triangle `2 × 2 km` extracts).
 7. **Developer Tools Interface & Self-Contained Reproduction Reporting (`TKT-009`)**:
    - In-app runtime panel (`src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`) replacing manual URL parameter editing.
    - Instant in-memory switching between road engines (`legacy`, `graph`, `graph-surface`, `graph-preview`) and railway implementations (`production`, `candidateA`, `candidateB`, `disabled`, `graph-preview`) without page reloads, plus live E2/E2+ road geometry counters and stage timings.
@@ -67,7 +67,12 @@
 
 ---
 
-## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), M2.3-E3-A2 (`TKT-011` — `closed`), M2.3-E3-B (`TKT-012` — `closed`), M2.3-E4-A (`TKT-013` — `closed`), Benchmarking Infrastructure (`TKT-016` & `TKT-017` — `closed`), Regional Scalability Assessment (`TKT-019` — `closed`), Planar/Road Scaling Optimization (`TKT-020` — `closed`), & Building Draw-Call Optimization (`TKT-023` — `closed`)
+## Completed Milestones: M2.1 (`TKT-002` — `closed`), M2.2 (`TKT-001` — `closed`), M2.3-A (`TKT-003` — `closed`), M2.3-B (`TKT-004` — `closed`), M2.3-C (`TKT-005` — `closed`), M2.3-D (`TKT-006` — `closed`), M2.3-E1 (`TKT-007` — `closed`), M2.3-E3-A1 (`TKT-010` — `closed`), M2.3-E3-A2 (`TKT-011` — `closed`), M2.3-E3-B (`TKT-012` — `closed`), M2.3-E4-A (`TKT-013` — `closed`), Benchmarking Infrastructure (`TKT-016` & `TKT-017` — `closed`), Regional Scalability Assessment (`TKT-019` — `closed`), Planar/Road Scaling Optimization (`TKT-020` — `closed`), Building Draw-Call Optimization (`TKT-023` — `closed`), & BVH Hover Raycast Optimization (`TKT-024` — `closed`)
+
+- **BVH Hover Raycast Optimization (`TKT-024` — Closed)**:
+   - Confirmed that React Three Fiber synchronously executes `state.raycaster.intersectObject(MapRoot, true)` on every DOM `pointermove` event before `MapScene.tsx`'s 16 ms hover throttle, causing brute-force triangle intersection tests across `708,440` merged building triangles (`49.522 ms` on `buildingsGroup`, `61.248 ms` median across the full `983,282`-triangle Hengelo S4 `2 × 2 km` scene, and `114.40 ms` median synchronous pointer-event blocking time per frame).
+   - Integrated `three-mesh-bvh` (`MeshBVH` with `{ indirect: true }`, `acceleratedRaycast`, and `raycaster.firstHitOnly = true`) via `SceneResourceManager.enableMeshBvh()` / `enableGroupBvh()`, building BVHs once at geometry generation time across `groundMesh` and all static scene groups (`buildingsGroup`, `roadsGroup`, `railwaysGroup`, `waterGroup`, `parksGroup`, `landuseGroup`, `barriersGroup`, `foliageGroup`), reporting BVH memory via `getBvhMemoryStats()`, and disposing `boundsTree` structures on `releaseIntermediateGeometry()` / `dispose()`.
+   - Verified on `hengelo-s4-2km.geojson.gz` (`237` meshes, `983,282` triangles): full-scene raycast CPU time dropped **`98.87%` (`88.3×` faster)** from **`61.248 ms` median (`83.862 ms` p95)** to **`0.694 ms` median (`1.623 ms` p95)**, `buildingsGroup` raycast time dropped **`99.96%` (`2,358×` faster)** from **`49.522 ms` to `0.021 ms`**, browser `pointermove` duration dropped **`42.4×`** (`114.40 ms` $\to$ `2.70 ms`), BVH memory overhead is `11.541 MB` (`12,102,038` bytes across `237` meshes, freed to `0 bytes` on `dispose()`), and `100/100` sampled viewport rays + targeted layer rays matched standard Three.js `faceIndex` and `resolveInspectedFeature` results with `0` mismatches. Added `3` automated tests in `src/world/BvhRaycasting.test.ts`.
 
 - **Building Draw-Call Optimization (`TKT-023` — Closed)**:
    - Diagnosed the root cause of multi-ten-thousand WebGL draw calls on dense urban maps (`73,806` calls reported on a 2 km center on Windows RTX 4060 Ti; `51,058` calls on Hengelo S4 `2 × 2 km` in Chromium): `mergeWithFaceRanges()` preserved `2–3` interleaved `BufferGeometry` groups per individual `ExtrudeGeometry`/canopy building inside each of the `7` `Buildings_${bucketKey}` meshes (`25,443` groups across `12,708` buildings on Hengelo S4), triggering one WebGL draw submission per group in both the directional shadow pass and main camera pass (`50,886` building draw calls).
@@ -124,17 +129,19 @@
 
 ---
 
-## Verified Test & Build Results (2026-11-16 — TKT-023 Closed)
+## Verified Test & Build Results (2026-11-16 — TKT-024 Closed)
 
 | Verification Step | Command | Result |
 | :--- | :--- | :--- |
-| **Focused Building, Geometry, Topology & Benchmark Suites (10 files)** | `npx tsx --test src/world/BuildingBatching.test.ts src/world/GeometryBuilder.test.ts src/world/FeatureCoverage.test.ts src/world/ElevationAndZIndex.test.ts src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts src/world/MapLoadDiagnostics.test.ts` + `npx tsx --test src/world/SubterraneanVisualIntegration.test.ts` + `npx tsx --test --test-concurrency=1 src/world/JunctionAndTopology.test.ts src/world/PerformanceBaseline.test.ts` | **121 / 121 passed** (`17` suites, `0` failures); full `npm test` remains deferred under open `TKT-018` |
+| **Focused BVH, Building, Feature, Infrastructure & Benchmark Suites** | `npx tsx --test src/world/BvhRaycasting.test.ts src/world/BuildingBatching.test.ts` + `npx tsx --test src/world/FeatureCoverage.test.ts src/world/BenchmarkInfrastructure.test.ts src/world/RegionalScalabilityBenchmark.test.ts` | **31 / 31 passed** (`0` failures); full `npm test` remains deferred under open `TKT-018` |
+| **Hengelo S4 (`2 × 2 km`) BVH Raycast & Browser Pointer Benchmark (`TKT-024`)** | 100-ray CPU parity & timing benchmark + Playwright Chromium (`1440×900`, SwiftShader) pointermove benchmark on `benchmarks/datasets/hengelo-scaling/hengelo-s4-2km.geojson.gz` (`983,282` triangles) | **Verified**: full-scene raycast median `61.248 ms` $\to$ `0.694 ms` (`88.3×` faster), `buildingsGroup` raycast `49.522 ms` $\to$ `0.021 ms` (`2,358×` faster), browser `pointermove` median `114.40 ms` $\to$ `2.70 ms`, `100/100` exact feature/`faceIndex` parity, `11.541 MB` BVH memory (`0` bytes after `dispose()`) |
 | **Hengelo S4 (`2 × 2 km`) Building Draw-Call & WebGL Benchmark (`TKT-023`)** | Playwright Chromium (`1440×900`, SwiftShader) + CPU group audit on `benchmarks/datasets/hengelo-scaling/hengelo-s4-2km.geojson.gz` (`12,708` buildings, `7` buckets) | **Verified**: `geometry.groups` `25,443` $\to$ `14` (`-99.945%`), building WebGL draw calls `50,886` $\to$ `28` (`-99.945%`), total scene WebGL draw calls `51,058` $\to$ `200` (`-99.61%`), CPU render median `81.4 ms` $\to$ `2.6 ms` (`-96.8%`), frame interval `89.3 ms` $\to$ `17.1 ms`, `0` disposal leaks |
 | **Bounded `S1`–`S4` Hengelo Scaling Suite (`TKT-020`)** | `npx tsx benchmarks/scalingRunner.ts --max-scale=S4 --warmup=1 --iterations=3 --max-rss-mb=3072 --max-old-space-size-mb=2048 --timeout-ms=120000 --validator-max-edges=250 --out=benchmarks/results/tkt020-hengelo-scaling.json --md-out=docs/tkt020-hengelo-scaling-report.md` | **12 / 12 completed** (`gcInvokedBeforeRun: true`, `0` disposal leaks; `S4` `9.77 s` Legacy, `5.44 s` E2, `8.67 s` E2+) |
 | **Quick CPU Benchmark Smoke Check** | `npm run bench:cpu -- --quick --no-save` | **Successful** (`4/4` quick workloads, `0` disposal leaks) |
 | **Browser Reload Lifecycle Audit** | `npx tsx benchmarks/browserRunner.ts --datasets small-real-europatunnel --configs production-legacy --scenarios repeated_scene_reload --swiftshader --no-save` | **Successful** (`43` draw calls, `0` WebGL resource leaks) |
 | **TypeScript Typecheck** | `npm run lint` (`tsc --noEmit`) | **Clean** (`0` errors) |
 | **Production Build** | `npm run build` (`vite build`) | **Successful** (`dist/` generated) |
+| **API Documentation** | `npm run docs:api` (`typedoc`) | **Successful** (`docs/api/` generated) |
 | **Owner Windows Hengelo S1–S5 Baseline (`TKT-019`)** | `npx tsx benchmarks/scalingRunner.ts` (`commit dc422d200874`, `gitDirty: true`, Windows i7-14650HX) | **Verified** (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`) |
 | **Owner Windows RTX 4060 Ti Hardware Verification (`TKT-017`)** | `npx tsx benchmarks/browserRunner.ts --quick --require-hardware` (`commit ea5848e52e51`, `gitDirty: true`) | **Verified** (`NVIDIA GeForce RTX 4060 Ti`, ANGLE Direct3D 11, `20/20` `--quick` scenarios, `238/240` valid GPU timer samples, `0` WebGL leaks) |
 | **Container SwiftShader Browser Benchmark (`v1.1.0`)** | `npx tsx benchmarks/browserRunner.ts --quick --swiftshader` | **Successful** (`benchmarks/baselines/browser-baseline.json`, `isSoftwareRenderer: true`) |
@@ -166,7 +173,8 @@
 | `RegionalScalabilityBenchmark.test.ts` (`TKT-019`, `TKT-020`) | 8 |
 | `PlanarAndRoadSpatialIndex.test.ts` (`TKT-020`) | 5 |
 | `BuildingBatching.test.ts` (`TKT-023`) | 3 |
-| **Total (`it` / `test` declarations across 28 files)** | **346 (`357` with suite subtests)** |
+| `BvhRaycasting.test.ts` (`TKT-024`) | 3 |
+| **Total (`it` / `test` declarations across 29 files)** | **349 (`360` with suite subtests)** |
 
 ---
 

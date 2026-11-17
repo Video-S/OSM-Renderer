@@ -1,9 +1,13 @@
 import http from 'http';
+import fs from 'fs';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { BoundedCache, createOsmDataHandler } from './src/server/osm/osmDataHandler';
+import { resolveOverijsselIndexPath } from './src/server/osm/overijsselConfig';
+import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
+import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,8 +17,30 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
+let overijsselBootstrapPromise: Promise<void> | null = null;
+
+function ensureOverijsselReady(): Promise<void> {
+  const indexPath = resolveOverijsselIndexPath();
+  if (fs.existsSync(indexPath)) {
+    return Promise.resolve();
+  }
+  if (!overijsselBootstrapPromise) {
+    overijsselBootstrapPromise = (async () => {
+      console.log('Bootstrapping offline Overijssel OSM spatial index...');
+      const fetched = await fetchOverijsselPbf();
+      await runBuildOverijsselIndex({ pbfPath: fetched.pbfPath, outIndexPath: indexPath });
+      console.log(`Offline Overijssel OSM spatial index ready at ${indexPath}`);
+    })().finally(() => {
+      overijsselBootstrapPromise = null;
+    });
+  }
+  return overijsselBootstrapPromise;
+}
+
 const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
-const osmDataController = createOsmDataHandler();
+const osmDataController = createOsmDataHandler({
+  ensureOverijsselReady,
+});
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
 app.get('/api/geocode', async (req, res) => {
@@ -103,8 +129,11 @@ async function startServer() {
   } else {
     console.warn(
       `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
-        `Run "npm run osm:setup-overijssel" to enable local Overijssel/Twente queries.`
+        `Starting automatic background setup...`
     );
+    ensureOverijsselReady().catch((err) => {
+      console.error('Automatic Overijssel spatial index bootstrap failed:', err?.message ?? err);
+    });
   }
 
   const shutdown = () => {

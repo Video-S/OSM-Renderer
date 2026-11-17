@@ -183,8 +183,9 @@ Z-fighting is audited programmatically by `src/world/ZFightingValidator.ts`:
 
 - **BufferGeometry Merging (`mergeWithFaceRanges` & `mergeBuildingItemsByMaterial`)**: Non-building layers batch same-material meshes via `mergeWithFaceRanges()`, while multi-material building buckets consolidate triangles contiguously by `materialIndex` via `mergeBuildingItemsByMaterial()` (`<= 2` WebGL groups per bucket instead of `O(buildings)` interleaved draw calls).
 - **Face Feature Range Tracking (`faceRanges`)**: Merged geometries maintain monotonically ordered triangle face ranges (`startFace .. endFace`) mapping `faceIndex` back to `InspectableFeatureInfo` via binary search in `resolveInspectedFeature()`.
+- **BVH-Accelerated Raycasting (`SceneResourceManager.enableMeshBvh` / `enableGroupBvh`, `TKT-024`)**: Static scene meshes construct an indirect `MeshBVH` (`{ indirect: true }`, `three-mesh-bvh`) once at geometry build time and attach `acceleratedRaycast` (`raycaster.firstHitOnly = true`), preserving original triangle indices (`0 .. triCount - 1`), `geometry.index`, and `geometry.groups` while accelerating full-scene hover/click raycasting on `2 × 2 km` extracts from `61.2 ms` to `0.69 ms` (`0.021 ms` on `708,440` building triangles).
 - **Immediate Intermediate Disposal**: Temporary geometries created during intermediate extrusion, non-indexed normalization, and Boolean clipping are tracked by `SceneResourceManager.registerGeometry()` and immediately freed via `releaseIntermediateGeometry()`.
-- **Idempotent Cleanup**: `BuiltSceneGeometry.dispose()` disposes all GPU buffers, index arrays, materials, and textures in a single pass and clears any retained `infrastructureRenderPreview` reference.
+- **Idempotent Cleanup**: `BuiltSceneGeometry.dispose()` disposes all GPU buffers, index arrays, `MeshBVH` acceleration structures (`boundsTree`), materials, and textures in a single pass and clears any retained `infrastructureRenderPreview` reference.
 
 ---
 

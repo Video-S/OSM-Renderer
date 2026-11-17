@@ -5863,6 +5863,23 @@ export class GeometryBuilder {
       }
     });
 
+    // Construct BVH spatial acceleration structures once at scene build time for all
+    // static scene meshes so hover/click raycasting runs in sub-millisecond time
+    // without mutating triangle indices, groups, or faceRanges.
+    resourceManager.enableMeshBvh(groundMesh);
+    for (const group of [
+      buildingsGroup,
+      roadsGroup,
+      railwaysGroup,
+      waterGroup,
+      parksGroup,
+      landuseGroup,
+      barriersGroup,
+      foliageGroup,
+    ]) {
+      resourceManager.enableGroupBvh(group);
+    }
+
     if (data.diagnostics) {
       data.diagnostics.sourceFeaturesRendered = renderedSourceIds.size;
       data.diagnostics.totalFeaturesRendered = renderedSourceIds.size;

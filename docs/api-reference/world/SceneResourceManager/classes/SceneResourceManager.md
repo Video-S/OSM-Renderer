@@ -6,11 +6,12 @@
 
 # Class: SceneResourceManager
 
-Defined in: world/SceneResourceManager.ts:8
+Defined in: world/SceneResourceManager.ts:10
 
 Explicit GPU Resource Manager ensuring single-pass, idempotent cleanup,
 immediate disposal of intermediate geometries after buffer merging,
-and protection against duplicate disposal of shared materials.
+protection against duplicate disposal of shared materials, and lifecycle
+management of BVH spatial acceleration structures (`three-mesh-bvh`).
 
 ## Constructors
 
@@ -30,7 +31,7 @@ and protection against duplicate disposal of shared materials.
 
 > **get** **disposed**(): `boolean`
 
-Defined in: world/SceneResourceManager.ts:107
+Defined in: world/SceneResourceManager.ts:228
 
 ##### Returns
 
@@ -44,7 +45,7 @@ Defined in: world/SceneResourceManager.ts:107
 
 > **get** **disposedGeometriesCount**(): `number`
 
-Defined in: world/SceneResourceManager.ts:64
+Defined in: world/SceneResourceManager.ts:142
 
 ##### Returns
 
@@ -58,7 +59,7 @@ Defined in: world/SceneResourceManager.ts:64
 
 > **get** **disposedMaterialsCount**(): `number`
 
-Defined in: world/SceneResourceManager.ts:68
+Defined in: world/SceneResourceManager.ts:146
 
 ##### Returns
 
@@ -72,7 +73,7 @@ Defined in: world/SceneResourceManager.ts:68
 
 > **get** **ownedGeometriesCount**(): `number`
 
-Defined in: world/SceneResourceManager.ts:56
+Defined in: world/SceneResourceManager.ts:134
 
 ##### Returns
 
@@ -86,7 +87,7 @@ Defined in: world/SceneResourceManager.ts:56
 
 > **get** **ownedMaterialsCount**(): `number`
 
-Defined in: world/SceneResourceManager.ts:60
+Defined in: world/SceneResourceManager.ts:138
 
 ##### Returns
 
@@ -98,7 +99,7 @@ Defined in: world/SceneResourceManager.ts:60
 
 > **dispose**(): `void`
 
-Defined in: world/SceneResourceManager.ts:111
+Defined in: world/SceneResourceManager.ts:232
 
 #### Returns
 
@@ -106,11 +107,103 @@ Defined in: world/SceneResourceManager.ts:111
 
 ***
 
+### enableGroupBvh()
+
+> **enableGroupBvh**(`root`): `void`
+
+Defined in: world/SceneResourceManager.ts:101
+
+Recursively enables BVH-accelerated raycasting on all non-instanced `THREE.Mesh`
+descendants of the given root object or group.
+
+#### Parameters
+
+##### root
+
+`Object3D`\<`Object3DEventMap`\>
+
+#### Returns
+
+`void`
+
+***
+
+### enableMeshBvh()
+
+> **enableMeshBvh**\<`T`\>(`mesh`): `T`
+
+Defined in: world/SceneResourceManager.ts:54
+
+Builds an indirect `MeshBVH` once for a static `THREE.Mesh` and attaches
+`acceleratedRaycast` without mutating vertex attributes, index buffers, or `geometry.groups`.
+
+- `{ indirect: true }` preserves original triangle indices (`0 .. triCount - 1`) so
+  `faceIndex -> faceRanges -> InspectableFeatureInfo` binary search works unchanged on
+  both indexed and non-indexed geometries.
+- For single-material meshes (`!Array.isArray(mesh.material)`), `geometry.groups` is
+  temporarily cleared during `MeshBVH` initialization and immediately restored so that
+  `three-mesh-bvh` builds a single unified BVH covering 100% of triangles even when
+  merged geometries combine grouped `ShapeGeometry` items with ungrouped ribbon buffers.
+
+#### Type Parameters
+
+##### T
+
+`T` *extends* `Mesh`\<`BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>, `Material`\<`MaterialEventMap`\> \| `Material`\<`MaterialEventMap`\>[], `Object3DEventMap`\>
+
+#### Parameters
+
+##### mesh
+
+`T`
+
+#### Returns
+
+`T`
+
+***
+
+### getBvhMemoryStats()
+
+> **getBvhMemoryStats**(): `object`
+
+Defined in: world/SceneResourceManager.ts:190
+
+Computes exact CPU memory (`byteLength`) used by `MeshBVH` acceleration structures
+(`_roots` node buffers and `_indirectBuffer` triangle index maps) across all currently
+owned BufferGeometries.
+
+#### Returns
+
+`object`
+
+##### bvhCount
+
+> **bvhCount**: `number`
+
+##### indirectBufferBytes
+
+> **indirectBufferBytes**: `number`
+
+##### rootBytes
+
+> **rootBytes**: `number`
+
+##### totalBytes
+
+> **totalBytes**: `number`
+
+##### totalMB
+
+> **totalMB**: `number`
+
+***
+
 ### getCpuBufferMemoryStats()
 
 > **getCpuBufferMemoryStats**(): `object`
 
-Defined in: world/SceneResourceManager.ts:76
+Defined in: world/SceneResourceManager.ts:154
 
 Computes exact CPU-side JavaScript TypedArray memory (`byteLength`) across all currently
 owned BufferGeometries (summing vertex attributes and index buffers).
@@ -145,7 +238,7 @@ owned BufferGeometries (summing vertex attributes and index buffers).
 
 > **registerGeometry**\<`T`\>(`geo`): `T`
 
-Defined in: world/SceneResourceManager.ts:19
+Defined in: world/SceneResourceManager.ts:21
 
 #### Type Parameters
 
@@ -169,7 +262,7 @@ Defined in: world/SceneResourceManager.ts:19
 
 > **registerMaterial**\<`T`\>(`mat`): `T`
 
-Defined in: world/SceneResourceManager.ts:26
+Defined in: world/SceneResourceManager.ts:28
 
 #### Type Parameters
 
@@ -193,7 +286,7 @@ Defined in: world/SceneResourceManager.ts:26
 
 > **registerTexture**\<`T`\>(`tex`): `T`
 
-Defined in: world/SceneResourceManager.ts:33
+Defined in: world/SceneResourceManager.ts:35
 
 #### Type Parameters
 
@@ -217,7 +310,7 @@ Defined in: world/SceneResourceManager.ts:33
 
 > **releaseIntermediateGeometry**(`geo`): `void`
 
-Defined in: world/SceneResourceManager.ts:45
+Defined in: world/SceneResourceManager.ts:122
 
 Immediately disposes an intermediate geometry (e.g., an individual feature BufferGeometry
 right after it has been merged into a batch BufferGeometry) and removes it from tracking.

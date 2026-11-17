@@ -65,6 +65,13 @@ export class OsmApiProvider implements MapDataProvider {
           ? new TextEncoder().encode(rawText).byteLength
           : rawText.length;
 
+      const trimmedText = rawText.trimStart();
+      if (trimmedText.startsWith('<')) {
+        throw new Error(
+          'OSM data endpoint returned an HTML page instead of GeoJSON (the server or local Overijssel index may still be warming up). Please retry in a moment.'
+        );
+      }
+
       const tDecodeStart = performance.now();
       geojson = JSON.parse(rawText);
       const tDecodeEnd = performance.now();

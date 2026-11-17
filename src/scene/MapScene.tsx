@@ -119,9 +119,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onDeactivateSpatialSelect,
   showGraphOverlay = false,
 }) => {
-  const { gl, events, camera } = useThree();
+  const { gl, events, camera, raycaster } = useThree();
   const lastHoverTimeRef = useRef<number>(0);
   const lastHoverRaycastMsRef = useRef<number>(0);
+  const lastRaycastIntersectMsRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(performance.now());
   const lastFrameTimestampRef = useRef<number>(performance.now());
@@ -156,8 +157,71 @@ export const MapScene: React.FC<MapSceneProps> = ({
   }, [builtGeometry]);
 
   useLayoutEffect(() => {
+    if (railwayGroupOverride) {
+      builtGeometry.resources.enableGroupBvh(railwayGroupOverride);
+    }
     cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
-  }, [activeRailwaysGroup, builtGeometry]);
+  }, [activeRailwaysGroup, railwayGroupOverride, builtGeometry]);
+
+  // Enable three-mesh-bvh firstHitOnly optimization and measure actual R3F
+  // raycaster.intersectObject(MapRoot, true) execution time so hoverRaycastTimeMs
+  // reflects the true Three.js/BVH raycast duration plus feature metadata lookup.
+  useEffect(() => {
+    if (!raycaster) return;
+    const prevFirstHitOnly = (raycaster as any).firstHitOnly;
+    (raycaster as any).firstHitOnly = true;
+    const origIntersectObject = raycaster.intersectObject.bind(raycaster);
+    const origIntersectObjects = raycaster.intersectObjects.bind(raycaster);
+    let depth = 0;
+
+    raycaster.intersectObject = (
+      object: THREE.Object3D,
+      recursive?: boolean,
+      optionalTarget?: THREE.Intersection[]
+    ) => {
+      if (depth > 0) {
+        return origIntersectObject(object, recursive, optionalTarget);
+      }
+      depth++;
+      const t0 = performance.now();
+      try {
+        return origIntersectObject(object, recursive, optionalTarget);
+      } finally {
+        const elapsed = performance.now() - t0;
+        if (object.name === 'MapRoot' || elapsed >= lastRaycastIntersectMsRef.current) {
+          lastRaycastIntersectMsRef.current = elapsed;
+          lastHoverRaycastMsRef.current = Number(elapsed.toFixed(3));
+        }
+        depth--;
+      }
+    };
+
+    raycaster.intersectObjects = (
+      objects: THREE.Object3D[],
+      recursive?: boolean,
+      optionalTarget?: THREE.Intersection[]
+    ) => {
+      if (depth > 0) {
+        return origIntersectObjects(objects, recursive, optionalTarget);
+      }
+      depth++;
+      const t0 = performance.now();
+      try {
+        return origIntersectObjects(objects, recursive, optionalTarget);
+      } finally {
+        const elapsed = performance.now() - t0;
+        lastRaycastIntersectMsRef.current = elapsed;
+        lastHoverRaycastMsRef.current = Number(elapsed.toFixed(3));
+        depth--;
+      }
+    };
+
+    return () => {
+      (raycaster as any).firstHitOnly = prevFirstHitOnly;
+      raycaster.intersectObject = origIntersectObject;
+      raycaster.intersectObjects = origIntersectObjects;
+    };
+  }, [raycaster]);
 
   // Spatial area drag state
   const isDraggingBoxRef = useRef(false);
@@ -699,7 +763,9 @@ export const MapScene: React.FC<MapSceneProps> = ({
         }
       }
     }
-    lastHoverRaycastMsRef.current = Number((performance.now() - t0).toFixed(3));
+    lastHoverRaycastMsRef.current = Number(
+      (lastRaycastIntersectMsRef.current + (performance.now() - t0)).toFixed(3)
+    );
     if (onHoverFeature) {
       const clientX = e.nativeEvent?.clientX ?? e.clientX ?? 0;
       const clientY = e.nativeEvent?.clientY ?? e.clientY ?? 0;

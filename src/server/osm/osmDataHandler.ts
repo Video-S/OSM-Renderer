@@ -66,6 +66,7 @@ export function createOsmDataHandler(options?: {
   cacheMaxEntries?: number;
   cacheTtlMs?: number;
   fetchImpl?: typeof fetch;
+  ensureOverijsselReady?: () => Promise<void>;
 }): OsmDataHandlerController {
   const osmCache = new BoundedCache<string, any>(
     options?.cacheMaxEntries ?? 40,
@@ -168,6 +169,9 @@ export function createOsmDataHandler(options?: {
     // Never silently fall back to live Overpass for covered coordinates.
     if (isPointInOverijssel(lat, lon)) {
       try {
+        if (!fs.existsSync(getIndexPath()) && options?.ensureOverijsselReady) {
+          await options.ensureOverijsselReady();
+        }
         const store = getOverijsselStore();
         const result = store.queryRegion({
           centerLat: lat,

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
 
 /**
  * Explicit GPU Resource Manager ensuring single-pass, idempotent cleanup,
  * immediate disposal of intermediate geometries after buffer merging,
- * and protection against duplicate disposal of shared materials.
+ * protection against duplicate disposal of shared materials, and lifecycle
+ * management of BVH spatial acceleration structures (`three-mesh-bvh`).
  */
 export class SceneResourceManager {
   private ownedGeometries = new Set<THREE.BufferGeometry>();
@@ -38,6 +40,81 @@ export class SceneResourceManager {
   }
 
   /**
+   * Builds an indirect `MeshBVH` once for a static `THREE.Mesh` and attaches
+   * `acceleratedRaycast` without mutating vertex attributes, index buffers, or `geometry.groups`.
+   *
+   * - `{ indirect: true }` preserves original triangle indices (`0 .. triCount - 1`) so
+   *   `faceIndex -> faceRanges -> InspectableFeatureInfo` binary search works unchanged on
+   *   both indexed and non-indexed geometries.
+   * - For single-material meshes (`!Array.isArray(mesh.material)`), `geometry.groups` is
+   *   temporarily cleared during `MeshBVH` initialization and immediately restored so that
+   *   `three-mesh-bvh` builds a single unified BVH covering 100% of triangles even when
+   *   merged geometries combine grouped `ShapeGeometry` items with ungrouped ribbon buffers.
+   */
+  enableMeshBvh<T extends THREE.Mesh>(mesh: T): T {
+    if (!mesh || this.isDisposed || mesh instanceof THREE.InstancedMesh) {
+      return mesh;
+    }
+    if (
+      mesh.raycast !== THREE.Mesh.prototype.raycast &&
+      mesh.raycast !== acceleratedRaycast
+    ) {
+      return mesh;
+    }
+    const geo = mesh.geometry as THREE.BufferGeometry | undefined;
+    if (!geo || this.disposedGeometries.has(geo)) {
+      return mesh;
+    }
+    const pos = geo.attributes?.position;
+    if (!pos || pos.count < 3) {
+      return mesh;
+    }
+    if (geo.index && geo.index.count < 3) {
+      return mesh;
+    }
+
+    this.registerGeometry(geo);
+
+    if (!(geo as any).boundsTree) {
+      const isMultiMaterial = Array.isArray(mesh.material);
+      const savedGroups = geo.groups;
+      if (!isMultiMaterial && savedGroups && savedGroups.length > 0) {
+        geo.groups = [];
+      }
+      try {
+        (geo as any).boundsTree = new MeshBVH(geo, { indirect: true });
+      } finally {
+        if (!isMultiMaterial && savedGroups && savedGroups.length > 0) {
+          geo.groups = savedGroups;
+        }
+      }
+    }
+
+    mesh.raycast = acceleratedRaycast;
+    return mesh;
+  }
+
+  /**
+   * Recursively enables BVH-accelerated raycasting on all non-instanced `THREE.Mesh`
+   * descendants of the given root object or group.
+   */
+  enableGroupBvh(root: THREE.Object3D | null | undefined): void {
+    if (!root || this.isDisposed) return;
+    root.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && !(obj instanceof THREE.InstancedMesh)) {
+        this.enableMeshBvh(obj);
+      }
+    });
+  }
+
+  private clearGeometryBvh(geo: THREE.BufferGeometry): void {
+    if ((geo as any).boundsTree) {
+      (geo as any).boundsTree = null;
+      delete (geo as any).boundsTree;
+    }
+  }
+
+  /**
    * Immediately disposes an intermediate geometry (e.g., an individual feature BufferGeometry
    * right after it has been merged into a batch BufferGeometry) and removes it from tracking.
    * Strictly single-pass and idempotent: repeated calls or calls on unowned geometries are safe no-ops.
@@ -49,6 +126,7 @@ export class SceneResourceManager {
 
     this.ownedGeometries.delete(geo);
     this.disposedGeometries.add(geo);
+    this.clearGeometryBvh(geo);
     geo.dispose();
     this._disposedGeometriesCount++;
   }
@@ -104,6 +182,49 @@ export class SceneResourceManager {
     };
   }
 
+  /**
+   * Computes exact CPU memory (`byteLength`) used by `MeshBVH` acceleration structures
+   * (`_roots` node buffers and `_indirectBuffer` triangle index maps) across all currently
+   * owned BufferGeometries.
+   */
+  getBvhMemoryStats(): {
+    bvhCount: number;
+    rootBytes: number;
+    indirectBufferBytes: number;
+    totalBytes: number;
+    totalMB: number;
+  } {
+    let bvhCount = 0;
+    let rootBytes = 0;
+    let indirectBufferBytes = 0;
+    for (const geo of this.ownedGeometries) {
+      if (this.disposedGeometries.has(geo)) continue;
+      const bvh = (geo as any).boundsTree as MeshBVH | undefined;
+      if (!bvh) continue;
+      bvhCount++;
+      const indirectBuf = (bvh as any)._indirectBuffer as ArrayBufferView | null | undefined;
+      if (indirectBuf && typeof indirectBuf.byteLength === 'number') {
+        indirectBufferBytes += indirectBuf.byteLength;
+      }
+      const roots = (bvh as any)._roots as ArrayBuffer[] | undefined;
+      if (Array.isArray(roots)) {
+        for (const root of roots) {
+          if (root && typeof root.byteLength === 'number') {
+            rootBytes += root.byteLength;
+          }
+        }
+      }
+    }
+    const totalBytes = rootBytes + indirectBufferBytes;
+    return {
+      bvhCount,
+      rootBytes,
+      indirectBufferBytes,
+      totalBytes,
+      totalMB: Number((totalBytes / (1024 * 1024)).toFixed(3)),
+    };
+  }
+
   get disposed(): boolean {
     return this.isDisposed;
   }
@@ -115,6 +236,7 @@ export class SceneResourceManager {
     for (const geo of this.ownedGeometries) {
       if (!this.disposedGeometries.has(geo)) {
         this.disposedGeometries.add(geo);
+        this.clearGeometryBvh(geo);
         geo.dispose();
         this._disposedGeometriesCount++;
       }

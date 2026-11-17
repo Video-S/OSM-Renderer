@@ -920,6 +920,7 @@ export default function App() {
         effectStartedAtMs: tEffectStart,
         buildDurationMs: rawBuildElapsedMs,
         sceneRevision: revision,
+        stageTimingsMs: scene.stageTimingsMs ?? null,
         rendererConfig: {
           roadsMode: infrastructureRenderOptions.roads,
           railwaysMode: infrastructureRenderOptions.railways,
@@ -1094,6 +1095,19 @@ export default function App() {
       sceneVertices: totalSceneVertices,
       sceneTriangles: totalSceneTriangles,
       cpuBufferMB: totalCpuBufferMB,
+      cpuBufferMemoryStats: cpuMem,
+      bvhMemoryStats: liveScene?.resources?.getBvhMemoryStats?.() ?? null,
+      sceneStageTimingsMs: liveScene?.stageTimingsMs ?? null,
+      legacyRoadStats: liveScene?.roadsGroup?.userData?.legacyRoadStats ?? null,
+      planarValidationReport: liveScene?.landuseGroup?.userData?.planarValidationReport ?? null,
+      jsHeapMemory:
+        typeof performance !== 'undefined' && (performance as any).memory
+          ? {
+              usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
+              totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
+              jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
+            }
+          : null,
       railwayGroupStats: railStats,
       graphRoadStats: liveScene?.roadsGroup?.userData?.graphRoadStats ?? null,
       graphRoadTiming: liveScene?.roadsGroup?.userData?.graphRoadTiming ?? null,
@@ -1204,6 +1218,29 @@ export default function App() {
         zoom: number = 1.0,
         azimuthDeg: number = 45
       ) => loadLiveAmsterdamPreset(target, zoom, azimuthDeg),
+      loadOsmLocation: async (params: {
+        name: string;
+        lat: number;
+        lon: number;
+        radius: number;
+        locationId?: string;
+      }) => {
+        const locId = params.locationId ?? `live_${params.radius}m`;
+        activeLocationIdRef.current = locId;
+        setActiveLocationId(locId);
+        await fetchLiveOsmLocation(
+          {
+            name: params.name,
+            lat: params.lat,
+            lon: params.lon,
+            radius: params.radius,
+          },
+          {
+            locationId: locId,
+            sourceType: 'live_osm',
+          }
+        );
+      },
       setCameraPose: (
         target: [number, number, number],
         zoom: number,
@@ -1432,6 +1469,7 @@ export default function App() {
         target?: [number, number, number];
         zoom?: number;
         azimuthDeg?: number;
+        timeoutMs?: number;
       }) => {
         const tTotalStart = performance.now();
         const targetRevision = ++transitionRevisionRef.current;
@@ -1543,16 +1581,20 @@ export default function App() {
         }));
 
         const tReadyWaitStart = performance.now();
-        await waitForSceneReady(targetRevision, {
-          expectedRevision: targetRevision,
-          datasetId: params.datasetId,
-          roadsMode: targetRenderOpts.roads,
-          railwaysMode: targetRenderOpts.railways,
-          railwayPrototypeMode: targetPrototypeMode,
-          themeId: targetThemeId,
-          expectNonEmptyScene: hasFeatures,
-          minWebglFramesRendered: 1,
-        });
+        await waitForSceneReady(
+          targetRevision,
+          {
+            expectedRevision: targetRevision,
+            datasetId: params.datasetId,
+            roadsMode: targetRenderOpts.roads,
+            railwaysMode: targetRenderOpts.railways,
+            railwayPrototypeMode: targetPrototypeMode,
+            themeId: targetThemeId,
+            expectNonEmptyScene: hasFeatures,
+            minWebglFramesRendered: 1,
+          },
+          params.timeoutMs ?? 30000
+        );
 
         if (imperativePoseSetterRef.current) {
           imperativePoseSetterRef.current(target, zoom, azimuthDeg);

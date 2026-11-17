@@ -18,6 +18,7 @@
 - [GeometryBuilderOptions](interfaces/GeometryBuilderOptions.md)
 - [LegacyRoadRenderStats](interfaces/LegacyRoadRenderStats.md)
 - [RoadRibbonOptions](interfaces/RoadRibbonOptions.md)
+- [SceneBuildStageTimingsMs](interfaces/SceneBuildStageTimingsMs.md)
 - [SurfaceCoverageDefect](interfaces/SurfaceCoverageDefect.md)
 - [SurfaceFirstCoverageValidationReport](interfaces/SurfaceFirstCoverageValidationReport.md)
 - [SurfaceFirstMeshIntegrityValidationReport](interfaces/SurfaceFirstMeshIntegrityValidationReport.md)

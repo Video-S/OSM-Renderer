@@ -6,7 +6,7 @@
 
 # Interface: LegacyRoadRenderStats
 
-Defined in: world/GeometryBuilder.ts:215
+Defined in: world/GeometryBuilder.ts:247
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:215
 
 > **candidateBlockerCheckCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:221
+Defined in: world/GeometryBuilder.ts:253
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:221
 
 > **clippingFailureCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:225
+Defined in: world/GeometryBuilder.ts:257
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/GeometryBuilder.ts:225
 
 > **fullySubtractedCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:227
+Defined in: world/GeometryBuilder.ts:259
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/GeometryBuilder.ts:227
 
 > **overlappingBlockerCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:222
+Defined in: world/GeometryBuilder.ts:254
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/GeometryBuilder.ts:222
 
 > **polygonDifferenceOperationCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:224
+Defined in: world/GeometryBuilder.ts:256
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/GeometryBuilder.ts:224
 
 > **polygonIntersectionOperationCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:223
+Defined in: world/GeometryBuilder.ts:255
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: world/GeometryBuilder.ts:223
 
 > **rawAtGradeRoadCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:216
+Defined in: world/GeometryBuilder.ts:248
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: world/GeometryBuilder.ts:216
 
 > **renderedJunctionCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:219
+Defined in: world/GeometryBuilder.ts:251
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: world/GeometryBuilder.ts:219
 
 > **renderedRoadRibbonCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:220
+Defined in: world/GeometryBuilder.ts:252
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: world/GeometryBuilder.ts:220
 
 > **safeFallbackCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:226
+Defined in: world/GeometryBuilder.ts:258
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: world/GeometryBuilder.ts:226
 
 > **skippedRoadConflictsCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:218
+Defined in: world/GeometryBuilder.ts:250
 
 ***
 
@@ -102,4 +102,4 @@ Defined in: world/GeometryBuilder.ts:218
 
 > **splitAtGradeRoadCount**: `number`
 
-Defined in: world/GeometryBuilder.ts:217
+Defined in: world/GeometryBuilder.ts:249

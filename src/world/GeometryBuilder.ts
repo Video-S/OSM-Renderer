@@ -184,6 +184,37 @@ export interface FaceFeatureRange {
   info: InspectableFeatureInfo;
 }
 
+export interface SceneBuildStageTimingsMs {
+  planarResolutionMs: number;
+  planarSurfaceGeometryMs: number;
+  railwayGeometryMs: number;
+  roadGeometryMs: number;
+  roadSubTimingsMs: {
+    classificationMs: number;
+    splitAndEndpointScanMs: number;
+    junctionsMs: number;
+    atGradeRibbonsAndClippingMs: number;
+    bridgesAndTunnelsMs: number;
+  };
+  barriersAndFoliageGeometryMs: number;
+  buildingGeometryMs: number;
+  geometryMergingMs: number;
+  mergeSubTimingsMs: {
+    planarMs: number;
+    roadsMs: number;
+    barriersAndLandmarksMs: number;
+    buildingsMs: number;
+  };
+  bvhConstructionMs: number;
+  bvhSubTimingsMs: {
+    groundMs: number;
+    buildingsMs: number;
+    roadsMs: number;
+    otherMs: number;
+  };
+  totalBuildSceneMs: number;
+}
+
 export interface BuiltSceneGeometry {
   buildingsGroup: THREE.Group;
   roadsGroup: THREE.Group;
@@ -204,6 +235,7 @@ export interface BuiltSceneGeometry {
     renderedFeaturesCount: number;
     forestTreesCount?: number;
   };
+  stageTimingsMs?: SceneBuildStageTimingsMs;
   resources: SceneResourceManager;
   infrastructureRenderOptions: InfrastructureRenderOptions;
   infrastructureRenderPreview: InfrastructureRenderPreviewResult | null;
@@ -2237,6 +2269,7 @@ export class GeometryBuilder {
   }
 
   buildScene(data: ProcessedMapData, theme: MapStyleTheme): BuiltSceneGeometry {
+    const tBuildScene0 = performance.now();
     const resourceManager = new SceneResourceManager();
     const infrastructureRenderOptions = this.options.infrastructureRenderOptions;
     // A single immutable entrance decision is shared by terrain cutouts, roads and railways.
@@ -2334,6 +2367,9 @@ export class GeometryBuilder {
     }
     landuseGroup.userData.planarValidationReport = planarValidationReport;
     landuseGroup.userData.planarResolutionTimingMs = planarResolutionTimingMs;
+
+    const tPlanarSurface0 = performance.now();
+    let planarMergeMs = 0;
 
     const planarPolygonRingsById = new Map<string, [number, number][][]>();
     for (const lu of data.landuse) {
@@ -2585,7 +2621,9 @@ export class GeometryBuilder {
 
     landuseBySubtype.forEach((items, subtype) => {
       items.sort((a, b) => a.sortY - b.sortY);
+      const tMergeLu0 = performance.now();
       const { merged: mergedLanduseGeo, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+      planarMergeMs += performance.now() - tMergeLu0;
       if (mergedLanduseGeo) {
         resourceManager.registerGeometry(mergedLanduseGeo);
         const tierInfo = getLanduseElevationAndOffset(subtype);
@@ -2618,10 +2656,12 @@ export class GeometryBuilder {
 
     let parkingMarkingMat: THREE.MeshStandardMaterial | undefined;
     if (parkingMarkingItems.length > 0) {
+      const tMergePm0 = performance.now();
       const { merged: mergedParkingMarks, faceRanges } = mergeWithFaceRanges(
         parkingMarkingItems,
         resourceManager
       );
+      planarMergeMs += performance.now() - tMergePm0;
       if (mergedParkingMarks) {
         resourceManager.registerGeometry(mergedParkingMarks);
         const markColor =
@@ -2758,7 +2798,9 @@ export class GeometryBuilder {
 
     let waterMat: THREE.MeshStandardMaterial | undefined;
     if (waterItems.length > 0) {
+      const tMergeWater0 = performance.now();
       const { merged: mergedWaterGeo, faceRanges } = mergeWithFaceRanges(waterItems, resourceManager);
+      planarMergeMs += performance.now() - tMergeWater0;
       if (mergedWaterGeo) {
         resourceManager.registerGeometry(mergedWaterGeo);
         mergedWaterGeo.computeBoundingBox();
@@ -2951,7 +2993,9 @@ export class GeometryBuilder {
 
     parksBySubtype.forEach((items, subtype) => {
       items.sort((a, b) => a.sortY - b.sortY);
+      const tMergePk0 = performance.now();
       const { merged: mergedParkGeo, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+      planarMergeMs += performance.now() - tMergePk0;
       if (mergedParkGeo) {
         resourceManager.registerGeometry(mergedParkGeo);
         const color = theme.terrainColors?.[subtype] || theme.parkColor;
@@ -2983,10 +3027,12 @@ export class GeometryBuilder {
 
     let pitchMarkingMat: THREE.MeshStandardMaterial | undefined;
     if (pitchMarkingItems.length > 0) {
+      const tMergePitch0 = performance.now();
       const { merged: mergedPitchMarks, faceRanges } = mergeWithFaceRanges(
         pitchMarkingItems,
         resourceManager
       );
+      planarMergeMs += performance.now() - tMergePitch0;
       if (mergedPitchMarks) {
         resourceManager.registerGeometry(mergedPitchMarks);
         pitchMarkingMat = resourceManager.registerMaterial(
@@ -3011,6 +3057,11 @@ export class GeometryBuilder {
         totalTriangles += (mergedPitchMarks.index?.count || 0) / 3;
       }
     }
+
+    const planarSurfaceGeometryMs = Math.max(
+      0,
+      performance.now() - tPlanarSurface0 - planarMergeMs
+    );
 
     // ==========================================================================
     // 5. RAILWAYS & AERIALWAYS (Delegated to Hybrid Candidate B RailwayGeometryBuilder)
@@ -3075,6 +3126,11 @@ export class GeometryBuilder {
     // ==========================================================================
     // 6. ROADS, JUNCTION-NODE MESHING, 3D BRIDGE RAMPS & 3D TUNNEL PORTALS
     // ==========================================================================
+    const tRoadClassification0 = performance.now();
+    let roadSplitAndEndpointScanMs = 0;
+    let roadJunctionsMs = 0;
+    let roadAtGradeRibbonsMs = 0;
+    let roadsMergeMs = 0;
     const rawAtGradeRoads: RoadFeature[] = [];
     const gradeSeparatedRoads: RoadFeature[] = [];
     const conflictingFallbackRoads: RoadFeature[] = [];
@@ -3129,12 +3185,15 @@ export class GeometryBuilder {
       }
     }
 
+    const roadClassificationMs = performance.now() - tRoadClassification0;
+
     const roadsByClass = new Map<
       RoadClass,
       Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
     >();
 
     if ((infrastructureRenderOptions.roads === 'graph' || infrastructureRenderOptions.roads === 'graph-surface') && infrastructureRenderPreview?.descriptors) {
+      const tGraphRoad0 = performance.now();
       const graphRoadResult = buildGraphAtGradeRoadGeometries({
         descriptors: infrastructureRenderPreview.descriptors,
         roadWidthMultiplier: this.options.roadWidthMultiplier,
@@ -3220,6 +3279,7 @@ export class GeometryBuilder {
           }
         }
       }
+      roadAtGradeRibbonsMs = performance.now() - tGraphRoad0;
     } else {
       const tLegacyRoad0 = performance.now();
       const legacyStats: LegacyRoadRenderStats = {
@@ -3238,6 +3298,7 @@ export class GeometryBuilder {
       };
       const topoIndex = new TopologicalNodeIndex(0.15);
 
+      const tRoadSplitAndScan0 = performance.now();
       // Split at-grade roads at any shared interior nodes so mid-polyline intersections are meshed
       const atGradeRoads = splitRoadsAtSharedInteriorNodes(rawAtGradeRoads, topoIndex);
       legacyStats.splitAtGradeRoadCount = atGradeRoads.length;
@@ -3398,6 +3459,8 @@ export class GeometryBuilder {
       }
     };
 
+    roadSplitAndEndpointScanMs = performance.now() - tRoadSplitAndScan0;
+    const tRoadJunctions0 = performance.now();
     // B. Solve each junction node: trim incoming ribbons & synthesize non-overlapping junction polygons
     for (const [nodeId, branches] of nodeBranches) {
       if (branches.length < 2) continue;
@@ -3765,6 +3828,8 @@ export class GeometryBuilder {
       }
     }
 
+    roadJunctionsMs = performance.now() - tRoadJunctions0;
+    const tRoadAtGradeRibbons0 = performance.now();
     // C. Build trimmed road ribbons for at-grade roads (Vehicular by priority first, then non-vehicular paths)
 
     const fullySubtractedRoadIds = new Set<string>();
@@ -4164,6 +4229,7 @@ export class GeometryBuilder {
         }
         roadsByClass.get(roadClass)!.push(...items);
       });
+      roadAtGradeRibbonsMs = performance.now() - tRoadAtGradeRibbons0;
     }
 
     // D. Build grade-separated roads:
@@ -4843,8 +4909,9 @@ export class GeometryBuilder {
       }
     }
 
+    const roadBridgesAndTunnelsMs = performance.now() - tRoadBridgeTunnel0;
     roadGradeTransitionDiagnostics.bridgeAndTunnelBuildTimeMs = Number(
-      (performance.now() - tRoadBridgeTunnel0).toFixed(2)
+      roadBridgesAndTunnelsMs.toFixed(2)
     );
     roadsGroup.userData.gradeTransitionDiagnostics = roadGradeTransitionDiagnostics;
     roadsGroup.userData.portalGroundCutoutPolygons = roadPortalGroundCutoutPolygons;
@@ -4880,7 +4947,9 @@ export class GeometryBuilder {
 
     // Merge and instantiate road meshes by class
     roadsByClass.forEach((items, roadClass) => {
+      const tMergeRoad0 = performance.now();
       const { merged: mergedRoadGeo, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+      roadsMergeMs += performance.now() - tMergeRoad0;
       if (mergedRoadGeo) {
         resourceManager.registerGeometry(mergedRoadGeo);
         const color = theme.roadColors[roadClass] || '#64748b';
@@ -4929,7 +4998,9 @@ export class GeometryBuilder {
       );
 
       if (bridgeSubstructureItems.length > 0) {
+        const tMergeBs0 = performance.now();
         const { merged, faceRanges } = mergeWithFaceRanges(bridgeSubstructureItems, resourceManager);
+        roadsMergeMs += performance.now() - tMergeBs0;
         if (merged) {
           resourceManager.registerGeometry(merged);
           const mesh = new THREE.Mesh(merged, bridgeStructureMat);
@@ -4946,7 +5017,9 @@ export class GeometryBuilder {
       }
 
       if (bridgePierItems.length > 0) {
+        const tMergeBp0 = performance.now();
         const { merged, faceRanges } = mergeWithFaceRanges(bridgePierItems, resourceManager);
+        roadsMergeMs += performance.now() - tMergeBp0;
         if (merged) {
           resourceManager.registerGeometry(merged);
           const mesh = new THREE.Mesh(merged, bridgeStructureMat);
@@ -4964,7 +5037,9 @@ export class GeometryBuilder {
     }
 
     if (bridgeParapetItems.length > 0) {
+      const tMergePar0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(bridgeParapetItems, resourceManager);
+      roadsMergeMs += performance.now() - tMergePar0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         bridgeParapetMat = resourceManager.registerMaterial(
@@ -4990,7 +5065,9 @@ export class GeometryBuilder {
     }
 
     if (tunnelPortalItems.length > 0) {
+      const tMergeTp0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(tunnelPortalItems, resourceManager);
+      roadsMergeMs += performance.now() - tMergeTp0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         tunnelPortalMat = resourceManager.registerMaterial(
@@ -5016,7 +5093,9 @@ export class GeometryBuilder {
     }
 
     if (tunnelMouthItems.length > 0) {
+      const tMergeTm0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(tunnelMouthItems, resourceManager);
+      roadsMergeMs += performance.now() - tMergeTm0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         tunnelMouthMat = resourceManager.registerMaterial(
@@ -5041,7 +5120,9 @@ export class GeometryBuilder {
     }
 
     if (tunnelTraceItems.length > 0) {
+      const tMergeTt0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(tunnelTraceItems, resourceManager);
+      roadsMergeMs += performance.now() - tMergeTt0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         tunnelTraceMat = resourceManager.registerMaterial(
@@ -5072,10 +5153,12 @@ export class GeometryBuilder {
     }
 
     if (tunnelUndergroundRoadItems.length > 0) {
+      const tMergeUg0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(
         tunnelUndergroundRoadItems,
         resourceManager
       );
+      roadsMergeMs += performance.now() - tMergeUg0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         tunnelUndergroundRoadMat = resourceManager.registerMaterial(
@@ -5119,6 +5202,8 @@ export class GeometryBuilder {
     // ==========================================================================
     // 7. LINEAR BARRIERS (Walls, Hedges, Fences, City Walls, Cliffs, Tree Rows)
     // ==========================================================================
+    const tBarriersAndFoliage0 = performance.now();
+    let barriersAndLandmarksMergeMs = 0;
     const barrierResolution = resolveBarrierStructuralContexts(
       data.barriers || [],
       data.roads || [],
@@ -5234,7 +5319,9 @@ export class GeometryBuilder {
     }
 
     barriersByType.forEach((items, bKey) => {
+      const tMergeBar0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+      barriersAndLandmarksMergeMs += performance.now() - tMergeBar0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         const color =
@@ -5264,10 +5351,12 @@ export class GeometryBuilder {
     });
 
     if (subterraneanBarrierItems.length > 0) {
+      const tMergeSubBar0 = performance.now();
       const { merged, faceRanges } = mergeWithFaceRanges(
         subterraneanBarrierItems,
         resourceManager
       );
+      barriersAndLandmarksMergeMs += performance.now() - tMergeSubBar0;
       if (merged) {
         resourceManager.registerGeometry(merged);
         const color = (theme.barrierColors as any)?.wall || '#475569';
@@ -5578,7 +5667,9 @@ export class GeometryBuilder {
         });
       }
 
+      const tMergeLm0 = performance.now();
       const { merged: mergedLmGeo, faceRanges } = mergeWithFaceRanges(lmItems, resourceManager);
+      barriersAndLandmarksMergeMs += performance.now() - tMergeLm0;
       if (mergedLmGeo) {
         resourceManager.registerGeometry(mergedLmGeo);
         const lmMesh = new THREE.Mesh(mergedLmGeo, landmarkPointMat);
@@ -5654,7 +5745,9 @@ export class GeometryBuilder {
       };
 
       furnitureByStyle.forEach((items, styleGroup) => {
+        const tMergeFurn0 = performance.now();
         const { merged: mergedFurnGeo, faceRanges } = mergeWithFaceRanges(items, resourceManager);
+        barriersAndLandmarksMergeMs += performance.now() - tMergeFurn0;
         if (mergedFurnGeo) {
           resourceManager.registerGeometry(mergedFurnGeo);
           const p = stylePalette[styleGroup];
@@ -5681,9 +5774,15 @@ export class GeometryBuilder {
       });
     }
 
+    const barriersAndFoliageGeometryMs = Math.max(
+      0,
+      performance.now() - tBarriersAndFoliage0 - barriersAndLandmarksMergeMs
+    );
+
     // ==========================================================================
     // 9. BUILDINGS (3D Extrusions with Archetype Sub-Palettes & Full OSM Tags)
     // ==========================================================================
+    const tBuildingsGen0 = performance.now();
     const interactiveBuildings: THREE.Mesh[] = [];
 
     const wallMat = resourceManager.registerMaterial(
@@ -5838,6 +5937,8 @@ export class GeometryBuilder {
       }
     }
 
+    const buildingGeometryMs = performance.now() - tBuildingsGen0;
+    const tBuildingsMerge0 = performance.now();
     buildingsByBucket.forEach(({ materials, items }, bucketKey) => {
       const { merged: mergedBldgGeo, faceRanges } = mergeBuildingItemsByMaterial(
         items,
@@ -5862,14 +5963,26 @@ export class GeometryBuilder {
         totalTriangles += getTriangleCount(mergedBldgGeo);
       }
     });
+    const buildingsMergeMs = performance.now() - tBuildingsMerge0;
 
     // Construct BVH spatial acceleration structures once at scene build time for all
     // static scene meshes so hover/click raycasting runs in sub-millisecond time
     // without mutating triangle indices, groups, or faceRanges.
+    const tBvh0 = performance.now();
+    const tBvhGround0 = performance.now();
     resourceManager.enableMeshBvh(groundMesh);
+    const groundBvhMs = performance.now() - tBvhGround0;
+
+    const tBvhBuildings0 = performance.now();
+    resourceManager.enableGroupBvh(buildingsGroup);
+    const buildingsBvhMs = performance.now() - tBvhBuildings0;
+
+    const tBvhRoads0 = performance.now();
+    resourceManager.enableGroupBvh(roadsGroup);
+    const roadsBvhMs = performance.now() - tBvhRoads0;
+
+    const tBvhOther0 = performance.now();
     for (const group of [
-      buildingsGroup,
-      roadsGroup,
       railwaysGroup,
       waterGroup,
       parksGroup,
@@ -5879,6 +5992,51 @@ export class GeometryBuilder {
     ]) {
       resourceManager.enableGroupBvh(group);
     }
+    const otherBvhMs = performance.now() - tBvhOther0;
+    const bvhConstructionMs = performance.now() - tBvh0;
+
+    const round3 = (v: number) => Number(Math.max(0, v).toFixed(3));
+    const roadGeometryMs =
+      roadClassificationMs +
+      roadSplitAndEndpointScanMs +
+      roadJunctionsMs +
+      roadAtGradeRibbonsMs +
+      roadBridgesAndTunnelsMs;
+    const geometryMergingMs =
+      planarMergeMs + roadsMergeMs + barriersAndLandmarksMergeMs + buildingsMergeMs;
+    const totalBuildSceneMs = performance.now() - tBuildScene0;
+
+    const stageTimingsMs: SceneBuildStageTimingsMs = {
+      planarResolutionMs: round3(planarResolutionTimingMs),
+      planarSurfaceGeometryMs: round3(planarSurfaceGeometryMs),
+      railwayGeometryMs: round3(railwaysGroup.userData.railwayGenerationTimingMs ?? 0),
+      roadGeometryMs: round3(roadGeometryMs),
+      roadSubTimingsMs: {
+        classificationMs: round3(roadClassificationMs),
+        splitAndEndpointScanMs: round3(roadSplitAndEndpointScanMs),
+        junctionsMs: round3(roadJunctionsMs),
+        atGradeRibbonsAndClippingMs: round3(roadAtGradeRibbonsMs),
+        bridgesAndTunnelsMs: round3(roadBridgesAndTunnelsMs),
+      },
+      barriersAndFoliageGeometryMs: round3(barriersAndFoliageGeometryMs),
+      buildingGeometryMs: round3(buildingGeometryMs),
+      geometryMergingMs: round3(geometryMergingMs),
+      mergeSubTimingsMs: {
+        planarMs: round3(planarMergeMs),
+        roadsMs: round3(roadsMergeMs),
+        barriersAndLandmarksMs: round3(barriersAndLandmarksMergeMs),
+        buildingsMs: round3(buildingsMergeMs),
+      },
+      bvhConstructionMs: round3(bvhConstructionMs),
+      bvhSubTimingsMs: {
+        groundMs: round3(groundBvhMs),
+        buildingsMs: round3(buildingsBvhMs),
+        roadsMs: round3(roadsBvhMs),
+        otherMs: round3(otherBvhMs),
+      },
+      totalBuildSceneMs: round3(totalBuildSceneMs),
+    };
+    groundMesh.userData.sceneStageTimingsMs = stageTimingsMs;
 
     if (data.diagnostics) {
       data.diagnostics.sourceFeaturesRendered = renderedSourceIds.size;
@@ -6096,6 +6254,7 @@ export class GeometryBuilder {
         renderedFeaturesCount: renderedSourceIds.size,
         forestTreesCount: treePlacements.length,
       },
+      stageTimingsMs,
       resources: resourceManager,
       infrastructureRenderOptions,
       infrastructureRenderPreview,

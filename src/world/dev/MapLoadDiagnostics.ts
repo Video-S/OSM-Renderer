@@ -2,6 +2,7 @@ import type {
   RailwayInfrastructureRenderSource,
   RoadInfrastructureRenderSource,
 } from '../infrastructure/rendering/InfrastructureRenderAdapter';
+import type { SceneBuildStageTimingsMs } from '../GeometryBuilder';
 
 export type MapLoadSourceType =
   | 'live_osm'
@@ -59,6 +60,8 @@ export interface MapLoadStageTimingsMs {
   infrastructurePreparationMs: number | null;
   /** GeometryBuilder.buildScene + optional prototype railway build time. */
   sceneGeometryMs: number | null;
+  /** Disjoint per-stage breakdown inside GeometryBuilder.buildScene(). */
+  sceneStageTimingsMs?: SceneBuildStageTimingsMs | null;
   /** React commit + Three.js resource upload + shader compile + first gl.render() for revision. */
   scenePresentationMs: number | null;
   /** Subset of unaccounted gap between mapData commit and buildScene effect start (minus infra memo). */
@@ -283,6 +286,7 @@ interface InternalMutableLoad {
   consoleDiagnosticsMs: number | null;
   infrastructurePreparationMs: number | null;
   sceneGeometryMs: number | null;
+  sceneStageTimingsMs: SceneBuildStageTimingsMs | null;
   scenePresentationMs: number | null;
 
   mapDataCommittedAtMs: number | null;
@@ -381,6 +385,7 @@ export class MapLoadTimelineTracker {
       consoleDiagnosticsMs: null,
       infrastructurePreparationMs: null,
       sceneGeometryMs: null,
+      sceneStageTimingsMs: null,
       scenePresentationMs: null,
       mapDataCommittedAtMs: null,
       infraPrepStartedAtMs: null,
@@ -552,6 +557,7 @@ export class MapLoadTimelineTracker {
       effectStartedAtMs: number;
       buildDurationMs: number;
       sceneRevision: number;
+      stageTimingsMs?: SceneBuildStageTimingsMs | null;
       rendererConfig?: Partial<MapLoadRendererConfigSnapshot>;
       triangles?: number | null;
       drawCalls?: number | null;
@@ -565,6 +571,9 @@ export class MapLoadTimelineTracker {
       load.geometryEffectStartedAtMs = params.effectStartedAtMs;
     }
     load.sceneGeometryMs = roundMs(params.buildDurationMs);
+    if (params.stageTimingsMs !== undefined) {
+      load.sceneStageTimingsMs = params.stageTimingsMs ?? null;
+    }
     load.sceneRevision = params.sceneRevision;
     load.geometryCommittedAtMs = t0;
     if (params.rendererConfig) {
@@ -749,6 +758,7 @@ export class MapLoadTimelineTracker {
         consoleDiagnosticsMs: load.consoleDiagnosticsMs,
         infrastructurePreparationMs: load.infrastructurePreparationMs,
         sceneGeometryMs: load.sceneGeometryMs,
+        sceneStageTimingsMs: load.sceneStageTimingsMs,
         scenePresentationMs: load.scenePresentationMs,
         reactSchedulingGapMs,
         unaccountedOverheadMs,

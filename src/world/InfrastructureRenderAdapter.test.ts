@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { MAP_THEMES } from '../styles/mapThemes';
 import {
@@ -707,14 +708,36 @@ function createRichSyntheticDataset(): ProcessedMapData & TopologySourceData {
   };
 }
 
+function hashTypedArray(
+  arr: ArrayBufferView | null | undefined
+): { type: string; length: number; byteLength: number; sha256: string } | null {
+  if (!arr) return null;
+  const view = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+  const sha256 = createHash('sha256').update(view).digest('hex');
+  return {
+    type: arr.constructor.name,
+    length: 'length' in arr ? Number((arr as { length: number }).length) : arr.byteLength,
+    byteLength: arr.byteLength,
+    sha256,
+  };
+}
+
+function hashJsonValue(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
 function snapshotSceneNode(obj: THREE.Object3D): any {
   const ud = obj.userData || {};
   const isInst = obj instanceof THREE.InstancedMesh;
   const instCount = isInst ? (obj as THREE.InstancedMesh).count : 0;
-  const instMatArr =
+  const instMatSummary =
     isInst && (obj as THREE.InstancedMesh).instanceMatrix
-      ? Array.from((obj as THREE.InstancedMesh).instanceMatrix.array.slice(0, instCount * 16))
-      : [];
+      ? hashTypedArray(
+          (
+            (obj as THREE.InstancedMesh).instanceMatrix.array as Float32Array
+          ).subarray(0, instCount * 16)
+        )
+      : null;
 
   let geometrySnapshot: {
     attributes: Record<
@@ -723,10 +746,10 @@ function snapshotSceneNode(obj: THREE.Object3D): any {
         itemSize: number;
         count: number;
         normalized: boolean;
-        values: number[];
+        data: ReturnType<typeof hashTypedArray>;
       }
     >;
-    index: number[] | null;
+    index: ReturnType<typeof hashTypedArray>;
     groups: Array<{ start: number; count: number; materialIndex?: number }>;
   } | null = null;
 
@@ -738,7 +761,7 @@ function snapshotSceneNode(obj: THREE.Object3D): any {
         itemSize: number;
         count: number;
         normalized: boolean;
-        values: number[];
+        data: ReturnType<typeof hashTypedArray>;
       }
     > = {};
 
@@ -750,12 +773,12 @@ function snapshotSceneNode(obj: THREE.Object3D): any {
           itemSize: attr.itemSize,
           count: attr.count,
           normalized: Boolean(attr.normalized),
-          values: Array.from(attr.array as ArrayLike<number>),
+          data: hashTypedArray(attr.array as ArrayBufferView),
         };
       }
     }
 
-    const index = geom.index ? Array.from(geom.index.array as ArrayLike<number>) : null;
+    const index = geom.index ? hashTypedArray(geom.index.array as ArrayBufferView) : null;
     const groups = (geom.groups || []).map((g) => ({
       start: g.start,
       count: g.count,
@@ -769,18 +792,24 @@ function snapshotSceneNode(obj: THREE.Object3D): any {
     };
   }
 
-  // Complete faceRanges collection (cloned cleanly for deterministic value comparison)
   const faceRanges = Array.isArray(ud.faceRanges)
-    ? ud.faceRanges.map((fr: any) => ({
-        startFace: fr.startFace,
-        endFace: fr.endFace,
-        info: fr.info ? JSON.parse(JSON.stringify(fr.info)) : null,
-      }))
+    ? {
+        count: ud.faceRanges.length,
+        sha256: hashJsonValue(
+          ud.faceRanges.map((fr: any) => ({
+            startFace: fr.startFace,
+            endFace: fr.endFace,
+            info: fr.info ?? null,
+          }))
+        ),
+      }
     : undefined;
 
-  // Complete instanceInfos collection (cloned cleanly for deterministic value comparison)
   const instanceInfos = Array.isArray(ud.instanceInfos)
-    ? ud.instanceInfos.map((info: any) => (info ? JSON.parse(JSON.stringify(info)) : null))
+    ? {
+        count: ud.instanceInfos.length,
+        sha256: hashJsonValue(ud.instanceInfos.map((info: any) => info ?? null)),
+      }
     : undefined;
 
   // Full nested scene object hierarchy and transforms
@@ -802,7 +831,7 @@ function snapshotSceneNode(obj: THREE.Object3D): any {
     instanceInfos,
     isInstanced: isInst,
     instanceCount: instCount,
-    instanceMatrices: instMatArr,
+    instanceMatrix: instMatSummary,
     geometry: geometrySnapshot,
     children,
   };
@@ -886,7 +915,11 @@ function collectSceneSnapshot(scene: BuiltSceneGeometry) {
     },
     cpuMemStats: scene.resources.getCpuBufferMemoryStats(),
     groupSnapshots,
-    provenanceSamples,
+    provenanceSummary: {
+      count: provenanceSamples.length,
+      sha256: hashJsonValue(provenanceSamples),
+      preview: provenanceSamples.slice(0, 8),
+    },
   };
 }
 
@@ -1460,7 +1493,7 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
     });
   }
 
-  it('8. preserves full railway prototype harness compatibility (production, candidateB) alongside prepared descriptors', () => {
+  it('8. preserves railway prototype harness compatibility (candidateB) and authoritative graph-R+ descriptor rendering', () => {
     const fixtureImplicit = createRailwayPrototypeFixtureData();
     const fixturePreview = createRailwayPrototypeFixtureData();
     const sharedPreview = prepareInfrastructureRenderPreview(fixturePreview, {
@@ -1468,8 +1501,13 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
       railways: 'graph-R+',
     });
     assert.ok(sharedPreview.descriptors);
+    assert.ok(sharedPreview.descriptors.railwayEdges.length > 0);
     assert.equal(sharedPreview.validation?.isValid, true);
+    const sharedPreviewSnapshotBefore = JSON.stringify(
+      serializeDescriptorBundle(sharedPreview.descriptors)
+    );
 
+    // 1. Rail-empty parity: implicit build vs explicit preview when both start with railways: []
     const nonRailImplicitData: ProcessedMapData = {
       ...fixtureImplicit,
       railways: [],
@@ -1478,6 +1516,12 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
       ...fixturePreview,
       railways: [],
     };
+    const sharedNonRailPreview = prepareInfrastructureRenderPreview(nonRailPreviewData, {
+      roads: 'graph-surface',
+      railways: 'graph-R+',
+    });
+    assert.ok(sharedNonRailPreview.descriptors);
+    assert.equal(sharedNonRailPreview.descriptors.railwayEdges.length, 0);
 
     const implicitNonRail = new GeometryBuilder({
       infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
@@ -1485,30 +1529,62 @@ describe('Milestone 2.3 Stage E1 — Graph-to-Renderer Adapter & Safe Integratio
 
     const previewNonRail = new GeometryBuilder({
       infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
+      infrastructureRenderPreview: sharedNonRailPreview,
+    }).buildScene(nonRailPreviewData, MAP_THEMES.tactical);
+
+    assert.equal(implicitNonRail.railwaysGroup.children.length, 0);
+    assert.deepEqual(collectSceneSnapshot(previewNonRail), collectSceneSnapshot(implicitNonRail));
+
+    // 2. Authoritative graph-R+ descriptor rendering: sharedPreview supplies railwayEdges
+    // identically whether built directly on full fixture data or via pre-prepared preview
+    const implicitFull = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
+    }).buildScene(fixtureImplicit, MAP_THEMES.tactical);
+
+    const previewFull = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
+      infrastructureRenderPreview: sharedPreview,
+    }).buildScene(fixturePreview, MAP_THEMES.tactical);
+
+    const previewFromSharedRailDescriptors = new GeometryBuilder({
+      infrastructureRenderOptions: { roads: 'graph-surface', railways: 'graph-R+' },
       infrastructureRenderPreview: sharedPreview,
     }).buildScene(nonRailPreviewData, MAP_THEMES.tactical);
 
-    assert.deepEqual(collectSceneSnapshot(previewNonRail), collectSceneSnapshot(implicitNonRail));
-
-    const protoProd = buildRailwayPrototypeGroup(
-      fixturePreview,
-      MAP_THEMES.tactical,
-      'candidateB',
-      1.0
+    assert.ok(implicitFull.railwaysGroup.children.length > 0);
+    assert.ok(previewFromSharedRailDescriptors.railwaysGroup.children.length > 0);
+    assert.deepEqual(collectSceneSnapshot(previewFull), collectSceneSnapshot(implicitFull));
+    assert.deepEqual(
+      collectSceneSnapshot(previewFromSharedRailDescriptors).groupSnapshots,
+      collectSceneSnapshot(implicitFull).groupSnapshots
     );
+
+    // 3. Standalone Candidate B railway prototype harness compatibility alongside sharedPreview
     const protoB = buildRailwayPrototypeGroup(
       fixturePreview,
       MAP_THEMES.tactical,
       'candidateB',
       1.0
     );
-    assert.ok(protoProd.railwaysGroup.children.length > 0);
     assert.ok(protoB.railwaysGroup.children.length > 0);
+    assert.equal(
+      JSON.stringify(serializeDescriptorBundle(sharedPreview.descriptors)),
+      sharedPreviewSnapshotBefore
+    );
 
-    protoProd.dispose();
     protoB.dispose();
     implicitNonRail.dispose();
     previewNonRail.dispose();
+    implicitFull.dispose();
+    previewFull.dispose();
+    previewFromSharedRailDescriptors.dispose();
+
+    assert.equal(implicitNonRail.resources.ownedGeometriesCount, 0);
+    assert.equal(previewNonRail.resources.ownedGeometriesCount, 0);
+    assert.equal(implicitFull.resources.ownedGeometriesCount, 0);
+    assert.equal(previewFull.resources.ownedGeometriesCount, 0);
+    assert.equal(previewFromSharedRailDescriptors.resources.ownedGeometriesCount, 0);
+    assert.equal(previewFull.resources.disposed, true);
   });
 
   it('9. measures and validates independent graph build, adapter build, and scene build performance across all benchmark datasets', () => {

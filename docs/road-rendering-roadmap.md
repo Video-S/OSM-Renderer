@@ -1,8 +1,8 @@
 # Road Rendering Validation & Migration Roadmap
 
-## 1. Current State & Renderer Mode (`TKT-026` — Promoted to Production Default)
+## 1. Current State & Renderer Mode (`TKT-026` — In Progress, Pending Owner Review)
 
-As of `TKT-026` (2026-11-17), **E2+ Surface-First Road Rendering (`roads: 'graph-surface'`)** and **R+ Surface-First Ballast Railway Rendering (`railways: 'graph-R+'`)** are the single permanent production infrastructure rendering architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS = { roads: 'graph-surface', railways: 'graph-R+' }`). The obsolete `'legacy'`, `'graph-preview'`, and intermediate `'graph'` (E2) road rendering branches have been retired.
+As of `TKT-026` (2026-11-17), **E2+ Surface-First Road Rendering (`roads: 'graph-surface'`)** and **R+ Surface-First Ballast Railway Rendering (`railways: 'graph-R+'`)** have been promoted in code as the single production infrastructure rendering architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS = { roads: 'graph-surface', railways: 'graph-R+' }`), pending project-owner review. The obsolete `'legacy'`, `'graph-preview'`, and intermediate `'graph'` (E2) road rendering branches have been retired.
 
 | Mode | Selector | Status | Description |
 | :--- | :--- | :--- | :--- |
@@ -41,11 +41,11 @@ Automated validation in Phase 1 identified three concrete issues in E2+, whose t
 
 ---
 
-## 4. Phase 3: Promotion to Production Default (`TKT-026` — Complete)
+## 4. Phase 3: Promotion to Production Default (`TKT-026` — In Progress, Pending Owner Review)
 
-`roads: 'graph-surface'` (E2+) and `railways: 'graph-R+'` (R+) have been promoted to the permanent production default (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`) following:
+`roads: 'graph-surface'` (E2+) and `railways: 'graph-R+'` (R+) have been promoted in code to the default production architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`) pending project-owner review following:
 1. Resolution of all three Phase 2 issues (provenance split bends, full-subtraction counter synchronization, and H01 pinched-ring overlap).
-2. Spatial indexing (`32 m` `RoadFootprintSpatialGrid`, `TKT-020`) and `4 × 4 km` pre-migration benchmark verification (`TKT-026`): frozen Hengelo S5 road generation dropped **`92.3%`** (`38,826.9 ms` $\to$ `2,994.7 ms`) and live Overijssel `r = 2000 m` road generation dropped **`90.3%`** (`79,209.9 ms` $\to$ `7,667.1 ms`).
+2. Spatial indexing (`32 m` `RoadFootprintSpatialGrid`, `TKT-020`) and `4 × 4 km` pre-migration benchmark verification (`TKT-026`): in the `1280×800` SwiftShader run vs. the `TKT-025` legacy baseline, frozen Hengelo S5 road generation dropped **`92.3%`** (`38,826.9 ms` $\to$ `2,994.7 ms`) and live Overijssel `r = 2000 m` road generation dropped **`90.3%`** (`79,209.9 ms` $\to$ `7,667.1 ms`); in a separate paired `1280×720` WebGL run (`57–68 FPS`), S5 road generation dropped **`69.8%`** (`38,832.8 ms` $\to$ `11,735.5 ms`) and live `r = 2000 m` dropped **`82.0%`** (`79,233.5 ms` $\to$ `14,232.2 ms`).
 3. Retirement of obsolete Legacy and intermediate E2 road/railway rendering paths (`TKT-026`).
 
 

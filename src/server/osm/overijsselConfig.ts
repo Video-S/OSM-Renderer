@@ -37,3 +37,25 @@ export function resolveOverijsselIndexPath(repoRoot: string = process.cwd()): st
   }
   return path.join(resolveOverijsselDataDir(repoRoot), OVERIJSSEL_INDEX_FILENAME);
 }
+
+const TRUTHY_FLAGS = new Set(['1', 'true', 'yes', 'on']);
+const FALSY_FLAGS = new Set(['0', 'false', 'no', 'off']);
+
+export function isOverijsselAutoBootstrapDisabled(
+  env: NodeJS.ProcessEnv = process.env,
+  argv: readonly string[] = process.argv
+): boolean {
+  if (argv.includes('--no-overijssel-bootstrap')) {
+    return true;
+  }
+  const disableFlag = env.DISABLE_OVERIJSSEL_BOOTSTRAP?.trim().toLowerCase();
+  if (disableFlag && TRUTHY_FLAGS.has(disableFlag)) {
+    return true;
+  }
+  const autoFlag = env.OVERIJSSEL_AUTO_BOOTSTRAP?.trim().toLowerCase();
+  if (autoFlag && FALSY_FLAGS.has(autoFlag)) {
+    return true;
+  }
+  return false;
+}
+

@@ -10,7 +10,11 @@ import { isPointInOverijssel } from '../server/osm/overijsselBoundary';
 import { buildOverijsselSpatialIndex } from '../server/osm/OverijsselIndexBuilder';
 import { OverijsselIndexMissingError, OverijsselOsmStore } from '../server/osm/OverijsselOsmStore';
 import { createOsmDataHandler } from '../server/osm/osmDataHandler';
-import { resolveOverijsselIndexPath } from '../server/osm/overijsselConfig';
+import {
+  isOverijsselAutoBootstrapDisabled,
+  resolveOverijsselIndexPath,
+} from '../server/osm/overijsselConfig';
+import { ensureOverijsselReady } from '../../server';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { parseServerTimingHeader } from './dev/MapLoadDiagnostics';
 
@@ -453,3 +457,74 @@ test('Full Overijssel snapshot spatial index (when present on disk) serves Henge
     store.close();
   }
 });
+
+test('Overijssel auto-bootstrap opt-out skips download and indexing while preserving default behavior', async () => {
+  // Default behavior: auto-bootstrap remains enabled when opt-out env/CLI flags are absent
+  assert.equal(isOverijsselAutoBootstrapDisabled({}, ['node', 'server.ts']), false);
+
+  // Explicit opt-outs: env vars and CLI flag
+  assert.equal(
+    isOverijsselAutoBootstrapDisabled({ DISABLE_OVERIJSSEL_BOOTSTRAP: 'true' }, ['node', 'server.ts']),
+    true
+  );
+  assert.equal(
+    isOverijsselAutoBootstrapDisabled({ DISABLE_OVERIJSSEL_BOOTSTRAP: '1' }, ['node', 'server.ts']),
+    true
+  );
+  assert.equal(
+    isOverijsselAutoBootstrapDisabled({ OVERIJSSEL_AUTO_BOOTSTRAP: 'false' }, ['node', 'server.ts']),
+    true
+  );
+  assert.equal(
+    isOverijsselAutoBootstrapDisabled({ OVERIJSSEL_AUTO_BOOTSTRAP: '0' }, ['node', 'server.ts']),
+    true
+  );
+  assert.equal(
+    isOverijsselAutoBootstrapDisabled({}, ['node', 'server.ts', '--no-overijssel-bootstrap']),
+    true
+  );
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'overijssel-optout-'));
+  try {
+    const missingIndexPath = path.join(tmpDir, 'missing.sqlite');
+    let fetchCalls = 0;
+    let buildCalls = 0;
+
+    // 1. With opt-out enabled, ensureOverijsselReady must NOT download or build index
+    await ensureOverijsselReady({
+      env: { DISABLE_OVERIJSSEL_BOOTSTRAP: 'true' },
+      argv: ['node', 'server.ts'],
+      indexPath: missingIndexPath,
+      fetchPbf: async () => {
+        fetchCalls++;
+        return { pbfPath: path.join(tmpDir, 'sample.osm.pbf') };
+      },
+      buildIndex: async () => {
+        buildCalls++;
+      },
+    });
+    assert.equal(fetchCalls, 0);
+    assert.equal(buildCalls, 0);
+    assert.equal(fs.existsSync(missingIndexPath), false);
+
+    // 2. With opt-out unset (default), ensureOverijsselReady triggers download + index build
+    await ensureOverijsselReady({
+      env: {},
+      argv: ['node', 'server.ts'],
+      indexPath: missingIndexPath,
+      fetchPbf: async () => {
+        fetchCalls++;
+        return { pbfPath: path.join(tmpDir, 'sample.osm.pbf') };
+      },
+      buildIndex: async ({ outIndexPath }) => {
+        buildCalls++;
+        assert.equal(outIndexPath, missingIndexPath);
+      },
+    });
+    assert.equal(fetchCalls, 1);
+    assert.equal(buildCalls, 1);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+

@@ -5,7 +5,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { BoundedCache, createOsmDataHandler } from './src/server/osm/osmDataHandler';
-import { resolveOverijsselIndexPath } from './src/server/osm/overijsselConfig';
+import {
+  isOverijsselAutoBootstrapDisabled,
+  resolveOverijsselIndexPath,
+} from './src/server/osm/overijsselConfig';
 import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 
@@ -19,16 +22,29 @@ app.use(express.json());
 
 let overijsselBootstrapPromise: Promise<void> | null = null;
 
-function ensureOverijsselReady(): Promise<void> {
-  const indexPath = resolveOverijsselIndexPath();
+export interface EnsureOverijsselReadyOptions {
+  env?: NodeJS.ProcessEnv;
+  argv?: readonly string[];
+  indexPath?: string;
+  fetchPbf?: () => Promise<{ pbfPath: string }>;
+  buildIndex?: (options: { pbfPath: string; outIndexPath: string }) => Promise<unknown>;
+}
+
+export function ensureOverijsselReady(options?: EnsureOverijsselReadyOptions): Promise<void> {
+  if (isOverijsselAutoBootstrapDisabled(options?.env, options?.argv)) {
+    return Promise.resolve();
+  }
+  const indexPath = options?.indexPath ?? resolveOverijsselIndexPath();
   if (fs.existsSync(indexPath)) {
     return Promise.resolve();
   }
   if (!overijsselBootstrapPromise) {
+    const fetchPbf = options?.fetchPbf ?? fetchOverijsselPbf;
+    const buildIndex = options?.buildIndex ?? runBuildOverijsselIndex;
     overijsselBootstrapPromise = (async () => {
       console.log('Bootstrapping offline Overijssel OSM spatial index...');
-      const fetched = await fetchOverijsselPbf();
-      await runBuildOverijsselIndex({ pbfPath: fetched.pbfPath, outIndexPath: indexPath });
+      const fetched = await fetchPbf();
+      await buildIndex({ pbfPath: fetched.pbfPath, outIndexPath: indexPath });
       console.log(`Offline Overijssel OSM spatial index ready at ${indexPath}`);
     })().finally(() => {
       overijsselBootstrapPromise = null;
@@ -39,7 +55,7 @@ function ensureOverijsselReady(): Promise<void> {
 
 const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
 const osmDataController = createOsmDataHandler({
-  ensureOverijsselReady,
+  ensureOverijsselReady: isOverijsselAutoBootstrapDisabled() ? undefined : ensureOverijsselReady,
 });
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
@@ -126,6 +142,11 @@ async function startServer() {
     console.log(
       `Overijssel offline spatial store ready (${overijsselStatus.snapshotId}) at ${overijsselStatus.indexPath}`
     );
+  } else if (isOverijsselAutoBootstrapDisabled()) {
+    console.info(
+      `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
+        `Automatic background setup disabled via opt-out.`
+    );
   } else {
     console.warn(
       `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
@@ -147,4 +168,18 @@ async function startServer() {
   });
 }
 
-startServer();
+const isMainModule = (() => {
+  if (typeof process.argv[1] !== 'string' || process.argv[1].length === 0) {
+    return false;
+  }
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(__filename);
+  } catch {
+    return path.resolve(process.argv[1]) === path.resolve(__filename);
+  }
+})();
+
+if (isMainModule) {
+  startServer();
+}
+

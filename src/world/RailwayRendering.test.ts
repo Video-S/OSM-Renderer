@@ -483,21 +483,22 @@ test('RailwayGeometryBuilder & GeometryBuilder: hybrid zoom switching, close par
 
   // 2. Verify both closely spaced parallel tracks and the turnout branch receive 3D sleepers
   const sleeperCountByTrack = new Map<string, number>();
-  const infos = (sleepers3DTarget.userData as any).instanceInfos as Array<{ id: string }>;
+  const infos = (sleepers3DTarget.userData as any).instanceInfos as Array<{ id: string; sourceFeatureId?: string }>;
   for (const inf of infos) {
-    sleeperCountByTrack.set(inf.id, (sleeperCountByTrack.get(inf.id) || 0) + 1);
+    const trackKey = inf.sourceFeatureId || inf.id;
+    sleeperCountByTrack.set(trackKey, (sleeperCountByTrack.get(trackKey) || 0) + 1);
   }
   assert.ok(
-    (sleeperCountByTrack.get('track-main-1') || 0) >= 100,
-    `Main track 1 must have continuous 3D sleepers (got ${sleeperCountByTrack.get('track-main-1')})`
+    ((sleeperCountByTrack.get('way/2001') ?? sleeperCountByTrack.get('track-main-1')) || 0) >= 100,
+    `Main track 1 must have continuous 3D sleepers (got ${sleeperCountByTrack.get('way/2001') ?? sleeperCountByTrack.get('track-main-1')})`
   );
   assert.ok(
-    (sleeperCountByTrack.get('track-main-2-close') || 0) >= 100,
-    `Closely spaced 2.25m parallel track 2 must retain its own sleepers without omission (got ${sleeperCountByTrack.get('track-main-2-close')})`
+    ((sleeperCountByTrack.get('way/2002') ?? sleeperCountByTrack.get('track-main-2-close')) || 0) >= 100,
+    `Closely spaced 2.25m parallel track 2 must retain its own sleepers without omission (got ${sleeperCountByTrack.get('way/2002') ?? sleeperCountByTrack.get('track-main-2-close')})`
   );
   assert.ok(
-    (sleeperCountByTrack.get('track-turnout-branch') || 0) >= 12,
-    `Diverging turnout branch must receive independent sleepers beyond shared throat bearers (got ${sleeperCountByTrack.get('track-turnout-branch')})`
+    ((sleeperCountByTrack.get('way/2003') ?? sleeperCountByTrack.get('track-turnout-branch')) || 0) >= 12,
+    `Diverging turnout branch must receive independent sleepers beyond shared throat bearers (got ${sleeperCountByTrack.get('way/2003') ?? sleeperCountByTrack.get('track-turnout-branch')})`
   );
 
   // 3. Feature inspection metadata via resolveInspectedFeature()
@@ -697,11 +698,11 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
   const railsRibbonY = getYBounds(railsRibbonMesh.geometry);
   const rails3DY = getYBounds(rails3DMesh.geometry);
 
-  // Verify sloped approach ramps transition from at-grade base up to full layer-1 bridge elevation
+  // 2a. Verify an isolated bridge deck with no connected at-grade approaches correctly remains at full elevated deck height
   assert.ok(
-    Math.abs(ballastY.minY - ELEVATION_POLICY.RAILWAY_BALLAST) < 0.05 &&
+    Math.abs(ballastY.minY - expectedElevs.ballast) < 0.02 &&
       Math.abs(ballastY.maxY - expectedElevs.ballast) < 0.02,
-    `Bridge ballast must ramp from ~${ELEVATION_POLICY.RAILWAY_BALLAST}m to ~${expectedElevs.ballast}m (got ${ballastY.minY.toFixed(3)}..${ballastY.maxY.toFixed(3)})`
+    `Isolated bridge deck ballast must remain at full elevated deck height ~${expectedElevs.ballast}m without artificial ground ramps (got ${ballastY.minY.toFixed(3)}..${ballastY.maxY.toFixed(3)})`
   );
   assert.ok(
     Math.abs(sleepersRibbonY.maxY - expectedElevs.sleepers) < 0.02 &&
@@ -714,11 +715,11 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
     `Bridge rail UV-ribbon must reach elevated rail height ~${expectedElevs.rails}m above sleepers (got ${railsRibbonY.maxY.toFixed(3)})`
   );
   assert.ok(
-    rails3DY.minY < 0.3 && rails3DY.maxY > expectedElevs.rails,
-    `3D extruded bridge rails must follow the ramped bridge profile from <0.3m up to >${expectedElevs.rails}m (got ${rails3DY.minY.toFixed(3)}..${rails3DY.maxY.toFixed(3)})`
+    Math.abs(rails3DY.minY - expectedElevs.rails) < 0.05 && rails3DY.maxY >= expectedElevs.rails,
+    `3D extruded rails on isolated bridge deck must remain at elevated rail height (got ${rails3DY.minY.toFixed(3)}..${rails3DY.maxY.toFixed(3)})`
   );
 
-  // Verify 3D instanced sleepers follow the elevated 3D bridge profile via instance matrices
+  // Verify 3D instanced sleepers follow the elevated bridge deck via instance matrices
   assert.ok(sleepers3DMesh.isInstancedMesh && sleepers3DMesh.count > 50, 'Bridge must have instanced 3D sleepers');
   const mat4 = new THREE.Matrix4();
   const posVec = new THREE.Vector3();
@@ -731,9 +732,79 @@ test('M2.2 Railway bridge: track elevation, 3D bridge profile, substructure, par
     maxSleeperInstY = Math.max(maxSleeperInstY, posVec.y);
   }
   assert.ok(
-    minSleeperInstY < 0.3 && maxSleeperInstY > expectedElevs.ballast,
-    `Instanced 3D bridge sleepers must follow the elevated bridge profile from approach ramps (<0.3m) to central deck (>${expectedElevs.ballast}m), got ${minSleeperInstY.toFixed(3)}..${maxSleeperInstY.toFixed(3)}`
+    minSleeperInstY >= expectedElevs.ballast - 0.05 && maxSleeperInstY <= expectedElevs.sleepers + 0.05,
+    `Instanced 3D sleepers on isolated bridge deck must remain at elevated deck height (got ${minSleeperInstY.toFixed(3)}..${maxSleeperInstY.toFixed(3)})`
   );
+
+  // 2b. Verify bridges with connected approach ramps transition from at-grade base up to full bridge elevation
+  const connectedMapData = createBaseMapData([
+    {
+      id: 'rail-approach-west',
+      type: 'railway',
+      sourceFeatureId: 'way/9000',
+      railwayType: 'rail',
+      points: [[-100, 0], [-60, 0]],
+      nodeIds: ['n1', 'n2'],
+      isBridge: false,
+      isTunnel: false,
+      layer: 0,
+      width: 3.2,
+      osmTags: { railway: 'rail' },
+    },
+    {
+      ...bridgeRailway,
+      id: 'rail-bridge-connected',
+      sourceFeatureId: 'way/9001',
+      nodeIds: ['n2', 'n3'],
+    },
+    {
+      id: 'rail-approach-east',
+      type: 'railway',
+      sourceFeatureId: 'way/9002',
+      railwayType: 'rail',
+      points: [[60, 0], [100, 0]],
+      nodeIds: ['n3', 'n4'],
+      isBridge: false,
+      isTunnel: false,
+      layer: 0,
+      width: 3.2,
+      osmTags: { railway: 'rail' },
+    },
+  ]);
+  const connectedScene = builder.buildScene(connectedMapData, MAP_THEMES.tactical);
+  try {
+    const connectedBallastMesh = firstMesh(connectedScene.railwaysGroup.children.find((c) => c.name === 'Railway_Ballast')!);
+    const connectedRails3DMesh = firstMesh(connectedScene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Rails_3D'))!);
+    const connectedSleepers3DMesh = firstMesh(connectedScene.railwaysGroup.children.find((c) => c.name.startsWith('Railway_Sleepers_3D'))!) as THREE.InstancedMesh;
+
+    const connectedBallastY = getYBounds(connectedBallastMesh.geometry);
+    const connectedRails3DY = getYBounds(connectedRails3DMesh.geometry);
+
+    assert.ok(
+      Math.abs(connectedBallastY.minY - ELEVATION_POLICY.RAILWAY_BALLAST) < 0.05 &&
+        Math.abs(connectedBallastY.maxY - expectedElevs.ballast) < 0.02,
+      `Connected bridge ballast must ramp from ~${ELEVATION_POLICY.RAILWAY_BALLAST}m to ~${expectedElevs.ballast}m (got ${connectedBallastY.minY.toFixed(3)}..${connectedBallastY.maxY.toFixed(3)})`
+    );
+    assert.ok(
+      connectedRails3DY.minY < 0.3 && connectedRails3DY.maxY > expectedElevs.rails,
+      `3D extruded rails with connected approach ramps must ramp from <0.3m up to >${expectedElevs.rails}m (got ${connectedRails3DY.minY.toFixed(3)}..${connectedRails3DY.maxY.toFixed(3)})`
+    );
+
+    let minConnSleeperY = Infinity;
+    let maxConnSleeperY = -Infinity;
+    for (let i = 0; i < connectedSleepers3DMesh.count; i++) {
+      connectedSleepers3DMesh.getMatrixAt(i, mat4);
+      posVec.setFromMatrixPosition(mat4);
+      minConnSleeperY = Math.min(minConnSleeperY, posVec.y);
+      maxConnSleeperY = Math.max(maxConnSleeperY, posVec.y);
+    }
+    assert.ok(
+      minConnSleeperY < 0.3 && maxConnSleeperY > expectedElevs.ballast,
+      `Instanced 3D sleepers with connected approach ramps must follow approach ramps (<0.3m) to central deck (>${expectedElevs.ballast}m), got ${minConnSleeperY.toFixed(3)}..${maxConnSleeperY.toFixed(3)}`
+    );
+  } finally {
+    connectedScene.dispose();
+  }
 
   // 3. No duplicate bridge geometry in roadsGroup
   const roadBridgeSub = scene.roadsGroup.children.find(

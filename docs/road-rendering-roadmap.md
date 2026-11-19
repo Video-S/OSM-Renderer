@@ -1,8 +1,8 @@
 # Road Rendering Validation & Migration Roadmap
 
-## 1. Current State & Renderer Mode (`TKT-026` — In Progress, Pending Owner Visual Approval)
+## 1. Current State & Renderer Mode (`TKT-026` — Closed 2026-11-19)
 
-As of `TKT-026` (2026-11-19), **E2+ Surface-First Road Rendering (`roads: 'graph-surface'`)** and **R+ Surface-First Ballast Railway Rendering (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`)** have been promoted in code as the sole production infrastructure rendering architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`), `in_progress` pending project-owner visual approval. The obsolete `'legacy'`, `'graph-preview'`, and intermediate `'graph'` (E2) road rendering branches have been retired.
+As of `TKT-026` (closed `2026-11-19` following project-owner visual approval), **E2+ Surface-First Road Rendering (`roads: 'graph-surface'`)** and **R+ Surface-First Ballast Railway Rendering (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`)** have been promoted as the sole production infrastructure rendering architecture (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`). The obsolete `'legacy'`, `'graph-preview'`, and intermediate `'graph'` (E2) road rendering branches have been retired.
 
 | Mode | Selector | Status | Description |
 | :--- | :--- | :--- | :--- |
@@ -41,9 +41,9 @@ Automated validation in Phase 1 identified three concrete issues in E2+, whose t
 
 ---
 
-## 4. Phase 3: Promotion to Production Default (`TKT-026` — In Progress, Pending Owner Visual Approval)
+## 4. Phase 3: Promotion to Production Default (`TKT-026` — Closed 2026-11-19)
 
-`roads: 'graph-surface'` (E2+) and `railways: 'graph-R+'` (`railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`, R+) have been promoted in code to the sole production defaults (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`), pending project-owner visual approval, following:
+`roads: 'graph-surface'` (E2+) and `railways: 'graph-R+'` (`railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`, R+) have been promoted to the sole production defaults (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`) and formally approved visually by the project owner on `2026-11-19` (`10,000 m` camera-distance check verifying visibility of loaded map and boundaries, close/distant visual consistency, good performance, and zero regressions), following:
 1. Resolution of all three Phase 2 issues (provenance split bends, full-subtraction counter synchronization, and H01 pinched-ring overlap).
 2. Spatial indexing (`32 m` `RoadFootprintSpatialGrid`, `TKT-020`) and `4 × 4 km` pre-migration benchmark runs (`TKT-026`, Run A & Run B preserved separately with provenance notes because raw `.json` files were not saved in `benchmarks/results/`): in the `1280×800` SwiftShader run (`Run A`) vs. the `TKT-025` legacy baseline, frozen Hengelo S5 road generation dropped **`92.3%`** (`38,826.9 ms` $\to$ `2,994.7 ms`) and live Overijssel `r = 2000 m` road generation dropped **`90.3%`** (`79,209.9 ms` $\to$ `7,667.1 ms`); in a separate paired `1280×720` WebGL run (`Run B`, `57–68 FPS`, warm live cache), S5 road generation dropped **`69.8%`** (`38,832.8 ms` $\to$ `11,735.5 ms`) and live `r = 2000 m` dropped **`82.0%`** (`79,233.5 ms` $\to$ `14,232.2 ms`).
 3. Retirement of obsolete Legacy and intermediate E2 road/railway rendering paths (`TKT-026`) and local Windows verification on commit `6436b7e` (`RailwayRendering` `9/9`, `InfrastructureRenderAdapter` `20/20`, `npm run lint`, `npm run build`).

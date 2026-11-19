@@ -14,7 +14,7 @@ This documentation is organized into two distinct categories:
 ## Manually Maintained Documents
 
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
-  Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1–M2.3 E2+ & R+ promoted under `TKT-026`, `in_progress` pending owner visual approval), verified test/build status, known limitations, and next steps.
+  Tracks the active goalpost and implementation milestones (Goalpost 2: M2.1–M2.3 E2+ & R+ promoted and closed under `TKT-026`; `TKT-027` closed; `TKT-028` regional tiling proposal open), verified test/build status, known limitations, and next steps.
 
 - **[System Architecture (architecture.md)](./architecture.md)**  
   High-level system overview, component responsibilities, runtime data flow, module relationships, and architectural boundaries.
@@ -36,6 +36,12 @@ This documentation is organized into two distinct categories:
 
 - **[Camera & World Coordinates (camera-and-world-coordinates.md)](./camera-and-world-coordinates.md)**  
   Local meter coordinate projection, orthographic camera configuration, viewport framing, zoom/pan/tilt controls, and bounds containment.
+
+- **[Persistent Offline Overijssel OSM Dataset (offline-overijssel-osm-dataset.md)](./offline-overijssel-osm-dataset.md)**  
+  Immutable canonical Geofabrik Overijssel snapshot (`overijssel-261114-8ae28196`), SQLite + R\*Tree spatial storage, strict `source_sha256` verification, and PowerShell setup guide (`TKT-022`, `TKT-027`).
+
+- **[Regional Tiling, Streaming, Offline Baking & Orthographic LOD Proposal (`TKT-028`) (regional-tiling-streaming-lod-proposal.md)](./regional-tiling-streaming-lod-proposal.md)**  
+  Proposed baked-first hybrid architecture for Twente and Overijssel: conformal regional projection, `512 m`–`4,096 m` quadtree tiers, global `InfrastructureGraph` topology, `64 m` collar surface clipping, floating-origin streaming, orthographic zoom LOD, and Hengelo Milestone M1 PoC (`open` pending approval).
 
 - **[Testing & Diagnostics (testing-and-diagnostics.md)](./testing-and-diagnostics.md)**  
   Unit/integration test suite, coplanar triangle overlap validators, junction portal continuity checks, E2+ surface-first geometry validator & performance counters, and regression verification.

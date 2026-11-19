@@ -3,7 +3,7 @@
 ---
 id: TKT-026
 title: Promote E2+/R+ to Production and Retire Legacy Renderers
-status: in_progress
+status: closed
 priority: high
 goalpost: GP-2
 milestone: M2.3-E5
@@ -117,13 +117,22 @@ Collected as a paired Legacy vs. E2+/R+ comparison in the `1280 × 720` WebGL ha
 ## 4. Acceptance Criteria & Verification
 
 - [x] `4 × 4 km` Frozen Hengelo S5 and Live Overijssel `r = 2000 m` benchmarked with E2+/R+ and compared against TKT-025 legacy measurements (Run A `1280×800` SwiftShader & Run B `1280×720` WebGL reconciled with provenance notes above).
-- [x] E2+/R+ (`roads: 'graph-surface'`, `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`) promoted to default across application startup, `GeometryBuilder`, Developer Tools, and benchmarks (pending project-owner visual approval).
+- [x] E2+/R+ (`roads: 'graph-surface'`, `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`) promoted to default across application startup, `GeometryBuilder`, Developer Tools, and benchmarks.
 - [x] Obsolete legacy at-grade road renderer, superseded E2 boundary-derived junction solver (`PathJunctionCornerSmoothing.ts`), legacy railway renderer, and ribbon ballast code paths retired and removed.
 - [x] Shared geometry helpers, Candidate B railway primitives, stage 6D bridge/tunnel structures, `0.050 m` elevation policy, OSM provenance (`faceRanges`), BVH raycasting, and `SceneResourceManager` disposal preserved intact.
 - [x] Automated technical verification completed on project owner's local Windows machine (`6436b7e`, `2048 MB` heap limit, `DISABLE_OVERIJSSEL_BOOTSTRAP=1`).
-- [ ] Project-owner visual approval to transition `TKT-026` from `in_progress` to `closed`.
+- [x] Project-owner visual approval to transition `TKT-026` from `in_progress` to `closed` (approved 2026-11-19).
 
 ### Verification
+
+#### Project-Owner Visual Verification & Approval (2026-11-19)
+- **Reviewer**: Project owner (local testing, formal visual approval granted `2026-11-19`).
+- **Observed Behavior**:
+  - At a camera distance of `10,000 m`, the entire loaded map and its boundaries remain clearly visible.
+  - Rendering remains visually consistent with closer camera distances.
+  - Runtime performance is good at both close and distant views.
+  - Zero visual regressions reported.
+- **Scope Clarification**: This `10,000 m` check is **camera-distance verification** of the currently loaded map bounds, not a claim that a `10 km` map radius was loaded.
 
 #### Project Owner Local Windows Verification (2026-11-19 — Commit `6436b7e`, Branch `main`)
 - **Environment**: Local Windows machine, Node.js `--max-old-space-size=2048` (`2048 MB` heap limit), `DISABLE_OVERIJSSEL_BOOTSTRAP=1`.
@@ -138,4 +147,4 @@ Collected as a paired Legacy vs. E2+/R+ comparison in the `1280 × 720` WebGL ha
 - `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/RailwayRendering.test.ts`: exit `0` (`9 / 9 passed`, `1.98 s`).
 - `npm run lint` (`tsc --noEmit`): exit `0`.
 - `npm run build` (`vite build`): exit `0`.
-- Status: **`in_progress` pending project-owner visual approval** (full `npm test` remains subject to open `TKT-018` memory tracking).
+- Status: **`closed`** — technical verification and project-owner visual approval satisfied on `2026-11-19` (full `npm test` memory investigation remains tracked separately under open `TKT-018`).

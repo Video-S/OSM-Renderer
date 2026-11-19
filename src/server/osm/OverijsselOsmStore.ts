@@ -5,16 +5,23 @@ import osmtogeojson from 'osmtogeojson';
 import { enrichGeoJsonWithOverpassNodeIds } from '../../world/infrastructure/topology/OsmNodeIdEnricher';
 import {
   OVERIJSSEL_ATTRIBUTION,
+  OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
   OVERIJSSEL_INDEX_SCHEMA_VERSION,
   OVERIJSSEL_OSM_TIMESTAMP_ISO,
+  OVERIJSSEL_PBF_EXPECTED_SHA256,
+  OVERIJSSEL_PBF_FILENAME,
   OVERIJSSEL_SNAPSHOT_ID,
+  type OverijsselSnapshotMode,
 } from './overijsselConfig';
 
 export interface OverijsselSnapshotMetadata {
   schemaVersion: string;
   snapshotId: string;
+  snapshotMode: OverijsselSnapshotMode;
   sourceFile: string;
   sourceSha256: string;
+  sourceMd5?: string;
+  sourceBytes?: number;
   osmTimestampIso: string;
   attribution: string;
   indexedAtIso: string;
@@ -28,6 +35,12 @@ export interface OverijsselSnapshotMetadata {
     minLat: number;
     maxLat: number;
   };
+}
+
+export interface OverijsselStoreOpenOptions {
+  expectedSha256?: string;
+  expectedSnapshotId?: string;
+  allowCustomSnapshot?: boolean;
 }
 
 export interface OverijsselBBoxQuery {
@@ -68,6 +81,18 @@ export class OverijsselIndexMissingError extends Error {
   ) {
     super(message);
     this.name = 'OverijsselIndexMissingError';
+  }
+}
+
+export class OverijsselIndexIncompatibleError extends OverijsselIndexMissingError {
+  constructor(
+    message: string,
+    indexPath: string,
+    public readonly expectedSha256: string,
+    public readonly actualSha256: string
+  ) {
+    super(message, indexPath);
+    this.name = 'OverijsselIndexIncompatibleError';
   }
 }
 
@@ -176,7 +201,10 @@ export class OverijsselOsmStore {
   private readonly stmtNodesBatch500: StatementSync;
   private readonly stmtWaysBatch500: StatementSync;
 
-  constructor(public readonly indexPath: string) {
+  constructor(
+    public readonly indexPath: string,
+    options?: OverijsselStoreOpenOptions
+  ) {
     const resolved = path.resolve(indexPath);
     if (!fs.existsSync(resolved)) {
       throw new OverijsselIndexMissingError(
@@ -205,8 +233,12 @@ export class OverijsselOsmStore {
         metaMap.set(r.key, r.value);
       }
       const schemaVersion = metaMap.get('schema_version');
-      if (!schemaVersion || !metaMap.get('snapshot_id')) {
-        throw new Error('Missing required snapshot metadata keys in SQLite metadata table.');
+      const snapshotId = metaMap.get('snapshot_id');
+      const sourceSha256 = (metaMap.get('source_sha256') ?? '').trim().toLowerCase();
+      if (!schemaVersion || !snapshotId || !sourceSha256) {
+        throw new Error(
+          'Missing required snapshot metadata keys (schema_version, snapshot_id, source_sha256) in SQLite metadata table.'
+        );
       }
       if (schemaVersion !== OVERIJSSEL_INDEX_SCHEMA_VERSION) {
         throw new Error(
@@ -214,11 +246,65 @@ export class OverijsselOsmStore {
         );
       }
 
+      const snapshotMode: OverijsselSnapshotMode =
+        metaMap.get('snapshot_mode') === 'custom' ? 'custom' : 'canonical';
+      const expectedSha = options?.expectedSha256?.trim().toLowerCase();
+
+      if (expectedSha && sourceSha256 !== expectedSha) {
+        throw new OverijsselIndexIncompatibleError(
+          `Incompatible Overijssel SQLite spatial index at "${resolved}": ` +
+            `expected source SHA-256 ${expectedSha}, found ${sourceSha256} (snapshot=${snapshotId}). ` +
+            `Rebuild with "npm run osm:setup-overijssel -- --force" or "npx tsx scripts/setup-overijssel.ts --force".`,
+          resolved,
+          expectedSha,
+          sourceSha256
+        );
+      }
+
+      if (
+        !expectedSha &&
+        !options?.allowCustomSnapshot &&
+        snapshotMode !== 'custom' &&
+        sourceSha256 !== OVERIJSSEL_PBF_EXPECTED_SHA256
+      ) {
+        const historicalNote =
+          sourceSha256 === OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256
+            ? ' (matches archived TKT-019/TKT-022 snapshot rather than the verified canonical Geofabrik snapshot)'
+            : '';
+        throw new OverijsselIndexIncompatibleError(
+          `Incompatible Overijssel SQLite spatial index at "${resolved}"${historicalNote}: ` +
+            `expected canonical snapshot ${OVERIJSSEL_SNAPSHOT_ID} (SHA-256 ${OVERIJSSEL_PBF_EXPECTED_SHA256}), ` +
+            `found snapshot "${snapshotId}" (SHA-256 ${sourceSha256}). ` +
+            `Run "npm run osm:setup-overijssel" (or "npx tsx scripts/setup-overijssel.ts --force") to install the verified snapshot, ` +
+            `or rebuild intentionally with "npx tsx scripts/build-overijssel-index.ts --allow-custom-snapshot".`,
+          resolved,
+          OVERIJSSEL_PBF_EXPECTED_SHA256,
+          sourceSha256
+        );
+      }
+
+      if (options?.expectedSnapshotId && snapshotId !== options.expectedSnapshotId) {
+        throw new OverijsselIndexIncompatibleError(
+          `Incompatible Overijssel SQLite spatial index snapshot_id at "${resolved}": ` +
+            `expected "${options.expectedSnapshotId}", found "${snapshotId}" (SHA-256 ${sourceSha256}).`,
+          resolved,
+          expectedSha ?? OVERIJSSEL_PBF_EXPECTED_SHA256,
+          sourceSha256
+        );
+      }
+
+      const rawBytes = metaMap.get('source_bytes');
+      const parsedBytes = rawBytes ? Number(rawBytes) : undefined;
       this.metadata = {
         schemaVersion,
-        snapshotId: metaMap.get('snapshot_id') ?? OVERIJSSEL_SNAPSHOT_ID,
-        sourceFile: metaMap.get('source_file') ?? 'overijssel-261114.osm.pbf',
-        sourceSha256: metaMap.get('source_sha256') ?? '',
+        snapshotId,
+        snapshotMode,
+        sourceFile: metaMap.get('source_file') ?? OVERIJSSEL_PBF_FILENAME,
+        sourceSha256,
+        ...(metaMap.get('source_md5') ? { sourceMd5: metaMap.get('source_md5') } : {}),
+        ...(parsedBytes !== undefined && Number.isFinite(parsedBytes)
+          ? { sourceBytes: parsedBytes }
+          : {}),
         osmTimestampIso: metaMap.get('osm_timestamp_iso') ?? OVERIJSSEL_OSM_TIMESTAMP_ISO,
         attribution: metaMap.get('attribution') ?? OVERIJSSEL_ATTRIBUTION,
         indexedAtIso: metaMap.get('indexed_at_iso') ?? '',
@@ -261,6 +347,9 @@ export class OverijsselOsmStore {
       );
     } catch (err: any) {
       this.close();
+      if (err instanceof OverijsselIndexMissingError) {
+        throw err;
+      }
       throw new OverijsselIndexMissingError(
         `Invalid or incomplete Overijssel OSM spatial index at "${resolved}": ${err?.message ?? err}. ` +
           `Rebuild with "npm run osm:build-overijssel-index".`,

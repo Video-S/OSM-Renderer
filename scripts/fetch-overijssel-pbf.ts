@@ -1,23 +1,44 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import {
+  OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
+  OVERIJSSEL_PBF_EXPECTED_BYTES,
+  OVERIJSSEL_PBF_EXPECTED_MD5,
   OVERIJSSEL_PBF_EXPECTED_SHA256,
   OVERIJSSEL_PBF_URL,
+  parseOverijsselCliOptions,
   resolveOverijsselPbfPath,
 } from '../src/server/osm/overijsselConfig';
+import { computePbfFileDigests } from '../src/server/osm/OverijsselIndexBuilder';
 
-async function sha256File(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath, { highWaterMark: 4 * 1024 * 1024 });
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
+function formatShaMismatchError(params: {
+  context: string;
+  filePath: string;
+  expectedSha256: string;
+  actualSha256: string;
+  actualMd5: string;
+  actualBytes: number;
+  recoveryLines: string[];
+}): string {
+  const canonicalHint =
+    params.expectedSha256 === OVERIJSSEL_PBF_EXPECTED_SHA256
+      ? ` (Geofabrik MD5 ${OVERIJSSEL_PBF_EXPECTED_MD5}, ${OVERIJSSEL_PBF_EXPECTED_BYTES.toLocaleString()} bytes)`
+      : '';
+  const historicalHint =
+    params.actualSha256 === OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256
+      ? '\n  Note: Actual SHA-256 matches the archived TKT-019/TKT-022 snapshot ("overijssel-261114"), not the current verified Geofabrik snapshot.'
+      : '';
+  return (
+    `${params.context} for "${params.filePath}" (${params.actualBytes.toLocaleString()} bytes):\n` +
+    `  Expected SHA-256: ${params.expectedSha256}${canonicalHint}\n` +
+    `  Actual SHA-256:   ${params.actualSha256}\n` +
+    `  Actual MD5:       ${params.actualMd5}${historicalHint}\n` +
+    `Recovery:\n` +
+    params.recoveryLines.map((line) => `  - ${line}`).join('\n')
+  );
 }
 
 export async function fetchOverijsselPbf(options?: {
@@ -27,27 +48,49 @@ export async function fetchOverijsselPbf(options?: {
   expectedSha256?: string;
   force?: boolean;
   skipHashCheck?: boolean;
-}): Promise<{ pbfPath: string; sha256: string; bytes: number; reusedExisting: boolean }> {
+}): Promise<{
+  pbfPath: string;
+  sha256: string;
+  md5: string;
+  bytes: number;
+  reusedExisting: boolean;
+}> {
   const outPath = path.resolve(options?.outPath ?? resolveOverijsselPbfPath());
-  const expectedSha256 = options?.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256;
+  const expectedSha256 = (options?.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256).toLowerCase();
   const url = options?.url ?? OVERIJSSEL_PBF_URL;
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   if (!options?.force && fs.existsSync(outPath)) {
-    const existingSha = await sha256File(outPath);
-    if (options?.skipHashCheck || existingSha === expectedSha256) {
-      const stat = fs.statSync(outPath);
+    const existing = await computePbfFileDigests(outPath);
+    if (options?.skipHashCheck || existing.sha256 === expectedSha256) {
       console.log(
         `Verified existing Overijssel PBF snapshot at ${outPath} (${(
-          stat.size /
+          existing.bytes /
           (1024 * 1024)
-        ).toFixed(1)} MiB, sha256=${existingSha.slice(0, 12)}...).`
+        ).toFixed(1)} MiB, sha256=${existing.sha256.slice(0, 12)}...).`
       );
-      return { pbfPath: outPath, sha256: existingSha, bytes: stat.size, reusedExisting: true };
+      return {
+        pbfPath: outPath,
+        sha256: existing.sha256,
+        md5: existing.md5,
+        bytes: existing.bytes,
+        reusedExisting: true,
+      };
     }
     throw new Error(
-      `Existing PBF at ${outPath} failed SHA-256 verification (expected ${expectedSha256}, got ${existingSha}). Re-run with --force to replace it.`
+      formatShaMismatchError({
+        context: 'Existing Overijssel PBF failed SHA-256 verification',
+        filePath: outPath,
+        expectedSha256,
+        actualSha256: existing.sha256,
+        actualMd5: existing.md5,
+        actualBytes: existing.bytes,
+        recoveryLines: [
+          'Re-download and replace with the verified canonical snapshot: npm run osm:fetch-overijssel -- "--" --force (PowerShell) or npx tsx scripts/fetch-overijssel-pbf.ts --force',
+          'Or keep and index this custom snapshot intentionally: npx tsx scripts/setup-overijssel.ts --allow-custom-snapshot (or set $env:OVERIJSSEL_ALLOW_CUSTOM_SNAPSHOT="1" before npm run osm:setup-overijssel)',
+        ],
+      })
     );
   }
 
@@ -56,54 +99,87 @@ export async function fetchOverijsselPbf(options?: {
     if (!fs.existsSync(src)) {
       throw new Error(`Local source PBF not found: ${src}`);
     }
-    const srcSha = await sha256File(src);
-    if (!options?.skipHashCheck && srcSha !== expectedSha256) {
+    const srcDigests = await computePbfFileDigests(src);
+    if (!options?.skipHashCheck && srcDigests.sha256 !== expectedSha256) {
       throw new Error(
-        `Source PBF ${src} SHA-256 mismatch: expected ${expectedSha256}, got ${srcSha}.`
+        formatShaMismatchError({
+          context: 'Local source PBF failed SHA-256 verification',
+          filePath: src,
+          expectedSha256,
+          actualSha256: srcDigests.sha256,
+          actualMd5: srcDigests.md5,
+          actualBytes: srcDigests.bytes,
+          recoveryLines: [
+            `If intentionally installing a custom snapshot, run: npx tsx scripts/setup-overijssel.ts --allow-custom-snapshot --from="${src}"`,
+            `PowerShell npm alternative: $env:OVERIJSSEL_ALLOW_CUSTOM_SNAPSHOT="1"; npm run osm:setup-overijssel -- "--" --from="${src}"`,
+          ],
+        })
       );
     }
     if (src !== outPath) {
       fs.copyFileSync(src, outPath);
     }
-    const stat = fs.statSync(outPath);
     console.log(
       `Installed Overijssel PBF snapshot to ${outPath} (${(
-        stat.size /
+        srcDigests.bytes /
         (1024 * 1024)
-      ).toFixed(1)} MiB, sha256=${srcSha}).`
+      ).toFixed(1)} MiB, sha256=${srcDigests.sha256}).`
     );
-    return { pbfPath: outPath, sha256: srcSha, bytes: stat.size, reusedExisting: false };
+    return {
+      pbfPath: outPath,
+      sha256: srcDigests.sha256,
+      md5: srcDigests.md5,
+      bytes: srcDigests.bytes,
+      reusedExisting: false,
+    };
   }
 
   console.log(`Downloading immutable Overijssel PBF snapshot from:\n  ${url}\n-> ${outPath}`);
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'RealWorld3DMapViewer/1.0 (TKT-022 offline snapshot setup)' },
+    headers: { 'User-Agent': 'RealWorld3DMapViewer/1.0 (TKT-027 offline snapshot setup)' },
   });
   if (!res.ok || !res.body) {
     throw new Error(`Failed to download ${url}: HTTP ${res.status} ${res.statusText}`);
   }
 
+  const resolvedUrl = res.url && res.url !== url ? `${url} (redirected to ${res.url})` : url;
   const tmpPath = `${outPath}.download.${process.pid}`;
   try {
     const fileStream = fs.createWriteStream(tmpPath);
     await pipeline(Readable.fromWeb(res.body as any), fileStream);
-    const actualSha = await sha256File(tmpPath);
-    if (!options?.skipHashCheck && actualSha !== expectedSha256) {
+    const actual = await computePbfFileDigests(tmpPath);
+    if (!options?.skipHashCheck && actual.sha256 !== expectedSha256) {
       throw new Error(
-        `Downloaded file SHA-256 mismatch for ${url}: expected ${expectedSha256}, got ${actualSha}.`
+        formatShaMismatchError({
+          context: `Downloaded file from ${resolvedUrl} failed SHA-256 verification (temp file discarded)`,
+          filePath: outPath,
+          expectedSha256,
+          actualSha256: actual.sha256,
+          actualMd5: actual.md5,
+          actualBytes: actual.bytes,
+          recoveryLines: [
+            'Verify network stability or Geofabrik mirror status and retry: npm run osm:setup-overijssel',
+            `If Geofabrik published an intentional updated snapshot and you choose to trust it locally, download manually and install with: npx tsx scripts/setup-overijssel.ts --allow-custom-snapshot --from="<path-to-pbf>"`,
+          ],
+        })
       );
     }
     if (fs.existsSync(outPath)) {
       fs.rmSync(outPath, { force: true });
     }
     fs.renameSync(tmpPath, outPath);
-    const stat = fs.statSync(outPath);
     console.log(
-      `Downloaded & verified ${outPath} (${(stat.size / (1024 * 1024)).toFixed(
+      `Downloaded & verified ${outPath} (${(actual.bytes / (1024 * 1024)).toFixed(
         1
-      )} MiB, sha256=${actualSha}).`
+      )} MiB, sha256=${actual.sha256}).`
     );
-    return { pbfPath: outPath, sha256: actualSha, bytes: stat.size, reusedExisting: false };
+    return {
+      pbfPath: outPath,
+      sha256: actual.sha256,
+      md5: actual.md5,
+      bytes: actual.bytes,
+      reusedExisting: false,
+    };
   } catch (err) {
     if (fs.existsSync(tmpPath)) {
       fs.rmSync(tmpPath, { force: true });
@@ -117,21 +193,17 @@ const isMain =
   path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
 if (isMain) {
-  let outPath: string | undefined;
-  let fromLocalPath: string | undefined;
-  let url: string | undefined;
-  let force = false;
-  let skipHashCheck = false;
-  for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith('--out=')) outPath = arg.slice('--out='.length).trim();
-    else if (arg.startsWith('--from=')) fromLocalPath = arg.slice('--from='.length).trim();
-    else if (arg.startsWith('--url=')) url = arg.slice('--url='.length).trim();
-    else if (arg === '--force') force = true;
-    else if (arg === '--skip-hash-check') skipHashCheck = true;
-  }
-
-  fetchOverijsselPbf({ outPath, fromLocalPath, url, force, skipHashCheck }).catch((err) => {
+  const cli = parseOverijsselCliOptions();
+  fetchOverijsselPbf({
+    outPath: cli.outPath ?? cli.pbfPath,
+    fromLocalPath: cli.fromLocalPath,
+    url: cli.url,
+    expectedSha256: cli.expectedSha256,
+    force: cli.force,
+    skipHashCheck: cli.skipHashCheck || cli.allowCustomSnapshot,
+  }).catch((err) => {
     console.error('Error fetching Overijssel PBF:', err?.message ?? err);
     process.exit(1);
   });
 }
+

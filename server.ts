@@ -9,6 +9,7 @@ import {
   isOverijsselAutoBootstrapDisabled,
   resolveOverijsselIndexPath,
 } from './src/server/osm/overijsselConfig';
+import { OverijsselOsmStore } from './src/server/osm/OverijsselOsmStore';
 import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 
@@ -27,7 +28,11 @@ export interface EnsureOverijsselReadyOptions {
   argv?: readonly string[];
   indexPath?: string;
   fetchPbf?: () => Promise<{ pbfPath: string }>;
-  buildIndex?: (options: { pbfPath: string; outIndexPath: string }) => Promise<unknown>;
+  buildIndex?: (options: {
+    pbfPath: string;
+    outIndexPath: string;
+    force?: boolean;
+  }) => Promise<unknown>;
 }
 
 export function ensureOverijsselReady(options?: EnsureOverijsselReadyOptions): Promise<void> {
@@ -35,8 +40,15 @@ export function ensureOverijsselReady(options?: EnsureOverijsselReadyOptions): P
     return Promise.resolve();
   }
   const indexPath = options?.indexPath ?? resolveOverijsselIndexPath();
+  let forceRebuild = false;
   if (fs.existsSync(indexPath)) {
-    return Promise.resolve();
+    try {
+      const store = new OverijsselOsmStore(indexPath);
+      store.close();
+      return Promise.resolve();
+    } catch {
+      forceRebuild = true;
+    }
   }
   if (!overijsselBootstrapPromise) {
     const fetchPbf = options?.fetchPbf ?? fetchOverijsselPbf;
@@ -44,7 +56,11 @@ export function ensureOverijsselReady(options?: EnsureOverijsselReadyOptions): P
     overijsselBootstrapPromise = (async () => {
       console.log('Bootstrapping offline Overijssel OSM spatial index...');
       const fetched = await fetchPbf();
-      await buildIndex({ pbfPath: fetched.pbfPath, outIndexPath: indexPath });
+      await buildIndex({
+        pbfPath: fetched.pbfPath,
+        outIndexPath: indexPath,
+        ...(forceRebuild ? { force: true } : {}),
+      });
       console.log(`Offline Overijssel OSM spatial index ready at ${indexPath}`);
     })().finally(() => {
       overijsselBootstrapPromise = null;

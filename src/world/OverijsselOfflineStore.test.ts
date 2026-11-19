@@ -6,15 +6,35 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import express from 'express';
+import { DatabaseSync } from 'node:sqlite';
 import { isPointInOverijssel } from '../server/osm/overijsselBoundary';
-import { buildOverijsselSpatialIndex } from '../server/osm/OverijsselIndexBuilder';
-import { OverijsselIndexMissingError, OverijsselOsmStore } from '../server/osm/OverijsselOsmStore';
+import {
+  buildOverijsselSpatialIndex,
+  computePbfFileDigests,
+} from '../server/osm/OverijsselIndexBuilder';
+import {
+  OverijsselIndexIncompatibleError,
+  OverijsselIndexMissingError,
+  OverijsselOsmStore,
+} from '../server/osm/OverijsselOsmStore';
 import { createOsmDataHandler } from '../server/osm/osmDataHandler';
 import {
+  buildCustomOverijsselSnapshotId,
   isOverijsselAutoBootstrapDisabled,
+  OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
+  OVERIJSSEL_HISTORICAL_BENCHMARK_SNAPSHOT_ID,
+  OVERIJSSEL_INDEX_FILENAME,
+  OVERIJSSEL_PBF_EXPECTED_BYTES,
+  OVERIJSSEL_PBF_EXPECTED_MD5,
+  OVERIJSSEL_PBF_EXPECTED_SHA256,
+  OVERIJSSEL_PBF_FILENAME,
+  OVERIJSSEL_SNAPSHOT_ID,
+  parseOverijsselCliOptions,
   resolveOverijsselIndexPath,
 } from '../server/osm/overijsselConfig';
 import { ensureOverijsselReady } from '../../server';
+import { fetchOverijsselPbf } from '../../scripts/fetch-overijssel-pbf';
+import { runBuildOverijsselIndex } from '../../scripts/build-overijssel-index';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
 import { parseServerTimingHeader } from './dev/MapLoadDiagnostics';
 
@@ -527,4 +547,370 @@ test('Overijssel auto-bootstrap opt-out skips download and indexing while preser
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('TKT-027: Canonical snapshot constants remain distinct from historical TKT-019/TKT-022 manifest provenance', () => {
+  assert.equal(OVERIJSSEL_SNAPSHOT_ID, 'overijssel-261114-8ae28196');
+  assert.equal(OVERIJSSEL_PBF_FILENAME, 'overijssel-261114.osm.pbf');
+  assert.equal(OVERIJSSEL_INDEX_FILENAME, 'overijssel-261114-8ae28196.sqlite');
+  assert.equal(
+    OVERIJSSEL_PBF_EXPECTED_SHA256,
+    '8ae281964831675c89f45db6aaa3566168a224767d3313c7068ad255c5f221c0'
+  );
+  assert.equal(OVERIJSSEL_PBF_EXPECTED_MD5, '461949c7c40f7d90b4bbb695d0933f57');
+  assert.equal(OVERIJSSEL_PBF_EXPECTED_BYTES, 114_506_422);
+
+  assert.equal(OVERIJSSEL_HISTORICAL_BENCHMARK_SNAPSHOT_ID, 'overijssel-261114');
+  assert.equal(
+    OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
+    '53d1f2d0b6c9461b4d752610c5c348bb48d1c1ac77838e75b934bf676a980243'
+  );
+  assert.notEqual(OVERIJSSEL_PBF_EXPECTED_SHA256, OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256);
+  assert.notEqual(OVERIJSSEL_SNAPSHOT_ID, OVERIJSSEL_HISTORICAL_BENCHMARK_SNAPSHOT_ID);
+
+  // Historical frozen Hengelo scaling manifest must retain its original 53d1f2d0... provenance
+  const manifestPath = path.resolve(process.cwd(), 'benchmarks/datasets/hengelo-scaling/manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.equal(manifest.sourceFileName, 'overijssel-261114.osm.pbf');
+  assert.equal(manifest.sourceSha256, OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256);
+});
+
+test('TKT-027: fetchOverijsselPbf verifies SHA-256 strictly, discards mismatched downloads, and provides recovery diagnostics', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tkt027-fetch-'));
+  try {
+    const fixturePbf = path.join(tmpDir, 'fixture.osm.pbf');
+    buildTestOsmPbf(fixturePbf);
+    const fixtureBytes = fs.readFileSync(fixturePbf);
+    const digests = await computePbfFileDigests(fixturePbf);
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/redirect') {
+        res.writeHead(302, { Location: '/canonical.osm.pbf' });
+        res.end();
+        return;
+      }
+      if (req.url === '/canonical.osm.pbf') {
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+        res.end(fixtureBytes);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as any).port;
+
+    try {
+      const targetPbf = path.join(tmpDir, 'out', 'overijssel.osm.pbf');
+
+      // 1. Download via HTTP redirect with matching expectedSha256 succeeds
+      const first = await fetchOverijsselPbf({
+        outPath: targetPbf,
+        url: `http://127.0.0.1:${port}/redirect`,
+        expectedSha256: digests.sha256,
+      });
+      assert.equal(first.reusedExisting, false);
+      assert.equal(first.sha256, digests.sha256);
+      assert.equal(first.md5, digests.md5);
+      assert.equal(first.bytes, digests.bytes);
+
+      // 2. Subsequent call verifies and reuses the existing file
+      const second = await fetchOverijsselPbf({
+        outPath: targetPbf,
+        url: `http://127.0.0.1:${port}/canonical.osm.pbf`,
+        expectedSha256: digests.sha256,
+      });
+      assert.equal(second.reusedExisting, true);
+      assert.equal(second.sha256, digests.sha256);
+
+      // 3. Mismatched existing file throws actionable diagnostics without --force
+      await assert.rejects(
+        () =>
+          fetchOverijsselPbf({
+            outPath: targetPbf,
+            url: `http://127.0.0.1:${port}/canonical.osm.pbf`,
+            expectedSha256: '0'.repeat(64),
+          }),
+        (err: Error) => {
+          assert.match(err.message, /failed SHA-256 verification/i);
+          assert.match(err.message, new RegExp(targetPbf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+          assert.match(err.message, new RegExp(digests.sha256));
+          assert.match(err.message, new RegExp(digests.md5));
+          assert.match(err.message, /--allow-custom-snapshot/);
+          return true;
+        }
+      );
+
+      // 4. Mismatched HTTP download discards temp file and leaves outPath absent
+      const rejectedOut = path.join(tmpDir, 'out', 'rejected.osm.pbf');
+      await assert.rejects(
+        () =>
+          fetchOverijsselPbf({
+            outPath: rejectedOut,
+            url: `http://127.0.0.1:${port}/redirect`,
+            expectedSha256: 'f'.repeat(64),
+          }),
+        (err: Error) => {
+          assert.match(err.message, /temp file discarded/i);
+          assert.match(err.message, /redirected to/i);
+          assert.match(err.message, new RegExp(digests.sha256));
+          assert.match(err.message, new RegExp(digests.md5));
+          return true;
+        }
+      );
+      assert.equal(fs.existsSync(rejectedOut), false);
+      const leftoverTemps = fs
+        .readdirSync(path.dirname(rejectedOut))
+        .filter((f) => f.includes('.download.'));
+      assert.equal(leftoverTemps.length, 0);
+
+      // 5. --from local path rejects unapproved mismatch unless skipHashCheck=true
+      await assert.rejects(
+        () =>
+          fetchOverijsselPbf({
+            outPath: rejectedOut,
+            fromLocalPath: fixturePbf,
+            expectedSha256: 'a'.repeat(64),
+          }),
+        /Local source PBF failed SHA-256 verification/i
+      );
+      const fromCustom = await fetchOverijsselPbf({
+        outPath: rejectedOut,
+        fromLocalPath: fixturePbf,
+        expectedSha256: 'a'.repeat(64),
+        skipHashCheck: true,
+      });
+      assert.equal(fromCustom.sha256, digests.sha256);
+      assert.equal(fs.existsSync(rejectedOut), true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('TKT-027: Index builder and OverijsselOsmStore validate provenance, distinguish custom snapshots, reject stale/incompatible DBs, and trigger rebuilds cleanly', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tkt027-index-'));
+  try {
+    const pbfA = path.join(tmpDir, 'a.osm.pbf');
+    const pbfB = path.join(tmpDir, 'b.osm.pbf');
+    buildTestOsmPbf(pbfA);
+    // Append a trailing zero byte? PBF length-prefixed blobs require valid framing, so write a second valid PBF or copy with different header timestamp by modifying header byte isn't safe;
+    // instead append a 0-length-ignored? No, OsmPbfReader reads until EOF via readInt32BE(offset); so let's construct pbfB with extra trailing uncompressed OSMHeader comment? Easier: buildTestOsmPbf reads fine, let's prepend/modify a tag string!
+    fs.copyFileSync(pbfA, pbfB);
+    // Modify pbfA vs pbfB cleanly by rebuilding a slightly different valid PBF:
+    // Actually we can just patch a single character inside a string? No, zlib-compressed!
+    // Let's write pbfB with a small valid OSMData blob or patch an uncompressed blob? Better: call buildTestOsmPbf and verify digests, or build a tiny valid 2nd PBF using the same helper style? Wait: wrapBlob in buildTestOsmPbf isn't exported, let's build a valid 2nd PBF with an extra header blob or re-run node/way? Wait: OsmPbfReader ignores unknown blob types! Adding a harmless 'CustomMeta' blob (header length + BlobHeader + empty Blob) produces a 100% valid OSM PBF with a different SHA-256!
+    const customHdr = Buffer.concat([
+      pbBytes(1, Buffer.from('CustomTest', 'utf8')),
+      pbVarint(3, 0),
+    ]);
+    const customLen = Buffer.allocUnsafe(4);
+    customLen.writeUInt32BE(customHdr.length, 0);
+    fs.writeFileSync(pbfB, Buffer.concat([fs.readFileSync(pbfA), customLen, customHdr]));
+
+    const digA = await computePbfFileDigests(pbfA);
+    const digB = await computePbfFileDigests(pbfB);
+    assert.notEqual(digA.sha256, digB.sha256);
+
+    const indexPath = path.join(tmpDir, 'overijssel.sqlite');
+
+    // 1. Default canonical mode rejects synthetic PBF without allowCustomSnapshot
+    await assert.rejects(
+      () =>
+        runBuildOverijsselIndex({
+          pbfPath: pbfA,
+          outIndexPath: indexPath,
+        }),
+      (err: Error) => {
+        assert.match(err.message, /Snapshot SHA-256 mismatch/);
+        assert.match(err.message, new RegExp(OVERIJSSEL_PBF_EXPECTED_SHA256));
+        assert.match(err.message, new RegExp(digA.sha256));
+        assert.match(err.message, /--allow-custom-snapshot/);
+        return true;
+      }
+    );
+
+    // 2. Custom snapshot mode writes distinct custom-<12hex> snapshotId + real sourceSha256/Md5/Bytes
+    const customResA = await runBuildOverijsselIndex({
+      pbfPath: pbfA,
+      outIndexPath: indexPath,
+      allowCustomSnapshot: true,
+    });
+    assert.ok(customResA);
+    assert.equal(customResA.snapshotMode, 'custom');
+    assert.equal(customResA.snapshotId, buildCustomOverijsselSnapshotId(digA.sha256));
+    assert.equal(customResA.pbfSha256, digA.sha256);
+    assert.equal(customResA.pbfMd5, digA.md5);
+    assert.equal(customResA.pbfBytes, digA.bytes);
+
+    const customStore = new OverijsselOsmStore(indexPath);
+    const metaA = customStore.getSnapshotMetadata();
+    assert.equal(metaA.snapshotMode, 'custom');
+    assert.equal(metaA.snapshotId, buildCustomOverijsselSnapshotId(digA.sha256));
+    assert.equal(metaA.sourceSha256, digA.sha256);
+    assert.equal(metaA.sourceMd5, digA.md5);
+    assert.equal(metaA.sourceBytes, digA.bytes);
+    customStore.close();
+
+    // 3. Re-running with unchanged PBF A reuses the existing SQLite index (returns null)
+    const reused = await runBuildOverijsselIndex({
+      pbfPath: pbfA,
+      outIndexPath: indexPath,
+      allowCustomSnapshot: true,
+    });
+    assert.equal(reused, null);
+
+    // 4. Switching to PBF B (even with allowCustomSnapshot=true) MUST NOT reuse PBF A's index!
+    const customResB = await runBuildOverijsselIndex({
+      pbfPath: pbfB,
+      outIndexPath: indexPath,
+      allowCustomSnapshot: true,
+    });
+    assert.ok(customResB, 'different PBF bytes must force index rebuild even with allowCustomSnapshot');
+    assert.equal(customResB.pbfSha256, digB.sha256);
+    assert.equal(customResB.snapshotId, buildCustomOverijsselSnapshotId(digB.sha256));
+
+    // 5. Simulate legacy pre-TKT-027 canonical index built from historical 53d1f2d0... (no snapshot_mode key)
+    const db = new DatabaseSync(indexPath);
+    db.exec(`
+      DELETE FROM metadata WHERE key = 'snapshot_mode';
+      INSERT OR REPLACE INTO metadata (key, value) VALUES ('snapshot_id', '${OVERIJSSEL_HISTORICAL_BENCHMARK_SNAPSHOT_ID}');
+      INSERT OR REPLACE INTO metadata (key, value) VALUES ('source_sha256', '${OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256}');
+    `);
+    db.close();
+
+    // OverijsselOsmStore rejects legacy/incompatible canonical DB by default
+    assert.throws(
+      () => new OverijsselOsmStore(indexPath),
+      (err: unknown) =>
+        err instanceof OverijsselIndexIncompatibleError &&
+        err instanceof OverijsselIndexMissingError &&
+        err.expectedSha256 === OVERIJSSEL_PBF_EXPECTED_SHA256 &&
+        err.actualSha256 === OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256 &&
+        /archived TKT-019\/TKT-022 snapshot/i.test(err.message)
+    );
+
+    // /api/osm-data treats OverijsselIndexIncompatibleError as HTTP 503 (never falls back to Overpass)
+    let overpassCalls = 0;
+    const controller = createOsmDataHandler({
+      overijsselIndexPath: indexPath,
+      fetchImpl: (async () => {
+        overpassCalls++;
+        throw new Error('Overpass must not be called');
+      }) as typeof fetch,
+    });
+    const app = express();
+    app.get('/api/osm-data', controller.handler);
+    const srv = http.createServer(app);
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    const port = (srv.address() as any).port;
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${port}/api/osm-data?lat=52.2625&lon=6.7935&radius=350&name=Hengelo`
+      );
+      assert.equal(res.status, 503);
+      assert.equal(overpassCalls, 0);
+      const body = (await res.json()) as { error: string };
+      assert.match(body.error, /Incompatible Overijssel SQLite spatial index/i);
+    } finally {
+      controller.close();
+      await new Promise<void>((r) => srv.close(() => r()));
+    }
+
+    // 6. Explicit expectedSha256 + expectedSnapshotId works and validates strictly
+    const explicitOk = new OverijsselOsmStore(indexPath, {
+      expectedSha256: OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
+      expectedSnapshotId: OVERIJSSEL_HISTORICAL_BENCHMARK_SNAPSHOT_ID,
+    });
+    explicitOk.close();
+
+    // 7. ensureOverijsselReady detects incompatible index on disk and triggers rebuild with force=true
+    let forcedRebuild: boolean | undefined;
+    await ensureOverijsselReady({
+      env: {},
+      argv: ['node', 'server.ts'],
+      indexPath,
+      fetchPbf: async () => ({ pbfPath: pbfA }),
+      buildIndex: async (opts) => {
+        forcedRebuild = opts.force;
+      },
+    });
+    assert.equal(forcedRebuild, true);
+
+    // 8. Building in canonical mode with expectedSha256 matching PBF A overrides legacy DB cleanly
+    const canonicalBuild = await runBuildOverijsselIndex({
+      pbfPath: pbfA,
+      outIndexPath: indexPath,
+      expectedSha256: digA.sha256,
+    });
+    assert.ok(canonicalBuild);
+    assert.equal(canonicalBuild.snapshotMode, 'canonical');
+    assert.equal(canonicalBuild.snapshotId, OVERIJSSEL_SNAPSHOT_ID);
+
+    const canonicalStore = new OverijsselOsmStore(indexPath, { expectedSha256: digA.sha256 });
+    assert.equal(canonicalStore.getSnapshotMetadata().snapshotId, OVERIJSSEL_SNAPSHOT_ID);
+    canonicalStore.close();
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('TKT-027: parseOverijsselCliOptions supports space/equals flags, OVERIJSSEL_* env vars, and npm_config_* PowerShell fallbacks', () => {
+  const direct = parseOverijsselCliOptions(
+    [
+      '--allow-custom-snapshot',
+      '--force',
+      '--skip-hash-check',
+      '--from=C:\\tmp\\custom.pbf',
+      '--pbf',
+      'data/osm/custom.pbf',
+      '--out=data/osm/custom.sqlite',
+      '--snapshot-id',
+      'my-custom-id',
+      '--expected-sha256=ABCDEF01',
+    ],
+    {}
+  );
+  assert.deepEqual(direct, {
+    pbfPath: 'data/osm/custom.pbf',
+    fromLocalPath: 'C:\\tmp\\custom.pbf',
+    outPath: 'data/osm/custom.sqlite',
+    url: undefined,
+    snapshotId: 'my-custom-id',
+    expectedSha256: 'abcdef01',
+    force: true,
+    allowCustomSnapshot: true,
+    skipHashCheck: true,
+  });
+
+  // PowerShell strips bare `--` so npm consumes `--allow-custom-snapshot` into npm_config_*
+  const npmFallback = parseOverijsselCliOptions([], {
+    npm_config_allow_custom_snapshot: 'true',
+    npm_config_force: '1',
+    npm_config_skip_hash_check: 'yes',
+    npm_config_from: 'C:\\downloads\\overijssel-261114.osm.pbf',
+    npm_config_pbf: 'data/osm/overijssel-261114.osm.pbf',
+    npm_config_out: 'data/osm/custom.sqlite',
+  });
+  assert.equal(npmFallback.allowCustomSnapshot, true);
+  assert.equal(npmFallback.force, true);
+  assert.equal(npmFallback.skipHashCheck, true);
+  assert.equal(npmFallback.fromLocalPath, 'C:\\downloads\\overijssel-261114.osm.pbf');
+  assert.equal(npmFallback.pbfPath, 'data/osm/overijssel-261114.osm.pbf');
+  assert.equal(npmFallback.outPath, 'data/osm/custom.sqlite');
+
+  // Explicit OVERIJSSEL_* environment variables also work across shells
+  const envOverrides = parseOverijsselCliOptions([], {
+    OVERIJSSEL_ALLOW_CUSTOM_SNAPSHOT: '1',
+    OVERIJSSEL_FORCE: 'true',
+    OVERIJSSEL_SKIP_HASH_CHECK: '1',
+    OVERIJSSEL_CUSTOM_SNAPSHOT_ID: 'local-overijssel',
+  });
+  assert.equal(envOverrides.allowCustomSnapshot, true);
+  assert.equal(envOverrides.force, true);
+  assert.equal(envOverrides.skipHashCheck, true);
+  assert.equal(envOverrides.snapshotId, 'local-overijssel');
+});
+
 

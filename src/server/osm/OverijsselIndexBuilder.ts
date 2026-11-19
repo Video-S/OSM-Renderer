@@ -3,11 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  buildCustomOverijsselSnapshotId,
   OVERIJSSEL_ATTRIBUTION,
+  OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256,
   OVERIJSSEL_INDEX_SCHEMA_VERSION,
   OVERIJSSEL_OSM_TIMESTAMP_ISO,
+  OVERIJSSEL_PBF_EXPECTED_BYTES,
+  OVERIJSSEL_PBF_EXPECTED_MD5,
   OVERIJSSEL_PBF_EXPECTED_SHA256,
   OVERIJSSEL_SNAPSHOT_ID,
+  type OverijsselSnapshotMode,
 } from './overijsselConfig';
 import { type DecodedOsmRelationMember, scanOsmPbfFile } from './OsmPbfReader';
 
@@ -24,7 +29,10 @@ export interface OverijsselIndexBuildResult {
   indexPath: string;
   pbfPath: string;
   pbfSha256: string;
+  pbfMd5: string;
+  pbfBytes: number;
   snapshotId: string;
+  snapshotMode: OverijsselSnapshotMode;
   osmTimestampIso: string;
   nodeCount: number;
   taggedNodeCount: number;
@@ -115,12 +123,29 @@ class NodeCoordDirectory {
   }
 }
 
-async function computeFileSha256(filePath: string): Promise<string> {
+export interface PbfDigestResult {
+  sha256: string;
+  md5: string;
+  bytes: number;
+}
+
+export async function computePbfFileDigests(filePath: string): Promise<PbfDigestResult> {
+  const stat = fs.statSync(filePath);
   return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
+    const sha256 = crypto.createHash('sha256');
+    const md5 = crypto.createHash('md5');
     const stream = fs.createReadStream(filePath, { highWaterMark: 4 * 1024 * 1024 });
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('data', (chunk) => {
+      sha256.update(chunk);
+      md5.update(chunk);
+    });
+    stream.on('end', () =>
+      resolve({
+        sha256: sha256.digest('hex'),
+        md5: md5.digest('hex'),
+        bytes: stat.size,
+      })
+    );
     stream.on('error', reject);
   });
 }
@@ -135,17 +160,29 @@ export async function buildOverijsselSpatialIndex(
   const outIndexPath = path.resolve(options.outIndexPath);
   if (!fs.existsSync(pbfPath)) {
     throw new Error(
-      `OSM PBF snapshot file not found at: ${pbfPath}. Run "npm run osm:fetch-overijssel" first.`
+      `OSM PBF snapshot file not found at: ${pbfPath}. Run "npm run osm:fetch-overijssel" (or "npm run osm:setup-overijssel") first.`
     );
   }
 
   log(`Verifying SHA-256 checksum of ${path.basename(pbfPath)}...`);
-  const pbfSha256 = await computeFileSha256(pbfPath);
-  const expectedSha = options.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256;
+  const { sha256: pbfSha256, md5: pbfMd5, bytes: pbfBytes } = await computePbfFileDigests(pbfPath);
+  const expectedSha = (options.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256).toLowerCase();
   if (!options.allowCustomSnapshot && expectedSha && pbfSha256 !== expectedSha) {
+    const historicalHint =
+      pbfSha256 === OVERIJSSEL_HISTORICAL_BENCHMARK_SHA256
+        ? ' This digest matches the archived TKT-019/TKT-022 snapshot ("overijssel-261114"), not the verified Geofabrik snapshot.'
+        : '';
+    const canonicalHint =
+      expectedSha === OVERIJSSEL_PBF_EXPECTED_SHA256
+        ? ` (expected MD5 ${OVERIJSSEL_PBF_EXPECTED_MD5}, ${OVERIJSSEL_PBF_EXPECTED_BYTES.toLocaleString()} bytes)`
+        : '';
     throw new Error(
-      `Snapshot SHA-256 mismatch for ${pbfPath}: expected ${expectedSha}, got ${pbfSha256}. ` +
-        `If intentionally building from a different snapshot, pass --allow-custom-snapshot.`
+      `Snapshot SHA-256 mismatch for "${pbfPath}" (${pbfBytes.toLocaleString()} bytes):\n` +
+        `  Expected SHA-256: ${expectedSha}${canonicalHint}\n` +
+        `  Actual SHA-256:   ${pbfSha256} (MD5 ${pbfMd5})${historicalHint}\n` +
+        `Recovery:\n` +
+        `  - To replace with the verified canonical snapshot: npm run osm:setup-overijssel -- "--" --force (PowerShell) or npx tsx scripts/setup-overijssel.ts --force\n` +
+        `  - To intentionally index this custom PBF: npx tsx scripts/build-overijssel-index.ts --allow-custom-snapshot --pbf="${pbfPath}"`
     );
   }
 
@@ -434,14 +471,24 @@ export async function buildOverijsselSpatialIndex(
     const osmTimestampIso = headerTimestampUnix
       ? new Date(headerTimestampUnix * 1000).toISOString()
       : OVERIJSSEL_OSM_TIMESTAMP_ISO;
-    const snapshotId = options.snapshotId ?? OVERIJSSEL_SNAPSHOT_ID;
+    const matchesExpectedCanonical = Boolean(expectedSha) && pbfSha256 === expectedSha;
+    const snapshotMode: OverijsselSnapshotMode =
+      options.allowCustomSnapshot && !matchesExpectedCanonical ? 'custom' : 'canonical';
+    const snapshotId =
+      options.snapshotId ??
+      (snapshotMode === 'custom'
+        ? buildCustomOverijsselSnapshotId(pbfSha256)
+        : OVERIJSSEL_SNAPSHOT_ID);
 
     const insertMetaStmt = db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)');
     const metaEntries: Array<[string, string]> = [
       ['schema_version', OVERIJSSEL_INDEX_SCHEMA_VERSION],
       ['snapshot_id', snapshotId],
+      ['snapshot_mode', snapshotMode],
       ['source_file', path.basename(pbfPath)],
       ['source_sha256', pbfSha256],
+      ['source_md5', pbfMd5],
+      ['source_bytes', String(pbfBytes)],
       ['osm_timestamp_iso', osmTimestampIso],
       ['attribution', OVERIJSSEL_ATTRIBUTION],
       ['indexed_at_iso', new Date().toISOString()],
@@ -486,7 +533,10 @@ export async function buildOverijsselSpatialIndex(
       indexPath: outIndexPath,
       pbfPath,
       pbfSha256,
+      pbfMd5,
+      pbfBytes,
       snapshotId,
+      snapshotMode,
       osmTimestampIso,
       nodeCount,
       taggedNodeCount,

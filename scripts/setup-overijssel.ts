@@ -1,35 +1,28 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseOverijsselCliOptions } from '../src/server/osm/overijsselConfig';
 import { fetchOverijsselPbf } from './fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './build-overijssel-index';
 
 async function main(): Promise<void> {
-  let pbfPath: string | undefined;
-  let fromLocalPath: string | undefined;
-  let outIndexPath: string | undefined;
-  let force = false;
-  let allowCustomSnapshot = false;
-
-  for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith('--pbf=')) pbfPath = arg.slice('--pbf='.length).trim();
-    else if (arg.startsWith('--from=')) fromLocalPath = arg.slice('--from='.length).trim();
-    else if (arg.startsWith('--out=')) outIndexPath = arg.slice('--out='.length).trim();
-    else if (arg === '--force') force = true;
-    else if (arg === '--allow-custom-snapshot') allowCustomSnapshot = true;
-  }
+  const cli = parseOverijsselCliOptions();
 
   const fetched = await fetchOverijsselPbf({
-    outPath: pbfPath,
-    fromLocalPath,
-    force,
-    skipHashCheck: allowCustomSnapshot,
+    outPath: cli.pbfPath,
+    fromLocalPath: cli.fromLocalPath,
+    url: cli.url,
+    expectedSha256: cli.expectedSha256,
+    force: cli.force,
+    skipHashCheck: cli.skipHashCheck || cli.allowCustomSnapshot,
   });
 
   await runBuildOverijsselIndex({
     pbfPath: fetched.pbfPath,
-    outIndexPath,
-    allowCustomSnapshot,
-    force,
+    outIndexPath: cli.outPath,
+    snapshotId: cli.snapshotId,
+    expectedSha256: cli.expectedSha256,
+    allowCustomSnapshot: cli.allowCustomSnapshot,
+    force: cli.force,
   });
 }
 
@@ -43,3 +36,4 @@ if (isMain) {
     process.exit(1);
   });
 }
+

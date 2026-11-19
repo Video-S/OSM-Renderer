@@ -1,6 +1,6 @@
 # ADR-0010: Surface-First At-Grade Road Rendering (E2+)
 
-- **Status**: Accepted (Experimental — Preferred Architectural Direction; Pending Production Promotion)
+- **Status**: Accepted — Promoted to Sole Production Road Architecture (`TKT-026`, `in_progress` pending owner visual approval)
 - **Date**: 2026-11-09
 - **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](./ADR-0002-boundary-derived-road-junction-meshing.md). **Related, not superseded:** [`ADR-0009`](./ADR-0009-infrastructure-graph-topology.md) (topology and source-data contracts remain authoritative)
 
@@ -51,4 +51,8 @@ The project owner repeatedly reports substantially improved real-world visuals. 
 Legacy remains the default. Before switching defaults: resolve or document the remaining diagnostic case with regression fixtures; verify geometry and source attribution; benchmark whole-Hengelo and progressively larger Twente tiles; obtain owner visual approval. The initial benchmark does not prove Twente-scale performance.
 
 Related: [technical design](../e2-plus-surface-first-road-rendering.md), [history](../project-history.md), [roadmap](../road-rendering-roadmap.md), [benchmark](../../research/surface-first-road-rendering/baseline-results.json).
+
+## Production Promotion Update (`TKT-026` — 2026-11-19, Pending Owner Visual Approval)
+
+Under `TKT-026` (`in_progress` pending project-owner visual approval), **E2+ (`roads: 'graph-surface'`)** was promoted to the sole production road renderer alongside **R+ (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`)** as the sole production railway renderer (`DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS`). Obsolete Legacy (`'legacy'`) and intermediate E2 (`'graph'`) junction-solver road branches, `PathJunctionCornerSmoothing.ts`, legacy railway fallback paths, and per-track ribbon ballast were retired and removed from production builders. Both pre-promotion `4 × 4 km` benchmark captures (`Run A` and `Run B`) and local Windows verification on commit `6436b7e` are recorded in `tickets/TKT-026-promote-e2plus-rplus-retire-legacy-renderers.md`.
 

@@ -68,5 +68,5 @@ The following architectural decisions have been accepted and represent the estab
   OSMnx-referenced pure-TypeScript infrastructure topology graph (`RoadNetwork`, `RailwayNetwork`, `GradeTransitionRelation`, `RailwayFlatCrossingRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`), non-destructive pre-deduplication/pre-chaining `TopologySourceData` handoff, non-interstitial degree-2 simplification with per-segment provenance, and staged renderer integration plan.
 
 - **[ADR-0010: Surface-First At-Grade Road Rendering (`E2+` / `roads: 'graph-surface'`)](./ADR-0010-surface-first-road-rendering.md)**  
-  Selection of surface-first rounded 2D edge-stroke buffering and priority-ordered Boolean ownership subtraction (`SurfaceFirstRoadFootprints.ts`) as the preferred architectural direction for at-grade road rendering, superseding explicit boundary-derived junction polygon synthesis (`ADR-0002` / E2 `solveBoundaryDerivedJunctionNode`) as the target default strategy pending final validation.
+  Selection and `TKT-026` production promotion (`in_progress` pending owner visual approval) of surface-first rounded 2D edge-stroke buffering and priority-ordered Boolean ownership subtraction (`SurfaceFirstRoadFootprints.ts`) as the sole production at-grade road renderer, retiring Legacy and E2 (`ADR-0002` / `solveBoundaryDerivedJunctionNode`).
 

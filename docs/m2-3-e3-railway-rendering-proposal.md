@@ -1,7 +1,7 @@
 # Implementation Proposal: Milestone 2.3-E3 — Graph-Driven Railway Rendering & Surface-First Ballast (R+)
 
 - **Target Milestone**: Milestone 2.3 Stage E3 (`M2.3-E3`)
-- **Status**: Proposal / Specification (Approved Architectural Direction; Stage E3-A1 Authorized)
+- **Status**: Implemented & Promoted (`TKT-010`, `TKT-011`, `TKT-012` closed; **R+** `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'` promoted to sole production railway renderer under `TKT-026`, `in_progress` pending owner visual approval)
 - **Author**: Core Infrastructure & Rendering Engineering
 - **Date**: 2026-11-09 (Updated with Project Owner Corrections)
 - **Governing ADRs**: 

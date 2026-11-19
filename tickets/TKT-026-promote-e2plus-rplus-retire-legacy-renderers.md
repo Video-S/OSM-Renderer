@@ -10,7 +10,7 @@ milestone: M2.3-E5
 stage: E5
 owner: AI Assistant
 created: 2026-11-17
-updated: 2026-11-18
+updated: 2026-11-19
 related_tickets:
   - TKT-008
   - TKT-010
@@ -79,10 +79,14 @@ Collected as a paired Legacy vs. E2+/R+ comparison in the `1280 × 720` WebGL ha
 | **Scene triangles / Draw calls** | `2,686,214` tris / `481` calls | `2,650,093` tris / `484` calls (`188` live WebGL) | `2,686,214` tris / `481` calls | `2,670,235` tris / `484` calls (`188` live WebGL) |
 | **First frame reached? / Steady FPS** | **Yes** (`57 FPS`) | **Yes (`65 FPS`, `0` console/page errors)** | **Yes** (`58 FPS`) | **Yes (`68 FPS`, `0` console/page errors)** |
 
-### Key Findings from Phase 1 Benchmark
+### Key Findings & Provenance Reconciliation from Phase 1 Benchmarks
 
-1. **Elimination of Quadratic Legacy Road Stalls**: Because E2+ (`roads: 'graph-surface'`) uses `RoadSpatialIndex` + `InfrastructureGraph` topological connectivity rather than the legacy renderer's unindexed $O(N^2)$ endpoint/intersection scans, `4 × 4 km` road generation drops consistently across both test configurations: from **`38.83 s` → `2.99 s` (`13.0×` faster)** on S5 and **`79.21 s` → `7.67 s` (`10.3×` faster)** on Live `r = 2000 m` in Run A (`1280×800` SwiftShader), and from **`38.83 s` → `11.74 s` (`3.31×` faster)** on S5 and **`79.23 s` → `14.23 s` (`5.57×` faster)** on Live `r = 2000 m` in Run B (`1280×720` WebGL).
-2. **Environment Differences Between Run A and Run B**: Run A (`1280×800` SwiftShader) used a cold Overijssel SQLite miss on Live `r = 2000 m` (matching `TKT-025`'s `125.8 s` baseline), whereas Run B (`1280×720`, hardware/accelerated WebGL at `57–68 FPS`) hit the warm server cache (`0.027 ms`) on Live `r = 2000 m` and experienced higher single-host CPU contention during `S5`/`r = 2000 m` geometry synthesis.
+1. **Elimination of Quadratic Legacy Road Stalls**: Because E2+ (`roads: 'graph-surface'`) uses `RoadSpatialIndex` + `InfrastructureGraph` topological connectivity rather than the legacy renderer's unindexed $O(N^2)$ endpoint/intersection scans, `4 × 4 km` road generation drops substantially across both test captures: from **`38.83 s` → `2.99 s` (`13.0×` faster)** on S5 and **`79.21 s` → `7.67 s` (`10.3×` faster)** on Live `r = 2000 m` in Run A (`1280×800` SwiftShader), and from **`38.83 s` → `11.74 s` (`3.31×` faster)** on S5 and **`79.23 s` → `14.23 s` (`5.57×` faster)** on Live `r = 2000 m` in Run B (`1280×720` WebGL).
+2. **Traceable Provenance & Documented Evidence Gaps**:
+   - **Repository Origin**: Both Run A (`docs/STATUS.md`) and Run B (`tickets/TKT-026-...md`) were introduced simultaneously in commit `7591a2c` (`refactor: promote E2+/R+ to default architecture`, 2026-11-17), whereas the authoritative Legacy `TKT-025` baseline was recorded earlier in commit `4c34f5a` (`tickets/TKT-025-large-map-loading-bottleneck-investigation.md`).
+   - **No Raw JSON Artifacts Retained**: `benchmarks/results/` contains only `tkt019-hengelo-scaling.json`; neither Run A nor Run B has a saved raw `.json` benchmark artifact, host CPU/GPU identifier, or exact pre-`7591a2c` commit SHA checked into the repository.
+   - **Known Configuration Differences**: Run A used `1280×800` Playwright SwiftShader with a cold Overijssel SQLite miss on Live `r = 2000 m` (`97,114` features vs. `TKT-025`'s `98,087` features) and slightly misquoted `TKT-025` Legacy `buildScene()` (`47,594.9 ms` / `97,295.4 ms` instead of `TKT-025`'s `47,589.8 ms` / `97,338.3 ms`) as well as citing a `616.47 MB` non-CDP S5 heap reference instead of `TKT-025` Table A's `1,165.97 MB` CDP-injected figure. Run B used a paired `1280×720` WebGL harness (`57–68 FPS`, BVH + `TKT-023` batching, `50.93 MB` live payload, `0.027 ms` warm server cache hit on Live `r = 2000 m`), and originally mislabeled its paired Legacy columns as `Legacy (TKT-025)`.
+   - **Unresolved Timing Variance**: While viewport/rasterizer and server-cache state explain part of the total load difference on Live `r = 2000 m`, **original repository evidence is insufficient to determine why Run A measured `2,994.7 ms` (`buildScene` `10,493.8 ms`) for Frozen S5 road generation while Run B measured `11,735.5 ms` (`buildScene` `22,594.5 ms`)** — likely reflecting differences in host hardware, container CPU contention, or pre-promotion code revision. Both runs are therefore preserved separately with their recorded provenance rather than averaged or merged.
 3. **Memory Behavior Verified**: Peak transient V8 heap during Boolean polygon clipping stayed well below the browser's `4,096 MB` heap ceiling (`760.87–1,339.93 MB` on S5, `965.43–984.61 MB` on Live Overijssel), settling to **`460.75–462.66 MB`** after GC in Run B. Retained CPU geometry (+ BVH) buffers were lower under E2+/R+ (`187.01 MB` vs. `193.43 MB` in Run A; `199.94 MB` vs. `206.38 MB` in Run B) with fewer total triangles (`2,650,093` vs. `2,686,214`).
 4. **Zero Regressions**: Descriptor validation passes (`isValid: true`), `0` Z-fighting or winding defects occur, all 11 road classes and R+ railway tracks/switches/ballast render cleanly, and Run B steady-state frame rate reached `65–68 FPS`.
 
@@ -112,18 +116,26 @@ Collected as a paired Legacy vs. E2+/R+ comparison in the `1280 × 720` WebGL ha
 
 ## 4. Acceptance Criteria & Verification
 
-- [x] `4 × 4 km` Frozen Hengelo S5 and Live Overijssel `r = 2000 m` benchmarked with E2+/R+ and compared against TKT-025 legacy measurements (Run A `1280×800` SwiftShader & Run B `1280×720` WebGL reconciled above).
-- [x] E2+/R+ (`roads: 'graph-surface'`, `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`) promoted to default across application startup, `GeometryBuilder`, Developer Tools, and benchmarks (pending project-owner review).
+- [x] `4 × 4 km` Frozen Hengelo S5 and Live Overijssel `r = 2000 m` benchmarked with E2+/R+ and compared against TKT-025 legacy measurements (Run A `1280×800` SwiftShader & Run B `1280×720` WebGL reconciled with provenance notes above).
+- [x] E2+/R+ (`roads: 'graph-surface'`, `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`) promoted to default across application startup, `GeometryBuilder`, Developer Tools, and benchmarks (pending project-owner visual approval).
 - [x] Obsolete legacy at-grade road renderer, superseded E2 boundary-derived junction solver (`PathJunctionCornerSmoothing.ts`), legacy railway renderer, and ribbon ballast code paths retired and removed.
 - [x] Shared geometry helpers, Candidate B railway primitives, stage 6D bridge/tunnel structures, `0.050 m` elevation policy, OSM provenance (`faceRanges`), BVH raycasting, and `SceneResourceManager` disposal preserved intact.
-- [ ] Complete post-promotion regression verification (`npm test` / remaining suites) and project-owner sign-off.
+- [x] Automated technical verification completed on project owner's local Windows machine (`6436b7e`, `2048 MB` heap limit, `DISABLE_OVERIJSSEL_BOOTSTRAP=1`).
+- [ ] Project-owner visual approval to transition `TKT-026` from `in_progress` to `closed`.
 
-### Verification (2026-11-18)
+### Verification
 
-Executed sequentially in the clean post-migration workspace (`NODE_OPTIONS="--max-old-space-size=1024"`):
-- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/OverijsselOfflineStore.test.ts` — exit `0` (`4 / 4 passed`, `1 skipped` because full Overijssel SQLite index is absent on disk; verifies `DISABLE_OVERIJSSEL_BOOTSTRAP` / `OVERIJSSEL_AUTO_BOOTSTRAP` / `--no-overijssel-bootstrap` opt-out in `server.ts` and `overijsselConfig.ts`).
-- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/InfrastructureRenderAdapter.test.ts` — exit `0` (`20 / 20 passed`, `12.50 s`; SHA-256 typed-buffer snapshots and Test 8 updated for authoritative `graph-R+` descriptor rendering).
-- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/RailwayRendering.test.ts` — exit `0` (`9 / 9 passed`, `1.98 s`).
-- `npm run lint` (`tsc --noEmit`) — exit `0` (`0` errors).
-- `npm run build` (`vite build`) — exit `0` (`dist/` compiled).
-- Deferred: Full `npm test` (`30` suites) was not run concurrently due to container memory bounds (`TKT-018`); ticket remains `in_progress` pending project-owner review.
+#### Project Owner Local Windows Verification (2026-11-19 — Commit `6436b7e`, Branch `main`)
+- **Environment**: Local Windows machine, Node.js `--max-old-space-size=2048` (`2048 MB` heap limit), `DISABLE_OVERIJSSEL_BOOTSTRAP=1`.
+- `RailwayRendering.test.ts`: **9 / 9 passed** (non-blocking Three.js CommonJS deprecation warning).
+- `InfrastructureRenderAdapter.test.ts`: **20 / 20 passed** (`8.95 s`; non-blocking Three.js CommonJS deprecation warning).
+- `npm run lint` (`tsc --noEmit`): **Passed** (`0` errors).
+- `npm run build` (`vite build`, Vite 8.3.8): **Passed** — `2,316` modules transformed (non-blocking Vite bundle-size and native-config warnings).
+
+#### Earlier AI Studio Sandbox Verification (2026-11-18 — `6436b7e` Prep)
+- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/OverijsselOfflineStore.test.ts`: exit `0` (`4 / 4 passed`, `1 skipped` due to absent full Overijssel SQLite index; verifies `DISABLE_OVERIJSSEL_BOOTSTRAP` / `OVERIJSSEL_AUTO_BOOTSTRAP` / `--no-overijssel-bootstrap` opt-out).
+- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/InfrastructureRenderAdapter.test.ts`: exit `0` (`20 / 20 passed`, `12.50 s`).
+- `NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/tsx --test src/world/RailwayRendering.test.ts`: exit `0` (`9 / 9 passed`, `1.98 s`).
+- `npm run lint` (`tsc --noEmit`): exit `0`.
+- `npm run build` (`vite build`): exit `0`.
+- Status: **`in_progress` pending project-owner visual approval** (full `npm test` remains subject to open `TKT-018` memory tracking).

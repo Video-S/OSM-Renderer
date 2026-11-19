@@ -1,6 +1,6 @@
 # E2+ Surface-First At-Grade Road Rendering (`roads: 'graph-surface'`)
 
-> **Status**: Experimental — Preferred Architectural Direction (`ADR-0010`). Opt-in via `?topologyRoads=graph-surface` or the Developer Tools panel (`Roads: E2+ Surface-First`). Production default remains `'legacy'`.
+> **Status**: **Promoted to Sole Production Road Architecture (`TKT-026`, `in_progress` pending project-owner visual approval)** — `roads: 'graph-surface'` is the permanent production road default alongside R+ railways (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`). Legacy and intermediate E2 junction-solver paths have been retired (`ADR-0010`).
 
 ## 1. Overview
 
@@ -96,7 +96,7 @@ Lightweight instrumentation is collected on every scene build and reset per rebu
 - The independent 24-gon reference uses a different buffer implementation than E2+'s 16-gon generator, but is still a **polygonal approximation** with declared tolerances, not ground-truth surveyed road geometry.
 - **Timing units are not fully comparable across the table**: Legacy rows use **scene-build** medians under "Road Gen Med", whereas graph/E2+ rows use **graph-road generation** medians. Compare full-scene-to-full-scene data before making relative speed claims.
 - Following the `conditionRing` iterative sub-millimeter fold-back needle cleanup, the previously reported `0.0312 m²` H01 pinched-ring coplanar overlap (`road_edge:way/1576579935-0:seg_0:p_0#seg1`) is resolved (`0` positive-area overlaps across all 12 benchmark datasets). High aggregate coverage percentages alone still do not substitute for explicit overlap, mesh-integrity, and provenance checks.
-- E2+ still shares the builder with E2; it bypasses, but does not remove, E2's junction solver. Grade-separated and railway geometry remain separately rendered, and true connectivity still comes from the graph.
+- Under `TKT-026`, E2's explicit junction solver and legacy at-grade road paths were retired and removed from `GraphRoadGeometryBuilder.ts` and `GeometryBuilder.ts`, leaving `graph-surface` (E2+) as the sole at-grade road builder. Grade-separated and railway geometry remain separately rendered, and true connectivity still comes from the graph.
 
 Full-Hengelo and Twente performance remain **unmeasured**. Spatial indexing, chunking, web workers and precomputed/baked queryable geometry are possible later strategies, not justifications for changing the currently successful geometry prematurely.
 

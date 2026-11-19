@@ -14,7 +14,7 @@ This documentation is organized into two distinct categories:
 ## Manually Maintained Documents
 
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
-  Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1 & M2.2 complete; M2.3 E2/E2+ under evaluation), verified test/build status, known limitations, and next steps.
+  Tracks the active goalpost and implementation milestone (Goalpost 2: M2.1–M2.3 E2+ & R+ promoted under `TKT-026`, `in_progress` pending owner visual approval), verified test/build status, known limitations, and next steps.
 
 - **[System Architecture (architecture.md)](./architecture.md)**  
   High-level system overview, component responsibilities, runtime data flow, module relationships, and architectural boundaries.
@@ -32,7 +32,7 @@ This documentation is organized into two distinct categories:
   Chronological evolution from Goalpost 1 boundary-derived junctions (`ADR-0002`) and Stage E2 (`TKT-008`) to the E2+ surface-first road renderer (`ADR-0010`).
 
 - **[Road Rendering Validation & Migration Roadmap (road-rendering-roadmap.md)](./road-rendering-roadmap.md)**  
-  Validation architecture, discovered geometry edge cases, and promotion criteria for migrating E2+ (`roads: 'graph-surface'`) to the production default.
+  Validation architecture, discovered geometry edge cases, and production promotion record for E2+ (`roads: 'graph-surface'`) and R+ (`railways: 'graph-R+'`) under `TKT-026`.
 
 - **[Camera & World Coordinates (camera-and-world-coordinates.md)](./camera-and-world-coordinates.md)**  
   Local meter coordinate projection, orthographic camera configuration, viewport framing, zoom/pan/tilt controls, and bounds containment.

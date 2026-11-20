@@ -287,6 +287,33 @@ export function buildSurfaceFirstRailwayBallastGeometries(
     const shapes = createShapesFromMultiPolygon(geomToTriangulate);
     if (!shapes || shapes.length === 0) continue;
 
+    // When building a clipped tile (or clipped study window), only attribute sourceFeatureIds
+    // of tracks in this component whose individual ballast footprint actually overlaps the clip box
+    let effectiveSourceFeatureIds = comp.sourceFeatureIds;
+    if (tileClipBounds && comp.footprintIds.length > 1) {
+      const footprintById = new Map(footprints.map((fp) => [fp.id, fp]));
+      const tileSids = new Set<string>();
+      for (const fpId of comp.footprintIds) {
+        const fp = footprintById.get(fpId);
+        if (!fp) continue;
+        if (
+          fp.bbox[1] < tileClipBounds.minX ||
+          fp.bbox[0] > tileClipBounds.maxX ||
+          fp.bbox[3] < tileClipBounds.minZ ||
+          fp.bbox[2] > tileClipBounds.maxZ
+        ) {
+          continue;
+        }
+        const clippedFp = clipMultiPolygonToBox2D(fp.geometry, tileClipBounds);
+        if (clippedFp.length > 0 && computeMultiPolygonArea(clippedFp) > 1e-4) {
+          for (const sid of fp.sourceFeatureIds) tileSids.add(sid);
+        }
+      }
+      if (tileSids.size > 0) {
+        effectiveSourceFeatureIds = Array.from(tileSids).sort();
+      }
+    }
+
     for (const shape of shapes) {
       const geo = new THREE.ShapeGeometry(shape);
       // Shape is in (x, -z) space; rotate to horizontal XZ plane
@@ -334,11 +361,11 @@ export function buildSurfaceFirstRailwayBallastGeometries(
 
       const info: InspectableFeatureInfo = {
         id: comp.componentId,
-        sourceFeatureId: comp.sourceFeatureIds[0] || comp.componentId,
-        sourceFeatureIds: comp.sourceFeatureIds,
-        name: `Ballast Bed (${comp.sourceFeatureIds.length} tracks)`,
+        sourceFeatureId: effectiveSourceFeatureIds[0] || comp.componentId,
+        sourceFeatureIds: effectiveSourceFeatureIds,
+        name: `Ballast Bed (${effectiveSourceFeatureIds.length} tracks)`,
         category: 'Railway & Aerial',
-        cartoLabel: `Ballast Bed (${comp.sourceFeatureIds.length} tracks)`,
+        cartoLabel: `Ballast Bed (${effectiveSourceFeatureIds.length} tracks)`,
         primaryTag: 'railway=ballast',
         subtype: 'ballast',
         elevation: ballastElevationY,

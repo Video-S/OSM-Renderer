@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { MAP_THEMES } from '../styles/mapThemes';
 import { createAlignedStudyGrid, HENGELO_CENTER_LONLAT } from './tiling/TileGrid';
 import {
@@ -961,4 +962,142 @@ test('Regression (Phase 3): touching unnamed residential landuse and forest poly
     tiled.dispose();
   }
 });
+
+test('Regression (B vs C Canonical Cleanup): asymmetric turnout bearers near tile seam and multi-track unioned ballast beds match per-tile sleeper counts and sourceFeatureIds', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'b_vs_c_turnout_and_ballast_test',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+
+  // Seam is at x = 0.
+  // 1) Mainline runs along x = -0.35 (inside West tile, 0.35m from seam x = 0) from z = -110 to z = +110.
+  // 2) Diverging branch splits at turnout node (-0.35, -35) toward (+3.5, +45) in East tile, so elongated
+  //    turnout bearers and laterally clipped sleepers on the mainline at x = -0.35 have track station center
+  //    box.cx = -0.35 < 0 (West tile) while their 3D visual box midpoint (box.cx + nx * midOffset) shifts
+  //    eastward into x > 0 (East tile).
+  // 3) Parallel yard siding at x = -4.8 (strictly inside West tile, [-6.55, -3.05] ballast width 3.5m)
+  //    unions into the same connected ballast component as the mainline/branch (which cross x = 0 into East tile),
+  //    testing that East tile's ballast metadata only attributes tracks whose ballast footprint overlaps East tile.
+  const nMainSouth = toLonLat(-0.35, -110);
+  const nSwitch = toLonLat(-0.35, -35);
+  const nMainNorth = toLonLat(-0.35, 110);
+  const nBranchNorth = toLonLat(3.5, 45);
+  const nYardWestSouth = toLonLat(-2.9, -95);
+  const nYardWestNorth = toLonLat(-2.9, -10);
+
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        id: 'way/rail-main-trunk',
+        properties: {
+          id: 'way/rail-main-trunk',
+          railway: 'rail',
+          _nodeIds: [1001, 1002],
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [nMainSouth, nSwitch],
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/rail-main-continuation',
+        properties: {
+          id: 'way/rail-main-continuation',
+          railway: 'rail',
+          _nodeIds: [1002, 1003],
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [nSwitch, nMainNorth],
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/rail-diverging-east',
+        properties: {
+          id: 'way/rail-diverging-east',
+          railway: 'rail',
+          service: 'siding',
+          _nodeIds: [1002, 1004],
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [nSwitch, nBranchNorth],
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/rail-west-only-siding',
+        properties: {
+          id: 'way/rail-west-only-siding',
+          railway: 'rail',
+          service: 'yard',
+          _nodeIds: [1005, 1006],
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [nYardWestSouth, nYardWestNorth],
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `Unexpected A vs C defects: ${JSON.stringify(report.defects)}`);
+
+    const abc = runDiagnosticAbcComparison({ ingested, reference, tiled });
+    assert.equal(abc.aVsB.isValid, true, `Unexpected A vs B defects: ${JSON.stringify(abc.aVsB.defects)}`);
+    assert.equal(
+      abc.bVsC.tilesWithGeometryDivergence,
+      0,
+      `Expected 0 B vs C geometry divergent tiles, got: ${JSON.stringify(abc.bVsC.divergentTiles)}`
+    );
+    assert.equal(
+      abc.bVsC.tilesWithMetadataDivergence,
+      0,
+      `Expected 0 B vs C metadata divergent tiles, got: ${JSON.stringify(abc.bVsC.divergentTiles)}`
+    );
+    assert.equal(abc.bVsC.isExactMatch, true);
+
+    // Confirm East tile (tx index 1) does not falsely claim 'way/rail-west-only-siding' which lies strictly at x = -2.9 in West tile
+    const eastTile = tiled.tiles.find((t) => t.tile.localBounds.minX >= 0);
+    assert.ok(eastTile, 'Expected East tile at minX >= 0');
+    const eastBallastMesh = eastTile.scene.railwaysGroup.children.find(
+      (c) => c.name === 'Railway_Ballast'
+    ) as THREE.Mesh | undefined;
+    assert.ok(eastBallastMesh, 'Expected Railway_Ballast mesh in East tile');
+    const eastFaceRanges = (eastBallastMesh.userData?.faceRanges ?? []) as Array<{
+      info: { sourceFeatureIds?: string[] };
+    }>;
+    const eastBallastSids = new Set(
+      eastFaceRanges.flatMap((r) => r.info.sourceFeatureIds ?? [])
+    );
+    assert.equal(
+      eastBallastSids.has('way/rail-west-only-siding'),
+      false,
+      'East tile ballast should not advertise West-only siding sourceFeatureId'
+    );
+    assert.equal(
+      eastBallastSids.has('way/rail-diverging-east'),
+      true,
+      'East tile ballast must retain East-crossing branch sourceFeatureId'
+    );
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
 

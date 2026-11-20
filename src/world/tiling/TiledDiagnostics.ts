@@ -6,7 +6,11 @@ import type {
 } from '../../types/MapFeature';
 import type { BuiltSceneGeometry, FaceFeatureRange } from '../GeometryBuilder';
 import { SceneResourceManager } from '../SceneResourceManager';
-import { clipBufferGeometryToBoxXZ } from './MeshBoxClipper';
+import {
+  buildAtGradeBallastFootprints,
+  computeMultiPolygonArea,
+} from '../infrastructure/railways/SurfaceFirstRailwayBallast';
+import { clipBufferGeometryToBoxXZ, clipMultiPolygonToBox2D } from './MeshBoxClipper';
 import { auditCollarSufficiency } from './CollarAudit';
 import {
   getRingsBBoxCentroid,
@@ -76,10 +80,82 @@ export interface DiagnosticAbcReport {
   };
 }
 
+function buildRailwayBallastFootprintMap(
+  ingested: IngestedStudyRegion
+): Map<string, { bbox: [number, number, number, number]; geometry: [number, number][][][] }> {
+  const map = new Map<
+    string,
+    { bbox: [number, number, number, number]; geometry: [number, number][][][] }
+  >();
+  const railways = ingested.data.railways || [];
+  if (railways.length === 0) return map;
+  const footprints = buildAtGradeBallastFootprints(railways);
+  for (const fp of footprints) {
+    for (const sid of fp.sourceFeatureIds) {
+      if (!map.has(sid)) {
+        map.set(sid, { bbox: fp.bbox, geometry: fp.geometry });
+      }
+    }
+  }
+  return map;
+}
+
+function normalizeBallastFaceRangesForTile(
+  faceRanges: FaceFeatureRange[],
+  tile: TileDescriptor,
+  ballastFootprintsBySid: ReadonlyMap<
+    string,
+    { bbox: [number, number, number, number]; geometry: [number, number][][][] }
+  >
+): FaceFeatureRange[] {
+  if (ballastFootprintsBySid.size === 0) return faceRanges;
+  const bounds = tile.localBounds;
+  return faceRanges.map((fr) => {
+    const info = fr.info;
+    if (
+      !info ||
+      info.subtype !== 'ballast' ||
+      !Array.isArray(info.sourceFeatureIds) ||
+      info.sourceFeatureIds.length <= 1
+    ) {
+      return fr;
+    }
+    const filteredSids = info.sourceFeatureIds.filter((sid) => {
+      const fp = ballastFootprintsBySid.get(sid);
+      if (!fp) return true;
+      if (
+        fp.bbox[1] < bounds.minX ||
+        fp.bbox[0] > bounds.maxX ||
+        fp.bbox[3] < bounds.minZ ||
+        fp.bbox[2] > bounds.maxZ
+      ) {
+        return false;
+      }
+      const clipped = clipMultiPolygonToBox2D(fp.geometry, bounds);
+      return clipped.length > 0 && computeMultiPolygonArea(clipped) > 1e-4;
+    });
+    if (filteredSids.length === 0 || filteredSids.length === info.sourceFeatureIds.length) {
+      return fr;
+    }
+    return {
+      ...fr,
+      info: {
+        ...info,
+        sourceFeatureId: filteredSids[0] || info.sourceFeatureId,
+        sourceFeatureIds: filteredSids,
+      },
+    };
+  });
+}
+
 function cloneStaticGroupWithClip(
   srcGroup: THREE.Group,
   tile: TileDescriptor,
-  disposables: THREE.BufferGeometry[]
+  disposables: THREE.BufferGeometry[],
+  ballastFootprintsBySid?: ReadonlyMap<
+    string,
+    { bbox: [number, number, number, number]; geometry: [number, number][][][] }
+  >
 ): THREE.Group {
   const dstGroup = new THREE.Group();
   dstGroup.name = srcGroup.name;
@@ -109,7 +185,16 @@ function cloneStaticGroupWithClip(
       ...mesh.userData,
     };
     if (Array.isArray(srcFaceRanges)) {
-      nextUserData.faceRanges = (clipped.userData?.faceRanges as FaceFeatureRange[] | undefined) ?? [];
+      let clippedRanges =
+        (clipped.userData?.faceRanges as FaceFeatureRange[] | undefined) ?? [];
+      if (ballastFootprintsBySid && mesh.name.startsWith('Railway_Ballast')) {
+        clippedRanges = normalizeBallastFaceRangesForTile(
+          clippedRanges,
+          tile,
+          ballastFootprintsBySid
+        );
+      }
+      nextUserData.faceRanges = clippedRanges;
       delete nextUserData.id;
       delete nextUserData.sourceFeatureId;
       delete nextUserData.sourceFeatureIds;
@@ -348,10 +433,22 @@ function countInstancedWithinBox(
     const im = obj as THREE.InstancedMesh;
     if (meshNameFilter && !meshNameFilter(im.name)) return;
     const instInfos = im.userData?.instanceInfos as InspectableFeatureInfo[] | undefined;
+    const instBoxes = im.userData?.instanceBoxes as
+      | ReadonlyArray<{ cx: number; cz: number }>
+      | undefined;
     for (let i = 0; i < im.count; i++) {
-      im.getMatrixAt(i, mat);
-      const tx = mat.elements[12] + im.position.x;
-      const tz = mat.elements[14] + im.position.z;
+      let tx: number;
+      let tz: number;
+      if (instBoxes && instBoxes[i]) {
+        // Use canonical Float64 track-centerline station anchor (box.cx, box.cz), matching
+        // RailwayGeometryBuilder.ts:2135 (`pointInHalfOpenBox(cx, cz, tileClipBounds)`)
+        tx = instBoxes[i].cx + im.position.x;
+        tz = instBoxes[i].cz + im.position.z;
+      } else {
+        im.getMatrixAt(i, mat);
+        tx = mat.elements[12] + im.position.x;
+        tz = mat.elements[14] + im.position.z;
+      }
       if (pointInHalfOpenBox(tx, tz, tile.localBounds)) {
         count++;
         if (instInfos && instInfos[i]) {
@@ -483,6 +580,7 @@ export function runDiagnosticAbcComparison(params: {
       ingested.grid,
       ingested.data.landmarks
     );
+    const ballastFootprintsBySid = buildRailwayBallastFootprintMap(ingested);
     const partitionedEntries: BuiltTileEntry[] = [];
 
     for (const tile of ingested.grid.tiles) {
@@ -493,7 +591,12 @@ export function runDiagnosticAbcComparison(params: {
       if (bMesh) buildingsGroup.add(bMesh);
 
       const roadsGroup = cloneStaticGroupWithClip(reference.scene.roadsGroup, tile, disposables);
-      const railwaysGroup = cloneStaticGroupWithClip(reference.scene.railwaysGroup, tile, disposables);
+      const railwaysGroup = cloneStaticGroupWithClip(
+        reference.scene.railwaysGroup,
+        tile,
+        disposables,
+        ballastFootprintsBySid
+      );
       const waterGroup = cloneStaticGroupWithClip(reference.scene.waterGroup, tile, disposables);
       const parksGroup = cloneStaticGroupWithClip(reference.scene.parksGroup, tile, disposables);
       const landuseGroup = cloneStaticGroupWithClip(reference.scene.landuseGroup, tile, disposables);

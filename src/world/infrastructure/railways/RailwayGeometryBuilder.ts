@@ -460,6 +460,7 @@ function buildInstancedSleepersMesh(
   instancedMesh.frustumCulled = true;
 
   const instanceInfos: InspectableFeatureInfo[] = new Array(count);
+  const instanceBoxes: SleeperBearerBox3D[] = new Array(count);
   const mat4 = new THREE.Matrix4();
   const te = mat4.elements;
 
@@ -473,6 +474,7 @@ function buildInstancedSleepersMesh(
   for (let i = 0; i < count; i++) {
     const { box, info } = items[i];
     instanceInfos[i] = info;
+    instanceBoxes[i] = box;
 
     const totalWidth = box.halfWidthLeft + box.halfWidthRight;
     const midOffset = (box.halfWidthLeft - box.halfWidthRight) * 0.5;
@@ -521,6 +523,7 @@ function buildInstancedSleepersMesh(
     isInstanced: true,
     isStructural3D: true,
     instanceInfos,
+    instanceBoxes,
   };
 
   return {

@@ -1,10 +1,19 @@
 import * as THREE from 'three';
-import type { InspectableFeatureInfo } from '../../types/MapFeature';
+import type {
+  BuildingFeature,
+  InspectableFeatureInfo,
+  PointLandmarkFeature,
+} from '../../types/MapFeature';
 import type { BuiltSceneGeometry, FaceFeatureRange } from '../GeometryBuilder';
 import { SceneResourceManager } from '../SceneResourceManager';
 import { clipBufferGeometryToBoxXZ } from './MeshBoxClipper';
 import { auditCollarSufficiency } from './CollarAudit';
-import { pointInHalfOpenBox, type StudyGridSpec, type TileDescriptor } from './TileGrid';
+import {
+  getRingsBBoxCentroid,
+  pointInHalfOpenBox,
+  type StudyGridSpec,
+  type TileDescriptor,
+} from './TileGrid';
 import type {
   BuiltTileEntry,
   IngestedStudyRegion,
@@ -16,8 +25,12 @@ import {
   type SeamValidationReport,
 } from './SeamValidator';
 
+const DEFAULT_MAX_SAMPLE_IDS_PER_TILE = 10;
+
 export interface TileSynthesisDivergence {
   tileId: string;
+  hasGeometryDivergence: boolean;
+  hasMetadataDivergence: boolean;
   bBuildings: number;
   cBuildings: number;
   bBuildingTris: number;
@@ -28,6 +41,10 @@ export interface TileSynthesisDivergence {
   cSleepers: number;
   maxRoadClassAreaDiffM2: number;
   worstRoadClass?: string;
+  extraSourceIdCount: number;
+  missingSourceIdCount: number;
+  sampleExtraSourceIds: string[];
+  sampleMissingSourceIds: string[];
   extraSourceIdsInC: string[];
   missingSourceIdsInC: string[];
 }
@@ -38,8 +55,11 @@ export interface DiagnosticAbcReport {
   /** Compares (B) partitioned reference tiles vs (C) independently built M1a tiles. Isolates synthesis divergences. */
   bVsC: {
     isExactMatch: boolean;
+    isGeometryExactMatch: boolean;
     tilesCompared: number;
     tilesWithDivergence: number;
+    tilesWithGeometryDivergence: number;
+    tilesWithMetadataDivergence: number;
     divergentTiles: TileSynthesisDivergence[];
     totalRoadAreaDiffByClassM2: Record<string, { bAreaM2: number; cAreaM2: number; diffM2: number }>;
     totalBuildingCountB: number;
@@ -70,6 +90,7 @@ function cloneStaticGroupWithClip(
     if ((obj as THREE.InstancedMesh).isInstancedMesh) return;
     if (!(obj as THREE.Mesh).isMesh) return;
     const mesh = obj as THREE.Mesh;
+    const srcFaceRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
     let srcGeo = mesh.geometry;
     let needsTempDispose = false;
     if (mesh.position.x !== 0 || mesh.position.y !== 0 || mesh.position.z !== 0) {
@@ -77,36 +98,129 @@ function cloneStaticGroupWithClip(
       srcGeo.translate(mesh.position.x, mesh.position.y, mesh.position.z);
       needsTempDispose = true;
     }
-    const clipped = clipBufferGeometryToBoxXZ(srcGeo, tile.localBounds);
+    const clipped = clipBufferGeometryToBoxXZ(srcGeo, tile.localBounds, srcFaceRanges);
     if (needsTempDispose) srcGeo.dispose();
     if (!clipped) return;
     disposables.push(clipped);
     const dstMesh = new THREE.Mesh(clipped, mesh.material);
     dstMesh.name = mesh.name;
     dstMesh.renderOrder = mesh.renderOrder;
-    dstMesh.userData = {
+    const nextUserData: Record<string, unknown> = {
       ...mesh.userData,
-      faceRanges: clipped.userData?.faceRanges ?? mesh.userData?.faceRanges,
     };
+    if (Array.isArray(srcFaceRanges)) {
+      nextUserData.faceRanges = (clipped.userData?.faceRanges as FaceFeatureRange[] | undefined) ?? [];
+      delete nextUserData.id;
+      delete nextUserData.sourceFeatureId;
+      delete nextUserData.sourceFeatureIds;
+    } else if (clipped.userData?.faceRanges) {
+      nextUserData.faceRanges = clipped.userData.faceRanges;
+    }
+    dstMesh.userData = nextUserData;
     dstGroup.add(dstMesh);
   });
 
   return dstGroup;
 }
 
+function partitionPointOwnedFoliageMeshesIntoTiles(
+  refFoliageGroup: THREE.Group,
+  grid: StudyGridSpec,
+  landmarks: readonly PointLandmarkFeature[] = []
+): Map<string, FaceFeatureRange[]> {
+  const perTile = new Map<string, FaceFeatureRange[]>();
+  for (const tile of grid.tiles) {
+    perTile.set(tile.id, []);
+  }
+
+  const landmarkPosById = new Map<string, [number, number]>();
+  for (const lm of landmarks) {
+    landmarkPosById.set(lm.id, [lm.position[0], lm.position[1]]);
+  }
+
+  refFoliageGroup.traverse((obj) => {
+    if ((obj as THREE.InstancedMesh).isInstancedMesh) return;
+    if (!(obj as THREE.Mesh).isMesh) return;
+    const mesh = obj as THREE.Mesh;
+    const posAttr = mesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    const idxAttr = mesh.geometry.getIndex();
+    const triCount = idxAttr ? Math.floor(idxAttr.count / 3) : Math.floor(posAttr.count / 3);
+    const faceRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
+    if (!faceRanges || faceRanges.length === 0) return;
+
+    for (const r of faceRanges) {
+      let pt = landmarkPosById.get(r.info.id);
+      if (!pt) {
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        const fEnd = Math.min(triCount, r.endFace);
+        for (let f = r.startFace; f < fEnd; f++) {
+          for (let k = 0; k < 3; k++) {
+            const vi = idxAttr ? idxAttr.getX(f * 3 + k) : f * 3 + k;
+            const x = posAttr.getX(vi) + mesh.position.x;
+            const z = posAttr.getZ(vi) + mesh.position.z;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+          }
+        }
+        if (Number.isFinite(minX) && Number.isFinite(minZ)) {
+          pt = [(minX + maxX) * 0.5, (minZ + maxZ) * 0.5];
+        }
+      }
+      if (!pt) continue;
+      for (const tile of grid.tiles) {
+        if (pointInHalfOpenBox(pt[0], pt[1], tile.localBounds)) {
+          const list = perTile.get(tile.id)!;
+          const triSpan = Math.max(1, r.endFace - r.startFace);
+          const startFace = list.length > 0 ? list[list.length - 1].endFace : 0;
+          list.push({
+            startFace,
+            endFace: startFace + triSpan,
+            info: r.info,
+          });
+          break;
+        }
+      }
+    }
+  });
+
+  return perTile;
+}
+
 function partitionBuildingsIntoTiles(
   refBuildingsGroup: THREE.Group,
-  grid: StudyGridSpec
+  grid: StudyGridSpec,
+  buildings: readonly BuildingFeature[] = []
 ): Map<string, Map<string, { tris: number; info: InspectableFeatureInfo }>> {
   const perTile = new Map<string, Map<string, { tris: number; info: InspectableFeatureInfo }>>();
   for (const tile of grid.tiles) {
     perTile.set(tile.id, new Map());
   }
 
-  // First pass: accumulate XZ centroid sums per building ID across all meshes/faceRanges
+  const canonicalCentroids = new Map<string, [number, number]>();
+  for (const b of buildings) {
+    if (b.footprint && b.footprint.length > 0) {
+      canonicalCentroids.set(b.id, getRingsBBoxCentroid(b.footprint));
+    }
+  }
+
+  // First pass: accumulate triangle counts and fallback 2D bbox per building ID across all meshes/faceRanges
   const accum = new Map<
     string,
-    { sumX: number; sumZ: number; vertCount: number; tris: number; info: InspectableFeatureInfo }
+    {
+      minX: number;
+      maxX: number;
+      minZ: number;
+      maxZ: number;
+      vertCount: number;
+      tris: number;
+      info: InspectableFeatureInfo;
+    }
   >();
 
   refBuildingsGroup.traverse((obj) => {
@@ -124,7 +238,15 @@ function partitionBuildingsIntoTiles(
         const key = r.info.id;
         let entry = accum.get(key);
         if (!entry) {
-          entry = { sumX: 0, sumZ: 0, vertCount: 0, tris: 0, info: r.info };
+          entry = {
+            minX: Infinity,
+            maxX: -Infinity,
+            minZ: Infinity,
+            maxZ: -Infinity,
+            vertCount: 0,
+            tris: 0,
+            info: r.info,
+          };
           accum.set(key, entry);
         }
         const fEnd = Math.min(triCount, r.endFace);
@@ -132,8 +254,12 @@ function partitionBuildingsIntoTiles(
         for (let f = r.startFace; f < fEnd; f++) {
           for (let k = 0; k < 3; k++) {
             const vi = idxAttr ? idxAttr.getX(f * 3 + k) : f * 3 + k;
-            entry.sumX += posAttr.getX(vi) + mesh.position.x;
-            entry.sumZ += posAttr.getZ(vi) + mesh.position.z;
+            const x = posAttr.getX(vi) + mesh.position.x;
+            const z = posAttr.getZ(vi) + mesh.position.z;
+            if (x < entry.minX) entry.minX = x;
+            if (x > entry.maxX) entry.maxX = x;
+            if (z < entry.minZ) entry.minZ = z;
+            if (z > entry.maxZ) entry.maxZ = z;
             entry.vertCount++;
           }
         }
@@ -143,8 +269,10 @@ function partitionBuildingsIntoTiles(
       let entry = accum.get(key);
       if (!entry) {
         entry = {
-          sumX: 0,
-          sumZ: 0,
+          minX: Infinity,
+          maxX: -Infinity,
+          minZ: Infinity,
+          maxZ: -Infinity,
           vertCount: 0,
           tris: 0,
           info: mesh.userData as InspectableFeatureInfo,
@@ -153,8 +281,12 @@ function partitionBuildingsIntoTiles(
       }
       entry.tris += triCount;
       for (let i = 0; i < posAttr.count; i++) {
-        entry.sumX += posAttr.getX(i) + mesh.position.x;
-        entry.sumZ += posAttr.getZ(i) + mesh.position.z;
+        const x = posAttr.getX(i) + mesh.position.x;
+        const z = posAttr.getZ(i) + mesh.position.z;
+        if (x < entry.minX) entry.minX = x;
+        if (x > entry.maxX) entry.maxX = x;
+        if (z < entry.minZ) entry.minZ = z;
+        if (z > entry.maxZ) entry.maxZ = z;
         entry.vertCount++;
       }
     }
@@ -162,8 +294,10 @@ function partitionBuildingsIntoTiles(
 
   for (const [bid, entry] of accum.entries()) {
     if (entry.vertCount === 0) continue;
-    const cx = entry.sumX / entry.vertCount;
-    const cz = entry.sumZ / entry.vertCount;
+    const [cx, cz] = canonicalCentroids.get(bid) ?? [
+      (entry.minX + entry.maxX) * 0.5,
+      (entry.minZ + entry.maxZ) * 0.5,
+    ];
     for (const tile of grid.tiles) {
       if (pointInHalfOpenBox(cx, cz, tile.localBounds)) {
         perTile.get(tile.id)!.set(bid, { tris: entry.tris, info: entry.info });
@@ -329,13 +463,26 @@ export function runDiagnosticAbcComparison(params: {
   ingested: IngestedStudyRegion;
   reference: SingleSceneReferenceResult;
   tiled: TiledStudyBuildResult;
+  includeFullIdLists?: boolean;
+  maxSampleIdsPerTile?: number;
 }): DiagnosticAbcReport {
   const { ingested, reference, tiled } = params;
+  const includeFullIdLists = Boolean(params.includeFullIdLists);
+  const maxSampleIds = params.maxSampleIdsPerTile ?? DEFAULT_MAX_SAMPLE_IDS_PER_TILE;
   const disposables: THREE.BufferGeometry[] = [];
   const tPart0 = performance.now();
 
   try {
-    const buildingOwnership = partitionBuildingsIntoTiles(reference.scene.buildingsGroup, ingested.grid);
+    const buildingOwnership = partitionBuildingsIntoTiles(
+      reference.scene.buildingsGroup,
+      ingested.grid,
+      ingested.data.buildings
+    );
+    const pointFoliageOwnership = partitionPointOwnedFoliageMeshesIntoTiles(
+      reference.scene.foliageGroup,
+      ingested.grid,
+      ingested.data.landmarks
+    );
     const partitionedEntries: BuiltTileEntry[] = [];
 
     for (const tile of ingested.grid.tiles) {
@@ -374,7 +521,15 @@ export function runDiagnosticAbcComparison(params: {
         (n) => n === 'ProceduralForest_Trunks'
       );
       const allFoliageInfos = countInstancedWithinBox(reference.scene.foliageGroup, tile);
-      const foliageGroup = cloneStaticGroupWithClip(reference.scene.foliageGroup, tile, disposables);
+      const foliageGroup = new THREE.Group();
+      foliageGroup.name = reference.scene.foliageGroup.name;
+      const pointFoliageRanges = pointFoliageOwnership.get(tile.id) ?? [];
+      if (pointFoliageRanges.length > 0) {
+        const lmMetaNode = new THREE.Group();
+        lmMetaNode.name = 'VirtualPointLandmarksAndFurniture';
+        lmMetaNode.userData = { faceRanges: pointFoliageRanges };
+        foliageGroup.add(lmMetaNode);
+      }
       if (allFoliageInfos.infos.length > 0) {
         const foliageMetaNode = new THREE.Group();
         foliageMetaNode.name = 'VirtualFoliageInfos';
@@ -442,6 +597,8 @@ export function runDiagnosticAbcComparison(params: {
         descriptors: ingested.descriptors,
         roadGradeSeparatedPlans: ingested.precomputedGlobalPlans.roadGradeSeparatedPlans,
         railwayGradeSeparatedPlans: ingested.precomputedGlobalPlans.railwayGradeSeparatedPlans,
+        hasGlobalAtGradeRoadPlan: Boolean(ingested.precomputedGlobalPlans.atGradeRoadPlan),
+        hasGlobalBarrierResolution: Boolean(ingested.precomputedGlobalPlans.barrierResolution),
       });
 
     const partitionedB: TiledStudyBuildResult = {
@@ -463,6 +620,8 @@ export function runDiagnosticAbcComparison(params: {
     const tCmp0 = performance.now();
     const cByTileId = new Map(tiled.tiles.map((t) => [t.tile.id, t]));
     const divergentTiles: TileSynthesisDivergence[] = [];
+    let tilesWithGeometryDivergence = 0;
+    let tilesWithMetadataDivergence = 0;
     const totalRoadAreaDiffByClassM2: Record<
       string,
       { bAreaM2: number; cAreaM2: number; diffM2: number }
@@ -535,20 +694,28 @@ export function runDiagnosticAbcComparison(params: {
         cEntry.scene.barriersGroup,
         cEntry.scene.foliageGroup,
       ]);
-      const extraSourceIdsInC = [...cSids].filter((id) => !bSids.has(id)).sort();
-      const missingSourceIdsInC = [...bSids].filter((id) => !cSids.has(id)).sort();
+      const allExtraSourceIdsInC = [...cSids].filter((id) => !bSids.has(id)).sort();
+      const allMissingSourceIdsInC = [...bSids].filter((id) => !cSids.has(id)).sort();
 
-      if (
+      const hasGeometryDivergence =
         bBldg.count !== cBldg.count ||
         bBldg.tris !== cBldg.tris ||
         bTrees !== cTrees ||
         bSleepers !== cSleepers ||
-        maxRoadClassAreaDiffM2 > 0.05 ||
-        extraSourceIdsInC.length > 0 ||
-        missingSourceIdsInC.length > 0
-      ) {
+        maxRoadClassAreaDiffM2 > 0.05;
+      const hasMetadataDivergence =
+        allExtraSourceIdsInC.length > 0 || allMissingSourceIdsInC.length > 0;
+
+      if (hasGeometryDivergence) tilesWithGeometryDivergence++;
+      if (hasMetadataDivergence) tilesWithMetadataDivergence++;
+
+      if (hasGeometryDivergence || hasMetadataDivergence) {
+        const sampleExtraSourceIds = allExtraSourceIdsInC.slice(0, maxSampleIds);
+        const sampleMissingSourceIds = allMissingSourceIdsInC.slice(0, maxSampleIds);
         divergentTiles.push({
           tileId: bEntry.tile.id,
+          hasGeometryDivergence,
+          hasMetadataDivergence,
           bBuildings: bBldg.count,
           cBuildings: cBldg.count,
           bBuildingTris: bBldg.tris,
@@ -559,8 +726,12 @@ export function runDiagnosticAbcComparison(params: {
           cSleepers,
           maxRoadClassAreaDiffM2: Number(maxRoadClassAreaDiffM2.toFixed(4)),
           worstRoadClass,
-          extraSourceIdsInC,
-          missingSourceIdsInC,
+          extraSourceIdCount: allExtraSourceIdsInC.length,
+          missingSourceIdCount: allMissingSourceIdsInC.length,
+          sampleExtraSourceIds,
+          sampleMissingSourceIds,
+          extraSourceIdsInC: includeFullIdLists ? allExtraSourceIdsInC : sampleExtraSourceIds,
+          missingSourceIdsInC: includeFullIdLists ? allMissingSourceIdsInC : sampleMissingSourceIds,
         });
       }
     }
@@ -578,8 +749,11 @@ export function runDiagnosticAbcComparison(params: {
       aVsB,
       bVsC: {
         isExactMatch: divergentTiles.length === 0,
+        isGeometryExactMatch: tilesWithGeometryDivergence === 0,
         tilesCompared: partitionedEntries.length,
         tilesWithDivergence: divergentTiles.length,
+        tilesWithGeometryDivergence,
+        tilesWithMetadataDivergence,
         divergentTiles,
         totalRoadAreaDiffByClassM2,
         totalBuildingCountB,

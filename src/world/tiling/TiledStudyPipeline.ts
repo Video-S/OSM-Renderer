@@ -11,11 +11,17 @@ import type {
   RoadFeature,
   WaterBodyFeature,
 } from '../../types/MapFeature';
+import * as THREE from 'three';
 import {
   applyTunnelPortalGroundCutoutsToPlanarLayers,
+  buildGraphAtGradeRoadGeometries,
+  createShapesFromMultiPolygon,
   GeometryBuilder,
+  resolveBarrierStructuralContexts,
+  SceneResourceManager,
   type BuiltSceneGeometry,
   type GeometryBuilderOptions,
+  type GraphRoadGeometryBuildResult,
 } from '../GeometryBuilder';
 import { resolveAndValidatePlanarPolygons } from '../PlanarLayerValidator';
 import { LocalGeoJsonProvider } from '../LocalGeoJsonProvider';
@@ -33,12 +39,19 @@ import {
   resolveGraphGradeSeparatedPlans,
   type GraphGradeSeparatedResolutionResult,
 } from '../BridgeAndTunnelBuilder';
-import { getRailwayElevations, getRoadElevation } from '../ElevationPolicy';
+import {
+  ELEVATION_POLICY,
+  getLanduseElevationAndOffset,
+  getRailwayElevations,
+  getRoadElevation,
+} from '../ElevationPolicy';
+import { classifyInfrastructurePlacement } from '../InfrastructurePlacementClassifier';
+import { computeRailwayDensifiedPointsMap } from '../infrastructure/railways/RailwayGeometryBuilder';
 import {
   computeContinuousTrackPhases,
   sortRailwaysMainlineFirst,
 } from '../infrastructure/railways/RailwayTopology';
-import { VerifiedTunnelEntrances } from '../SurfaceVisibilityPolicy';
+import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from '../SurfaceVisibilityPolicy';
 import { auditCollarSufficiency, type CollarAuditReport } from './CollarAudit';
 import {
   boxesOverlap2D,
@@ -248,8 +261,9 @@ export function ingestCanonicalStudyGeoJson(
       })
     : null;
 
-  // Compute canonical global railway track phases (matching RailwayGeometryBuilder exactly)
+  // Compute canonical global railway track phases and tile-invariant densified polylines
   let railwayTrackPhases = new Map<string, number>();
+  let railwayDensifiedPointsByEdgeId = new Map<string, [number, number][]>();
   if (descriptors && descriptors.railwayEdges.length > 0) {
     const divergingEdgeIds = new Set<string>();
     for (const node of descriptors.railwayNodes) {
@@ -261,33 +275,47 @@ export function ingestCanonicalStudyGeoJson(
         divergingEdgeIds.add(node.turnoutTopology.divergingBranchEdgeId);
       }
     }
-    const pseudoRailways: RailwayFeature[] = descriptors.railwayEdges.map((e) => {
-      const plan = railwayGradeSeparatedPlans?.plansByEdgeId.get(e.id);
-      const snap = railwayGradeSeparatedPlans?.atGradePortalSnapsByEdgeId.get(e.id);
-      const pts: [number, number][] = (plan?.points ?? e.points).map(
-        (p) => [p[0], p[1]] as [number, number]
-      );
-      if (snap?.start && pts.length > 0) pts[0] = [snap.start[0], snap.start[1]];
-      if (snap?.end && pts.length > 0) pts[pts.length - 1] = [snap.end[0], snap.end[1]];
-      return {
-        id: e.id,
-        sourceFeatureId: e.sourceFeatureId,
-        sourceFeatureIds: [...e.sourceFeatureIds],
-        type: 'railway' as const,
-        points: pts,
-        railwayType: e.railwayType,
-        width: e.width,
-        layer: e.layer,
-        isBridge: e.isBridge,
-        isTunnel: e.isTunnel,
-        placementClassification: e.placementClassification,
-        osmTags: e.primaryOsmTags as Record<string, string | number | boolean>,
-      };
-    });
+    const pseudoRailways: RailwayFeature[] = descriptors.railwayEdges
+      .map((e) => {
+        const placement =
+          e.placementClassification ??
+          classifyInfrastructurePlacement(e.primaryOsmTags as Record<string, string | number | boolean>, {
+            isBridge: e.isBridge,
+            isTunnel: e.isTunnel,
+            layer: e.layer,
+            featureDomain: 'railway',
+          });
+        const plan = railwayGradeSeparatedPlans?.plansByEdgeId.get(e.id);
+        const snap = railwayGradeSeparatedPlans?.atGradePortalSnapsByEdgeId.get(e.id);
+        const pts: [number, number][] = (plan?.points ?? e.points).map(
+          (p) => [p[0], p[1]] as [number, number]
+        );
+        if (snap?.start && pts.length > 0) pts[0] = [snap.start[0], snap.start[1]];
+        if (snap?.end && pts.length > 0) pts[pts.length - 1] = [snap.end[0], snap.end[1]];
+        return {
+          id: e.id,
+          sourceFeatureId: e.sourceFeatureId,
+          sourceFeatureIds: [...e.sourceFeatureIds],
+          type: 'railway' as const,
+          points: pts,
+          railwayType: e.railwayType,
+          width: e.width,
+          layer: placement.hasConflict ? 0 : e.layer,
+          isBridge: placement.hasConflict ? false : placement.rendersOnSurface ? false : e.isBridge,
+          isTunnel: placement.hasConflict ? false : placement.isSubterraneanTunnel,
+          placementClassification: placement,
+          osmTags: e.primaryOsmTags as Record<string, string | number | boolean>,
+        };
+      })
+      .filter((r) => resolveSurfaceVisibility(r) !== 'concealed_indoor');
     const sorted = sortRailwaysMainlineFirst(pseudoRailways, divergingEdgeIds);
     railwayTrackPhases = computeContinuousTrackPhases(sorted);
+    railwayDensifiedPointsByEdgeId = computeRailwayDensifiedPointsMap(sorted, true);
   } else if (data.railways.length > 0) {
-    railwayTrackPhases = computeContinuousTrackPhases(sortRailwaysMainlineFirst(data.railways));
+    const active = data.railways.filter((r) => resolveSurfaceVisibility(r) !== 'concealed_indoor');
+    const sorted = sortRailwaysMainlineFirst(active);
+    railwayTrackPhases = computeContinuousTrackPhases(sorted);
+    railwayDensifiedPointsByEdgeId = computeRailwayDensifiedPointsMap(sorted, true);
   }
 
   const tunnelEntrances = new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
@@ -315,6 +343,105 @@ export function ingestCanonicalStudyGeoJson(
   }
   applyTunnelPortalGroundCutoutsToPlanarLayers(data, planarResolvedById, tunnelEntrances, 1.0);
 
+  // Precompute unclipped 3D planar ShapeGeometries once so every tile clips the exact same 3D triangles
+  const unclippedPlanarGeometriesById = new Map<string, THREE.BufferGeometry>();
+  const buildUnclippedPlanarGeo = (
+    id: string,
+    fallbackPolygon: [number, number][][],
+    yElev: number
+  ) => {
+    const resolved = planarResolvedById.get(id);
+    if (resolved?.isDeduplicatedInto) return;
+    const mp =
+      resolved && resolved.resolvedMultiPolygon.length > 0
+        ? resolved.resolvedMultiPolygon
+        : resolved && resolved.resolvedMultiPolygon.length === 0
+          ? []
+          : [fallbackPolygon];
+    if (mp.length === 0) return;
+    const shapes = createShapesFromMultiPolygon(mp);
+    if (shapes.length === 0) return;
+    const g = new THREE.ShapeGeometry(shapes);
+    g.rotateX(-Math.PI / 2);
+    g.translate(0, yElev, 0);
+    if (g.hasAttribute('uv')) g.deleteAttribute('uv');
+    g.clearGroups();
+    g.computeBoundingBox();
+    unclippedPlanarGeometriesById.set(id, g);
+  };
+
+  for (const item of data.landuse || []) {
+    try {
+      const resolved = planarResolvedById.get(item.id);
+      const subtype = item.landuseType || 'landuse';
+      const tierInfo = getLanduseElevationAndOffset(subtype);
+      const exactElevation = resolved ? resolved.elevationY : tierInfo.elevation;
+      buildUnclippedPlanarGeo(item.id, item.polygon, exactElevation);
+    } catch {
+      // Skip invalid polygon
+    }
+  }
+  for (const item of data.waterBodies || []) {
+    if (resolveSurfaceVisibility(item) !== 'surface') continue;
+    try {
+      buildUnclippedPlanarGeo(item.id, item.polygon, ELEVATION_POLICY.WATER_SURFACE);
+    } catch {
+      // Skip invalid polygon
+    }
+  }
+  for (const item of data.parks || []) {
+    try {
+      const resolved = planarResolvedById.get(item.id);
+      const exactParkY = resolved ? resolved.elevationY : ELEVATION_POLICY.PARKS;
+      buildUnclippedPlanarGeo(item.id, item.polygon, exactParkY);
+    } catch {
+      // Skip invalid polygon
+    }
+  }
+
+  // Precompute global at-grade road geometries once on the batch so full blocker subtraction
+  // and earcut validation run before 3D tile clipping
+  let atGradeRoadPlan: GraphRoadGeometryBuildResult | null = null;
+  if (descriptors) {
+    const gradeTransitionCoords: [number, number][] = [];
+    for (const r of data.roads || []) {
+      if (!r.points || r.points.length < 2) continue;
+      const placement =
+        r.placementClassification ??
+        classifyInfrastructurePlacement(r.osmTags, {
+          isBridge: r.isBridge,
+          isTunnel: r.isTunnel,
+          layer: r.layer,
+          featureDomain: 'road',
+        });
+      if (placement.hasConflict) continue;
+      const visibility = resolveSurfaceVisibility(r);
+      if (visibility === 'concealed_indoor') continue;
+      if (visibility !== 'surface') {
+        gradeTransitionCoords.push(r.points[0], r.points[r.points.length - 1]);
+      }
+    }
+    const roadPlanResourceManager = new SceneResourceManager();
+    atGradeRoadPlan = buildGraphAtGradeRoadGeometries({
+      descriptors,
+      roadWidthMultiplier: 1.0,
+      surfaceFirst: true,
+      gradeTransitionCoords,
+      resourceManager: roadPlanResourceManager,
+    });
+    atGradeRoadPlan.roadsByClass.forEach((items) => {
+      for (const item of items) {
+        item.geom.computeBoundingBox();
+      }
+    });
+  }
+
+  const barrierResolution = resolveBarrierStructuralContexts(
+    data.barriers || [],
+    data.roads || [],
+    data.railways || []
+  );
+
   const ingestTimeMs = Number((performance.now() - t0).toFixed(2));
   return {
     grid,
@@ -330,6 +457,9 @@ export function ingestCanonicalStudyGeoJson(
       roadGradeSeparatedPlans,
       railwayGradeSeparatedPlans,
       railwayTrackPhases,
+      railwayDensifiedPointsByEdgeId,
+      atGradeRoadPlan,
+      barrierResolution,
       tunnelEntrances,
       existingParkingSpaceBoxes,
       planarResolution: {
@@ -337,6 +467,7 @@ export function ingestCanonicalStudyGeoJson(
         report: planarReport,
         polygonRingsById,
         portalCutoutsApplied: true,
+        unclippedGeometriesById: unclippedPlanarGeometriesById,
       },
     },
     ingestTimeMs,
@@ -409,20 +540,28 @@ export function sliceStudyInputsForTile(
     return bb ? boxesOverlap2D(bb, collar, 2) : false;
   });
 
-  const landuse: LanduseFeature[] = data.landuse.filter((l) => {
-    const bb = computeRingBBox(l.polygon);
+  const resolvedPlanarById = ingested.precomputedGlobalPlans.planarResolution?.resolvedById;
+  const planarItemOverlapsCollar = (id: string, polygon: [number, number][][]): boolean => {
+    const resolved = resolvedPlanarById?.get(id);
+    if (resolved?.isDeduplicatedInto) return false;
+    if (resolved?.bbox && boxesOverlap2D(resolved.bbox, collar, 2)) {
+      return true;
+    }
+    const bb = computeRingBBox(polygon);
     return bb ? boxesOverlap2D(bb, collar, 2) : false;
-  });
+  };
 
-  const parks: ParkFeature[] = data.parks.filter((p) => {
-    const bb = computeRingBBox(p.polygon);
-    return bb ? boxesOverlap2D(bb, collar, 2) : false;
-  });
+  const landuse: LanduseFeature[] = data.landuse.filter((l) =>
+    planarItemOverlapsCollar(l.id, l.polygon)
+  );
 
-  const waterBodies: WaterBodyFeature[] = data.waterBodies.filter((w) => {
-    const bb = computeRingBBox(w.polygon);
-    return bb ? boxesOverlap2D(bb, collar, 2) : false;
-  });
+  const parks: ParkFeature[] = data.parks.filter((p) =>
+    planarItemOverlapsCollar(p.id, p.polygon)
+  );
+
+  const waterBodies: WaterBodyFeature[] = data.waterBodies.filter((w) =>
+    planarItemOverlapsCollar(w.id, w.polygon)
+  );
 
   const linearWaterways: LinearWaterwayFeature[] = data.linearWaterways.filter((w) => {
     const bb = computePointsBBox(w.points);
@@ -629,6 +768,8 @@ export function buildTiledStudyScenes(
     descriptors: ingested.descriptors,
     roadGradeSeparatedPlans: ingested.precomputedGlobalPlans.roadGradeSeparatedPlans,
     railwayGradeSeparatedPlans: ingested.precomputedGlobalPlans.railwayGradeSeparatedPlans,
+    hasGlobalAtGradeRoadPlan: Boolean(ingested.precomputedGlobalPlans.atGradeRoadPlan),
+    hasGlobalBarrierResolution: Boolean(ingested.precomputedGlobalPlans.barrierResolution),
   });
 
   const builtTiles: BuiltTileEntry[] = [];

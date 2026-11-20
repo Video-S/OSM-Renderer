@@ -306,10 +306,13 @@ function resolveFaceRangeForInputFace(
  */
 export function clipBufferGeometryToBoxXZ(
   geom: THREE.BufferGeometry,
-  bounds: ClipBox2D
+  bounds: ClipBox2D,
+  srcFaceRangesOverride?: readonly FaceRangeEntry[]
 ): THREE.BufferGeometry | null {
   const posAttr = geom.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || posAttr.count === 0) return null;
+
+  const srcFaceRanges = (srcFaceRangesOverride ?? geom.userData?.faceRanges) as FaceRangeEntry[] | undefined;
 
   if (!geom.boundingBox) {
     geom.computeBoundingBox();
@@ -331,8 +334,9 @@ export function clipBufferGeometryToBoxXZ(
       bb.max.z < bounds.maxZ - 1e-6
     ) {
       const out = geom.index ? geom.toNonIndexed() : geom.clone();
-      if (geom.userData) {
-        out.userData = { ...geom.userData };
+      out.userData = { ...(geom.userData || {}) };
+      if (srcFaceRanges && srcFaceRanges.length > 0) {
+        out.userData.faceRanges = srcFaceRanges.map((r) => ({ ...r }));
       }
       return out;
     }
@@ -367,15 +371,26 @@ export function clipBufferGeometryToBoxXZ(
     };
   };
 
-  // Group span handling (preserve multi-material groups if present)
-  const srcGroups =
-    geom.groups && geom.groups.length > 0
-      ? geom.groups.map((g) => ({
-          startTri: Math.floor(g.start / 3),
-          endTri: Math.floor((g.start + g.count) / 3) - 1,
-          materialIndex: g.materialIndex ?? 0,
-        }))
-      : [{ startTri: 0, endTri: totalTriCount - 1, materialIndex: 0 }];
+  // Group span handling (preserve multi-material groups only when multiple groups cover the entire buffer;
+  // single-material merged meshes like WaterSurfaces or Roads_* may carry partial/stale geom.groups
+  // inherited from ShapeGeometry items while ribbon/deck items had empty groups).
+  let useExplicitGroups = false;
+  if (geom.groups && geom.groups.length > 1) {
+    let coveredTris = 0;
+    for (const g of geom.groups) {
+      coveredTris += Math.floor(g.count / 3);
+    }
+    if (coveredTris >= totalTriCount) {
+      useExplicitGroups = true;
+    }
+  }
+  const srcGroups = useExplicitGroups
+    ? geom.groups.map((g) => ({
+        startTri: Math.floor(g.start / 3),
+        endTri: Math.floor((g.start + g.count) / 3) - 1,
+        materialIndex: g.materialIndex ?? 0,
+      }))
+    : [{ startTri: 0, endTri: totalTriCount - 1, materialIndex: geom.groups?.[0]?.materialIndex ?? 0 }];
 
   const outPositions: number[] = [];
   const outNormals: number[] = [];
@@ -384,7 +399,6 @@ export function clipBufferGeometryToBoxXZ(
   const outColors: number[] = [];
   const outGroups: Array<{ start: number; count: number; materialIndex: number }> = [];
 
-  const srcFaceRanges = geom.userData?.faceRanges as FaceRangeEntry[] | undefined;
   const outFaceRanges: FaceRangeEntry[] = [];
   const faceRangeCursor = { idx: 0 };
   let outFaceCount = 0;

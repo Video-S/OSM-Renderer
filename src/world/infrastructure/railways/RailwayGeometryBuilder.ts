@@ -99,6 +99,8 @@ export interface BuildRailwayPrototypeOptions {
   precomputedTrackPhases?: ReadonlyMap<string, number>;
   /** Optional precomputed global grade-separated plans for railway bridges/tunnels. */
   precomputedGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
+  /** Optional precomputed global densified 2D polylines keyed by railway edge ID for tile-invariant UV ribbons. */
+  precomputedDensifiedPoints?: ReadonlyMap<string, [number, number][]>;
 }
 
 export interface RailwayBuildProfile {
@@ -260,10 +262,93 @@ function mergeItemsWithFaceRanges(
     resourceManager.releaseIntermediateGeometry(g);
   }
   if (merged) {
+    merged.clearGroups();
     merged.computeBoundingBox();
     merged.computeBoundingSphere();
   }
   return { merged, faceRanges };
+}
+
+/**
+ * Precomputes tile-invariant densified 2D polylines across a sorted global list of active railways
+ * so at-grade railway UV ribbons (`Railway_Sleepers_Ribbon`, `Railway_Rails_Ribbon`) have identical
+ * vertex positions and arc-length `u` coordinates on both sides of every tile boundary.
+ */
+export function computeRailwayDensifiedPointsMap(
+  activeRailways: RailwayFeature[],
+  useSpatialGridIndex: boolean = true
+): Map<string, [number, number][]> {
+  const result = new Map<string, [number, number][]>();
+  const hostIndexByScope = new Map<string, HostTrackSpatialIndex>();
+
+  for (const r of activeRailways) {
+    const isSubterraneanTunnel = r.placementClassification
+      ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+      : r.isTunnel;
+    if (!r.points || r.points.length < 2 || isSubterraneanTunnel) continue;
+
+    const cleanPts: [number, number][] = [];
+    for (const pt of r.points) {
+      if (
+        cleanPts.length === 0 ||
+        Math.hypot(pt[0] - cleanPts[cleanPts.length - 1][0], pt[1] - cleanPts[cleanPts.length - 1][1]) >
+          0.02
+      ) {
+        cleanPts.push(pt);
+      }
+    }
+    if (cleanPts.length < 2) continue;
+
+    const subdivPts = subdivideSharpPolylineCorners2D(cleanPts);
+    if (subdivPts.length < 2) continue;
+
+    const isTram = r.railwayType === 'tram';
+    const gaugeOffsetHalf =
+      (isTram
+        ? RAILWAY_DIMENSION_SPEC.visualTramCenterToCenterGaugeMeters
+        : RAILWAY_DIMENSION_SPEC.visualCenterToCenterGaugeMeters) * 0.5;
+    const isBridge = r.placementClassification
+      ? !r.placementClassification.hasConflict && r.placementClassification.isElevatedBridge
+      : Boolean(r.isBridge || r.layer > 0);
+    const scopeLayer = isBridge ? r.layer : 0;
+    const scope = `${scopeLayer}|${isBridge}|${isTram ? 'tram' : 'rail'}`;
+
+    let hostIndex = hostIndexByScope.get(scope);
+    if (!hostIndex) {
+      hostIndex = new HostTrackSpatialIndex(useSpatialGridIndex);
+      hostIndexByScope.set(scope, hostIndex);
+    }
+
+    const densifiedPts: [number, number][] = [subdivPts[0]];
+    for (let i = 0; i < subdivPts.length - 1; i++) {
+      const p0 = subdivPts[i];
+      const p1 = subdivPts[i + 1];
+      const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+      if (segLen > 2.2 && !isBridge) {
+        const d0 = hostIndex.queryMinDistanceToHostCenterline(p0[0], p0[1], r.id).minDist;
+        const d1 = hostIndex.queryMinDistanceToHostCenterline(p1[0], p1[1], r.id).minDist;
+        const mx = (p0[0] + p1[0]) * 0.5;
+        const mz = (p0[1] + p1[1]) * 0.5;
+        const dm = hostIndex.queryMinDistanceToHostCenterline(mx, mz, r.id).minDist;
+        if (d0 < 3.6 || d1 < 3.6 || dm < 3.6) {
+          const steps = Math.min(32, Math.ceil(segLen / 1.8));
+          for (let s = 1; s < steps; s++) {
+            const frac = s / steps;
+            densifiedPts.push([
+              p0[0] + (p1[0] - p0[0]) * frac,
+              p0[1] + (p1[1] - p0[1]) * frac,
+            ]);
+          }
+        }
+      }
+      densifiedPts.push(p1);
+    }
+
+    result.set(r.id, densifiedPts);
+    hostIndex.registerTrack(subdivPts, gaugeOffsetHalf, r.id);
+  }
+
+  return result;
 }
 
 /**
@@ -1247,31 +1332,36 @@ export function buildRailwayGroupInternal(
       ? !r.placementClassification.hasConflict && r.placementClassification.isElevatedBridge
       : Boolean(r.isBridge || r.layer > 0);
     const tUv0 = performance.now();
-    const densifiedPts: [number, number][] = [subdivPts[0]];
-    for (let i = 0; i < subdivPts.length - 1; i++) {
-      const p0 = subdivPts[i];
-      const p1 = subdivPts[i + 1];
-      const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-      // Bridges already resample every segment to <= 2.2 m inside buildBridgeProfile3D;
-      // keep densifiedPts independent of tile-sliced hostIndex on bridges.
-      if (segLen > 2.2 && !isBridgeForDensify) {
-        const d0 = hostIndex.queryMinDistanceToHostCenterline(p0[0], p0[1], r.id).minDist;
-        const d1 = hostIndex.queryMinDistanceToHostCenterline(p1[0], p1[1], r.id).minDist;
-        const mx = (p0[0] + p1[0]) * 0.5;
-        const mz = (p0[1] + p1[1]) * 0.5;
-        const dm = hostIndex.queryMinDistanceToHostCenterline(mx, mz, r.id).minDist;
-        if (d0 < 3.6 || d1 < 3.6 || dm < 3.6) {
-          const steps = Math.min(32, Math.ceil(segLen / 1.8));
-          for (let s = 1; s < steps; s++) {
-            const frac = s / steps;
-            densifiedPts.push([
-              p0[0] + (p1[0] - p0[0]) * frac,
-              p0[1] + (p1[1] - p0[1]) * frac,
-            ]);
+    const precomputedDensified = options?.precomputedDensifiedPoints?.get(r.id);
+    const densifiedPts: [number, number][] = precomputedDensified
+      ? precomputedDensified.map((pt) => [pt[0], pt[1]] as [number, number])
+      : [subdivPts[0]];
+    if (!precomputedDensified) {
+      for (let i = 0; i < subdivPts.length - 1; i++) {
+        const p0 = subdivPts[i];
+        const p1 = subdivPts[i + 1];
+        const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+        // Bridges already resample every segment to <= 2.2 m inside buildBridgeProfile3D;
+        // keep densifiedPts independent of tile-sliced hostIndex on bridges.
+        if (segLen > 2.2 && !isBridgeForDensify) {
+          const d0 = hostIndex.queryMinDistanceToHostCenterline(p0[0], p0[1], r.id).minDist;
+          const d1 = hostIndex.queryMinDistanceToHostCenterline(p1[0], p1[1], r.id).minDist;
+          const mx = (p0[0] + p1[0]) * 0.5;
+          const mz = (p0[1] + p1[1]) * 0.5;
+          const dm = hostIndex.queryMinDistanceToHostCenterline(mx, mz, r.id).minDist;
+          if (d0 < 3.6 || d1 < 3.6 || dm < 3.6) {
+            const steps = Math.min(32, Math.ceil(segLen / 1.8));
+            for (let s = 1; s < steps; s++) {
+              const frac = s / steps;
+              densifiedPts.push([
+                p0[0] + (p1[0] - p0[0]) * frac,
+                p0[1] + (p1[1] - p0[1]) * frac,
+              ]);
+            }
           }
         }
+        densifiedPts.push(p1);
       }
-      densifiedPts.push(p1);
     }
     uvRibbonAndSwitchTimeMs += performance.now() - tUv0;
 
@@ -2891,5 +2981,6 @@ export function buildRailwayInfrastructure(
     tileClipBounds: options?.tileClipBounds,
     precomputedTrackPhases: options?.precomputedTrackPhases,
     precomputedGradeSeparatedPlans: options?.precomputedGradeSeparatedPlans,
+    precomputedDensifiedPoints: options?.precomputedDensifiedPoints,
   });
 }

@@ -677,3 +677,288 @@ test('Regression: road seam edge interval check ignores tangent cul-de-sacs, cat
     tiled.dispose();
   }
 });
+
+test('Regression (Phase 1 & 2): A->B and B->C conserve water (WaterBody + LinearWaterway), mixed road meshes, asymmetric border buildings, and overhanging street furniture', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'abc-conservation-and-provenance',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const ring = (pts: Array<[number, number]>) => [pts.map(([x, z]) => toLonLat(x, z))];
+
+  // Study bounds: X in [-512, 512], Z in [-256, 256]
+  // Asymmetric L-shaped building near X = -512 border:
+  // BBox X in [-520, -490] -> 2D bbox midpoint X = -505 (inside [-512, 0] west tile!),
+  // while many dense vertices clustered around X = -518 pull the 3D vertex average below -512.
+  const denseWestWallPts: Array<[number, number]> = [
+    [-520, -20],
+    [-519.5, -18],
+    [-519, -16],
+    [-518.5, -14],
+    [-518, -12],
+    [-517.5, -10],
+    [-517, -8],
+    [-516.5, -6],
+    [-516, -4],
+    [-515.5, -2],
+    [-515, 0],
+    [-490, 0],
+    [-490, 10],
+    [-520, 10],
+    [-520, -20],
+  ];
+
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      // WaterBody (ShapeGeometry) + LinearWaterway (ribbon) merged into WaterSurfaces
+      {
+        type: 'Feature',
+        id: 'way/water-pond',
+        properties: { id: 'way/water-pond', natural: 'water', water: 'pond' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-180, -80],
+            [-120, -80],
+            [-120, -30],
+            [-180, -30],
+            [-180, -80],
+          ]),
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/canal-twente',
+        properties: { id: 'way/canal-twente', waterway: 'canal', width: '16' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-240, -10), toLonLat(0, 10), toLonLat(240, 30)],
+        },
+      },
+      // At-grade secondary road + elevated secondary bridge merged into Roads_secondary
+      {
+        type: 'Feature',
+        id: 'way/sec-at-grade-w',
+        properties: { id: 'way/sec-at-grade-w', highway: 'secondary' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-220, -120), toLonLat(-80, -120)],
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/sec-bridge-mid',
+        properties: { id: 'way/sec-bridge-mid', highway: 'secondary', bridge: 'yes', layer: '1' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-80, -120), toLonLat(80, -120)],
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/sec-at-grade-e',
+        properties: { id: 'way/sec-at-grade-e', highway: 'secondary' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(80, -120), toLonLat(220, -120)],
+        },
+      },
+      // Asymmetric border building
+      {
+        type: 'Feature',
+        id: 'way/bldg-asymmetric-border',
+        properties: { id: 'way/bldg-asymmetric-border', building: 'industrial', height: '12' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring(denseWestWallPts),
+        },
+      },
+      // Overhanging 3D tower and shelter placed 0.4m west of seam x=0 (radius overhangs into east tile!)
+      {
+        type: 'Feature',
+        id: 'node/tower-near-seam',
+        properties: { id: 'node/tower-near-seam', man_made: 'cooling_tower', height: '18' },
+        geometry: {
+          type: 'Point',
+          coordinates: toLonLat(-0.4, 75),
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'node/shelter-near-seam',
+        properties: { id: 'node/shelter-near-seam', amenity: 'shelter' },
+        geometry: {
+          type: 'Point',
+          coordinates: toLonLat(-0.3, -75),
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `A vs C defects: ${JSON.stringify(report.defects)}`);
+    assert.ok(
+      Math.abs(report.areaComparisons.water.diffM2) <= 1e-3,
+      `Expected A vs C water diff <= 1e-3 m², got ${report.areaComparisons.water.diffM2}`
+    );
+
+    const abc = runDiagnosticAbcComparison({ ingested, reference, tiled });
+    assert.equal(abc.aVsB.isValid, true, `A vs B defects: ${JSON.stringify(abc.aVsB.defects)}`);
+    assert.ok(
+      Math.abs(abc.aVsB.areaComparisons.water.diffM2) <= 1e-3,
+      `Expected A vs B water diff <= 1e-3 m², got ${abc.aVsB.areaComparisons.water.diffM2}`
+    );
+    assert.equal(abc.aVsB.buildingParity.missingFromTiles.length, 0);
+    assert.equal(
+      abc.bVsC.isExactMatch,
+      true,
+      `B vs C divergent tiles: ${JSON.stringify(abc.bVsC.divergentTiles)}`
+    );
+    assert.equal(abc.bVsC.isGeometryExactMatch, true);
+    assert.equal(abc.bVsC.tilesWithGeometryDivergence, 0);
+    assert.equal(abc.bVsC.tilesWithMetadataDivergence, 0);
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
+test('Regression (Phase 3): touching unnamed residential landuse and forest polygons unioned across collar preserve exact planar area and at-grade railway densification preserves UV phase', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'phase3-unioned-planar-and-atgrade-rail',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const ring = (pts: Array<[number, number]>) => [pts.map(([x, z]) => toLonLat(x, z))];
+
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      // Canonical unnamed residential polygon A wholly in west tile outside east tile's 64m collar ([-260, -80])
+      {
+        type: 'Feature',
+        id: 'way/res-seed-west',
+        properties: { id: 'way/res-seed-west', landuse: 'residential' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-260, -90],
+            [-80, -90],
+            [-80, 90],
+            [-260, 90],
+            [-260, -90],
+          ]),
+        },
+      },
+      // Overlapping unnamed residential polygon B deduplicated into A, extending across x=0 into east tile ([-100, 190])
+      {
+        type: 'Feature',
+        id: 'way/res-partner-east',
+        properties: { id: 'way/res-partner-east', landuse: 'residential' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-100, -90],
+            [190, -90],
+            [190, 90],
+            [-100, 90],
+            [-100, -90],
+          ]),
+        },
+      },
+      // Canonical unnamed forest A wholly outside east tile's 64m collar ([-250, -75])
+      {
+        type: 'Feature',
+        id: 'way/forest-seed-west',
+        properties: { id: 'way/forest-seed-west', landuse: 'forest' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-250, 110],
+            [-75, 110],
+            [-75, 200],
+            [-250, 200],
+            [-250, 110],
+          ]),
+        },
+      },
+      // Overlapping unnamed forest B deduplicated into A, extending into east tile ([-90, 160])
+      {
+        type: 'Feature',
+        id: 'way/forest-partner-east',
+        properties: { id: 'way/forest-partner-east', landuse: 'forest' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-90, 110],
+            [160, 110],
+            [160, 200],
+            [-90, 200],
+            [-90, 110],
+          ]),
+        },
+      },
+      // At-grade main host track in west tile outside east tile's 64m collar ([-220, -75])
+      {
+        type: 'Feature',
+        id: 'way/rail-atgrade-host-west',
+        properties: { id: 'way/rail-atgrade-host-west', railway: 'rail' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-220, -140), toLonLat(-75, -140)],
+        },
+      },
+      // Secondary at-grade track starting within 3.0m of host track at (-80, -142.8) and running on a single long segment
+      // to a 3.5-degree bend right at (-2, -142.8) before crossing seam x=0 into east tile
+      {
+        type: 'Feature',
+        id: 'way/rail-atgrade-cross-seam',
+        properties: { id: 'way/rail-atgrade-cross-seam', railway: 'rail', service: 'siding' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            toLonLat(-80, -142.8),
+            toLonLat(-2, -142.8),
+            toLonLat(120, -135.3),
+          ],
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `Unexpected defects: ${JSON.stringify(report.defects)}`);
+    assert.equal(report.areaComparisons.landuseBySubtype.residential?.diffM2 ?? 0, 0);
+    assert.equal(report.areaComparisons.parksBySubtype.forest?.diffM2 ?? 0, 0);
+    assert.ok(report.railwayParity.maxPhaseDiscontinuityU <= 1e-3);
+
+    const abc = runDiagnosticAbcComparison({ ingested, reference, tiled });
+    assert.equal(abc.aVsB.isValid, true, `A vs B defects: ${JSON.stringify(abc.aVsB.defects)}`);
+    assert.equal(
+      abc.bVsC.isExactMatch,
+      true,
+      `B vs C divergent tiles: ${JSON.stringify(abc.bVsC.divergentTiles)}`
+    );
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+

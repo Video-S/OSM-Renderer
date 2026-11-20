@@ -32,7 +32,6 @@ import {
 } from '../../GeometryBuilder';
 import {
   clipBufferGeometryToBoxXZ,
-  clipMultiPolygonToBox2D,
   type ClipBox2D,
 } from '../../tiling/MeshBoxClipper';
 import {
@@ -793,6 +792,7 @@ function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean 
   }
 
   geo.setIndex(validIndices);
+  geo.clearGroups();
 
   const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
   if (!normAttr || normAttr.count !== posAttr.count) {
@@ -1493,20 +1493,6 @@ export function buildGraphAtGradeRoadGeometries(
           }
           registerRoadFootprint(sub.subId, isPath, visible);
 
-          const buildHorizontalRoadGeo = (polys: MultiPolygonCoords): THREE.BufferGeometry | null => {
-            const shapes = createShapesFromMultiPolygon(polys);
-            if (shapes.length === 0) return null;
-            const g = new THREE.ShapeGeometry(shapes);
-            g.rotateX(-Math.PI / 2);
-            g.translate(0, roadElevation, 0);
-            if (g.hasAttribute('uv')) g.deleteAttribute('uv');
-            if (!validateAndPruneHorizontalGeometry(g)) {
-              g.dispose();
-              return null;
-            }
-            return g;
-          };
-
           if (
             tileClipBounds &&
             (maxX < tileClipBounds.minX ||
@@ -1517,46 +1503,37 @@ export function buildGraphAtGradeRoadGeometries(
             continue;
           }
 
-          const renderPolygons = tileClipBounds
-            ? clipMultiPolygonToBox2D(visible, tileClipBounds)
-            : visible;
-
           const tTriStart = performance.now();
           let geo: THREE.BufferGeometry | null = null;
           let failedEmptyShapes = false;
           let failedInvalidTriangles = false;
 
-          if (renderPolygons.length > 0) {
-            const shapes = createShapesFromMultiPolygon(renderPolygons);
-            if (shapes.length === 0) {
-              failedEmptyShapes = true;
+          const shapes = createShapesFromMultiPolygon(visible);
+          if (shapes.length === 0) {
+            failedEmptyShapes = true;
+          } else {
+            const unclippedGeo = new THREE.ShapeGeometry(shapes);
+            unclippedGeo.rotateX(-Math.PI / 2);
+            unclippedGeo.translate(0, roadElevation, 0);
+            if (unclippedGeo.hasAttribute('uv')) unclippedGeo.deleteAttribute('uv');
+            if (!validateAndPruneHorizontalGeometry(unclippedGeo)) {
+              unclippedGeo.dispose();
+              failedInvalidTriangles = true;
+            } else if (!tileClipBounds) {
+              geo = unclippedGeo;
             } else {
-              const candidateGeo = new THREE.ShapeGeometry(shapes);
-              candidateGeo.rotateX(-Math.PI / 2);
-              candidateGeo.translate(0, roadElevation, 0);
-              if (candidateGeo.hasAttribute('uv')) candidateGeo.deleteAttribute('uv');
-              if (validateAndPruneHorizontalGeometry(candidateGeo)) {
-                geo = candidateGeo;
-              } else {
-                candidateGeo.dispose();
-                failedInvalidTriangles = true;
-              }
-            }
-          }
-
-          if (!geo && tileClipBounds) {
-            const unclippedGeo = buildHorizontalRoadGeo(visible);
-            if (unclippedGeo) {
               const clippedGeo = clipBufferGeometryToBoxXZ(unclippedGeo, tileClipBounds);
               unclippedGeo.dispose();
-              if (clippedGeo) {
-                if (validateAndPruneHorizontalGeometry(clippedGeo)) {
-                  geo = clippedGeo;
-                } else {
-                  clippedGeo.dispose();
-                }
-              } else if (renderPolygons.length === 0) {
-                // Road bbox touched tileClipBounds without intersecting polygon area; valid skip
+              if (!clippedGeo) {
+                // Road bbox overlapped tileClipBounds without intersecting polygon area; valid skip
+                timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
+                continue;
+              }
+              if (validateAndPruneHorizontalGeometry(clippedGeo)) {
+                geo = clippedGeo;
+              } else {
+                clippedGeo.dispose();
+                // Micro-sliver clipped away at tile border; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
                 continue;
               }
@@ -1565,14 +1542,11 @@ export function buildGraphAtGradeRoadGeometries(
 
           if (!geo) {
             timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
-            if (renderPolygons.length === 0 && !tileClipBounds) {
-              continue;
-            }
             if (failedEmptyShapes) {
               stats.emptyShapeCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
-            } else if (failedInvalidTriangles || renderPolygons.length > 0) {
+            } else if (failedInvalidTriangles) {
               stats.invalidTriangleGeometryCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
@@ -1582,9 +1556,8 @@ export function buildGraphAtGradeRoadGeometries(
 
           timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
           resourceManager.registerGeometry(geo);
-          const countedPolygons = renderPolygons.length > 0 ? renderPolygons : visible;
-          stats.outputPolygonCount += countedPolygons.length;
-          for (const poly of countedPolygons) {
+          stats.outputPolygonCount += visible.length;
+          for (const poly of visible) {
             if (poly.length > 1) {
               stats.outputHoleRingCount += poly.length - 1;
             }

@@ -114,6 +114,8 @@ export function auditCollarSufficiency(params: {
   descriptors?: InfrastructureRenderDescriptorBundle | null;
   roadGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
   railwayGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
+  hasGlobalAtGradeRoadPlan?: boolean;
+  hasGlobalBarrierResolution?: boolean;
   maxSceneTreesCap?: number;
 }): CollarAuditReport {
   const {
@@ -122,6 +124,8 @@ export function auditCollarSufficiency(params: {
     descriptors,
     roadGradeSeparatedPlans,
     railwayGradeSeparatedPlans,
+    hasGlobalAtGradeRoadPlan = false,
+    hasGlobalBarrierResolution = false,
     maxSceneTreesCap = 2200,
   } = params;
 
@@ -258,7 +262,9 @@ export function auditCollarSufficiency(params: {
       if (overflowMeters > 0.01) {
         pushCase({
           kind: 'building_extends_beyond_collar',
-          contextScope: 'tile_local_collar',
+          contextScope: hasGlobalAtGradeRoadPlan
+            ? 'resolved_by_global_context'
+            : 'tile_local_collar',
           tileId: tile.id,
           featureId: bldg.id,
           sourceFeatureId: bldg.sourceFeatureId || bldg.id,
@@ -266,7 +272,7 @@ export function auditCollarSufficiency(params: {
           requiredCollarMeters: Number(requiredCollarMeters.toFixed(2)),
           proposedCollarMeters,
           overflowMeters: Number(overflowMeters.toFixed(2)),
-          detail: `Building footprint extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar around ${tile.id}`,
+          detail: `Building footprint extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar around ${tile.id} (emitted unclipped in half-open centroid owner tile)`,
         });
       }
     }
@@ -310,7 +316,9 @@ export function auditCollarSufficiency(params: {
         } else if (!isGradeSep && overflowMeters > 0.01) {
           pushCase({
             kind: 'road_edge_or_blocker_exceeds_collar',
-            contextScope: 'tile_local_collar',
+            contextScope: hasGlobalAtGradeRoadPlan
+              ? 'resolved_by_global_context'
+              : 'tile_local_collar',
             tileId: tile.id,
             featureId: edge.id,
             sourceFeatureId: edge.sourceFeatureId || edge.id,
@@ -318,7 +326,7 @@ export function auditCollarSufficiency(params: {
             requiredCollarMeters: Number(requiredCollarMeters.toFixed(2)),
             proposedCollarMeters,
             overflowMeters: Number(overflowMeters.toFixed(2)),
-            detail: `At-grade road edge extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar`,
+            detail: `At-grade road edge extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar${hasGlobalAtGradeRoadPlan ? ' (resolved by global at-grade road plan)' : ''}`,
           });
         }
       }
@@ -384,7 +392,9 @@ export function auditCollarSufficiency(params: {
       if (overflowMeters > 0.01) {
         pushCase({
           kind: 'barrier_structural_context_exceeds_collar',
-          contextScope: 'tile_local_collar',
+          contextScope: hasGlobalBarrierResolution
+            ? 'resolved_by_global_context'
+            : 'tile_local_collar',
           tileId: tile.id,
           featureId: bar.id,
           sourceFeatureId: bar.sourceFeatureId || bar.id,
@@ -392,7 +402,7 @@ export function auditCollarSufficiency(params: {
           requiredCollarMeters: Number(requiredCollarMeters.toFixed(2)),
           proposedCollarMeters,
           overflowMeters: Number(overflowMeters.toFixed(2)),
-          detail: `Barrier (${bar.barrierType}) extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar`,
+          detail: `Barrier (${bar.barrierType}) extends ${overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar${hasGlobalBarrierResolution ? ' (resolved by global barrier structural context)' : ''}`,
         });
       }
     }

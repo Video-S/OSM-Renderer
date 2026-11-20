@@ -183,6 +183,9 @@ export interface GeometryBuilderOptions {
     roadGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
     railwayGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
     railwayTrackPhases?: ReadonlyMap<string, number>;
+    railwayDensifiedPointsByEdgeId?: ReadonlyMap<string, [number, number][]>;
+    atGradeRoadPlan?: GraphRoadGeometryBuildResult | null;
+    barrierResolution?: ReturnType<typeof resolveBarrierStructuralContexts>;
     tunnelEntrances?: VerifiedTunnelEntrances;
     existingParkingSpaceBoxes?: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
     planarResolution?: {
@@ -190,6 +193,7 @@ export interface GeometryBuilderOptions {
       report: PlanarValidationReport;
       polygonRingsById: Map<string, [number, number][][]>;
       portalCutoutsApplied: boolean;
+      unclippedGeometriesById?: Map<string, THREE.BufferGeometry>;
     };
   };
 }
@@ -775,8 +779,6 @@ function mergeWithFaceRanges(
   if (items.length === 0) return { merged: null, faceRanges: [] };
   const geos: THREE.BufferGeometry[] = [];
   const faceRanges: FaceFeatureRange[] = [];
-  const combinedGroups: Array<{ start: number; count: number; materialIndex: number }> = [];
-  let hasGroups = false;
   let cursor = 0;
 
   for (const item of items) {
@@ -785,17 +787,6 @@ function mergeWithFaceRanges(
       if (resourceManager) resourceManager.releaseIntermediateGeometry(item.geom);
       else item.geom.dispose();
       continue;
-    }
-    if (item.geom.groups && item.geom.groups.length > 0) {
-      hasGroups = true;
-      const offset = cursor * 3;
-      for (const g of item.geom.groups) {
-        combinedGroups.push({
-          start: offset + g.start,
-          count: g.count,
-          materialIndex: g.materialIndex ?? 0,
-        });
-      }
     }
     geos.push(item.geom);
     faceRanges.push({
@@ -828,11 +819,9 @@ function mergeWithFaceRanges(
       g.dispose();
     }
   }
-  if (merged && hasGroups) {
+  if (merged) {
+    // Single-material merged meshes must not retain partial child groups from ShapeGeometry items.
     merged.clearGroups();
-    for (const g of combinedGroups) {
-      merged.addGroup(g.start, g.count, g.materialIndex);
-    }
   }
   return { merged, faceRanges };
 }
@@ -2265,23 +2254,47 @@ export class GeometryBuilder {
       try {
         const resolved = resolvedPlanarById.get(item.id);
         if (resolved?.isDeduplicatedInto) {
-          if (item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
+          if (!tileClipBounds && item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
           continue;
         }
 
-        const effectiveMultiPoly =
-          resolved && resolved.resolvedMultiPolygon.length > 0
-            ? tileClipBounds
-              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
-              : resolved.resolvedMultiPolygon
-            : resolved && resolved.resolvedMultiPolygon.length === 0
-              ? []
-              : tileClipBounds
-                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+        const subtype = item.landuseType || 'landuse';
+        const tierInfo = getLanduseElevationAndOffset(subtype);
+        const exactElevation = resolved ? resolved.elevationY : tierInfo.elevation;
+
+        let geom: THREE.BufferGeometry | null = null;
+        const cachedPlanarGeo = prePlanar?.unclippedGeometriesById?.get(item.id);
+        if (cachedPlanarGeo) {
+          if (tileClipBounds) {
+            const clipped = clipBufferGeometryToBoxXZ(cachedPlanarGeo, tileClipBounds);
+            if (clipped) {
+              geom = resourceManager.registerGeometry(clipped);
+            }
+          } else {
+            geom = resourceManager.registerGeometry(cachedPlanarGeo.clone());
+          }
+        } else {
+          const unclippedMultiPoly =
+            resolved && resolved.resolvedMultiPolygon.length > 0
+              ? resolved.resolvedMultiPolygon
+              : resolved && resolved.resolvedMultiPolygon.length === 0
+                ? []
                 : [item.polygon];
-        const shapes =
-          effectiveMultiPoly.length > 0 ? createShapesFromMultiPolygon(effectiveMultiPoly) : [];
-        if (shapes.length === 0) {
+          const shapes =
+            unclippedMultiPoly.length > 0 ? createShapesFromMultiPolygon(unclippedMultiPoly) : [];
+          if (shapes.length > 0) {
+            const rawGeom = new THREE.ShapeGeometry(shapes);
+            rawGeom.rotateX(-Math.PI / 2);
+            rawGeom.translate(0, exactElevation, 0);
+            if (rawGeom.hasAttribute('uv')) {
+              rawGeom.deleteAttribute('uv');
+            }
+            rawGeom.clearGroups();
+            geom = clipGeomToTile(rawGeom);
+          }
+        }
+
+        if (!geom) {
           if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
@@ -2293,17 +2306,6 @@ export class GeometryBuilder {
           continue;
         }
 
-        const subtype = item.landuseType || 'landuse';
-        const tierInfo = getLanduseElevationAndOffset(subtype);
-        const exactElevation = resolved ? resolved.elevationY : tierInfo.elevation;
-
-        const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
-        geom.rotateX(-Math.PI / 2);
-        geom.translate(0, exactElevation, 0);
-        if (geom.hasAttribute('uv')) {
-          geom.deleteAttribute('uv');
-        }
-
         const mergedSourceIds =
           resolved && resolved.sourceFeatureIds.length > 0
             ? resolved.sourceFeatureIds
@@ -2312,6 +2314,7 @@ export class GeometryBuilder {
         const featureInfo: InspectableFeatureInfo = {
           id: item.id,
           sourceFeatureId: mergedSourceIds[0],
+          sourceFeatureIds: mergedSourceIds,
           name: item.name || item.cartoLabel || `Landuse (${subtype})`,
           category: 'Landuse & Zoning',
           cartoLabel: item.cartoLabel || `${subtype} Area`,
@@ -2459,25 +2462,45 @@ export class GeometryBuilder {
       try {
         const resolved = resolvedPlanarById.get(item.id);
         if (resolved?.isDeduplicatedInto) {
-          if (item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
+          if (!tileClipBounds && item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
           continue;
         }
 
-        const effectiveWaterMultiPoly =
-          resolved && resolved.resolvedMultiPolygon.length > 0
-            ? tileClipBounds
-              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
-              : resolved.resolvedMultiPolygon
-            : resolved && resolved.resolvedMultiPolygon.length === 0
-              ? []
-              : tileClipBounds
-                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+        let geom: THREE.BufferGeometry | null = null;
+        const cachedPlanarGeo = prePlanar?.unclippedGeometriesById?.get(item.id);
+        if (cachedPlanarGeo) {
+          if (tileClipBounds) {
+            const clipped = clipBufferGeometryToBoxXZ(cachedPlanarGeo, tileClipBounds);
+            if (clipped) {
+              geom = resourceManager.registerGeometry(clipped);
+            }
+          } else {
+            geom = resourceManager.registerGeometry(cachedPlanarGeo.clone());
+          }
+        } else {
+          const unclippedWaterMultiPoly =
+            resolved && resolved.resolvedMultiPolygon.length > 0
+              ? resolved.resolvedMultiPolygon
+              : resolved && resolved.resolvedMultiPolygon.length === 0
+                ? []
                 : [item.polygon];
-        const shapes =
-          effectiveWaterMultiPoly.length > 0
-            ? createShapesFromMultiPolygon(effectiveWaterMultiPoly)
-            : [];
-        if (shapes.length === 0) {
+          const shapes =
+            unclippedWaterMultiPoly.length > 0
+              ? createShapesFromMultiPolygon(unclippedWaterMultiPoly)
+              : [];
+          if (shapes.length > 0) {
+            const rawGeom = new THREE.ShapeGeometry(shapes);
+            rawGeom.rotateX(-Math.PI / 2);
+            rawGeom.translate(0, ELEVATION_POLICY.WATER_SURFACE, 0);
+            if (rawGeom.hasAttribute('uv')) {
+              rawGeom.deleteAttribute('uv');
+            }
+            rawGeom.clearGroups();
+            geom = clipGeomToTile(rawGeom);
+          }
+        }
+
+        if (!geom) {
           if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
@@ -2489,21 +2512,17 @@ export class GeometryBuilder {
           continue;
         }
 
-        if (effectiveWaterMultiPoly.length > 0) {
-          placedWaterMultiPolygons.push(...effectiveWaterMultiPoly);
-        }
+        const mergedSourceIds =
+          resolved && resolved.sourceFeatureIds.length > 0
+            ? resolved.sourceFeatureIds
+            : [item.sourceFeatureId || item.id];
 
-        const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
-        geom.rotateX(-Math.PI / 2);
-        geom.translate(0, ELEVATION_POLICY.WATER_SURFACE, 0);
-        if (geom.hasAttribute('uv')) {
-          geom.deleteAttribute('uv');
-        }
         waterItems.push({
           geom,
           info: {
             id: item.id,
-            sourceFeatureId: item.sourceFeatureId || item.id,
+            sourceFeatureId: mergedSourceIds[0],
+            sourceFeatureIds: mergedSourceIds,
             name: item.name || item.cartoLabel || 'Water Body',
             category: 'Water & Waterway',
             cartoLabel: item.cartoLabel || 'Body of Water',
@@ -2514,7 +2533,9 @@ export class GeometryBuilder {
             osmTags: sanitizeOsmTags(item.osmTags),
           },
         });
-        if (item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
+        for (const sid of mergedSourceIds) {
+          if (sid) renderedSourceIds.add(sid);
+        }
       } catch (err) {
         console.warn(`Skipping invalid water body ${item.id}`, err);
       }
@@ -2617,25 +2638,48 @@ export class GeometryBuilder {
       try {
         const resolved = resolvedPlanarById.get(item.id);
         if (resolved?.isDeduplicatedInto) {
-          if (item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
+          if (!tileClipBounds && item.sourceFeatureId) renderedSourceIds.add(item.sourceFeatureId);
           continue;
         }
 
-        const effectiveParkMultiPoly =
-          resolved && resolved.resolvedMultiPolygon.length > 0
-            ? tileClipBounds
-              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
-              : resolved.resolvedMultiPolygon
-            : resolved && resolved.resolvedMultiPolygon.length === 0
-              ? []
-              : tileClipBounds
-                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+        const subtype = item.subtype || 'park';
+        const exactParkY = resolved ? resolved.elevationY : ELEVATION_POLICY.PARKS;
+
+        let geom: THREE.BufferGeometry | null = null;
+        const cachedPlanarGeo = prePlanar?.unclippedGeometriesById?.get(item.id);
+        if (cachedPlanarGeo) {
+          if (tileClipBounds) {
+            const clipped = clipBufferGeometryToBoxXZ(cachedPlanarGeo, tileClipBounds);
+            if (clipped) {
+              geom = resourceManager.registerGeometry(clipped);
+            }
+          } else {
+            geom = resourceManager.registerGeometry(cachedPlanarGeo.clone());
+          }
+        } else {
+          const unclippedParkMultiPoly =
+            resolved && resolved.resolvedMultiPolygon.length > 0
+              ? resolved.resolvedMultiPolygon
+              : resolved && resolved.resolvedMultiPolygon.length === 0
+                ? []
                 : [item.polygon];
-        const shapes =
-          effectiveParkMultiPoly.length > 0
-            ? createShapesFromMultiPolygon(effectiveParkMultiPoly)
-            : [];
-        if (shapes.length === 0 && !item.has3DFoliage) {
+          const shapes =
+            unclippedParkMultiPoly.length > 0
+              ? createShapesFromMultiPolygon(unclippedParkMultiPoly)
+              : [];
+          if (shapes.length > 0) {
+            const rawGeom = new THREE.ShapeGeometry(shapes);
+            rawGeom.rotateX(-Math.PI / 2);
+            rawGeom.translate(0, exactParkY, 0);
+            if (rawGeom.hasAttribute('uv')) {
+              rawGeom.deleteAttribute('uv');
+            }
+            rawGeom.clearGroups();
+            geom = clipGeomToTile(rawGeom);
+          }
+        }
+
+        if (!geom && !item.has3DFoliage) {
           if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
@@ -2647,9 +2691,6 @@ export class GeometryBuilder {
           continue;
         }
 
-        const subtype = item.subtype || 'park';
-        const exactParkY = resolved ? resolved.elevationY : ELEVATION_POLICY.PARKS;
-
         const mergedSourceIds =
           resolved && resolved.sourceFeatureIds.length > 0
             ? resolved.sourceFeatureIds
@@ -2658,6 +2699,7 @@ export class GeometryBuilder {
         const featureInfo: InspectableFeatureInfo = {
           id: item.id,
           sourceFeatureId: mergedSourceIds[0],
+          sourceFeatureIds: mergedSourceIds,
           name: item.name || item.cartoLabel || 'Park / Natural Area',
           category: item.has3DFoliage ? 'Forest & Woodland' : 'Terrain & Nature',
           cartoLabel: item.cartoLabel || `${subtype} Area`,
@@ -2667,14 +2709,7 @@ export class GeometryBuilder {
           osmTags: sanitizeOsmTags(item.osmTags),
         };
 
-        if (shapes.length > 0) {
-          const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
-          geom.rotateX(-Math.PI / 2);
-          geom.translate(0, exactParkY, 0);
-          if (geom.hasAttribute('uv')) {
-            geom.deleteAttribute('uv');
-          }
-
+        if (geom) {
           if (!parksBySubtype.has(subtype)) {
             parksBySubtype.set(subtype, []);
           }
@@ -2867,6 +2902,8 @@ export class GeometryBuilder {
           precomputedTrackPhases: this.options.precomputedGlobalPlans?.railwayTrackPhases,
           precomputedGradeSeparatedPlans:
             this.options.precomputedGlobalPlans?.railwayGradeSeparatedPlans,
+          precomputedDensifiedPoints:
+            this.options.precomputedGlobalPlans?.railwayDensifiedPointsByEdgeId,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {
@@ -2950,15 +2987,62 @@ export class GeometryBuilder {
 
     if (infrastructureRenderPreview?.descriptors) {
       const tGraphRoad0 = performance.now();
-      const graphRoadResult = buildGraphAtGradeRoadGeometries({
-        descriptors: infrastructureRenderPreview.descriptors,
-        roadWidthMultiplier: this.options.roadWidthMultiplier,
-        surfaceFirst: true,
-        gradeTransitionCoords,
-        resourceManager,
-        diagnostics: data.diagnostics,
-        tileClipBounds,
-      });
+      const precomputedAtGradeRoadPlan = this.options.precomputedGlobalPlans?.atGradeRoadPlan;
+      let graphRoadResult: GraphRoadGeometryBuildResult;
+
+      if (precomputedAtGradeRoadPlan) {
+        const clippedRoadsByClass = new Map<
+          RoadClass,
+          Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }>
+        >();
+        const clippedRenderedSourceIds = new Set<string>();
+
+        precomputedAtGradeRoadPlan.roadsByClass.forEach((items, roadClass) => {
+          const outItems: Array<{ geom: THREE.BufferGeometry; info: InspectableFeatureInfo }> = [];
+          for (const item of items) {
+            let geom: THREE.BufferGeometry | null = null;
+            if (tileClipBounds) {
+              const clipped = clipBufferGeometryToBoxXZ(item.geom, tileClipBounds);
+              if (clipped) {
+                geom = resourceManager.registerGeometry(clipped);
+              }
+            } else {
+              geom = resourceManager.registerGeometry(item.geom.clone());
+            }
+            if (geom) {
+              outItems.push({ geom, info: item.info });
+              if (item.info.sourceFeatureId) clippedRenderedSourceIds.add(item.info.sourceFeatureId);
+              if (Array.isArray(item.info.sourceFeatureIds)) {
+                for (const sid of item.info.sourceFeatureIds) {
+                  if (sid) clippedRenderedSourceIds.add(sid);
+                }
+              }
+            }
+          }
+          if (outItems.length > 0) {
+            clippedRoadsByClass.set(roadClass, outItems);
+          }
+        });
+
+        graphRoadResult = {
+          roadsByClass: clippedRoadsByClass,
+          atGradeRoadEndpoints: precomputedAtGradeRoadPlan.atGradeRoadEndpoints,
+          renderedSourceIds: clippedRenderedSourceIds,
+          fullySubtractedRoadIds: precomputedAtGradeRoadPlan.fullySubtractedRoadIds,
+          stats: precomputedAtGradeRoadPlan.stats,
+          timing: precomputedAtGradeRoadPlan.timing,
+        };
+      } else {
+        graphRoadResult = buildGraphAtGradeRoadGeometries({
+          descriptors: infrastructureRenderPreview.descriptors,
+          roadWidthMultiplier: this.options.roadWidthMultiplier,
+          surfaceFirst: true,
+          gradeTransitionCoords,
+          resourceManager,
+          diagnostics: data.diagnostics,
+          tileClipBounds,
+        });
+      }
 
       graphRoadResult.roadsByClass.forEach((items, roadClass) => {
         roadsByClass.set(roadClass, items);
@@ -3750,11 +3834,13 @@ export class GeometryBuilder {
     // ==========================================================================
     const tBarriersAndFoliage0 = performance.now();
     let barriersAndLandmarksMergeMs = 0;
-    const barrierResolution = resolveBarrierStructuralContexts(
-      data.barriers || [],
-      data.roads || [],
-      data.railways || []
-    );
+    const barrierResolution =
+      this.options.precomputedGlobalPlans?.barrierResolution ??
+      resolveBarrierStructuralContexts(
+        data.barriers || [],
+        data.roads || [],
+        data.railways || []
+      );
     barriersGroup.userData.structuralContextDiagnostics = barrierResolution.diagnostics;
     if (data.diagnostics) {
       data.diagnostics.structuralContextDiagnostics = barrierResolution.diagnostics;

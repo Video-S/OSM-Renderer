@@ -86,10 +86,10 @@ Inspection of the current codebase identifies six concrete technical constraints
    - The `64 m` collar hypothesis was explicitly audited in M1a (`CollarAudit.ts`) rather than assumed unconditionally sufficient. While `64 m` comfortably covers road stroke widths (`~24–32 m`) and adjacent parallel ballast envelopes, `CollarAudit` proves that **raw `64 m` spatial bbox slicing alone is NOT sufficient without global/precomputed context** for:
      1. large planar `landuse`/`parks`/`waterBodies` polygons (deduplication, Boolean priority subtraction, and tunnel portal cutouts) and `> 64 m` buildings straddling tile borders;
      2. `> 64 m` grade-separated bridge/tunnel approach ramp components;
-     3. global railway continuous sleeper/rail UV phase propagation (`computeContinuousTrackPhases` across connected track components); and
+     3. global railway continuous sleeper/rail UV phase propagation (`computeContinuousTrackPhases` across connected track components) and at-grade track segment densification near chamfered host tracks; and
      4. `GeometryBuilder`'s `MAX_SCENE_TREES = 2200` global cap (`SceneTreeBudgetAudit`).
-   - `CollarAudit` explicitly separates cases into `resolved_by_global_context` (already resolved deterministically via precomputed global topology, grade-separated plans, track phases, and `planarResolution`) versus `tile_local_collar` dependencies, sanitizing unbounded portal distances (`finiteOrZero`) so audit JSON remains strictly finite.
-   - Consequently, M1a resolves cross-border continuity by pairing exact 2D/3D tile clipping (`MeshBoxClipper.ts`, `GraphRoadGeometryBuilder` 3D clipping fallback, pure geometric curved bridge sampling) with precomputed global topology, grade-separated plans, track phases, and global planar resolution (`TiledStudyPipeline.ts`), verifiable cleanly via `TiledDiagnostics.runDiagnosticAbcComparison` (`--diagnose-abc`) — directly informing M1b offline baker architecture.
+   - `CollarAudit` explicitly separates cases into `resolved_by_global_context` (resolved deterministically via precomputed global topology, grade-separated plans, at-grade road plans, barrier resolutions, track phases/densification, and `planarResolution`) versus `tile_local_collar` dependencies, sanitizing unbounded portal distances (`finiteOrZero`) so audit JSON remains strictly finite.
+   - Consequently, M1a resolves cross-border continuity by pairing **precomputed batch/region unclipped 3D geometry plans + exact 3D tile triangle clipping (`clipBufferGeometryToBoxXZ`)** with deterministic half-open centroid ownership (`TiledStudyPipeline.ts`), verified cleanly via `TiledDiagnostics.runDiagnosticAbcComparison` (`--diagnose-abc`) — directly informing M1b offline baker architecture (see §4.5.1 below).
 
 ---
 
@@ -107,13 +107,14 @@ overijssel-261114-8ae28196.sqlite
         │      • Persist overijssel-graph-261114-8ae28196.sqlite
         │
         └──► Stage B (Multi-LOD Tile Baker — worker pool / Node.js)
-               • For each non-empty quadtree cell (LOD0 -> LOD3):
-                   1. Fetch tile + 64 m collar descriptors & features
-                   2. Run E2+ / R+ / Planar / Building / Foliage / Bridge synthesis
-                   3. Exact 2D tile-clip surfaces; centroid-assign 3D buildings/trees
-                   4. Convert vertex XY/Z to tile-local Float32 (center = 0,0,0)
-                   5. Pack canonical materialSlotKey groups + faceRanges + interned tags (+ LOD0 BVH)
-                   6. Compress (zstd / brotli / gzip) & write blob
+               • Process in bounded regional synthesis batches (e.g. 4×4 = 2,048 m macro-blocks + collar):
+                   1. Fetch batch + collar descriptors & features from global InfrastructureGraph
+                   2. Run E2+ / R+ / Planar / Building / Foliage / Bridge synthesis once per batch
+                   3. Clip continuous 3D surface meshes per 512 m tile via clipBufferGeometryToBoxXZ
+                   4. Assign discrete 3D buildings, trees, landmarks & street furniture by half-open centroid
+                   5. Convert vertex XY/Z to tile-local Float32 (center = 0,0,0)
+                   6. Pack canonical materialSlotKey groups + faceRanges + interned tags (+ LOD0 BVH)
+                   7. Compress (zstd / brotli / gzip) & write blob
                • Persist overijssel-tiles-261114-8ae28196.sqlite
 ```
 
@@ -197,15 +198,29 @@ Naive spatial bounding-box querying followed by per-tile `GeometryBuilder` intro
 3. **Broken bridge/tunnel ramps** when a `35–60 m` approach ramp (`BridgeAndTunnelBuilder`) straddles a tile border and misses its opposite abutment or portal node.
 4. **Fake cut exterior building walls** when a `Polygon` building is split along a tile edge before `ExtrudeGeometry`.
 5. **Rail sleeper phase & turnout bearer discontinuities** when sleeper spacing resets to `s = 0` at every tile border.
-6. **Seam cracks or Z-fighting** if adjacent ground/landuse/road polygons clip with slightly different rounding.
+6. **Seam cracks, area drift, or partial rejection** when adjacent ground/landuse/road polygons clip in 2D prior to Earcut triangulation and `validateAndPruneHorizontalGeometry`.
 
 **Deterministic Boundary Guarantees by Geometry Class**:
 
 | Geometry Class | Boundary Ownership Rule | Why Seam Artifacts Cannot Occur |
 |---|---|---|
-| **At-grade Surfaces (`E2+` Roads, `R+` Ballast, Ground, Landuse, Parks, Water)** | **Collar Synthesis + Post-Boolean Exact Clip (`H = 64 m`)**: Build & subtract polygons over `(tile + 64 m collar)`, **then** clip the final 2D result against exact snapped `[tileMinX, tileMaxX] × [tileMinZ, tileMaxZ]` via `polygonClipping.intersection()` *before* triangulation, with `capStart`/`capEnd` driven strictly by global topological degree (`0` caps on internal tile-crossing splits). | Tile A and Tile B synthesize the exact same global stroke + priority set inside their overlapping collar region, then cut along the exact same mathematical line — guaranteeing matching boundary X/Z coordinates (`0` gaps, `0` overlaps, `0` fake end-caps). |
-| **Discrete 3D Extruded / Point Objects (Buildings, Trees, Barriers, Furniture)** | **Deterministic Centroid Ownership**: Assign each building/courtyard/tree uniquely to `tileOf(canonicalBboxCentroid)` in global coordinates. Bake full unclipped 3D geometry inside its owning tile and inflate the tile's culling AABB by its max protrusion (`pad_x`, `pad_z`). | Zero interior cut facade walls on cross-border buildings, zero duplicate faces rendered twice across neighbors, and no frustum culling pop-out when the building's center just leaves the screen. |
-| **Continuous 3D Bridges, Tunnels & Rail Sleepers/Rails** | **Global Arc-Length Parameterization**: Compute `totalLength`, bridge elevation curve `y(s)`, ramp zones, and `computeContinuousTrackPhases` once on the **global** `InfrastructureGraph` edge/component; slice extruded decks/rails cleanly at `x = tileEdge` or `z = tileEdge` interpolating exact `(x_edge, y(s_edge), z_edge)` and assigning each sleeper/pier/bearer by midpoint centroid. | Adjacent bridge decks and rails meet at identical elevation `y(s_edge)` and lateral tangent; sleepers maintain continuous uniform spacing across tile seams without doubling or jumping. |
+| **At-grade Surfaces (`E2+` Roads, `R+` Ballast, Ground, Landuse, Parks, Water)** | **Pre-Triangulated Surface Synthesis + Exact 3D Tile-Box Triangle Clip (`clipBufferGeometryToBoxXZ`)**: Synthesize Boolean surface polygons (`visible` road footprints, resolved `landuse`/`parks`/`waterBodies` polygons) and run `THREE.ShapeGeometry` + `validateAndPruneHorizontalGeometry` **before** tile-box clipping, then clip the validated 3D triangle mesh against exact `[tileMinX, tileMaxX] × [tileMinZ, tileMaxZ]` via Sutherland-Hodgman `clipBufferGeometryToBoxXZ`. | Sutherland-Hodgman 3D triangle clipping against half-open/adjacent tile boxes forms a mathematical partition of unity in `Float32` (`0.0000 m²` area drift across 64 tiles) and prevents asymmetric per-tile Earcut rejection when one tile's 2D-clipped piece contains a degenerate micro-triangle while the neighboring tile's piece succeeds. |
+| **Discrete 3D Extruded / Point Objects (Buildings, Trees, Barriers, Point Landmarks, Street Furniture)** | **Deterministic Half-Open Centroid Ownership**: Assign each building (`getRingsBBoxCentroid(b.footprint)`), tree, point landmark (`PointLandmarks_3D`), and street furniture item (`StreetFurniture_*`) uniquely to `pointInHalfOpenBox(position, tile.localBounds)`. Bake full unclipped 3D geometry inside its owning tile and inflate the tile's culling AABB by its max protrusion (`pad_x`, `pad_z`). | Zero interior cut facade walls on cross-border buildings or cooling towers/shelters, zero duplicate faces rendered twice across neighbors, and exact 1:1 triangle/provenance conservation between partitioned reference (`B`) and tiled build (`C`). |
+| **Continuous 3D Bridges, Tunnels & Rail Sleepers/Rails** | **Global Arc-Length Parameterization & Precomputed Densification**: Compute `totalLength`, bridge elevation curve `y(s)`, ramp zones, `computeContinuousTrackPhases`, and at-grade track densification (`computeRailwayDensifiedPointsMap`) once on the **global** `InfrastructureGraph`; slice extruded decks/rails cleanly at `x = tileEdge` or `z = tileEdge` via `clipBufferGeometryToBoxXZ` (preserving linearly interpolated UV `v` phase) and assign each sleeper/pier/bearer by midpoint centroid. | Adjacent bridge decks, rails, and UV ribbons meet at identical elevation `y(s_edge)` and identical interpolated UV phase (`0.000000` seam delta); sleepers maintain continuous uniform spacing across tile seams without doubling or jumping. |
+
+#### 4.5.1 M1a Empirical Findings: Bounded Regional Batch Synthesis + 3D Tile Clipping vs. Independent 512 m 2D Synthesis
+
+During canonical `8 × 8` Hengelo (`4,096 × 4,096 m`, `102,469` features) verification with `--diagnose-abc` (`A` = single-scene reference, `B` = reference partitioned directly into 64 tiles, `C` = tiled build), three fundamental lessons emerged that directly govern M1b/M2 offline baking:
+
+1. **Why 2D Per-Tile Polygon Clipping Before Earcut Fails Conservation (`A ↔ C`)**:
+   - *Asymmetric Earcut validation on at-grade roads (`11` unmatched road seam edges, `5` road area differences, `4` extra `sourceFeatureIds`)*: When a road polygon's `visible` MultiPolygon was clipped in 2D per tile via `clipMultiPolygonToBox2D` before `ShapeGeometry` + `validateAndPruneHorizontalGeometry`, a complex road polygon containing a near-collinear vertex in Tile 1 failed `validateAndPruneHorizontalGeometry` as a whole in `A` and in Tile 1 of `C`, but its clipped sub-polygon in Tile 2 of `C` had no degenerate triangle and succeeded — creating an extra `sourceFeatureId`, extra road area in `C`, and an unmatched road boundary edge along the Tile 1/Tile 2 seam.
+   - *2D MultiPolygon clipping + independent Earcut triangulation on large unioned planar surfaces (`-173,656.857 m²` Residential Landuse, `-1,572.120 m²` Forest)*: First, `resolveAndValidatePlanarPolygons` merges touching same-kind unnamed polygons (`mergeTouchingSameKindUnnamedPolygons`) into the first item's ID; slicing tile inputs only by the pre-union `item.polygon` bbox dropped canonical unioned polygons from tiles where only deduplicated partner polygons overlapped the collar. Second, even with unioned bbox filtering, clipping complex MultiPolygons in 2D into 64 tiles and running `ShapeGeometry` (`earcut`) independently per tile does not form an exact `Float32` partition of unity. Triangulating each resolved planar polygon and at-grade road polygon once into an unclipped `ShapeGeometry` and clipping its 3D triangles per tile via `clipBufferGeometryToBoxXZ` guarantees exact area, seam-edge, and provenance parity (`0` defects).
+2. **Why `mergeWithFaceRanges` Must Clear Partial Child Material Groups (`A → B`)**:
+   - `THREE.ShapeGeometry` populates `geom.groups = [{ start: 0, count: N, materialIndex: 0 }]`, whereas ribbon/extrusion builders (`LinearWaterway`, bridge decks, road steps) leave `geom.groups = []`, and `validateAndPruneHorizontalGeometry` rewrites `geo.index` without updating `geo.groups[0].count`. When `mergeBufferGeometries` concatenated mixed items into a single-material mesh (`WaterSurfaces`, `Roads_*`), `merged.groups` covered only the subset of triangles originating from `ShapeGeometry`, causing `clipBufferGeometryToBoxXZ` to drop `-132,163.164 m²` of `LinearWaterway` triangles and `7` road class subsets. Calling `merged.clearGroups()` on all single-material merged meshes (and requiring `coveredTris >= totalTriCount` before `clipBufferGeometryToBoxXZ` uses explicit multi-material groups) restores 100% triangle conservation.
+3. **Architectural Recommendation for M1b/M2 Offline Baking**:
+   - **Do not** run independent 512 m 2D polygon synthesis at runtime or per isolated 512 m tile in the offline baker.
+   - Instead, the **M1b offline baker** should synthesize continuous surface layers (`E2+` roads, `R+` railways, planar `landuse`/`parks`/`waterBodies`, barriers) over **bounded regional synthesis macro-blocks** (e.g., `4 × 4` = `2,048 × 2,048 m` or `8 × 8` = `4,096 × 4,096 m` study blocks with an outer collar, matching `ingestCanonicalStudyGeoJson`'s `precomputedGlobalPlans`), triangulate and validate each surface polygon once, and **partition into `512 m` LOD0 tiles via 3D `clipBufferGeometryToBoxXZ` and half-open centroid ownership**.
+   - This architecture keeps peak Node.js baker memory strictly bounded (`~4–16 km²` per macro-block rather than `3,420 km²` for all of Overijssel at once) while guaranteeing mathematically exact 3D triangle conservation (`A = B = C`) across every `512 m` tile seam.
 
 ---
 

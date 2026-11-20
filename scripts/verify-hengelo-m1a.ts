@@ -159,9 +159,34 @@ export function runHengeloM1aVerification(
     };
 
     if (options?.jsonOutPath) {
+      const maxCases = options.maxCaseSamples ?? 50;
+      const serializableOutput: HengeloM1aVerificationOutput = {
+        ...output,
+        report: {
+          ...output.report,
+          collarAudit: {
+            ...output.report.collarAudit,
+            cases: output.report.collarAudit.cases.slice(0, maxCases),
+          },
+        },
+        ...(output.diagnosticAbc
+          ? {
+              diagnosticAbc: {
+                ...output.diagnosticAbc,
+                aVsB: {
+                  ...output.diagnosticAbc.aVsB,
+                  collarAudit: {
+                    ...output.diagnosticAbc.aVsB.collarAudit,
+                    cases: [],
+                  },
+                },
+              },
+            }
+          : {}),
+      };
       const outPath = path.resolve(options.jsonOutPath);
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
-      fs.writeFileSync(outPath, JSON.stringify(output, null, 2), 'utf8');
+      fs.writeFileSync(outPath, JSON.stringify(serializableOutput, null, 2), 'utf8');
     }
 
     return output;
@@ -218,7 +243,7 @@ function formatSummary(res: HengeloM1aVerificationOutput): string {
   if (res.diagnosticAbc) {
     const abc = res.diagnosticAbc;
     lines.push(
-      `Diag ABC: aVsB.isValid=${abc.aVsB.isValid} (defects=${abc.aVsB.defects.length}), bVsC.isExactMatch=${abc.bVsC.isExactMatch} (divergentTiles=${abc.bVsC.tilesWithDivergence}/${abc.bVsC.tilesCompared})`
+      `Diag ABC: aVsB.isValid=${abc.aVsB.isValid} (defects=${abc.aVsB.defects.length}), bVsC.isExactMatch=${abc.bVsC.isExactMatch} (geomExact=${abc.bVsC.isGeometryExactMatch}, geomDivTiles=${abc.bVsC.tilesWithGeometryDivergence}/${abc.bVsC.tilesCompared}, metaDivTiles=${abc.bVsC.tilesWithMetadataDivergence}/${abc.bVsC.tilesCompared})`
     );
   }
   if (report.defects.length > 0) {

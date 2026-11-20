@@ -564,12 +564,19 @@ test('CollarAudit sanitizes Infinity portal distances and TiledStudyPipeline kee
       assert.ok(Number.isFinite(c.requiredCollarMeters));
       assert.ok(Number.isFinite(c.overflowMeters));
     }
+    assert.equal(tiled.peakMemory.available, true);
+    assert.equal(tiled.peakMemory.source, 'node-process');
+    assert.equal(tiled.memoryAfterAllTiles.available, true);
+    assert.notEqual(tiled.peakMemory.rssMB, null);
+    assert.notEqual(tiled.memoryAfterAllTiles.rssMB, null);
+    assert.notEqual(tiled.peakMemory.heapUsedMB, null);
+    assert.notEqual(tiled.memoryAfterAllTiles.heapUsedMB, null);
     assert.ok(
-      tiled.peakMemory.rssMB >= tiled.memoryAfterAllTiles.rssMB,
+      (tiled.peakMemory.rssMB as number) >= (tiled.memoryAfterAllTiles.rssMB as number),
       `Expected peak rssMB (${tiled.peakMemory.rssMB}) >= afterAllTiles (${tiled.memoryAfterAllTiles.rssMB})`
     );
     assert.ok(
-      tiled.peakMemory.heapUsedMB >= tiled.memoryAfterAllTiles.heapUsedMB,
+      (tiled.peakMemory.heapUsedMB as number) >= (tiled.memoryAfterAllTiles.heapUsedMB as number),
       `Expected peak heapUsedMB (${tiled.peakMemory.heapUsedMB}) >= afterAllTiles (${tiled.memoryAfterAllTiles.heapUsedMB})`
     );
   } finally {

@@ -222,6 +222,7 @@ function parseCliArgs(argv: readonly string[]): HengeloM1aVerificationOptions {
 
 function formatSummary(res: HengeloM1aVerificationOutput): string {
   const { report } = res;
+  const fmtMem = (v: number | null) => (v !== null ? `${v}MB` : 'unavailable');
   const lines: string[] = [
     `=== TKT-028 M1a Hengelo 8x8 Canonical Verification ===`,
     `Snapshot: ${res.snapshotMetadata.snapshotId} (expected ${OVERIJSSEL_SNAPSHOT_ID})`,
@@ -229,7 +230,7 @@ function formatSummary(res: HengeloM1aVerificationOutput): string {
     `Grid    : ${res.grid.cols}x${res.grid.rows} @ ${res.grid.tileSizeMeters}m (${res.grid.studyWidthMeters}m x ${res.grid.studyDepthMeters}m), CRS=${res.grid.crs}, collar=${res.grid.collarMeters}m`,
     `Query   : ${res.sqliteQuery.counts.features} GeoJSON features (${res.sqliteQuery.timings.spatialQueryMs.toFixed(1)}ms SQL, ${res.sqliteQuery.timings.osmtogeojsonMs.toFixed(1)}ms osmtogeojson, ${res.sqliteQuery.timings.nodeIdEnrichMs.toFixed(1)}ms nodeId)`,
     `Timings : ingest=${res.timingsMs.ingestMs}ms | ref=${res.timingsMs.referenceBuildMs}ms | tiledTotal=${res.timingsMs.tiledBuildTotalMs}ms (avg=${res.timingsMs.tiledBuildAvgTileMs}ms, max=${res.timingsMs.tiledBuildMaxTileMs}ms) | seamCheck=${res.timingsMs.seamValidationMs}ms`,
-    `Memory  : refHeap=${res.memoryMB.afterReferenceBuild.heapUsedMB}MB | peakTileHeap=${res.memoryMB.peakDuringTiledBuild.heapUsedMB}MB | peakRss=${res.memoryMB.peakDuringTiledBuild.rssMB}MB`,
+    `Memory  : refHeap=${fmtMem(res.memoryMB.afterReferenceBuild.heapUsedMB)} | peakTileHeap=${fmtMem(res.memoryMB.peakDuringTiledBuild.heapUsedMB)} | peakRss=${fmtMem(res.memoryMB.peakDuringTiledBuild.rssMB)}`,
     `Tiles   : ${report.tilesProcessed} total (${report.nonEmptyTiles} non-empty, ${report.emptyTiles} empty), ${report.internalSeamsChecked} internal seams`,
     `Seam OK : ${report.isValid} (defects=${report.defects.length}, roadIntegrityFailures=${report.roadIntegrityFailures.length})`,
     `Bldgs   : ref=${report.buildingParity.refCount}, tiledUnique=${report.buildingParity.tiledUniqueCount}, emitted=${report.buildingParity.tiledTotalEmitted}, missing=${report.buildingParity.missingFromTiles.length}, dup=${report.buildingParity.duplicatedAcrossTiles.length}, triMismatch=${report.buildingParity.triangleMismatches.length}`,

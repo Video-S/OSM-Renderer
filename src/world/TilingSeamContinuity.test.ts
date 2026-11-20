@@ -10,7 +10,10 @@ import {
 import {
   buildSingleSceneReference,
   buildTiledStudyScenes,
+  captureProcessMemorySnapshot,
   ingestCanonicalStudyGeoJson,
+  mergeProcessMemoryPeak,
+  type ProcessMemorySnapshot,
 } from './tiling/TiledStudyPipeline';
 import { validateTiledSeamContinuity } from './tiling/SeamValidator';
 import { runDiagnosticAbcComparison } from './tiling/TiledDiagnostics';
@@ -1143,5 +1146,138 @@ test('M1a Visual Acceptance Harness: assembleTiledStudyCompositeScene and create
     composite.updateCameraZoom?.(8.0);
   } finally {
     composite.dispose();
+  }
+});
+
+test('Browser-runtime regression: M1a pipeline & visual harness succeed without global process', () => {
+  const smallGrid = createAlignedStudyGrid({
+    name: 'browser-no-process-regression',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 2,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const geojson = buildMultiTileCrossingGeoJson(smallGrid);
+
+  const originalProcessDesc = Object.getOwnPropertyDescriptor(globalThis, 'process');
+  const originalPerfMemDesc =
+    typeof performance !== 'undefined'
+      ? Object.getOwnPropertyDescriptor(performance, 'memory')
+      : undefined;
+
+  let unavailableSnap!: ProcessMemorySnapshot;
+  let browserPerfSnap!: ProcessMemorySnapshot;
+  let ingested!: ReturnType<typeof ingestCanonicalStudyGeoJson>;
+  let reference!: ReturnType<typeof buildSingleSceneReference>;
+  let tiled!: ReturnType<typeof buildTiledStudyScenes>;
+  let composite!: ReturnType<typeof assembleTiledStudyCompositeScene>;
+  let overlay!: ReturnType<typeof createM1aTileBoundaryOverlay>;
+
+  try {
+    Object.defineProperty(globalThis, 'process', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+    if (typeof performance !== 'undefined') {
+      Object.defineProperty(performance, 'memory', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    }
+
+    // 1. No global process & no performance.memory -> explicitly unavailable telemetry
+    unavailableSnap = captureProcessMemorySnapshot();
+
+    // 2. Full visual harness pipeline executes without global process
+    ingested = ingestCanonicalStudyGeoJson(geojson, smallGrid);
+    reference = buildSingleSceneReference(ingested, MAP_THEMES.tactical);
+    tiled = buildTiledStudyScenes(ingested, MAP_THEMES.tactical);
+    composite = assembleTiledStudyCompositeScene(tiled, ingested, MAP_THEMES.tactical);
+    overlay = createM1aTileBoundaryOverlay(smallGrid);
+
+    // 3. Chromium performance.memory telemetry populates heap without fabricating RSS/external
+    if (typeof performance !== 'undefined') {
+      Object.defineProperty(performance, 'memory', {
+        value: {
+          usedJSHeapSize: 48 * 1024 * 1024,
+          totalJSHeapSize: 64 * 1024 * 1024,
+        },
+        configurable: true,
+        writable: true,
+      });
+    }
+    browserPerfSnap = captureProcessMemorySnapshot();
+  } finally {
+    if (originalProcessDesc) {
+      Object.defineProperty(globalThis, 'process', originalProcessDesc);
+    } else {
+      Reflect.deleteProperty(globalThis, 'process');
+    }
+    if (typeof performance !== 'undefined') {
+      if (originalPerfMemDesc) {
+        Object.defineProperty(performance, 'memory', originalPerfMemDesc);
+      } else {
+        Reflect.deleteProperty(performance, 'memory');
+      }
+    }
+  }
+
+  try {
+    assert.deepEqual(unavailableSnap, {
+      available: false,
+      source: 'unavailable',
+      rssMB: null,
+      heapTotalMB: null,
+      heapUsedMB: null,
+      externalMB: null,
+    });
+
+    assert.deepEqual(browserPerfSnap, {
+      available: true,
+      source: 'browser-performance-memory',
+      rssMB: null,
+      heapTotalMB: 64,
+      heapUsedMB: 48,
+      externalMB: null,
+    });
+
+    const mergedUnavailable = mergeProcessMemoryPeak(unavailableSnap, unavailableSnap);
+    assert.deepEqual(mergedUnavailable, unavailableSnap);
+
+    const mergedBrowser = mergeProcessMemoryPeak(unavailableSnap, browserPerfSnap);
+    assert.deepEqual(mergedBrowser, browserPerfSnap);
+
+    for (const snap of [
+      ingested.memoryAfterIngest,
+      reference.memoryAfterBuild,
+      tiled.peakMemory,
+      tiled.memoryAfterAllTiles,
+    ]) {
+      assert.equal(snap.available, false);
+      assert.equal(snap.source, 'unavailable');
+      assert.equal(snap.rssMB, null);
+      assert.equal(snap.heapTotalMB, null);
+      assert.equal(snap.heapUsedMB, null);
+      assert.equal(snap.externalMB, null);
+    }
+
+    assert.equal(tiled.tiles.length, 4);
+    assert.equal(overlay.tileCount, 4);
+    assert.equal(overlay.internalSeamCount, 4);
+    assert.ok(composite.stats.totalTriangles > 0);
+
+    const seamReport = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(
+      seamReport.isValid,
+      true,
+      `Unexpected seam defects without global process: ${JSON.stringify(seamReport.defects)}`
+    );
+  } finally {
+    overlay?.dispose();
+    composite?.dispose();
+    reference?.dispose();
   }
 });

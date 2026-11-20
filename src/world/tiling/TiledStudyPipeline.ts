@@ -61,21 +61,111 @@ import {
   type TileDescriptor,
 } from './TileGrid';
 
+export type ProcessMemoryTelemetrySource =
+  | 'node-process'
+  | 'browser-performance-memory'
+  | 'unavailable';
+
 export interface ProcessMemorySnapshot {
-  rssMB: number;
-  heapTotalMB: number;
-  heapUsedMB: number;
-  externalMB: number;
+  available: boolean;
+  source: ProcessMemoryTelemetrySource;
+  rssMB: number | null;
+  heapTotalMB: number | null;
+  heapUsedMB: number | null;
+  externalMB: number | null;
+}
+
+const toMemoryMB = (bytes: number): number =>
+  Number((bytes / (1024 * 1024)).toFixed(2));
+
+const maxNullableMetric = (a: number | null, b: number | null): number | null => {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.max(a, b);
+};
+
+export function mergeProcessMemoryPeak(
+  peak: ProcessMemorySnapshot,
+  sample: ProcessMemorySnapshot
+): ProcessMemorySnapshot {
+  const source: ProcessMemoryTelemetrySource =
+    peak.source === 'node-process' || sample.source === 'node-process'
+      ? 'node-process'
+      : peak.source === 'browser-performance-memory' ||
+          sample.source === 'browser-performance-memory'
+        ? 'browser-performance-memory'
+        : 'unavailable';
+
+  return {
+    available: peak.available || sample.available,
+    source,
+    rssMB: maxNullableMetric(peak.rssMB, sample.rssMB),
+    heapTotalMB: maxNullableMetric(peak.heapTotalMB, sample.heapTotalMB),
+    heapUsedMB: maxNullableMetric(peak.heapUsedMB, sample.heapUsedMB),
+    externalMB: maxNullableMetric(peak.externalMB, sample.externalMB),
+  };
 }
 
 export function captureProcessMemorySnapshot(): ProcessMemorySnapshot {
-  const mem = process.memoryUsage();
-  const toMB = (bytes: number) => Number((bytes / (1024 * 1024)).toFixed(2));
+  if (
+    typeof process !== 'undefined' &&
+    process !== null &&
+    typeof process.memoryUsage === 'function'
+  ) {
+    const mem = process.memoryUsage();
+    return {
+      available: true,
+      source: 'node-process',
+      rssMB: toMemoryMB(mem.rss),
+      heapTotalMB: toMemoryMB(mem.heapTotal),
+      heapUsedMB: toMemoryMB(mem.heapUsed),
+      externalMB: toMemoryMB(mem.external),
+    };
+  }
+
+  if (typeof performance !== 'undefined' && performance !== null) {
+    const perfMemory = (
+      performance as {
+        memory?: {
+          totalJSHeapSize?: unknown;
+          usedJSHeapSize?: unknown;
+        };
+      }
+    ).memory;
+    if (perfMemory && typeof perfMemory === 'object') {
+      const heapTotalMB =
+        typeof perfMemory.totalJSHeapSize === 'number' &&
+        Number.isFinite(perfMemory.totalJSHeapSize) &&
+        perfMemory.totalJSHeapSize >= 0
+          ? toMemoryMB(perfMemory.totalJSHeapSize)
+          : null;
+      const heapUsedMB =
+        typeof perfMemory.usedJSHeapSize === 'number' &&
+        Number.isFinite(perfMemory.usedJSHeapSize) &&
+        perfMemory.usedJSHeapSize >= 0
+          ? toMemoryMB(perfMemory.usedJSHeapSize)
+          : null;
+
+      if (heapTotalMB !== null || heapUsedMB !== null) {
+        return {
+          available: true,
+          source: 'browser-performance-memory',
+          rssMB: null,
+          heapTotalMB,
+          heapUsedMB,
+          externalMB: null,
+        };
+      }
+    }
+  }
+
   return {
-    rssMB: toMB(mem.rss),
-    heapTotalMB: toMB(mem.heapTotal),
-    heapUsedMB: toMB(mem.heapUsed),
-    externalMB: toMB(mem.external),
+    available: false,
+    source: 'unavailable',
+    rssMB: null,
+    heapTotalMB: null,
+    heapUsedMB: null,
+    externalMB: null,
   };
 }
 
@@ -775,15 +865,6 @@ export function buildTiledStudyScenes(
   const builtTiles: BuiltTileEntry[] = [];
   let maxTileBuildTimeMs = 0;
   let peakMemory = captureProcessMemorySnapshot();
-  const mergePeakMemory = (
-    peak: ProcessMemorySnapshot,
-    sample: ProcessMemorySnapshot
-  ): ProcessMemorySnapshot => ({
-    rssMB: Math.max(peak.rssMB, sample.rssMB),
-    heapTotalMB: Math.max(peak.heapTotalMB, sample.heapTotalMB),
-    heapUsedMB: Math.max(peak.heapUsedMB, sample.heapUsedMB),
-    externalMB: Math.max(peak.externalMB, sample.externalMB),
-  });
 
   const targetTiles = options?.tileFilter
     ? ingested.grid.tiles.filter(options.tileFilter)
@@ -816,7 +897,7 @@ export function buildTiledStudyScenes(
     if (buildTimeMs > maxTileBuildTimeMs) maxTileBuildTimeMs = buildTimeMs;
 
     const memNow = captureProcessMemorySnapshot();
-    peakMemory = mergePeakMemory(peakMemory, memNow);
+    peakMemory = mergeProcessMemoryPeak(peakMemory, memNow);
 
     builtTiles.push({
       tile,
@@ -847,7 +928,7 @@ export function buildTiledStudyScenes(
       : 0;
 
   const memoryAfterAllTiles = captureProcessMemorySnapshot();
-  peakMemory = mergePeakMemory(peakMemory, memoryAfterAllTiles);
+  peakMemory = mergeProcessMemoryPeak(peakMemory, memoryAfterAllTiles);
 
   return {
     grid: ingested.grid,

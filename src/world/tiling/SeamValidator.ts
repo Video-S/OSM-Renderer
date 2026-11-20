@@ -6,6 +6,7 @@ import {
   type GraphRoadMeshIntegrityReport,
 } from '../infrastructure/roads/GraphRoadGeometryBuilder';
 import type { SleeperBearerBox3D } from '../infrastructure/railways/RailwayTopology';
+import { RAILWAY_DIMENSION_SPEC } from '../infrastructure/railways/RailwayTopology';
 import type { CollarAuditReport } from './CollarAudit';
 import type { BuiltTileEntry, SingleSceneReferenceResult, TiledStudyBuildResult } from './TiledStudyPipeline';
 import type { StudyGridSpec, TileDescriptor } from './TileGrid';
@@ -81,6 +82,7 @@ export interface SeamValidationReport {
     refSourceFeatureCount: number;
     tiledSourceFeatureCount: number;
     missingSourceFeatureIds: string[];
+    extraSourceFeatureIds: string[];
   };
   roadIntegrityFailures: Array<{ tileId: string; report: GraphRoadMeshIntegrityReport }>;
   collarAudit: CollarAuditReport;
@@ -181,11 +183,11 @@ function extractUpwardTrianglesXZ(
 
     let featureId: string | undefined;
     if (faceRanges) {
-      while (rangeIdx < faceRanges.length && f > faceRanges[rangeIdx].endFace) {
+      while (rangeIdx < faceRanges.length && f >= faceRanges[rangeIdx].endFace) {
         rangeIdx++;
       }
       const r = faceRanges[rangeIdx];
-      if (r && f >= r.startFace && f <= r.endFace) {
+      if (r && f >= r.startFace && f < r.endFace) {
         featureId = r.info.sourceFeatureId || r.info.id;
       }
     }
@@ -394,14 +396,38 @@ function collectSeamVertices(
   seam: SeamLineSpec,
   meshFilter: (name: string) => boolean,
   coordTol = 1e-3
-): Array<{ x: number; y: number; z: number; u?: number; v?: number; meshName: string }> {
-  const pts: Array<{ x: number; y: number; z: number; u?: number; v?: number; meshName: string }> = [];
+): Array<{ x: number; y: number; z: number; u?: number; v?: number; period?: number; meshName: string }> {
+  const pts: Array<{ x: number; y: number; z: number; u?: number; v?: number; period?: number; meshName: string }> = [];
   for (const mesh of collectGroupMeshes(group)) {
     if (!meshFilter(mesh.name)) continue;
     const geo = mesh.geometry;
     const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
     if (!posAttr) continue;
     const uvAttr = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    const faceRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
+    let vertexPeriods: Float32Array | undefined;
+    if (faceRanges && faceRanges.some((r) => r.info?.subtype === 'tram')) {
+      vertexPeriods = new Float32Array(posAttr.count);
+      vertexPeriods.fill(RAILWAY_DIMENSION_SPEC.visualSleeperPeriodMeters);
+      const idxAttr = geo.getIndex();
+      const triCount = idxAttr ? Math.floor(idxAttr.count / 3) : Math.floor(posAttr.count / 3);
+      let rIdx = 0;
+      for (let f = 0; f < triCount; f++) {
+        while (rIdx < faceRanges.length && f >= faceRanges[rIdx].endFace) {
+          rIdx++;
+        }
+        const r = faceRanges[rIdx];
+        if (r && f >= r.startFace && f < r.endFace && r.info?.subtype === 'tram') {
+          const period = RAILWAY_DIMENSION_SPEC.visualTramSleeperPeriodMeters;
+          const i0 = idxAttr ? idxAttr.getX(f * 3) : f * 3;
+          const i1 = idxAttr ? idxAttr.getX(f * 3 + 1) : f * 3 + 1;
+          const i2 = idxAttr ? idxAttr.getX(f * 3 + 2) : f * 3 + 2;
+          vertexPeriods[i0] = period;
+          vertexPeriods[i1] = period;
+          vertexPeriods[i2] = period;
+        }
+      }
+    }
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i) + mesh.position.x;
       const y = posAttr.getY(i) + mesh.position.y;
@@ -415,12 +441,96 @@ function collectSeamVertices(
           z,
           u: uvAttr ? uvAttr.getX(i) : undefined,
           v: uvAttr ? uvAttr.getY(i) : undefined,
+          period: vertexPeriods ? vertexPeriods[i] : RAILWAY_DIMENSION_SPEC.visualSleeperPeriodMeters,
           meshName: mesh.name,
         });
       }
     }
   }
   return pts;
+}
+
+interface SeamBoundaryEdge2D {
+  s0: number;
+  s1: number;
+  y0: number;
+  y1: number;
+  isBridgeMesh: boolean;
+  meshName: string;
+}
+
+function collectRoadSeamBoundaryEdges(
+  group: THREE.Group,
+  seam: SeamLineSpec,
+  coordTol = 2e-4
+): SeamBoundaryEdge2D[] {
+  const edges: SeamBoundaryEdge2D[] = [];
+  for (const mesh of collectGroupMeshes(group)) {
+    if (!mesh.name.startsWith('Roads_') && !mesh.name.startsWith('Bridge_')) continue;
+    const geo = mesh.geometry;
+    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr || posAttr.count < 3) continue;
+    const idxAttr = geo.getIndex();
+    const triCount = idxAttr ? Math.floor(idxAttr.count / 3) : Math.floor(posAttr.count / 3);
+    const isBridgeMesh = mesh.name.startsWith('Bridge_');
+
+    const getV = (vi: number): [number, number, number] => [
+      posAttr.getX(vi) + mesh.position.x,
+      posAttr.getY(vi) + mesh.position.y,
+      posAttr.getZ(vi) + mesh.position.z,
+    ];
+
+    const tryPushEdge = (
+      a: [number, number, number],
+      b: [number, number, number]
+    ) => {
+      const ca = seam.orientation === 'vertical' ? a[0] : a[2];
+      const cb = seam.orientation === 'vertical' ? b[0] : b[2];
+      if (Math.abs(ca - seam.coord) > coordTol || Math.abs(cb - seam.coord) > coordTol) return;
+      const saRaw = seam.orientation === 'vertical' ? a[2] : a[0];
+      const sbRaw = seam.orientation === 'vertical' ? b[2] : b[0];
+      if (Math.abs(sbRaw - saRaw) <= 1e-3) return;
+      const flip = saRaw > sbRaw;
+      const rawMin = flip ? sbRaw : saRaw;
+      const rawMax = flip ? saRaw : sbRaw;
+      const yMinRaw = flip ? b[1] : a[1];
+      const yMaxRaw = flip ? a[1] : b[1];
+      const clampedMin = Math.max(seam.spanMin, rawMin);
+      const clampedMax = Math.min(seam.spanMax, rawMax);
+      if (clampedMax - clampedMin <= 1e-3) return;
+      const len = rawMax - rawMin;
+      const y0 = yMinRaw + ((clampedMin - rawMin) / len) * (yMaxRaw - yMinRaw);
+      const y1 = yMinRaw + ((clampedMax - rawMin) / len) * (yMaxRaw - yMinRaw);
+      edges.push({
+        s0: clampedMin,
+        s1: clampedMax,
+        y0,
+        y1,
+        isBridgeMesh,
+        meshName: mesh.name,
+      });
+    };
+
+    for (let f = 0; f < triCount; f++) {
+      const i0 = idxAttr ? idxAttr.getX(f * 3) : f * 3;
+      const i1 = idxAttr ? idxAttr.getX(f * 3 + 1) : f * 3 + 1;
+      const i2 = idxAttr ? idxAttr.getX(f * 3 + 2) : f * 3 + 2;
+      const v0 = getV(i0);
+      const v1 = getV(i1);
+      const v2 = getV(i2);
+      tryPushEdge(v0, v1);
+      tryPushEdge(v1, v2);
+      tryPushEdge(v2, v0);
+    }
+  }
+  return edges;
+}
+
+function evalBoundaryEdgeY(edge: SeamBoundaryEdge2D, s: number): number {
+  const span = edge.s1 - edge.s0;
+  if (span <= 1e-9) return (edge.y0 + edge.y1) * 0.5;
+  const t = Math.max(0, Math.min(1, (s - edge.s0) / span));
+  return edge.y0 + t * (edge.y1 - edge.y0);
 }
 
 function extractBuildingStatsFromScene(scene: BuiltSceneGeometry): Map<string, number> {
@@ -430,7 +540,7 @@ function extractBuildingStatsFromScene(scene: BuiltSceneGeometry): Map<string, n
     if (faceRanges && faceRanges.length > 0) {
       for (const r of faceRanges) {
         const key = r.info.id;
-        const count = r.endFace - r.startFace + 1;
+        const count = r.endFace - r.startFace;
         trisByBuildingId.set(key, (trisByBuildingId.get(key) ?? 0) + count);
       }
     } else if (mesh.userData?.id) {
@@ -711,53 +821,90 @@ export function validateTiledSeamContinuity(params: {
       }
     }
 
-    // D) Road & Bridge seam vertex / elevation continuity (detects unmatched end-caps or ramp steps)
-    const roadSeamPtsA = collectSeamVertices(entryA.scene.roadsGroup, seam, (n) =>
-      n.startsWith('Roads_') || n.startsWith('Bridge_')
-    );
-    const roadSeamPtsB = collectSeamVertices(entryB.scene.roadsGroup, seam, (n) =>
-      n.startsWith('Roads_') || n.startsWith('Bridge_')
-    );
-    for (const pa of roadSeamPtsA) {
-      let bestDist = Infinity;
-      let bestDy = Infinity;
-      for (const pb of roadSeamPtsB) {
-        const dXZ = Math.hypot(pa.x - pb.x, pa.z - pb.z);
-        const dy = Math.abs(pa.y - pb.y);
-        if (dXZ < bestDist - 1e-5 || (Math.abs(dXZ - bestDist) <= 1e-5 && dy < bestDy)) {
-          bestDist = dXZ;
-          bestDy = dy;
+    // D) Symmetric road & bridge seam boundary-edge interval coverage + elevation check
+    const roadSeamEdgesA = collectRoadSeamBoundaryEdges(entryA.scene.roadsGroup, seam);
+    const roadSeamEdgesB = collectRoadSeamBoundaryEdges(entryB.scene.roadsGroup, seam);
+    const checkRoadSeamDirection = (
+      srcEdges: SeamBoundaryEdge2D[],
+      dstEdges: SeamBoundaryEdge2D[],
+      srcTileId: string,
+      dstTileId: string
+    ) => {
+      const coverTol = 0.05;
+      for (const ea of srcEdges) {
+        const overlapping = dstEdges
+          .filter(
+            (eb) =>
+              eb.isBridgeMesh === ea.isBridgeMesh &&
+              eb.s1 >= ea.s0 - coverTol &&
+              eb.s0 <= ea.s1 + coverTol
+          )
+          .sort((a, b) => a.s0 - b.s0);
+
+        let coveredUntil = ea.s0;
+        let maxGap = 0;
+        for (const eb of overlapping) {
+          if (eb.s0 - coverTol > coveredUntil) {
+            maxGap = Math.max(maxGap, eb.s0 - coverTol - coveredUntil);
+          }
+          coveredUntil = Math.max(coveredUntil, eb.s1 + coverTol);
+          if (coveredUntil >= ea.s1) break;
+        }
+        if (coveredUntil < ea.s1) {
+          maxGap = Math.max(maxGap, ea.s1 - coveredUntil);
+        }
+
+        const edgeSpan = ea.s1 - ea.s0;
+        if (overlapping.length === 0 || (edgeSpan > coverTol && maxGap > coverTol)) {
+          const sMid = (ea.s0 + ea.s1) * 0.5;
+          const [wx, wz] =
+            seam.orientation === 'vertical' ? [seam.coord, sMid] : [sMid, seam.coord];
+          const gapDist = overlapping.length === 0 ? edgeSpan : maxGap;
+          defects.push({
+            category: 'road_boundary_end_cap',
+            seamId: seam.id,
+            tileAId: srcTileId,
+            tileBId: dstTileId,
+            layer: ea.meshName,
+            detail: `Unmatched road/bridge seam edge (${ea.meshName}) on ${srcTileId} at (${wx.toFixed(2)}, ${wz.toFixed(2)}) span [${ea.s0.toFixed(2)}, ${ea.s1.toFixed(2)}], uncovered gap ${gapDist.toFixed(3)} m on ${dstTileId}`,
+            measuredValue: gapDist,
+            tolerance: coverTol,
+          });
+          return;
+        }
+
+        const ovStart = Math.max(ea.s0, overlapping[0].s0);
+        const ovEnd = Math.min(ea.s1, overlapping[overlapping.length - 1].s1);
+        const sSample = ovEnd >= ovStart ? (ovStart + ovEnd) * 0.5 : (ea.s0 + ea.s1) * 0.5;
+        const yA = evalBoundaryEdgeY(ea, sSample);
+        let bestDy = Infinity;
+        for (const eb of overlapping) {
+          const clampedS = Math.max(eb.s0, Math.min(eb.s1, sSample));
+          const dy = Math.abs(yA - evalBoundaryEdgeY(eb, clampedS));
+          if (dy < bestDy) bestDy = dy;
+        }
+        if (bestDy > maxDeckElevationDiscontinuityM) {
+          maxDeckElevationDiscontinuityM = bestDy;
+        }
+        if (bestDy > elevationToleranceM) {
+          defects.push({
+            category: 'bridge_elevation_discontinuity',
+            seamId: seam.id,
+            tileAId: srcTileId,
+            tileBId: dstTileId,
+            layer: ea.meshName,
+            detail: `Road/bridge elevation discontinuity across seam ${seam.id}: |Δy|=${bestDy.toFixed(5)} m`,
+            measuredValue: bestDy,
+            tolerance: elevationToleranceM,
+          });
+          return;
         }
       }
-      if (bestDist > 0.05) {
-        defects.push({
-          category: 'road_boundary_end_cap',
-          seamId: seam.id,
-          tileAId: seam.tileAId,
-          tileBId: seam.tileBId,
-          layer: pa.meshName,
-          detail: `Unmatched road/bridge seam vertex (${pa.meshName}) on ${seam.tileAId} at (${pa.x.toFixed(2)}, ${pa.z.toFixed(2)}), nearest on ${seam.tileBId} is ${bestDist.toFixed(3)} m away`,
-          measuredValue: bestDist,
-          tolerance: 0.05,
-        });
-        break;
-      }
-      if (bestDy > maxDeckElevationDiscontinuityM) {
-        maxDeckElevationDiscontinuityM = bestDy;
-      }
-      if (bestDy > elevationToleranceM) {
-        defects.push({
-          category: 'bridge_elevation_discontinuity',
-          seamId: seam.id,
-          tileAId: seam.tileAId,
-          tileBId: seam.tileBId,
-          layer: pa.meshName,
-          detail: `Road/bridge elevation discontinuity across seam ${seam.id}: |Δy|=${bestDy.toFixed(5)} m`,
-          measuredValue: bestDy,
-          tolerance: elevationToleranceM,
-        });
-        break;
-      }
+    };
+    const defectCountBeforeD = defects.length;
+    checkRoadSeamDirection(roadSeamEdgesA, roadSeamEdgesB, seam.tileAId, seam.tileBId);
+    if (defects.length === defectCountBeforeD) {
+      checkRoadSeamDirection(roadSeamEdgesB, roadSeamEdgesA, seam.tileBId, seam.tileAId);
     }
 
     // E) Railway rail/sleeper UV phase and elevation continuity across seam
@@ -772,7 +919,9 @@ export function validateTiledSeamContinuity(params: {
       n.startsWith('Railway_Bridge_')
     );
     for (const pa of railPtsA) {
+      let bestExact = false;
       let bestDist = Infinity;
+      let bestDy = Infinity;
       let bestPb: (typeof railPtsB)[number] | null = null;
       let bestModDiff = Infinity;
       const paBase = pa.meshName.split('_chunk_')[0];
@@ -780,19 +929,31 @@ export function validateTiledSeamContinuity(params: {
         if (pb.meshName.split('_chunk_')[0] !== paBase) continue;
         const dXZ = Math.hypot(pa.x - pb.x, pa.z - pb.z);
         if (dXZ > 0.05) continue;
+        const isExact = dXZ <= 1e-3;
         const dy = Math.abs(pa.y - pb.y);
+        const period = pa.period ?? RAILWAY_DIMENSION_SPEC.visualSleeperPeriodMeters;
         const modDiff =
           pa.u !== undefined && pb.u !== undefined
             ? (() => {
-                const rd = Math.abs(pa.u - pb.u);
-                return Math.min(rd % 1.0, 1.0 - (rd % 1.0));
+                const rd = Math.abs(pa.u - pb.u) % period;
+                return Math.min(rd, period - rd);
               })()
             : 0;
-        if (
-          dXZ < bestDist - 1e-4 ||
-          (Math.abs(dXZ - bestDist) <= 1e-4 && (dy < (bestPb ? Math.abs(pa.y - bestPb.y) : Infinity) || modDiff < bestModDiff))
-        ) {
+        const better =
+          !bestPb ||
+          (isExact && !bestExact) ||
+          (isExact === bestExact &&
+            (isExact
+              ? dy < bestDy - 1e-5 ||
+                (Math.abs(dy - bestDy) <= 1e-5 &&
+                  (modDiff < bestModDiff - 1e-5 ||
+                    (Math.abs(modDiff - bestModDiff) <= 1e-5 && dXZ < bestDist)))
+              : dXZ < bestDist - 1e-4 ||
+                (Math.abs(dXZ - bestDist) <= 1e-4 && (dy < bestDy || modDiff < bestModDiff))));
+        if (better) {
+          bestExact = isExact;
           bestDist = dXZ;
+          bestDy = dy;
           bestPb = pb;
           bestModDiff = modDiff;
         }
@@ -923,11 +1084,26 @@ export function validateTiledSeamContinuity(params: {
       missingSourceFeatureIds.push(sid);
     }
   }
+  const extraSourceFeatureIds: string[] = [];
+  for (const sid of tiledSourceIds) {
+    if (!refSourceIds.has(sid)) {
+      extraSourceFeatureIds.push(sid);
+    }
+  }
+  extraSourceFeatureIds.sort();
   if (missingSourceFeatureIds.length > 0) {
     defects.push({
       category: 'provenance_mismatch',
       detail: `${missingSourceFeatureIds.length} OSM sourceFeatureId(s) present in reference are missing from tiled faceRanges/instanceInfos (sample: ${missingSourceFeatureIds.slice(0, 5).join(', ')})`,
       measuredValue: missingSourceFeatureIds.length,
+      tolerance: 0,
+    });
+  }
+  if (extraSourceFeatureIds.length > 0) {
+    defects.push({
+      category: 'provenance_mismatch',
+      detail: `${extraSourceFeatureIds.length} unexpected OSM sourceFeatureId(s) present in tiled output are absent from reference (sample: ${extraSourceFeatureIds.slice(0, 5).join(', ')})`,
+      measuredValue: extraSourceFeatureIds.length,
       tolerance: 0,
     });
   }
@@ -974,6 +1150,7 @@ export function validateTiledSeamContinuity(params: {
       refSourceFeatureCount: refSourceIds.size,
       tiledSourceFeatureCount: tiledSourceIds.size,
       missingSourceFeatureIds,
+      extraSourceFeatureIds,
     },
     roadIntegrityFailures,
     collarAudit: tiled.collarAudit,

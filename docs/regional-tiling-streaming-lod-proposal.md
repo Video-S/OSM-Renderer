@@ -84,11 +84,12 @@ Inspection of the current codebase identifies six concrete technical constraints
 
 3. **Synthesis Collar Margin (`H = 64 m` Hypothesis — Audited in M1a)**:
    - The `64 m` collar hypothesis was explicitly audited in M1a (`CollarAudit.ts`) rather than assumed unconditionally sufficient. While `64 m` comfortably covers road stroke widths (`~24–32 m`) and adjacent parallel ballast envelopes, `CollarAudit` proves that **raw `64 m` spatial bbox slicing alone is NOT sufficient without global/precomputed context** for:
-     1. large planar `landuse`/`parks`/`waterBodies` polygons and `> 64 m` buildings straddling tile borders;
+     1. large planar `landuse`/`parks`/`waterBodies` polygons (deduplication, Boolean priority subtraction, and tunnel portal cutouts) and `> 64 m` buildings straddling tile borders;
      2. `> 64 m` grade-separated bridge/tunnel approach ramp components;
      3. global railway continuous sleeper/rail UV phase propagation (`computeContinuousTrackPhases` across connected track components); and
      4. `GeometryBuilder`'s `MAX_SCENE_TREES = 2200` global cap (`SceneTreeBudgetAudit`).
-   - Consequently, M1a resolves cross-border continuity by pairing exact tile clipping (`MeshBoxClipper.ts`) with precomputed global topology, grade-separated plans, and track phases (`TiledStudyPipeline.ts`) — directly informing M1b offline baker architecture.
+   - `CollarAudit` explicitly separates cases into `resolved_by_global_context` (already resolved deterministically via precomputed global topology, grade-separated plans, track phases, and `planarResolution`) versus `tile_local_collar` dependencies, sanitizing unbounded portal distances (`finiteOrZero`) so audit JSON remains strictly finite.
+   - Consequently, M1a resolves cross-border continuity by pairing exact 2D/3D tile clipping (`MeshBoxClipper.ts`, `GraphRoadGeometryBuilder` 3D clipping fallback, pure geometric curved bridge sampling) with precomputed global topology, grade-separated plans, track phases, and global planar resolution (`TiledStudyPipeline.ts`), verifiable cleanly via `TiledDiagnostics.runDiagnosticAbcComparison` (`--diagnose-abc`) — directly informing M1b offline baker architecture.
 
 ---
 

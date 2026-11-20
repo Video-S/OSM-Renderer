@@ -24,6 +24,10 @@ import {
   validateTiledSeamContinuity,
   type SeamValidationReport,
 } from '../src/world/tiling/SeamValidator';
+import {
+  runDiagnosticAbcComparison,
+  type DiagnosticAbcReport,
+} from '../src/world/tiling/TiledDiagnostics';
 
 export interface HengeloM1aVerificationOutput {
   generatedAtIso: string;
@@ -70,6 +74,7 @@ export interface HengeloM1aVerificationOutput {
     afterAllTiles: ProcessMemorySnapshot;
   };
   report: SeamValidationReport;
+  diagnosticAbc?: DiagnosticAbcReport;
 }
 
 export interface HengeloM1aVerificationOptions {
@@ -79,6 +84,7 @@ export interface HengeloM1aVerificationOptions {
   collarMeters?: number;
   jsonOutPath?: string;
   maxCaseSamples?: number;
+  diagnoseAbc?: boolean;
 }
 
 export function runHengeloM1aVerification(
@@ -109,6 +115,9 @@ export function runHengeloM1aVerification(
     const tVal0 = performance.now();
     const report = validateTiledSeamContinuity({ reference, tiled });
     const seamValidationMs = Number((performance.now() - tVal0).toFixed(2));
+    const diagnosticAbc = options?.diagnoseAbc
+      ? runDiagnosticAbcComparison({ ingested, reference, tiled })
+      : undefined;
 
     const output: HengeloM1aVerificationOutput = {
       generatedAtIso: new Date().toISOString(),
@@ -146,6 +155,7 @@ export function runHengeloM1aVerification(
         afterAllTiles: tiled.memoryAfterAllTiles,
       },
       report,
+      ...(diagnosticAbc ? { diagnosticAbc } : {}),
     };
 
     if (options?.jsonOutPath) {
@@ -178,6 +188,8 @@ function parseCliArgs(argv: readonly string[]): HengeloM1aVerificationOptions {
       opts.collarMeters = Number(arg.slice('--collar='.length));
     } else if (arg.startsWith('--tile-size=')) {
       opts.tileSizeMeters = Number(arg.slice('--tile-size='.length));
+    } else if (arg === '--diagnose-abc') {
+      opts.diagnoseAbc = true;
     }
   }
   return opts;
@@ -198,11 +210,17 @@ function formatSummary(res: HengeloM1aVerificationOutput): string {
     `Bldgs   : ref=${report.buildingParity.refCount}, tiledUnique=${report.buildingParity.tiledUniqueCount}, emitted=${report.buildingParity.tiledTotalEmitted}, missing=${report.buildingParity.missingFromTiles.length}, dup=${report.buildingParity.duplicatedAcrossTiles.length}, triMismatch=${report.buildingParity.triangleMismatches.length}`,
     `Rail    : refSleepers=${report.railwayParity.refSleeperCount}, tiledSleepers=${report.railwayParity.tiledSleeperCount}, maxPhaseDisc=${report.railwayParity.maxPhaseDiscontinuityU}, maxRailDy=${report.railwayParity.maxRailElevationDiscontinuityM}m`,
     `Bridge  : maxDeckDy=${report.bridgeContinuity.maxDeckElevationDiscontinuityM}m`,
-    `OSM IDs : ref=${report.provenanceParity.refSourceFeatureCount}, tiled=${report.provenanceParity.tiledSourceFeatureCount}, missing=${report.provenanceParity.missingSourceFeatureIds.length}`,
-    `Collar  : proposed=${report.collarAudit.proposedCollarMeters}m sufficientWithoutGlobal=${report.collarAudit.isProposedCollarSufficientWithoutGlobalContext}, tilesWithInsufficiency=${report.collarAudit.tilesWithInsufficiency}/${report.collarAudit.totalTilesAudited}, totalCases=${report.collarAudit.totalInsufficiencyCases}, maxRequiredCollar=${report.collarAudit.maxRequiredCollarMeters}m`,
+    `OSM IDs : ref=${report.provenanceParity.refSourceFeatureCount}, tiled=${report.provenanceParity.tiledSourceFeatureCount}, missing=${report.provenanceParity.missingSourceFeatureIds.length}, extra=${report.provenanceParity.extraSourceFeatureIds.length}`,
+    `Collar  : proposed=${report.collarAudit.proposedCollarMeters}m sufficientWithoutGlobal=${report.collarAudit.isProposedCollarSufficientWithoutGlobalContext}, tilesWithInsufficiency=${report.collarAudit.tilesWithInsufficiency}/${report.collarAudit.totalTilesAudited}, totalCases=${report.collarAudit.totalInsufficiencyCases} (globalResolved=${report.collarAudit.resolvedByGlobalContextCount}, tileLocalCollar=${report.collarAudit.tileLocalCollarDependentCount}), maxRequiredCollar=${report.collarAudit.maxRequiredCollarMeters}m`,
     `CollarKinds: ${JSON.stringify(report.collarAudit.countsByKind)}`,
     `TreeBudget : ${report.collarAudit.sceneTreeBudgetAudit.note}`,
   ];
+  if (res.diagnosticAbc) {
+    const abc = res.diagnosticAbc;
+    lines.push(
+      `Diag ABC: aVsB.isValid=${abc.aVsB.isValid} (defects=${abc.aVsB.defects.length}), bVsC.isExactMatch=${abc.bVsC.isExactMatch} (divergentTiles=${abc.bVsC.tilesWithDivergence}/${abc.bVsC.tilesCompared})`
+    );
+  }
   if (report.defects.length > 0) {
     lines.push(`Defects (first 20):`);
     for (const d of report.defects.slice(0, 20)) {

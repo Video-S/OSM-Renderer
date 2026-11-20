@@ -17,8 +17,11 @@ export type CollarInsufficiencyKind =
   | 'road_edge_or_blocker_exceeds_collar'
   | 'barrier_structural_context_exceeds_collar';
 
+export type CollarContextScope = 'resolved_by_global_context' | 'tile_local_collar';
+
 export interface CollarInsufficiencyCase {
   kind: CollarInsufficiencyKind;
+  contextScope: CollarContextScope;
   tileId: string;
   featureId: string;
   sourceFeatureId: string;
@@ -45,8 +48,15 @@ export interface CollarAuditReport {
   isProposedCollarSufficientWithoutGlobalContext: boolean;
   maxRequiredCollarMeters: number;
   countsByKind: Record<CollarInsufficiencyKind, number>;
+  resolvedByGlobalContextCount: number;
+  tileLocalCollarDependentCount: number;
+  countsByContextScope: Record<CollarContextScope, number>;
   cases: CollarInsufficiencyCase[];
   sceneTreeBudgetAudit: SceneTreeBudgetAudit;
+}
+
+function finiteOrZero(v: number | undefined): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
 function computeOverflowBeyondTile(
@@ -125,16 +135,29 @@ export function auditCollarSufficiency(params: {
     barrier_structural_context_exceeds_collar: 0,
   };
 
+  const countsByContextScope: Record<CollarContextScope, number> = {
+    resolved_by_global_context: 0,
+    tile_local_collar: 0,
+  };
+
   const cases: CollarInsufficiencyCase[] = [];
   const tilesWithIssues = new Set<string>();
   let maxRequiredCollarMeters = 0;
 
   const pushCase = (entry: CollarInsufficiencyCase) => {
-    cases.push(entry);
-    countsByKind[entry.kind]++;
-    tilesWithIssues.add(entry.tileId);
-    if (entry.requiredCollarMeters > maxRequiredCollarMeters) {
-      maxRequiredCollarMeters = entry.requiredCollarMeters;
+    const req = Number.isFinite(entry.requiredCollarMeters) ? entry.requiredCollarMeters : 0;
+    const ov = Number.isFinite(entry.overflowMeters) ? entry.overflowMeters : 0;
+    const normalized: CollarInsufficiencyCase = {
+      ...entry,
+      requiredCollarMeters: Number(req.toFixed(2)),
+      overflowMeters: Number(ov.toFixed(2)),
+    };
+    cases.push(normalized);
+    countsByKind[normalized.kind]++;
+    countsByContextScope[normalized.contextScope]++;
+    tilesWithIssues.add(normalized.tileId);
+    if (normalized.requiredCollarMeters > maxRequiredCollarMeters) {
+      maxRequiredCollarMeters = normalized.requiredCollarMeters;
     }
   };
 
@@ -209,6 +232,7 @@ export function auditCollarSufficiency(params: {
         if (overflowMeters > 0.01) {
           pushCase({
             kind: 'planar_polygon_extends_beyond_collar',
+            contextScope: 'resolved_by_global_context',
             tileId: tile.id,
             featureId: item.id,
             sourceFeatureId: item.sourceFeatureId || item.id,
@@ -216,7 +240,7 @@ export function auditCollarSufficiency(params: {
             requiredCollarMeters: Number(requiredCollarMeters.toFixed(2)),
             proposedCollarMeters,
             overflowMeters: Number(overflowMeters.toFixed(2)),
-            detail: `${category} polygon overlaps tile ${tile.id} and extends ${overflowMeters.toFixed(1)} m beyond the ${proposedCollarMeters} m collar`,
+            detail: `${category} polygon overlaps tile ${tile.id} and extends ${overflowMeters.toFixed(1)} m beyond the ${proposedCollarMeters} m collar (resolved by global planar precomputation)`,
           });
         }
       }
@@ -234,6 +258,7 @@ export function auditCollarSufficiency(params: {
       if (overflowMeters > 0.01) {
         pushCase({
           kind: 'building_extends_beyond_collar',
+          contextScope: 'tile_local_collar',
           tileId: tile.id,
           featureId: bldg.id,
           sourceFeatureId: bldg.sourceFeatureId || bldg.id,
@@ -259,9 +284,9 @@ export function auditCollarSufficiency(params: {
         const planRequiredMeters = plan
           ? Math.max(
               requiredCollarMeters,
-              plan.startPortalDistanceMeters ?? 0,
-              plan.endPortalDistanceMeters ?? 0,
-              plan.componentRampLengthMeters ?? 0
+              finiteOrZero(plan.startPortalDistanceMeters),
+              finiteOrZero(plan.endPortalDistanceMeters),
+              finiteOrZero(plan.componentRampLengthMeters)
             )
           : requiredCollarMeters;
         const effectiveOverflow = Math.max(
@@ -272,6 +297,7 @@ export function auditCollarSufficiency(params: {
         if (isGradeSep && effectiveOverflow > 0.01) {
           pushCase({
             kind: 'bridge_or_tunnel_component_exceeds_collar',
+            contextScope: 'resolved_by_global_context',
             tileId: tile.id,
             featureId: edge.id,
             sourceFeatureId: edge.sourceFeatureId || edge.id,
@@ -279,11 +305,12 @@ export function auditCollarSufficiency(params: {
             requiredCollarMeters: Number(planRequiredMeters.toFixed(2)),
             proposedCollarMeters,
             overflowMeters: Number(effectiveOverflow.toFixed(2)),
-            detail: `Road bridge/tunnel edge/component requires ${planRequiredMeters.toFixed(1)} m context outside ${tile.id}`,
+            detail: `Road bridge/tunnel edge/component requires ${planRequiredMeters.toFixed(1)} m context outside ${tile.id} (resolved by global grade-separation plan)`,
           });
         } else if (!isGradeSep && overflowMeters > 0.01) {
           pushCase({
             kind: 'road_edge_or_blocker_exceeds_collar',
+            contextScope: 'tile_local_collar',
             tileId: tile.id,
             featureId: edge.id,
             sourceFeatureId: edge.sourceFeatureId || edge.id,
@@ -311,13 +338,15 @@ export function auditCollarSufficiency(params: {
         if (isGradeSep) {
           const req = Math.max(
             edgeOverflow.requiredCollarMeters,
-            plan?.startPortalDistanceMeters ?? 0,
-            plan?.endPortalDistanceMeters ?? 0
+            finiteOrZero(plan?.startPortalDistanceMeters),
+            finiteOrZero(plan?.endPortalDistanceMeters),
+            finiteOrZero(plan?.componentRampLengthMeters)
           );
           const ov = Math.max(0, req - proposedCollarMeters);
           if (ov > 0.01) {
             pushCase({
               kind: 'bridge_or_tunnel_component_exceeds_collar',
+              contextScope: 'resolved_by_global_context',
               tileId: tile.id,
               featureId: edge.id,
               sourceFeatureId: edge.sourceFeatureId || edge.id,
@@ -325,7 +354,7 @@ export function auditCollarSufficiency(params: {
               requiredCollarMeters: Number(req.toFixed(2)),
               proposedCollarMeters,
               overflowMeters: Number(ov.toFixed(2)),
-              detail: `Railway bridge/tunnel edge requires ${req.toFixed(1)} m context outside ${tile.id}`,
+              detail: `Railway bridge/tunnel edge requires ${req.toFixed(1)} m context outside ${tile.id} (resolved by global grade-separation plan)`,
             });
           }
         }
@@ -333,6 +362,7 @@ export function auditCollarSufficiency(params: {
         if (compOverflow.overflowMeters > 0.01) {
           pushCase({
             kind: 'railway_phase_or_switch_exceeds_collar',
+            contextScope: 'resolved_by_global_context',
             tileId: tile.id,
             featureId: edge.id,
             sourceFeatureId: edge.sourceFeatureId || edge.id,
@@ -340,7 +370,7 @@ export function auditCollarSufficiency(params: {
             requiredCollarMeters: Number(compOverflow.requiredCollarMeters.toFixed(2)),
             proposedCollarMeters,
             overflowMeters: Number(compOverflow.overflowMeters.toFixed(2)),
-            detail: `Connected railway track phase/switch component extends ${compOverflow.overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar`,
+            detail: `Connected railway track phase/switch component extends ${compOverflow.overflowMeters.toFixed(1)} m beyond ${proposedCollarMeters} m collar (resolved by global track-phase precomputation)`,
           });
         }
       }
@@ -354,6 +384,7 @@ export function auditCollarSufficiency(params: {
       if (overflowMeters > 0.01) {
         pushCase({
           kind: 'barrier_structural_context_exceeds_collar',
+          contextScope: 'tile_local_collar',
           tileId: tile.id,
           featureId: bar.id,
           sourceFeatureId: bar.sourceFeatureId || bar.id,
@@ -379,6 +410,9 @@ export function auditCollarSufficiency(params: {
       cases.length === 0 && !singleSceneTruncatedByCap,
     maxRequiredCollarMeters: Number(maxRequiredCollarMeters.toFixed(2)),
     countsByKind,
+    resolvedByGlobalContextCount: countsByContextScope.resolved_by_global_context,
+    tileLocalCollarDependentCount: countsByContextScope.tile_local_collar,
+    countsByContextScope,
     cases,
     sceneTreeBudgetAudit: {
       singleSceneTreeCap: maxSceneTreesCap,

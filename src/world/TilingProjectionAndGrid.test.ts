@@ -20,6 +20,11 @@ import {
   clipMultiPolygonToBox2D,
 } from './tiling/MeshBoxClipper';
 import { auditCollarSufficiency } from './tiling/CollarAudit';
+import {
+  buildTiledStudyScenes,
+  ingestCanonicalStudyGeoJson,
+} from './tiling/TiledStudyPipeline';
+import { MAP_THEMES } from '../styles/mapThemes';
 import type { ProcessedMapData } from '../types/MapFeature';
 import { prepareInfrastructureRenderPreview } from './infrastructure/rendering/InfrastructureRenderAdapter';
 import { resolveGraphGradeSeparatedPlans } from './BridgeAndTunnelBuilder';
@@ -210,7 +215,7 @@ test('MeshBoxClipper conserves 2D polygon area and clips 3D BufferGeometry prese
   geom.userData.faceRanges = [
     {
       startFace: 0,
-      endFace: 1,
+      endFace: 2,
       info: {
         id: 'bridge-1',
         sourceFeatureId: 'way/bridge-1',
@@ -255,6 +260,11 @@ test('MeshBoxClipper conserves 2D polygon area and clips 3D BufferGeometry prese
   }
   assert.ok(Array.isArray(cLeft.userData.faceRanges) && cLeft.userData.faceRanges.length === 1);
   assert.equal(cLeft.userData.faceRanges[0].info.sourceFeatureId, 'way/bridge-1');
+  const leftTris = cLeft.getIndex()
+    ? cLeft.getIndex()!.count / 3
+    : cLeft.getAttribute('position').count / 3;
+  assert.equal(cLeft.userData.faceRanges[0].startFace, 0);
+  assert.equal(cLeft.userData.faceRanges[0].endFace, leftTris);
 
   geom.dispose();
   cLeft.dispose();
@@ -445,4 +455,124 @@ test('CollarAudit explicitly detects > 64m planar, building, bridge, and railway
   assert.ok(audit.countsByKind.bridge_or_tunnel_component_exceeds_collar >= 1);
   assert.ok(audit.countsByKind.railway_phase_or_switch_exceeds_collar >= 1);
   assert.ok(audit.maxRequiredCollarMeters >= 150);
+  assert.equal(
+    audit.resolvedByGlobalContextCount + audit.tileLocalCollarDependentCount,
+    audit.totalInsufficiencyCases
+  );
+  assert.ok(audit.resolvedByGlobalContextCount >= 1);
+  assert.ok(audit.tileLocalCollarDependentCount >= 1);
+});
+
+test('clipBufferGeometryToBoxXZ preserves exact half-open faceRanges across multiple features', () => {
+  const geom = new THREE.BufferGeometry();
+  // Feature A: 1 triangle strictly in x <= 0; Feature B: 1 triangle crossing x = 0
+  geom.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(
+      [
+        -5, 0, -2, -1, 0, -2, -1, 0, 2,
+        -2, 0, -2, 2, 0, -2, 2, 0, 2,
+      ],
+      3
+    )
+  );
+  geom.setAttribute(
+    'normal',
+    new THREE.Float32BufferAttribute(new Array(18).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3)
+  );
+  geom.userData.faceRanges = [
+    {
+      startFace: 0,
+      endFace: 1,
+      info: {
+        id: 'feat-A',
+        sourceFeatureId: 'way/A',
+        name: 'A',
+        category: 'Road & Way',
+        cartoLabel: 'Road',
+        primaryTag: 'highway=residential',
+      },
+    },
+    {
+      startFace: 1,
+      endFace: 2,
+      info: {
+        id: 'feat-B',
+        sourceFeatureId: 'way/B',
+        name: 'B',
+        category: 'Road & Way',
+        cartoLabel: 'Road',
+        primaryTag: 'highway=residential',
+      },
+    },
+  ];
+
+  const clippedRight = clipBufferGeometryToBoxXZ(geom, {
+    minX: 0,
+    maxX: 10,
+    minZ: -10,
+    maxZ: 10,
+  });
+  assert.ok(clippedRight);
+  const ranges = clippedRight.userData.faceRanges as Array<{
+    startFace: number;
+    endFace: number;
+    info: { id: string };
+  }>;
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].info.id, 'feat-B');
+  assert.equal(ranges[0].startFace, 0);
+  const triCount = clippedRight.getAttribute('position').count / 3;
+  assert.equal(ranges[0].endFace, triCount);
+  geom.dispose();
+  clippedRight.dispose();
+});
+
+test('CollarAudit sanitizes Infinity portal distances and TiledStudyPipeline keeps peakMemory >= afterAllTiles', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'collar-tunnel-and-peak-mem',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number) => grid.projection.toGeo(x, z);
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        id: 'way/tunnel-1',
+        properties: { id: 'way/tunnel-1', highway: 'primary', tunnel: 'yes', layer: '-1' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-150, 0), toLonLat(150, 0)],
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const serialized = JSON.stringify(tiled.collarAudit);
+    assert.equal(serialized.includes('null'), false, `CollarAudit serialized unexpected null: ${serialized}`);
+    assert.ok(Number.isFinite(tiled.collarAudit.maxRequiredCollarMeters));
+    assert.ok(tiled.collarAudit.cases.length >= 1);
+    for (const c of tiled.collarAudit.cases) {
+      assert.ok(Number.isFinite(c.requiredCollarMeters));
+      assert.ok(Number.isFinite(c.overflowMeters));
+    }
+    assert.ok(
+      tiled.peakMemory.rssMB >= tiled.memoryAfterAllTiles.rssMB,
+      `Expected peak rssMB (${tiled.peakMemory.rssMB}) >= afterAllTiles (${tiled.memoryAfterAllTiles.rssMB})`
+    );
+    assert.ok(
+      tiled.peakMemory.heapUsedMB >= tiled.memoryAfterAllTiles.heapUsedMB,
+      `Expected peak heapUsedMB (${tiled.peakMemory.heapUsedMB}) >= afterAllTiles (${tiled.memoryAfterAllTiles.heapUsedMB})`
+    );
+  } finally {
+    tiled.dispose();
+  }
 });

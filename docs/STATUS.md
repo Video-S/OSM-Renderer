@@ -206,8 +206,8 @@
 | `OverijsselOfflineStore.test.ts` (`TKT-022`, `TKT-026`, `TKT-027`) | 9 |
 | `BuildingBatching.test.ts` (`TKT-023`) | 3 |
 | `BvhRaycasting.test.ts` (`TKT-024`) | 3 |
-| Regional Tiling M1a (`TilingProjectionAndGrid` [5], `TilingSeamContinuity` [1], `TilingHengeloIntegration` [1 disk-gated]) | 7 |
-| **Total (`it` / `test` declarations across 33 files)** | **344 (`354` with `InfrastructureRenderAdapter` scenario subtests)** |
+| Regional Tiling M1a (`TilingProjectionAndGrid` [7], `TilingSeamContinuity` [5], `TilingHengeloIntegration` [1 disk-gated]) | 13 |
+| **Total (`it` / `test` declarations across 33 files)** | **350 (`360` with `InfrastructureRenderAdapter` scenario subtests)** |
 
 ---
 
@@ -230,8 +230,8 @@
    - **Stage E5 (`M2.3-E5` / `TKT-026` — `closed`)**: Promoted E2+ (`roads: 'graph-surface'`) and R+ (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`) as sole production defaults, retired legacy/intermediate renderers, and closed following project-owner visual approval (`2026-11-19`, `10,000 m` camera-distance check).
 2. **Milestone 2.4: Road Surface Markings (`Planned`)**:
    - Goalpost 2 procedural road surface markings (lane dividers, directional arrows, crosswalks, stop bars) consuming `InfrastructureGraph` topology and per-segment provenance.
-3. **Regional Tiling, Offline Baking, Streaming & Orthographic LOD (`TKT-028` — `in_progress`, Milestone M1a Implemented / Pending Owner Review)**:
-   - **Milestone M1a (Projection, Tile Grid, Seam Continuity & `64 m` Collar Validation — Implemented, Pending Owner Windows Verification)**: Added `src/world/tiling/` (`RegionalProjection.ts` [`EPSG:25832`], `TileGrid.ts` [aligned `512 m` `8 × 8` Hengelo `4,096 m × 4,096 m` grid], `MeshBoxClipper.ts` [exact 2D/3D clipping], `CollarAudit.ts` [explicitly auditing `64 m` collar limitations and `MAX_SCENE_TREES = 2200`], `TiledStudyPipeline.ts`, `SeamValidator.ts`), backward-compatible `tileClipBounds` / `precomputedGlobalPlans` builder hooks, `TilingProjectionAndGrid.test.ts` (`5/5`), `TilingSeamContinuity.test.ts` (`1/1` synthetic `2 × 2` stress test with `0` seam defects), `TilingHengeloIntegration.test.ts` (disk-gated), and `scripts/verify-hengelo-m1a.ts` for local Windows canonical Hengelo SQLite verification.
+3. **Regional Tiling, Offline Baking, Streaming & Orthographic LOD (`TKT-028` — `in_progress`, Milestone M1a Seam Fixes & A/B/C Diagnostics Ready for Owner Windows Verification)**:
+   - **Milestone M1a (Projection, Tile Grid, Seam Continuity & `64 m` Collar Validation — Updated, Pending Owner Windows Verification)**: Added `src/world/tiling/` (`RegionalProjection.ts` [`EPSG:25832`], `TileGrid.ts` [aligned `512 m` `8 × 8` Hengelo `4,096 m × 4,096 m` grid], `MeshBoxClipper.ts` [exact half-open `[startFace, endFace)` 2D/3D clipping with Float32 horizontal sliver hardening], `CollarAudit.ts` [explicitly auditing `64 m` collar limitations across `resolved_by_global_context` vs `tile_local_collar` scopes with finite JSON reporting], `TiledStudyPipeline.ts` [shared global topology, plans, track phases, `planarResolution`, and per-field peak RSS tracking], `SeamValidator.ts` [symmetric seam boundary-edge interval checks, `1.45 m`/`1.65 m` railway phase periods, and missing/extra `sourceFeatureId` parity], `TiledDiagnostics.ts` [`--diagnose-abc` A/B/C separation]), backward-compatible `tileClipBounds` / `precomputedGlobalPlans` builder hooks (including `GraphRoadGeometryBuilder` unconditional footprint registration + 3D clipping fallback and pure-geometric curved railway bridge sampling), `TilingProjectionAndGrid.test.ts` (`7/7`), `TilingSeamContinuity.test.ts` (`5/5`), `TilingHengeloIntegration.test.ts` (disk-gated), and `scripts/verify-hengelo-m1a.ts`.
    - **Milestones M1b (`OSMTILE1` Baker & `ThemeMaterialRegistry`), M2 (Streaming Runtime), M3 (`LOD1`–`LOD3` & `CameraController` Zoom), & M4 (Twente/Overijssel Scale-Out)**: Remain proposed in [`regional-tiling-streaming-lod-proposal.md`](./regional-tiling-streaming-lod-proposal.md) and [`TKT-028`](../tickets/TKT-028-regional-tiling-streaming-lod.md) pending M1a sign-off and separate milestone authorization.
 
 ---

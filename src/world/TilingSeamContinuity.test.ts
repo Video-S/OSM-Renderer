@@ -8,6 +8,7 @@ import {
   ingestCanonicalStudyGeoJson,
 } from './tiling/TiledStudyPipeline';
 import { validateTiledSeamContinuity } from './tiling/SeamValidator';
+import { runDiagnosticAbcComparison } from './tiling/TiledDiagnostics';
 import type { StudyGridSpec } from './tiling/TileGrid';
 
 function buildMultiTileCrossingGeoJson(grid: StudyGridSpec) {
@@ -393,7 +394,284 @@ test('2x2 multi-tile pipeline preserves zero seam defects and exact parity with 
     assert.ok(report.railwayParity.maxPhaseDiscontinuityU <= 1e-3);
     assert.ok(report.bridgeContinuity.maxDeckElevationDiscontinuityM <= 1e-3);
     assert.equal(report.provenanceParity.missingSourceFeatureIds.length, 0);
+    assert.equal(report.provenanceParity.extraSourceFeatureIds.length, 0);
     assert.equal(report.roadIntegrityFailures.length, 0);
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
+test('Regression: single-building tile bucket preserves exact triangle parity against multi-building reference bucket', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'single-bldg-tile-parity',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const ring = (pts: Array<[number, number]>) => [pts.map(([x, z]) => toLonLat(x, z))];
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      // Lone building in west tile [-512, 0]
+      {
+        type: 'Feature',
+        id: 'way/bldg-west-lone',
+        properties: { id: 'way/bldg-west-lone', building: 'house', height: '8' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-200, -10],
+            [-180, -10],
+            [-180, 10],
+            [-200, 10],
+            [-200, -10],
+          ]),
+        },
+      },
+      // Two buildings in east tile [0, 512]
+      {
+        type: 'Feature',
+        id: 'way/bldg-east-1',
+        properties: { id: 'way/bldg-east-1', building: 'house', height: '8' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [180, -10],
+            [200, -10],
+            [200, 10],
+            [180, 10],
+            [180, -10],
+          ]),
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/bldg-east-2',
+        properties: { id: 'way/bldg-east-2', building: 'apartments', height: '14' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [240, -10],
+            [260, -10],
+            [260, 10],
+            [240, 10],
+            [240, -10],
+          ]),
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true);
+    assert.equal(report.buildingParity.triangleMismatches.length, 0);
+    assert.equal(report.buildingParity.refCount, 3);
+    assert.equal(report.buildingParity.tiledUniqueCount, 3);
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
+test('Regression: curved railway bridge with distant parallel host track preserves zero UV phase discontinuity', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'curved-rail-bridge-phase',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        id: 'way/rail-bridge-curved',
+        properties: { id: 'way/rail-bridge-curved', railway: 'rail', bridge: 'yes', layer: '1' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            toLonLat(-140, -12),
+            toLonLat(-50, -8),
+            toLonLat(0, 0),
+            toLonLat(55, 11),
+            toLonLat(140, 28),
+          ],
+        },
+      },
+      // Host track starting inside east tile outside west tile's 64m collar
+      {
+        type: 'Feature',
+        id: 'way/rail-host-east-only',
+        properties: { id: 'way/rail-host-east-only', railway: 'rail', bridge: 'yes', layer: '1' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(90, 14), toLonLat(150, 26)],
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `Unexpected defects: ${JSON.stringify(report.defects)}`);
+    assert.ok(report.railwayParity.maxPhaseDiscontinuityU <= 1e-3);
+    assert.ok(report.railwayParity.maxRailElevationDiscontinuityM <= 1e-3);
+    assert.equal(report.railwayParity.tiledSleeperCount, report.railwayParity.refSleeperCount);
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
+test('Regression: global planar deduplication prevents extra forest trees and extra sourceFeatureIds across collars', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'global-planar-forest-dedup',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const ring = (pts: Array<[number, number]>) => [pts.map(([x, z]) => toLonLat(x, z))];
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      // Duplicate forest polygons whose shared outer ring extends > 64m on west side
+      {
+        type: 'Feature',
+        id: 'way/forest-canon',
+        properties: { id: 'way/forest-canon', landuse: 'forest', leaf_type: 'broadleaved' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-140, -40],
+            [40, -40],
+            [40, 40],
+            [-140, 40],
+            [-140, -40],
+          ]),
+        },
+      },
+      {
+        type: 'Feature',
+        id: 'way/forest-dup',
+        properties: { id: 'way/forest-dup', landuse: 'forest', leaf_type: 'broadleaved' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-140, -40],
+            [40, -40],
+            [40, 40],
+            [-140, 40],
+            [-140, -40],
+          ]),
+        },
+      },
+      // High-priority paved parking covering part of forest beyond east tile collar
+      {
+        type: 'Feature',
+        id: 'way/parking-cover',
+        properties: { id: 'way/parking-cover', amenity: 'parking', surface: 'asphalt' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: ring([
+            [-120, -25],
+            [-75, -25],
+            [-75, 25],
+            [-120, 25],
+            [-120, -25],
+          ]),
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `Unexpected defects: ${JSON.stringify(report.defects)}`);
+    assert.equal(report.provenanceParity.missingSourceFeatureIds.length, 0);
+    assert.equal(report.provenanceParity.extraSourceFeatureIds.length, 0);
+  } finally {
+    reference.dispose();
+    tiled.dispose();
+  }
+});
+
+test('Regression: road seam edge interval check ignores tangent cul-de-sacs, catches missing continuations, and passes Diagnostic A/B/C', () => {
+  const grid = createAlignedStudyGrid({
+    name: 'road-seam-and-abc',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      // Crossing primary road
+      {
+        type: 'Feature',
+        id: 'way/road-cross-seam',
+        properties: { id: 'way/road-cross-seam', highway: 'primary' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-120, 0), toLonLat(120, 0)],
+        },
+      },
+      // Cul-de-sac stopping right next to x=0 without crossing into east tile
+      {
+        type: 'Feature',
+        id: 'way/road-culdesac-near-seam',
+        properties: { id: 'way/road-culdesac-near-seam', highway: 'residential' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [toLonLat(-90, 45), toLonLat(-3.0005, 45)],
+        },
+      },
+    ],
+  };
+
+  const ingested = ingestCanonicalStudyGeoJson(geojson, grid);
+  const reference = buildSingleSceneReference(ingested, MAP_THEMES.daylight);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.daylight);
+  try {
+    const report = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(report.isValid, true, `Unexpected defects: ${JSON.stringify(report.defects)}`);
+
+    const abc = runDiagnosticAbcComparison({ ingested, reference, tiled });
+    assert.equal(abc.aVsB.isValid, true, `A vs B failed: ${JSON.stringify(abc.aVsB.defects)}`);
+    assert.equal(
+      abc.bVsC.isExactMatch,
+      true,
+      `B vs C diverged: ${JSON.stringify(abc.bVsC.divergentTiles)}`
+    );
+
+    // Negative test: remove east tile's road meshes -> validator must catch road_boundary_end_cap
+    const eastTile = tiled.tiles[1];
+    eastTile.scene.roadsGroup.clear();
+    const brokenReport = validateTiledSeamContinuity({ reference, tiled });
+    assert.equal(brokenReport.isValid, false);
+    assert.ok(brokenReport.defects.some((d) => d.category === 'road_boundary_end_cap'));
   } finally {
     reference.dispose();
     tiled.dispose();

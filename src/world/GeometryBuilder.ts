@@ -51,6 +51,8 @@ import {
   MultiPolygonCoords,
   filterDegenerateBooleanArtifacts,
   resolveAndValidatePlanarPolygons,
+  type PlanarValidationReport,
+  type ResolvedPlanarLayer,
 } from './PlanarLayerValidator';
 import {
   buildRailwayInfrastructure,
@@ -183,6 +185,12 @@ export interface GeometryBuilderOptions {
     railwayTrackPhases?: ReadonlyMap<string, number>;
     tunnelEntrances?: VerifiedTunnelEntrances;
     existingParkingSpaceBoxes?: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
+    planarResolution?: {
+      resolvedById: Map<string, ResolvedPlanarLayer>;
+      report: PlanarValidationReport;
+      polygonRingsById: Map<string, [number, number][][]>;
+      portalCutoutsApplied: boolean;
+    };
   };
 }
 
@@ -1917,6 +1925,137 @@ function buildStreetFurnitureGeometry(
   return { geom: merged, styleGroup: 'lamp' };
 }
 
+/**
+ * Applies localized portal entrance cutouts to overlapping landuse/park ground-cover polygons.
+ * Shared between global study ingestion and single-scene GeometryBuilder builds.
+ */
+export function applyTunnelPortalGroundCutoutsToPlanarLayers(
+  data: ProcessedMapData,
+  resolvedPlanarById: Map<string, ResolvedPlanarLayer>,
+  tunnelEntrances: VerifiedTunnelEntrances,
+  roadWidthMultiplier: number = 1.0
+): void {
+  const hasSubterraneanTunnelsForGroundCutout =
+    (data.landuse.length > 0 || data.parks.length > 0) &&
+    ((data.roads || []).some((r) =>
+      r.placementClassification
+        ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+        : r.isTunnel
+    ) ||
+      (data.railways || []).some((r) =>
+        r.placementClassification
+          ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+          : r.isTunnel
+      ));
+
+  if (!hasSubterraneanTunnelsForGroundCutout) return;
+
+  const preCutouts: Array<{
+    poly: [number, number][][];
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  }> = [];
+  const pushPreCutoutFromTunnel = (
+    pts: readonly [number, number][],
+    width: number,
+    isPath: boolean,
+    entrance: { start: boolean; end: boolean },
+    railwayType?: string
+  ) => {
+    if (!pts || pts.length < 2 || (!entrance.start && !entrance.end)) return;
+    const portalGroundCutoutPolygons = calculateTunnelPortalGroundCutouts(pts, width, isPath, {
+      emitStartPortal: entrance.start,
+      emitEndPortal: entrance.end,
+      railwayType,
+    });
+    for (const poly of portalGroundCutoutPolygons) {
+      if (!poly[0] || poly[0].length < 3) continue;
+      let minX = Infinity,
+        maxX = -Infinity,
+        minZ = Infinity,
+        maxZ = -Infinity;
+      for (const [x, z] of poly[0]) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
+      preCutouts.push({ poly, minX, maxX, minZ, maxZ });
+    }
+  };
+
+  for (const r of data.roads || []) {
+    const isTun = r.placementClassification
+      ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
+      : r.isTunnel;
+    if (isTun) {
+      pushPreCutoutFromTunnel(
+        r.points,
+        r.width * roadWidthMultiplier,
+        isNonVehicularRoadClass(r.roadClass),
+        tunnelEntrances.forFeature(r)
+      );
+    }
+  }
+  for (const rl of data.railways || []) {
+    const isTun = rl.placementClassification
+      ? !rl.placementClassification.hasConflict && rl.placementClassification.isSubterraneanTunnel
+      : rl.isTunnel;
+    if (isTun) {
+      pushPreCutoutFromTunnel(
+        rl.points,
+        rl.width || 4.8,
+        false,
+        tunnelEntrances.forFeature(rl),
+        rl.railwayType
+      );
+    }
+  }
+
+  if (preCutouts.length === 0) return;
+
+  for (const resolved of resolvedPlanarById.values()) {
+    if (
+      (resolved.category !== 'landuse' && resolved.category !== 'park') ||
+      resolved.resolvedMultiPolygon.length === 0
+    ) {
+      continue;
+    }
+    let rMinX = Infinity,
+      rMaxX = -Infinity,
+      rMinZ = Infinity,
+      rMaxZ = -Infinity;
+    for (const poly of resolved.resolvedMultiPolygon) {
+      if (!poly[0]) continue;
+      for (const [x, z] of poly[0]) {
+        if (x < rMinX) rMinX = x;
+        if (x > rMaxX) rMaxX = x;
+        if (z < rMinZ) rMinZ = z;
+        if (z > rMaxZ) rMaxZ = z;
+      }
+    }
+    const matchingCutouts = preCutouts
+      .filter((c) => c.maxX >= rMinX && c.minX <= rMaxX && c.maxZ >= rMinZ && c.minZ <= rMaxZ)
+      .map((c) => c.poly);
+    if (matchingCutouts.length > 0) {
+      try {
+        const diff = polygonClipping.difference(
+          resolved.resolvedMultiPolygon as unknown as polygonClipping.Geom,
+          ...(matchingCutouts as unknown as polygonClipping.Geom[])
+        ) as unknown as MultiPolygonCoords;
+        const cleaned = filterDegenerateBooleanArtifacts(diff);
+        if (cleaned.length > 0) {
+          resolved.resolvedMultiPolygon = cleaned;
+        }
+      } catch {
+        // Keep original resolvedMultiPolygon if boolean clipping fails
+      }
+    }
+  }
+}
+
 export class GeometryBuilder {
   private options: {
     buildingHeightMultiplier: number;
@@ -2044,14 +2183,16 @@ export class GeometryBuilder {
     // ==========================================================================
     // 2. SEMANTIC SURFACE RESOLUTION & LANDUSE / PARKING AREAS
     // ==========================================================================
+    const prePlanar = this.options.precomputedGlobalPlans?.planarResolution;
     const tPlanarResolution0 = performance.now();
-    const { resolvedById: resolvedPlanarById, report: planarValidationReport } =
-      resolveAndValidatePlanarPolygons(
-        data.landuse || [],
-        data.parks || [],
-        data.waterBodies || [],
-        data.linearWaterways || []
-      );
+    const { resolvedById: resolvedPlanarById, report: planarValidationReport } = prePlanar
+      ? { resolvedById: prePlanar.resolvedById, report: prePlanar.report }
+      : resolveAndValidatePlanarPolygons(
+          data.landuse || [],
+          data.parks || [],
+          data.waterBodies || [],
+          data.linearWaterways || []
+        );
     const planarResolutionTimingMs = performance.now() - tPlanarResolution0;
 
     if (data.diagnostics) {
@@ -2070,120 +2211,27 @@ export class GeometryBuilder {
     const tPlanarSurface0 = performance.now();
     let planarMergeMs = 0;
 
-    const planarPolygonRingsById = new Map<string, [number, number][][]>();
-    for (const lu of data.landuse) {
-      if (lu.polygon) planarPolygonRingsById.set(lu.id, lu.polygon);
-    }
-    for (const pk of data.parks) {
-      if (pk.polygon) planarPolygonRingsById.set(pk.id, pk.polygon);
+    let planarPolygonRingsById: Map<string, [number, number][][]>;
+    if (prePlanar?.polygonRingsById) {
+      planarPolygonRingsById = prePlanar.polygonRingsById;
+    } else {
+      planarPolygonRingsById = new Map<string, [number, number][][]>();
+      for (const lu of data.landuse) {
+        if (lu.polygon) planarPolygonRingsById.set(lu.id, lu.polygon);
+      }
+      for (const pk of data.parks) {
+        if (pk.polygon) planarPolygonRingsById.set(pk.id, pk.polygon);
+      }
     }
 
     // Apply localized portal entrance cutouts to overlapping ground-cover polygons (M2.3-E4-T2)
-    const hasSubterraneanTunnelsForGroundCutout =
-      (data.landuse.length > 0 || data.parks.length > 0) &&
-      ((data.roads || []).some((r) =>
-        r.placementClassification
-          ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
-          : r.isTunnel
-      ) ||
-        (data.railways || []).some((r) =>
-          r.placementClassification
-            ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
-            : r.isTunnel
-        ));
-
-    if (hasSubterraneanTunnelsForGroundCutout) {
-      const preCutouts: Array<{
-        poly: [number, number][][];
-        minX: number;
-        maxX: number;
-        minZ: number;
-        maxZ: number;
-      }> = [];
-      const pushPreCutoutFromTunnel = (
-        pts: readonly [number, number][], width: number, isPath: boolean,
-        entrance: { start: boolean; end: boolean }, railwayType?: string
-      ) => {
-        if (!pts || pts.length < 2 || (!entrance.start && !entrance.end)) return;
-        const portalGroundCutoutPolygons = calculateTunnelPortalGroundCutouts(
-          pts, width, isPath,
-          { emitStartPortal: entrance.start, emitEndPortal: entrance.end, railwayType }
-        );
-        for (const poly of portalGroundCutoutPolygons) {
-          if (!poly[0] || poly[0].length < 3) continue;
-          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-          for (const [x, z] of poly[0]) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (z < minZ) minZ = z;
-            if (z > maxZ) maxZ = z;
-          }
-          preCutouts.push({ poly, minX, maxX, minZ, maxZ });
-        }
-      };
-
-      for (const r of data.roads || []) {
-        const isTun = r.placementClassification
-          ? !r.placementClassification.hasConflict && r.placementClassification.isSubterraneanTunnel
-          : r.isTunnel;
-        if (isTun) {
-          pushPreCutoutFromTunnel(
-            r.points,
-            r.width * this.options.roadWidthMultiplier,
-            isNonVehicularRoadClass(r.roadClass),
-            tunnelEntrances.forFeature(r)
-          );
-        }
-      }
-      for (const rl of data.railways || []) {
-        const isTun = rl.placementClassification
-          ? !rl.placementClassification.hasConflict && rl.placementClassification.isSubterraneanTunnel
-          : rl.isTunnel;
-        if (isTun) {
-          pushPreCutoutFromTunnel(rl.points, rl.width || 4.8, false, tunnelEntrances.forFeature(rl), rl.railwayType);
-        }
-      }
-
-      if (preCutouts.length > 0) {
-        for (const resolved of resolvedPlanarById.values()) {
-          if (
-            (resolved.category !== 'landuse' && resolved.category !== 'park') ||
-            resolved.resolvedMultiPolygon.length === 0
-          ) {
-            continue;
-          }
-          let rMinX = Infinity, rMaxX = -Infinity, rMinZ = Infinity, rMaxZ = -Infinity;
-          for (const poly of resolved.resolvedMultiPolygon) {
-            if (!poly[0]) continue;
-            for (const [x, z] of poly[0]) {
-              if (x < rMinX) rMinX = x;
-              if (x > rMaxX) rMaxX = x;
-              if (z < rMinZ) rMinZ = z;
-              if (z > rMaxZ) rMaxZ = z;
-            }
-          }
-          const matchingCutouts = preCutouts
-            .filter(
-              (c) =>
-                c.maxX >= rMinX && c.minX <= rMaxX && c.maxZ >= rMinZ && c.minZ <= rMaxZ
-            )
-            .map((c) => c.poly);
-          if (matchingCutouts.length > 0) {
-            try {
-              const diff = polygonClipping.difference(
-                resolved.resolvedMultiPolygon as unknown as polygonClipping.Geom,
-                ...(matchingCutouts as unknown as polygonClipping.Geom[])
-              ) as unknown as MultiPolygonCoords;
-              const cleaned = filterDegenerateBooleanArtifacts(diff);
-              if (cleaned.length > 0) {
-                resolved.resolvedMultiPolygon = cleaned;
-              }
-            } catch {
-              // Keep original resolvedMultiPolygon if boolean clipping fails
-            }
-          }
-        }
-      }
+    if (!prePlanar?.portalCutoutsApplied) {
+      applyTunnelPortalGroundCutoutsToPlanarLayers(
+        data,
+        resolvedPlanarById,
+        tunnelEntrances,
+        this.options.roadWidthMultiplier
+      );
     }
 
     const landuseBySubtype = new Map<

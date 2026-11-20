@@ -12,10 +12,12 @@ import type {
   WaterBodyFeature,
 } from '../../types/MapFeature';
 import {
+  applyTunnelPortalGroundCutoutsToPlanarLayers,
   GeometryBuilder,
   type BuiltSceneGeometry,
   type GeometryBuilderOptions,
 } from '../GeometryBuilder';
+import { resolveAndValidatePlanarPolygons } from '../PlanarLayerValidator';
 import { LocalGeoJsonProvider } from '../LocalGeoJsonProvider';
 import {
   DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS,
@@ -298,6 +300,21 @@ export function ingestCanonicalStudyGeoJson(
     }
   }
 
+  const { resolvedById: planarResolvedById, report: planarReport } = resolveAndValidatePlanarPolygons(
+    data.landuse || [],
+    data.parks || [],
+    data.waterBodies || [],
+    data.linearWaterways || []
+  );
+  const polygonRingsById = new Map<string, [number, number][][]>();
+  for (const lu of data.landuse) {
+    if (lu.polygon) polygonRingsById.set(lu.id, lu.polygon);
+  }
+  for (const pk of data.parks) {
+    if (pk.polygon) polygonRingsById.set(pk.id, pk.polygon);
+  }
+  applyTunnelPortalGroundCutoutsToPlanarLayers(data, planarResolvedById, tunnelEntrances, 1.0);
+
   const ingestTimeMs = Number((performance.now() - t0).toFixed(2));
   return {
     grid,
@@ -315,6 +332,12 @@ export function ingestCanonicalStudyGeoJson(
       railwayTrackPhases,
       tunnelEntrances,
       existingParkingSpaceBoxes,
+      planarResolution: {
+        resolvedById: planarResolvedById,
+        report: planarReport,
+        polygonRingsById,
+        portalCutoutsApplied: true,
+      },
     },
     ingestTimeMs,
     memoryAfterIngest: captureProcessMemorySnapshot(),
@@ -611,6 +634,15 @@ export function buildTiledStudyScenes(
   const builtTiles: BuiltTileEntry[] = [];
   let maxTileBuildTimeMs = 0;
   let peakMemory = captureProcessMemorySnapshot();
+  const mergePeakMemory = (
+    peak: ProcessMemorySnapshot,
+    sample: ProcessMemorySnapshot
+  ): ProcessMemorySnapshot => ({
+    rssMB: Math.max(peak.rssMB, sample.rssMB),
+    heapTotalMB: Math.max(peak.heapTotalMB, sample.heapTotalMB),
+    heapUsedMB: Math.max(peak.heapUsedMB, sample.heapUsedMB),
+    externalMB: Math.max(peak.externalMB, sample.externalMB),
+  });
 
   const targetTiles = options?.tileFilter
     ? ingested.grid.tiles.filter(options.tileFilter)
@@ -643,9 +675,7 @@ export function buildTiledStudyScenes(
     if (buildTimeMs > maxTileBuildTimeMs) maxTileBuildTimeMs = buildTimeMs;
 
     const memNow = captureProcessMemorySnapshot();
-    if (memNow.heapUsedMB > peakMemory.heapUsedMB) {
-      peakMemory = memNow;
-    }
+    peakMemory = mergePeakMemory(peakMemory, memNow);
 
     builtTiles.push({
       tile,
@@ -675,6 +705,9 @@ export function buildTiledStudyScenes(
         )
       : 0;
 
+  const memoryAfterAllTiles = captureProcessMemorySnapshot();
+  peakMemory = mergePeakMemory(peakMemory, memoryAfterAllTiles);
+
   return {
     grid: ingested.grid,
     tiles: builtTiles,
@@ -683,7 +716,7 @@ export function buildTiledStudyScenes(
     maxTileBuildTimeMs,
     avgTileBuildTimeMs,
     peakMemory,
-    memoryAfterAllTiles: captureProcessMemorySnapshot(),
+    memoryAfterAllTiles,
     dispose: () => {
       for (const entry of builtTiles) {
         entry.scene.dispose();

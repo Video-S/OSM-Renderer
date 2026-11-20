@@ -24,8 +24,8 @@ related_adrs:
 ## Summary
 Design and incrementally implement a **baked-first hybrid** regional tiling, viewport streaming, and orthographic zoom-driven LOD architecture allowing seamless interactive exploration of **Twente** (~`45 × 35 km`) and eventually the entire province of **Overijssel** (`~88 × 82.6 km`) without loading the entire province into one scene or sacrificing E2+/R+ surface continuity, OSM feature provenance, or responsive camera navigation.
 
-> **Current Status (`2026-11-20`)**: **`in_progress` — Milestone M1a Implemented (Pending Project-Owner Review & Windows Canonical SQLite Verification)**.
-> Milestone **M1a** (ETRS89 / UTM Zone 32N `EPSG:25832` regional projection, deterministic `512 m` aligned Hengelo `8 × 8` tile grid, 2D/3D tile-box clipping, same-source single-scene reference parity & seam validation, explicit `64 m` collar sufficiency auditing, synthetic `2 × 2` multi-tile seam stress suite, and canonical Hengelo `8 × 8` SQLite verification script) is complete in the workspace.
+> **Current Status (`2026-11-20`)**: **`in_progress` — Milestone M1a Seam/Parity Fixes & A/B/C Diagnostics Implemented (Pending Project-Owner Local Windows Canonical Verification)**.
+> Milestone **M1a** (ETRS89 / UTM Zone 32N `EPSG:25832` regional projection, deterministic `512 m` aligned Hengelo `8 × 8` tile grid, 2D/3D tile-box clipping, same-source single-scene reference parity & seam validation, explicit `64 m` collar sufficiency auditing, `A/B/C` diagnostic separation (`TiledDiagnostics.ts`), and resolution of all 68 canonical Hengelo verification defects + reporting bugs) is updated in the workspace.
 > **M1b** (`OSMTILE1` binary codec, `overijssel-tiles-261114-8ae28196.sqlite` persistence, `ThemeMaterialRegistry`), **M2** (streaming runtime / `/api/tiles` / Workers / floating origin), **M3** (LOD1–LOD3 & `CameraController` `minZoom`), and **M4** (province-wide graph & bake) remain **unapproved / not implemented**.
 
 ## Context
@@ -46,14 +46,21 @@ Design and incrementally implement a **baked-first hybrid** regional tiling, vie
      - grade-separated bridge/tunnel ramp components exceeding `64 m` (`bridge_or_tunnel_component_exceeds_collar`);
      - global railway continuous track-phase propagation (`computeContinuousTrackPhases` across multi-tile connected components) and long road/barrier contexts (`railway_phase_or_switch_exceeds_collar`, `road_edge_or_blocker_exceeds_collar`, `barrier_structural_context_exceeds_collar`);
      - `GeometryBuilder`'s `MAX_SCENE_TREES = 2200` single-scene cap (`SceneTreeBudgetAudit`), which truncates large multi-tile forests globally while per-tile budgets do not.
-   - **Seam Continuity Resolution in M1a**: Passing precomputed global `InfrastructureGraph` descriptors, `roadGradeSeparatedPlans`, `railwayGradeSeparatedPlans`, `railwayTrackPhases`, `tunnelEntrances`, and `existingParkingSpaceBoxes` alongside exact 2D `clipMultiPolygonToBox2D` (`polygon-clipping`), exact 3D `clipBufferGeometryToBoxXZ` (Sutherland-Hodgman prism clip preserving attributes and `faceRanges`), and half-open `[minX, maxX) × [minZ, maxZ)` centroid ownership eliminates fake road end-caps, coplanar overlaps, building splits, and phase/elevation discontinuities while preserving 100% backward compatibility with non-tiled `GeometryBuilder` execution.
+    - **Seam Continuity & Canonical Defect Resolution in M1a**: Passing precomputed global `InfrastructureGraph` descriptors, `roadGradeSeparatedPlans`, `railwayGradeSeparatedPlans`, `railwayTrackPhases`, `tunnelEntrances`, `existingParkingSpaceBoxes`, and **precomputed global `planarResolution`** (`resolvedById` with global tunnel-portal cutouts + `polygonRingsById`) alongside hardened 2D/3D `MeshBoxClipper` (`[startFace, endFace)` half-open ranges, `Float32` horizontal triangle sliver preservation) and `GraphRoadGeometryBuilder` unconditional `registerRoadFootprint` + 3D `clipBufferGeometryToBoxXZ` fallback eliminates fake road end-caps, road area drops, coplanar overlaps, building `-1` parity mismatches, railway curved-bridge UV phase drift, and duplicate-forest tree/provenance drift while preserving 100% backward compatibility with non-tiled `GeometryBuilder` execution.
+    - **Canonical `8 × 8` Hengelo Root Causes Fixed (`68` defects + `2` reporting bugs)**:
+      1. *48 building `-1` triangle mismatches*: `SeamValidator.extractBuildingStatsFromScene` and `extractUpwardTrianglesXZ` treated half-open `[startFace, endFace)` ranges (`GeometryBuilder.mergeWithFaceRanges`) as inclusive (`endFace - startFace + 1`), inflating reference counts by `+1` wherever single-building tile buckets merged 2 material groups into 1 contiguous `FaceFeatureRange`. `MeshBoxClipper` also had an inclusive `faceIdx <= endFace` check fixed to half-open `<`.
+      2. *6 road class area mismatches & 12 unmatched road seam vertex reports*: `GraphRoadGeometryBuilder` skipped `registerRoadFootprint` and discarded entire road segments when 2D-clipped `renderPolygons` produced empty Earcut shapes or `Float32`-degenerate horizontal triangles under `validateAndPruneHorizontalGeometry` (resolved via unconditional `registerRoadFootprint` + 3D `ShapeGeometry` -> `clipBufferGeometryToBoxXZ` fallback); `SeamValidator` Check D used asymmetric raw vertex proximity (flagging non-crossing cul-de-sacs and Earcut Steiner differences along shared seam edges), replaced with symmetric seam-aligned boundary-edge interval coverage + elevation continuity.
+      3. *1 railway UV phase mismatch (`0.075829`)*: `RailwayGeometryBuilder` curved bridge adaptive sampling queried tile-dependent `hostIndex`, altering `profile3D` arc length across tiles (replaced with pure geometric curvature sampling; `SeamValidator` Check E also corrected from `% 1.0` to `visualSleeperPeriodMeters` `1.45 m` / `1.65 m` with exact-coordinate tie-breaking).
+      4. *`+12` extra forest trees & `+6` extra `sourceFeatureIds`*: Per-tile `resolveAndValidatePlanarPolygons` lost global deduplication/subtraction context beyond `64 m` collars (resolved by precomputing `planarResolution` once in `ingestCanonicalStudyGeoJson` and adding `extraSourceFeatureIds` parity check in `SeamValidator`).
+      5. *Reporting bugs*: `TiledStudyPipeline.peakMemory` updated on `heapUsedMB` alone (`rssMB` peak < `afterAllTiles`, fixed via per-field `Math.max` including `afterAllTiles`), and `CollarAudit` serialized `Infinity` tunnel portal distances as JSON `null` (sanitized via `finiteOrZero` and classified into `resolved_by_global_context` vs `tile_local_collar`).
+      6. *Diagnostic A/B/C separation*: Added `TiledDiagnostics.runDiagnosticAbcComparison` (`--diagnose-abc` in `scripts/verify-hengelo-m1a.ts`) comparing **(A)** single-scene reference, **(B)** reference partitioned/clipped directly into 64 tiles, and **(C)** independently built M1a tiles.
 3. **Non-Scope**: No gameplay mechanics, combat, physics simulation, traffic/agent AI, or large ECS frameworks (`GEMINI.md` / `docs/architecture.md`).
 
 ## Phased Milestones (M1 Split Into M1a & M1b)
 
 - **Milestone M1a (Projection, Tile Grid, Seam Continuity & `64 m` Collar Validation — Implemented, Pending Owner Verification)**:
-  - `src/world/tiling/RegionalProjection.ts`, `TileGrid.ts`, `MeshBoxClipper.ts`, `CollarAudit.ts`, `TiledStudyPipeline.ts`, `SeamValidator.ts`, backward-compatible `tileClipBounds` / `precomputedGlobalPlans` hooks on `LocalGeoJsonProvider.ts`, `GeometryBuilder.ts`, `GraphRoadGeometryBuilder.ts`, `RailwayGeometryBuilder.ts`, and `SurfaceFirstRailwayBallast.ts`.
-  - Tests & CLI: `src/world/TilingProjectionAndGrid.test.ts`, `src/world/TilingSeamContinuity.test.ts`, `src/world/TilingHengeloIntegration.test.ts` (disk-gated), and `scripts/verify-hengelo-m1a.ts`.
+  - `src/world/tiling/RegionalProjection.ts`, `TileGrid.ts`, `MeshBoxClipper.ts`, `CollarAudit.ts`, `TiledStudyPipeline.ts`, `SeamValidator.ts`, `TiledDiagnostics.ts`, backward-compatible `tileClipBounds` / `precomputedGlobalPlans` hooks on `LocalGeoJsonProvider.ts`, `GeometryBuilder.ts`, `GraphRoadGeometryBuilder.ts`, `RailwayGeometryBuilder.ts`, and `SurfaceFirstRailwayBallast.ts`.
+  - Tests & CLI: `src/world/TilingProjectionAndGrid.test.ts` (`7`), `src/world/TilingSeamContinuity.test.ts` (`5`), `src/world/TilingHengeloIntegration.test.ts` (disk-gated), and `scripts/verify-hengelo-m1a.ts` (with `--diagnose-abc`).
 - **Milestone M1b (Offline Tile Baker, `OSMTILE1` Codec & `ThemeMaterialRegistry` — Unapproved / Future)**:
   - Incorporate M1a `CollarAudit` requirements (precomputed global graph/plans/phases + tile-local `Float32` transform + `OSMTILE1` binary serialization + `overijssel-tiles-261114-8ae28196.sqlite` + shared `ThemeMaterialRegistry` prototype).
 - **Milestone M2 (Client Streaming Runtime, Floating Origin & Disposal — Unapproved / Future)**:
@@ -79,17 +86,24 @@ Design and incrementally implement a **baked-first hybrid** regional tiling, vie
 
 ## Verification
 - **AI Studio Sandbox Verification (`2026-11-20`)**:
-  - Targeted sequential tests (`DISABLE_OVERIJSSEL_BOOTSTRAP=1 npx tsx --test --test-concurrency=1 src/world/TilingProjectionAndGrid.test.ts src/world/TilingSeamContinuity.test.ts src/world/TilingHengeloIntegration.test.ts src/world/OverijsselOfflineStore.test.ts`): `14` passed, `0` failed, `2` skipped (`TilingHengeloIntegration.test.ts` and full-Overijssel test in `OverijsselOfflineStore.test.ts`, both skipped cleanly because `data/osm/overijssel-261114-8ae28196.sqlite` is absent on disk in the sandbox).
+  - Sequential tiling suite (`DISABLE_OVERIJSSEL_BOOTSTRAP=1 npx tsx --test --test-concurrency=1 src/world/TilingProjectionAndGrid.test.ts src/world/TilingSeamContinuity.test.ts src/world/TilingHengeloIntegration.test.ts`): `12` passed, `0` failed, `1` skipped (`TilingHengeloIntegration.test.ts` skipped cleanly because `data/osm/overijssel-261114-8ae28196.sqlite` is absent on disk in the sandbox).
+  - Sequential E2+ / R+ regression suite (`DISABLE_OVERIJSSEL_BOOTSTRAP=1 npx tsx --test --test-concurrency=1 src/world/GraphRoadRendering.test.ts src/world/RailwayRendering.test.ts`): `40` passed (`31` road + `9` railway), `0` failed.
   - TypeScript check (`npm run lint` / `tsc --noEmit`) & Production build (`npm run build` / `vite build`): verified clean (see final co-execution record).
-- **Pending Project-Owner Local Windows Verification (Requires `data/osm/overijssel-261114-8ae28196.sqlite`)**:
-  - Canonical Hengelo `8 × 8` CLI benchmark & seam audit:
-    `npx tsx scripts/verify-hengelo-m1a.ts --json-out=benchmarks/results/tkt028-m1a-hengelo.json`
+- **Pending Project-Owner Local Windows Canonical Verification (PowerShell, Requires `data/osm/overijssel-261114-8ae28196.sqlite`)**:
+  - Canonical Hengelo `8 × 8` CLI benchmark, A/B/C diagnostics & seam audit:
+    ```powershell
+    $env:DISABLE_OVERIJSSEL_BOOTSTRAP="1"
+    npx tsx scripts/verify-hengelo-m1a.ts --diagnose-abc --json-out=benchmarks/results/tkt028-m1a-hengelo.json
+    ```
   - Disk-gated integration test:
-    `DISABLE_OVERIJSSEL_BOOTSTRAP=1 npx tsx --test --test-concurrency=1 src/world/TilingHengeloIntegration.test.ts`
+    ```powershell
+    $env:DISABLE_OVERIJSSEL_BOOTSTRAP="1"
+    npx tsx --test --test-concurrency=1 src/world/TilingHengeloIntegration.test.ts
+    ```
 
 ## Related files and documentation
 - Proposal: [`docs/regional-tiling-streaming-lod-proposal.md`](../docs/regional-tiling-streaming-lod-proposal.md)
-- M1a Modules: `src/world/tiling/RegionalProjection.ts`, `src/world/tiling/TileGrid.ts`, `src/world/tiling/MeshBoxClipper.ts`, `src/world/tiling/CollarAudit.ts`, `src/world/tiling/TiledStudyPipeline.ts`, `src/world/tiling/SeamValidator.ts`
+- M1a Modules: `src/world/tiling/RegionalProjection.ts`, `src/world/tiling/TileGrid.ts`, `src/world/tiling/MeshBoxClipper.ts`, `src/world/tiling/CollarAudit.ts`, `src/world/tiling/TiledStudyPipeline.ts`, `src/world/tiling/SeamValidator.ts`, `src/world/tiling/TiledDiagnostics.ts`
 - M1a Verification & Tests: `scripts/verify-hengelo-m1a.ts`, `src/world/TilingProjectionAndGrid.test.ts`, `src/world/TilingSeamContinuity.test.ts`, `src/world/TilingHengeloIntegration.test.ts`
 - Related Docs: `docs/architecture.md`, `docs/camera-and-world-coordinates.md`, `docs/offline-overijssel-osm-dataset.md`, `docs/e2-plus-surface-first-road-rendering.md`, `docs/STATUS.md`
 - Core Subsystems Referenced: `src/world/WorldCoordinates.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/world/SceneResourceManager.ts`, `src/world/GeometryBuilder.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/railways/RailwayGeometryBuilder.ts`, `src/world/infrastructure/railways/SurfaceFirstRailwayBallast.ts`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`, `src/server/osm/OverijsselOsmStore.ts`, `src/server/osm/overijsselBoundary.ts`

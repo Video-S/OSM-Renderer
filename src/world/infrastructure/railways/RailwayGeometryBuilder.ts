@@ -1243,13 +1243,18 @@ export function buildRailwayGroupInternal(
     const subdivPts = subdivideSharpPolylineCorners2D(cleanPts);
     if (subdivPts.length < 2) continue;
 
+    const isBridgeForDensify = r.placementClassification
+      ? !r.placementClassification.hasConflict && r.placementClassification.isElevatedBridge
+      : Boolean(r.isBridge || r.layer > 0);
     const tUv0 = performance.now();
     const densifiedPts: [number, number][] = [subdivPts[0]];
     for (let i = 0; i < subdivPts.length - 1; i++) {
       const p0 = subdivPts[i];
       const p1 = subdivPts[i + 1];
       const segLen = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-      if (segLen > 2.2) {
+      // Bridges already resample every segment to <= 2.2 m inside buildBridgeProfile3D;
+      // keep densifiedPts independent of tile-sliced hostIndex on bridges.
+      if (segLen > 2.2 && !isBridgeForDensify) {
         const d0 = hostIndex.queryMinDistanceToHostCenterline(p0[0], p0[1], r.id).minDist;
         const d1 = hostIndex.queryMinDistanceToHostCenterline(p1[0], p1[1], r.id).minDist;
         const mx = (p0[0] + p1[0]) * 0.5;
@@ -1382,16 +1387,13 @@ export function buildRailwayGroupInternal(
             const dx2 = next.x - curr.x;
             const dz2 = next.z - curr.z;
             const l2 = Math.hypot(dx2, dz2) || 1e-6;
-            if ((dx1 * dx2 + dz1 * dz2) / (l1 * l2) < 0.99985) {
+            // Purely geometric curvature & deterministic span check (never depends on tile-sliced hostIndex)
+            if ((dx1 * dx2 + dz1 * dz2) / (l1 * l2) < 0.99996) {
               filtered.push(curr);
               continue;
             }
             const span = curr.arcLength - prev.arcLength;
-            if (
-              span >= 1.75 &&
-              (hostIndex.queryMinDistanceToHostCenterline(curr.x, curr.z, r.id).minDist < 3.6 ||
-                span >= 14)
-            ) {
+            if (span >= 14) {
               filtered.push(curr);
             }
           }

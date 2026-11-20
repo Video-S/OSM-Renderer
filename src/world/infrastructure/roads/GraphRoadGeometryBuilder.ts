@@ -1491,40 +1491,100 @@ export function buildGraphAtGradeRoadGeometries(
             }
             continue;
           }
+          registerRoadFootprint(sub.subId, isPath, visible);
+
+          const buildHorizontalRoadGeo = (polys: MultiPolygonCoords): THREE.BufferGeometry | null => {
+            const shapes = createShapesFromMultiPolygon(polys);
+            if (shapes.length === 0) return null;
+            const g = new THREE.ShapeGeometry(shapes);
+            g.rotateX(-Math.PI / 2);
+            g.translate(0, roadElevation, 0);
+            if (g.hasAttribute('uv')) g.deleteAttribute('uv');
+            if (!validateAndPruneHorizontalGeometry(g)) {
+              g.dispose();
+              return null;
+            }
+            return g;
+          };
+
+          if (
+            tileClipBounds &&
+            (maxX < tileClipBounds.minX ||
+              minX > tileClipBounds.maxX ||
+              maxZ < tileClipBounds.minZ ||
+              minZ > tileClipBounds.maxZ)
+          ) {
+            continue;
+          }
+
           const renderPolygons = tileClipBounds
             ? clipMultiPolygonToBox2D(visible, tileClipBounds)
             : visible;
-          if (renderPolygons.length === 0) {
-            timing.triangulationAndValidationTimeMs += performance.now() - tTotalStart * 0;
-            registerRoadFootprint(sub.subId, isPath, visible);
-            continue;
-          }
+
           const tTriStart = performance.now();
-          const shapes = createShapesFromMultiPolygon(renderPolygons);
-          if (shapes.length === 0) {
+          let geo: THREE.BufferGeometry | null = null;
+          let failedEmptyShapes = false;
+          let failedInvalidTriangles = false;
+
+          if (renderPolygons.length > 0) {
+            const shapes = createShapesFromMultiPolygon(renderPolygons);
+            if (shapes.length === 0) {
+              failedEmptyShapes = true;
+            } else {
+              const candidateGeo = new THREE.ShapeGeometry(shapes);
+              candidateGeo.rotateX(-Math.PI / 2);
+              candidateGeo.translate(0, roadElevation, 0);
+              if (candidateGeo.hasAttribute('uv')) candidateGeo.deleteAttribute('uv');
+              if (validateAndPruneHorizontalGeometry(candidateGeo)) {
+                geo = candidateGeo;
+              } else {
+                candidateGeo.dispose();
+                failedInvalidTriangles = true;
+              }
+            }
+          }
+
+          if (!geo && tileClipBounds) {
+            const unclippedGeo = buildHorizontalRoadGeo(visible);
+            if (unclippedGeo) {
+              const clippedGeo = clipBufferGeometryToBoxXZ(unclippedGeo, tileClipBounds);
+              unclippedGeo.dispose();
+              if (clippedGeo) {
+                if (validateAndPruneHorizontalGeometry(clippedGeo)) {
+                  geo = clippedGeo;
+                } else {
+                  clippedGeo.dispose();
+                }
+              } else if (renderPolygons.length === 0) {
+                // Road bbox touched tileClipBounds without intersecting polygon area; valid skip
+                timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
+                continue;
+              }
+            }
+          }
+
+          if (!geo) {
             timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
-            stats.emptyShapeCount++;
-            stats.rejectedOrDegenerateCount++;
-            recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
+            if (renderPolygons.length === 0 && !tileClipBounds) {
+              continue;
+            }
+            if (failedEmptyShapes) {
+              stats.emptyShapeCount++;
+              stats.rejectedOrDegenerateCount++;
+              recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
+            } else if (failedInvalidTriangles || renderPolygons.length > 0) {
+              stats.invalidTriangleGeometryCount++;
+              stats.rejectedOrDegenerateCount++;
+              recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
+            }
             continue;
           }
-          const geo = new THREE.ShapeGeometry(shapes);
-          geo.rotateX(-Math.PI / 2);
-          geo.translate(0, roadElevation, 0);
-          if (geo.hasAttribute('uv')) geo.deleteAttribute('uv');
-          if (!validateAndPruneHorizontalGeometry(geo)) {
-            timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
-            geo.dispose();
-            stats.invalidTriangleGeometryCount++;
-            stats.rejectedOrDegenerateCount++;
-            recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
-            continue;
-          }
+
           timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
           resourceManager.registerGeometry(geo);
-          registerRoadFootprint(sub.subId, isPath, visible);
-          stats.outputPolygonCount += renderPolygons.length;
-          for (const poly of renderPolygons) {
+          const countedPolygons = renderPolygons.length > 0 ? renderPolygons : visible;
+          stats.outputPolygonCount += countedPolygons.length;
+          for (const poly of countedPolygons) {
             if (poly.length > 1) {
               stats.outputHoleRingCount += poly.length - 1;
             }

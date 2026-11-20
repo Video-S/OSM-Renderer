@@ -97,7 +97,58 @@ export function clipMultiPolygonToBox2D(
     ) as unknown as MultiPolygonCoords;
     return filterDegenerateBooleanArtifacts(clipped);
   } catch {
-    return [];
+    // Retry with coordinate snapping and per-polygon clipping so a single sweep-line
+    // edge case never silently drops an entire valid multi-polygon road or planar patch.
+    const snapPolygon = (poly: [number, number][][], quantum: number): [number, number][][] => {
+      const snappedRings: [number, number][][] = [];
+      for (const ring of poly) {
+        const outRing: [number, number][] = [];
+        for (const pt of ring) {
+          const sx = Math.round(pt[0] / quantum) * quantum;
+          const sz = Math.round(pt[1] / quantum) * quantum;
+          if (
+            outRing.length === 0 ||
+            Math.abs(sx - outRing[outRing.length - 1][0]) > quantum * 0.5 ||
+            Math.abs(sz - outRing[outRing.length - 1][1]) > quantum * 0.5
+          ) {
+            outRing.push([sx, sz]);
+          }
+        }
+        if (outRing.length >= 3) {
+          const first = outRing[0];
+          const last = outRing[outRing.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            outRing.push([first[0], first[1]]);
+          }
+          if (outRing.length >= 4) {
+            snappedRings.push(outRing);
+          }
+        }
+      }
+      return snappedRings;
+    };
+
+    const collected: MultiPolygonCoords = [];
+    for (const poly of mp) {
+      let clippedOne: MultiPolygonCoords | null = null;
+      for (const quantum of [1e-5, 1e-4]) {
+        const snapped = snapPolygon(poly, quantum);
+        if (snapped.length === 0) continue;
+        try {
+          clippedOne = polygonClipping.intersection(
+            [snapped] as unknown as polygonClipping.Geom,
+            boxGeom as unknown as polygonClipping.Geom
+          ) as unknown as MultiPolygonCoords;
+          break;
+        } catch {
+          clippedOne = null;
+        }
+      }
+      if (clippedOne && clippedOne.length > 0) {
+        collected.push(...clippedOne);
+      }
+    }
+    return filterDegenerateBooleanArtifacts(collected);
   }
 }
 
@@ -230,18 +281,18 @@ function resolveFaceRangeForInputFace(
   if (!faceRanges || faceRanges.length === 0) return null;
   while (
     cursorRef.idx < faceRanges.length &&
-    faceIdx > faceRanges[cursorRef.idx].endFace
+    faceIdx >= faceRanges[cursorRef.idx].endFace
   ) {
     cursorRef.idx++;
   }
   const current = faceRanges[cursorRef.idx];
-  if (current && faceIdx >= current.startFace && faceIdx <= current.endFace) {
+  if (current && faceIdx >= current.startFace && faceIdx < current.endFace) {
     return current.info;
   }
   // Fallback linear lookup if unsorted
   for (let i = 0; i < faceRanges.length; i++) {
     const entry = faceRanges[i];
-    if (faceIdx >= entry.startFace && faceIdx <= entry.endFace) {
+    if (faceIdx >= entry.startFace && faceIdx < entry.endFace) {
       return entry.info;
     }
   }
@@ -357,10 +408,23 @@ export function clipBufferGeometryToBoxXZ(
     const area3DSq = 0.25 * (cx * cx + cy * cy + cz * cz);
     if (area3DSq <= TRI_AREA_3D_EPS * TRI_AREA_3D_EPS) return;
 
-    // If essentially horizontal, reject zero-area XZ slivers on boundary edges
+    // If essentially horizontal, reject zero-area XZ slivers and Float32-quantized micro-slivers
     const areaXZ = 0.5 * Math.abs(abx * acz - abz * acx);
-    if (Math.abs(aby) < 1e-6 && Math.abs(acy) < 1e-6 && areaXZ <= TRI_AREA_XZ_EPS) {
-      return;
+    if (Math.abs(aby) < 1e-6 && Math.abs(acy) < 1e-6) {
+      if (areaXZ <= TRI_AREA_XZ_EPS) {
+        return;
+      }
+      const fx0 = Math.fround(a.x);
+      const fz0 = Math.fround(a.z);
+      const fx1 = Math.fround(b.x);
+      const fz1 = Math.fround(b.z);
+      const fx2 = Math.fround(c.x);
+      const fz2 = Math.fround(c.z);
+      const cyF32 = (fz1 - fz0) * (fx2 - fx0) - (fx1 - fx0) * (fz2 - fz0);
+      const areaF32XZ = 0.5 * Math.abs(cyF32);
+      if (areaF32XZ <= 1e-6 || (cy > 0 && cyF32 <= 0 && areaF32XZ <= 1e-3)) {
+        return;
+      }
     }
 
     const pushV = (v: ClipVertex) => {
@@ -384,12 +448,12 @@ export function clipBufferGeometryToBoxXZ(
 
     if (info) {
       const lastRange = outFaceRanges[outFaceRanges.length - 1];
-      if (lastRange && lastRange.info === info && lastRange.endFace === outFaceCount - 1) {
-        lastRange.endFace = outFaceCount;
+      if (lastRange && lastRange.info === info && lastRange.endFace === outFaceCount) {
+        lastRange.endFace = outFaceCount + 1;
       } else {
         outFaceRanges.push({
           startFace: outFaceCount,
-          endFace: outFaceCount,
+          endFace: outFaceCount + 1,
           info,
         });
       }

@@ -31,6 +31,11 @@ import {
   sanitizeOsmTags,
 } from '../../GeometryBuilder';
 import {
+  clipBufferGeometryToBoxXZ,
+  clipMultiPolygonToBox2D,
+  type ClipBox2D,
+} from '../../tiling/MeshBoxClipper';
+import {
   compareStringsCodeUnit,
   EdgeSegmentProvenance,
 } from '../topology/InfrastructureGraph';
@@ -510,6 +515,8 @@ export interface GraphRoadGeometryBuildOptions {
   resourceManager: SceneResourceManager;
   /** Optional pipeline diagnostics object to record clipping failures or rejected geometry fallbacks. */
   diagnostics?: ProcessedMapData['diagnostics'];
+  /** Optional tile XZ bounds; when provided, clips emitted road/step meshes to exact tile boundaries after priority subtraction. */
+  tileClipBounds?: ClipBox2D;
 }
 
 /**
@@ -1031,6 +1038,7 @@ export function buildGraphAtGradeRoadGeometries(
     roadWidthMultiplier,
     resourceManager,
     diagnostics,
+    tileClipBounds,
   } = options;
   void options.surfaceFirst;
 
@@ -1483,8 +1491,16 @@ export function buildGraphAtGradeRoadGeometries(
             }
             continue;
           }
+          const renderPolygons = tileClipBounds
+            ? clipMultiPolygonToBox2D(visible, tileClipBounds)
+            : visible;
+          if (renderPolygons.length === 0) {
+            timing.triangulationAndValidationTimeMs += performance.now() - tTotalStart * 0;
+            registerRoadFootprint(sub.subId, isPath, visible);
+            continue;
+          }
           const tTriStart = performance.now();
-          const shapes = createShapesFromMultiPolygon(visible);
+          const shapes = createShapesFromMultiPolygon(renderPolygons);
           if (shapes.length === 0) {
             timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
             stats.emptyShapeCount++;
@@ -1507,8 +1523,8 @@ export function buildGraphAtGradeRoadGeometries(
           timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
           resourceManager.registerGeometry(geo);
           registerRoadFootprint(sub.subId, isPath, visible);
-          stats.outputPolygonCount += visible.length;
-          for (const poly of visible) {
+          stats.outputPolygonCount += renderPolygons.length;
+          for (const poly of renderPolygons) {
             if (poly.length > 1) {
               stats.outputHoleRingCount += poly.length - 1;
             }
@@ -1544,15 +1560,24 @@ export function buildGraphAtGradeRoadGeometries(
           stats.renderedRoadRibbonCount++;
           for (const sid of sids) renderedSourceIds.add(sid);
           if (edge.roadClass === 'steps') {
-            const treadGeo = generateGraphStepTreads(
+            const rawTreadGeo = generateGraphStepTreads(
               pts, width, roadElevation + ELEVATION_POLICY.STEP_TREAD_OFFSET
             );
-            if (treadGeo) {
-              if (validateAndPruneHorizontalGeometry(treadGeo)) {
-                resourceManager.registerGeometry(treadGeo);
-                roadsByClass.get(edge.roadClass)!.push({ geom: treadGeo, info: roadInfo });
-              } else {
-                treadGeo.dispose();
+            if (rawTreadGeo) {
+              const treadGeo = tileClipBounds
+                ? (() => {
+                    const clipped = clipBufferGeometryToBoxXZ(rawTreadGeo, tileClipBounds);
+                    rawTreadGeo.dispose();
+                    return clipped;
+                  })()
+                : rawTreadGeo;
+              if (treadGeo) {
+                if (validateAndPruneHorizontalGeometry(treadGeo)) {
+                  resourceManager.registerGeometry(treadGeo);
+                  roadsByClass.get(edge.roadClass)!.push({ geom: treadGeo, info: roadInfo });
+                } else {
+                  treadGeo.dispose();
+                }
               }
             }
           }

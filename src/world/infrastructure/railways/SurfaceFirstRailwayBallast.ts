@@ -8,6 +8,7 @@ import { bufferSurfaceFirstRoadCenterline } from '../roads/SurfaceFirstRoadFootp
 import { createShapesFromMultiPolygon } from '../../GeometryBuilder';
 import { InspectableFeatureInfo, RailwayFeature } from '../../../types/MapFeature';
 import { SceneResourceManager } from '../../GeometryBuilder';
+import { clipMultiPolygonToBox2D, type ClipBox2D } from '../../tiling/MeshBoxClipper';
 
 type Point = [number, number];
 
@@ -263,7 +264,8 @@ export function buildSurfaceFirstRailwayBallastGeometries(
   ballastElevationY: number,
   resourceManager: SceneResourceManager,
   getChunkKey: (x: number, z: number) => string,
-  endpointCapPolicy?: ReadonlyMap<string, { capStart: boolean; capEnd: boolean }>
+  endpointCapPolicy?: ReadonlyMap<string, { capStart: boolean; capEnd: boolean }>,
+  tileClipBounds?: ClipBox2D
 ): SurfaceFirstBallastBuildResult {
   const t0 = performance.now();
   const footprints = buildAtGradeBallastFootprints(railways, endpointCapPolicy);
@@ -278,7 +280,11 @@ export function buildSurfaceFirstRailwayBallastGeometries(
   let totalTriangles = 0;
 
   for (const comp of components) {
-    const shapes = createShapesFromMultiPolygon(comp.unionGeometry);
+    const geomToTriangulate = tileClipBounds
+      ? clipMultiPolygonToBox2D(comp.unionGeometry, tileClipBounds)
+      : comp.unionGeometry;
+    if (geomToTriangulate.length === 0) continue;
+    const shapes = createShapesFromMultiPolygon(geomToTriangulate);
     if (!shapes || shapes.length === 0) continue;
 
     for (const shape of shapes) {

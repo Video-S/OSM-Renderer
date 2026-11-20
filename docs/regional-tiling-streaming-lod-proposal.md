@@ -1,7 +1,7 @@
 # Architectural Proposal: Regional Tiling, Streaming, Offline Baking, and Orthographic LOD (`TKT-028`)
 
-> **Status**: Proposed Architecture (Planning Only — Not Implemented; Pending Project-Owner Review)  
-> **Tracking Ticket**: [`TKT-028`](../tickets/TKT-028-regional-tiling-streaming-lod.md)  
+> **Status (`2026-11-20`)**: **Milestone M1a Implemented (Pending Owner Windows Verification & Review)**; Milestones **M1b–M4** Remain Proposed / Unapproved  
+> **Tracking Ticket**: [`TKT-028`](../tickets/TKT-028-regional-tiling-streaming-lod.md) (`in_progress`)  
 > **Prerequisites Closed**: [`TKT-026`](../tickets/TKT-026-promote-e2plus-rplus-retire-legacy-renderers.md) (E2+/R+ Sole Production Renderer), [`TKT-027`](../tickets/TKT-027-overijssel-snapshot-integrity.md) (Canonical Snapshot `overijssel-261114-8ae28196`)
 
 ---
@@ -64,26 +64,31 @@ Inspection of the current codebase identifies six concrete technical constraints
 
 ### 4.1 Spatial Partitioning & Regional Coordinate System
 
-1. **Canonical Regional Conformal Projection (`RegionalProjection`)**:
-   - Replace per-dataset tangent equirectangular math *for tiled Overijssel assets* with a single regional conformal projection anchored across Overijssel: **Transverse Mercator centered at `(lon₀ = 6.4260°, lat₀ = 52.4845°)` with WGS84 ellipsoid (`k₀ = 0.9999`, or standard ETRS89 / UTM Zone 32N `EPSG:25832`)**.
-   - Axes match Three.js conventions (`+X` East, `+Y` Up, `+Z` South so North is `-Z`) in exact **Float64 meters** globally.
-   - *Rationale*: Transverse Mercator / UTM Zone 32N keeps local scale distortion `< 0.04%` across the entire `88 × 83 km` province without external datum grid downloads (`RDTRANS`), while keeping `WorldCoordinates.ts` untouched for standalone live Overpass datasets.
+1. **Canonical Regional Conformal Projection (`RegionalProjection` — Implemented in M1a)**:
+   - Standardized for tiled Overijssel assets on **ETRS89 / UTM Zone 32N (`EPSG:25832`)** using 4th-order Krüger/Karney ellipsoidal Transverse Mercator series (`src/world/tiling/RegionalProjection.ts`, `< 1e-6 m` forward/inverse round-trip precision).
+   - Axes match Three.js conventions (`+X` East, `+Y` Up, `+Z` South so North is `-Z`) shifted to a deterministic Float64 study/grid origin while keeping `WorldCoordinates.ts` untouched for standalone live Overpass datasets.
+   - *Rationale*: `EPSG:25832` provides standardized European conformal metric coordinates across the entire `88 × 83 km` province without external datum grid downloads (`RDTRANS`), avoiding the `~1.7%` N–S horizontal scale drift of single-origin tangent equirectangular math.
 
 2. **Quadtree Grid & Proposed Initial Tile Sizes**:
-   - Anchor the quadtree origin `(gridOriginX, gridOriginZ)` at an integer `4,096 m`-aligned corner enclosing `OVERIJSSEL_BBOX` + margin (approx. `24 × 24` LOD3 root cells covering `~98.3 × 98.3 km`).
+   - Anchor the grid in integer `tileSizeMeters` (`512 m` at LOD0) cells in `EPSG:25832` easting/northing (`tx = floor(E / 512)`, `ty = floor(N / 512)`), using deterministic half-open ownership `[minX, maxX) × [minZ, maxZ)` on internal boundaries (`TileGrid.ts`).
    - **Proposed Quadtree Levels**:
 
-| LOD Tier | Tile Edge Length | Tile Area | Tiles Covering `4 × 4 km` S5 | Proposed Use |
+| LOD Tier | Tile Edge Length | Tile Area | Tiles Covering `8 × 8` Hengelo (`4,096 m`) | Proposed Use |
 |---|---:|---:|---:|---|
 | **LOD0** | `512 m × 512 m` | `0.262 km²` | `64` tiles (`8 × 8`) | Street-level & neighborhood exploration; full E2+/R+ + BVH |
 | **LOD1** | `1,024 m × 1,024 m` | `1.049 km²` | `16` tiles (`4 × 4`) | District view; simplified bends, UV-ribbon rail, no micro-furniture |
 | **LOD2** | `2,048 m × 2,048 m` | `4.194 km²` | `4` tiles (`2 × 2`) | City / corridor view; arterial+residential roads, merged massing |
 | **LOD3** | `4,096 m × 4,096 m` | `16.777 km²` | `1` tile | Twente & Overijssel regional overview; highways, rail trunks, urban blocks |
 
-   - *Why `512 m` for LOD0 (Proposal)*: Closely matches Hengelo `S2` (`500 × 500 m`, `2,757` features in dense city center; far sparser in agricultural Overijssel), keeps dense urban vertex/BVH payloads compact for incremental streaming and fast `<= 16 ms` upload budgets, and nests evenly into `1,024 / 2,048 / 4,096 m` parent tiles. Actual optimal base size (`256 m` vs. `512 m`) will be validated in the Milestone 1 Hengelo PoC.
+   - *Note on Study Footprint*: An aligned `8 × 8` `512 m` LOD0 grid covers **`4,096 m × 4,096 m` (`16.78 km²`)**, which is intentionally distinct in both projection (`EPSG:25832`) and extent from the historical `TKT-026` S5 (`4,000 m × 4,000 m` tangent-equirectangular) benchmark footprint.
 
-3. **Synthesis Collar Margin (`H = 64 m`, Proposed)**:
-   - Every surface tile `[xMin, xMax] × [zMin, zMax]` pulls topological context and neighboring strokes within a `±64 m` expanded bbox before running `E2+` stroke buffering/subtraction, `R+` ballast union, and `PlanarLayerValidator`. `64 m` comfortably exceeds widest multi-lane motorway widths (`~24–32 m`), roundabout radii, and `12–15 m` adjacent track ballast envelopes.
+3. **Synthesis Collar Margin (`H = 64 m` Hypothesis — Audited in M1a)**:
+   - The `64 m` collar hypothesis was explicitly audited in M1a (`CollarAudit.ts`) rather than assumed unconditionally sufficient. While `64 m` comfortably covers road stroke widths (`~24–32 m`) and adjacent parallel ballast envelopes, `CollarAudit` proves that **raw `64 m` spatial bbox slicing alone is NOT sufficient without global/precomputed context** for:
+     1. large planar `landuse`/`parks`/`waterBodies` polygons and `> 64 m` buildings straddling tile borders;
+     2. `> 64 m` grade-separated bridge/tunnel approach ramp components;
+     3. global railway continuous sleeper/rail UV phase propagation (`computeContinuousTrackPhases` across connected track components); and
+     4. `GeometryBuilder`'s `MAX_SCENE_TREES = 2200` global cap (`SceneTreeBudgetAudit`).
+   - Consequently, M1a resolves cross-border continuity by pairing exact tile clipping (`MeshBoxClipper.ts`) with precomputed global topology, grade-separated plans, and track phases (`TiledStudyPipeline.ts`) — directly informing M1b offline baker architecture.
 
 ---
 
@@ -259,26 +264,25 @@ Naive spatial bounding-box querying followed by per-tile `GeometryBuilder` intro
 
 ## 5. Phased Implementation Plan (Small, Independently Verifiable Milestones)
 
-To protect E2+/R+ stability and avoid huge unverified changes, `TKT-028` should be delivered in four incremental, separately reviewed stages:
+To protect E2+/R+ stability and avoid huge unverified changes, `TKT-028` is structured into separately reviewed milestones (splitting Milestone 1 into **M1a** Geometry Continuity PoC and **M1b** Binary Baking & Material Registry):
 
 | Milestone | Scope | Key Deliverables | Independent Verification |
 |---|---|---|---|
-| **M1 — Foundation & Hengelo `4 × 4 km` PoC (First Implementation Milestone)** | Coordinate frame, global graph on Hengelo bbox, offline `512 m` LOD0 baker (`64 m` collar), `OSMTILE1` codec, single-tile & multi-tile seam tests | `RegionalProjection.ts`, offline tile-bake script producing `8 × 8` Hengelo LOD0 pack, `TileBinaryCodec.ts`, shared `ThemeMaterialRegistry` prototype | Automated seam-continuity tests comparing baked `8 × 8` Hengelo tiles against single-region `GeometryBuilder` baseline: `0` gaps, `0` fake end-caps, `0` positive-area coplanar overlaps, `0` duplicate buildings, exact OSM `faceRanges` parity |
-| **M2 — Streaming Runtime, Floating Origin & Disposal** | `/api/tiles/...` Express route, Web Worker `OSMTILE1` decoder, `TileStreamManager` (hysteresis + `AbortController` + bounded GPU commits), floating origin, IndexedDB cache, `TileResourceHandle` disposal | `server.ts` tile endpoint, `TileStreamManager.ts`, `TileDecodeWorker.ts`, `MapScene.tsx` tiled group + target-tracking shadow frustum | Automated load/pan/eviction/reload lifecycle tests: `0` WebGL/CPU/BVH leaks on tile eviction & full unmount, 4-theme live swap across active tiles, hover inspection continuity across tile boundaries |
-| **M3 — Orthographic Zoom-Driven LOD1–LOD3 & Wide Navigation** | Lower `CameraController` `minZoom` (`0.15` -> `0.015–0.02`), offline baker extensions for LOD1/LOD2/LOD3, atomic quadtree parent/child replacement | Multi-LOD tile generation (`512` / `1,024` / `2,048` / `4,096 m`), `CameraController.tsx` regional zoom & dynamic frustum updates | Interactive & automated zoom-sweep tests (close-up `5 px/m` -> regional `0.02 px/m` -> pan -> zoom-in): zero holes during LOD swap, responsive frame times, `> 4.5 px/m` R+ sleeper continuity |
-| **M4 — Twente & Full Overijssel Scale-Out** | Streaming/partitioned province-wide `InfrastructureGraph` generation, full Twente & Overijssel SQLite bake, CLI setup script & benchmarking | `npm run osm:bake-overijssel-tiles`, progress/disk-size reporting, Twente corridor & Overijssel scaling benchmark report | End-to-end province coverage test (`Hengelo`, `Enschede`, `Almelo`, `Zwolle`, `Deventer`, rural boundaries), bounded memory/RSS & disk verification under owner Windows testing |
+| **M1a — Projection, Tile Grid, Seam Continuity & `64 m` Collar Validation *(Implemented — Pending Owner Review)*** | `EPSG:25832` projection, deterministic `512 m` grid (`8 × 8` Hengelo `4,096 m`), exact 2D/3D clipping, shared global plans/phases, `64 m` collar audit, synthetic + canonical Hengelo seam checks | `RegionalProjection.ts`, `TileGrid.ts`, `MeshBoxClipper.ts`, `CollarAudit.ts`, `TiledStudyPipeline.ts`, `SeamValidator.ts`, `scripts/verify-hengelo-m1a.ts`, `TilingProjectionAndGrid.test.ts`, `TilingSeamContinuity.test.ts`, `TilingHengeloIntegration.test.ts` | Synthetic `2 × 2` stress test + unit suite verified (`0` seam defects, exact parity vs. same-source single-scene reference); canonical `8 × 8` SQLite verification ready via `npx tsx scripts/verify-hengelo-m1a.ts` on owner Windows checkout |
+| **M1b — Offline Tile Baker, `OSMTILE1` Codec & `ThemeMaterialRegistry` *(Unapproved / Future)*** | Tile-local `Float32` transform, `OSMTILE1` binary codec, `overijssel-tiles-261114-8ae28196.sqlite` persistence, shared `ThemeMaterialRegistry` (`4` themes), `MeshBVH` serialization | `TileBinaryCodec.ts`, `ThemeMaterialRegistry.ts`, offline LOD0 tile-pack baker for Hengelo `8 × 8`, consuming M1a global plan/phase & collar findings | Byte-size, bake speed, worker decode, 4-theme swap parity, `OSMTILE1` BVH inspection parity |
+| **M2 — Streaming Runtime, Floating Origin & Disposal *(Unapproved / Future)*** | `/api/tiles/...` Express route, Web Worker `OSMTILE1` decoder, `TileStreamManager` (hysteresis + `AbortController` + bounded GPU commits), floating origin, IndexedDB cache, `TileResourceHandle` disposal | `server.ts` tile endpoint, `TileStreamManager.ts`, `TileDecodeWorker.ts`, `MapScene.tsx` tiled group + target-tracking shadow frustum | Automated load/pan/eviction/reload lifecycle tests: `0` WebGL/CPU/BVH leaks on tile eviction & full unmount, 4-theme live swap across active tiles, hover inspection continuity across tile boundaries |
+| **M3 — Orthographic Zoom-Driven LOD1–LOD3 & Wide Navigation *(Unapproved / Future)*** | Lower `CameraController` `minZoom` (`0.15` -> `0.015–0.02`), offline baker extensions for LOD1/LOD2/LOD3, atomic quadtree parent/child replacement | Multi-LOD tile generation (`512` / `1,024` / `2,048` / `4,096 m`), `CameraController.tsx` regional zoom & dynamic frustum updates | Interactive & automated zoom-sweep tests (close-up `5 px/m` -> regional `0.02 px/m` -> pan -> zoom-in): zero holes during LOD swap, responsive frame times, `> 4.5 px/m` R+ sleeper continuity |
+| **M4 — Twente & Full Overijssel Scale-Out *(Unapproved / Future)*** | Streaming/partitioned province-wide `InfrastructureGraph` generation, full Twente & Overijssel SQLite bake, CLI setup script & benchmarking | `npm run osm:bake-overijssel-tiles`, progress/disk-size reporting, Twente corridor & Overijssel scaling benchmark report | End-to-end province coverage test (`Hengelo`, `Enschede`, `Almelo`, `Zwolle`, `Deventer`, rural boundaries), bounded memory/RSS & disk verification under owner Windows testing |
 
 ---
 
-## 6. Minimal Proof-of-Concept: Hengelo `4 × 4 km` Tiled Grid (Milestone M1)
+## 6. Proof-of-Concept Scope: Hengelo `8 × 8` Tiled Grid (Milestone M1a / M1b)
 
-Before baking all of Overijssel, **Milestone M1** builds and proves the architecture against the well-benchmarked **Hengelo `4 × 4 km`** region (`centerLonLat = [6.7935, 52.2625]`, matching the spatial footprint of `hengelo-s5-4km` / `TKT-026` live `r = 2000 m`):
+Before baking all of Overijssel, **Milestone M1a** proves geometric & topological continuity across **Hengelo** (`centerLonLat = [6.7935, 52.2625]`):
 
-1. **Grid**: `8 × 8 = 64` `LOD0` tiles of **`512 m × 512 m`** (`4,096 m × 4,096 m` total), extracted from canonical `data/osm/overijssel-261114-8ae28196.sqlite` with an outer topology margin so boundary ways do not terminate artificially at `4 × 4 km`.
-2. **Focus**: LOD0 only, E2+ roads, R+ railways, buildings, water, parks, landuse, bridges/tunnels, and BVH hover inspection. (LOD1–LOD3 wait for M3.)
-3. **Why this PoC de-risks the whole project**:
-   - Allows side-by-side geometric & visual comparison against the exact `TKT-026` single-scene `4 × 4 km` Hengelo baseline (`~2.65M` triangles).
-   - Directly measures actual compressed SQLite tile byte sizes (`OSMTILE1`), offline bake speed per tile, worker decode speed, BVH serialization overhead, and seam-clipping correctness (`SurfaceFirstRoadValidator` + `ZFightingValidator` across `7` internal E–W and `7` internal N–S tile borders).
+1. **Grid**: `8 × 8 = 64` aligned `512 m × 512 m` cells (**`4,096 m × 4,096 m`** in `EPSG:25832`, `112` internal seams) queried from canonical `data/osm/overijssel-261114-8ae28196.sqlite` (`SHA-256: 8ae28196...`) with an outer study collar (`studyExpandedGeoBounds`). Note that this aligned `4,096 m` UTM footprint differs intentionally from the legacy `TKT-026` S5 `4,000 m` tangent-equirectangular footprint; M1a validates tiled scenes directly against a **same-source single-scene reference** in identical `EPSG:25832` coordinates.
+2. **Focus in M1a**: Same-source reference vs. tiled `GeometryBuilder` output parity (roads, railways, ballast, 3D sleepers, UV phases, bridges/tunnels, buildings, water, parks, landuse, trees, barriers, `sourceFeatureId` provenance) and empirical validation of the `64 m` collar hypothesis (`CollarAudit.ts`).
+3. **Follow-On in M1b**: Binary `OSMTILE1` serialization, compressed SQLite tile storage, serialized `MeshBVH`, and `ThemeMaterialRegistry`.
 
 ---
 

@@ -26,7 +26,7 @@ import {
   WaterBodyType,
   WaterwayType,
 } from '../types/MapFeature';
-import { WorldCoordinates } from './WorldCoordinates';
+import { CoordinateTransformer, WorldCoordinates } from './WorldCoordinates';
 import { MapDataProvider, MapRegionQuery } from './MapDataProvider';
 import { classifyGeoJsonFeature, ROAD_CLASS_WIDTHS } from './FeatureCatalogue';
 import { isNonVehicularRoadClass } from './ElevationPolicy';
@@ -890,6 +890,11 @@ export function clipPolygonRingsToBox(
   };
 }
 
+export interface GeoJsonParseOptions {
+  coordinateTransformer?: CoordinateTransformer;
+  disableRegionClipping?: boolean;
+}
+
 export interface LocalGeoJsonProviderOptions {
   sourceUrl?: string;
   defaultBuildingHeight?: number;
@@ -942,7 +947,8 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     geojson: any,
     explicitRegionName?: string,
     explicitCenter?: [number, number],
-    clipRadiusMeters?: number
+    clipRadiusMeters?: number,
+    parseOptions?: GeoJsonParseOptions
   ): ProcessedMapData {
     if (!geojson || geojson.type !== 'FeatureCollection' || !Array.isArray(geojson.features)) {
       throw new Error('Invalid GeoJSON: Expected a FeatureCollection with features array');
@@ -1123,10 +1129,15 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
     const centerLon = explicitCenter ? explicitCenter[0] : (minLon + maxLon) / 2;
     const centerLat = explicitCenter ? explicitCenter[1] : (minLat + maxLat) / 2;
-    const coords = new WorldCoordinates(centerLon, centerLat);
+    const coords: CoordinateTransformer =
+      parseOptions?.coordinateTransformer ?? new WorldCoordinates(centerLon, centerLat);
+    const resolvedCenterLon = parseOptions?.coordinateTransformer ? coords.originLon : centerLon;
+    const resolvedCenterLat = parseOptions?.coordinateTransformer ? coords.originLat : centerLat;
 
     // Region clipping box when an explicit live tile center or clip radius is provided
-    const shouldClipToRegion = Boolean(explicitCenter || clipRadiusMeters !== undefined);
+    const shouldClipToRegion =
+      !parseOptions?.disableRegionClipping &&
+      Boolean(explicitCenter || clipRadiusMeters !== undefined);
     const clipExtent = clipRadiusMeters !== undefined ? Math.max(clipRadiusMeters, 1) : 380;
 
     // Pre-scan narrow streams/ditches/drains vs major obstacle ways (at-grade roads, railways, rivers/canals)
@@ -2389,7 +2400,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
 
     return {
       regionName: explicitRegionName || geojson.name || 'OpenStreetMap Region',
-      centerLonLat: [centerLon, centerLat],
+      centerLonLat: [resolvedCenterLon, resolvedCenterLat],
       bounds: {
         minX,
         maxX,
@@ -2438,7 +2449,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     }
   }
 
-  private extractPoints(geom: any, coords: WorldCoordinates): [number, number][] {
+  private extractPoints(geom: any, coords: CoordinateTransformer): [number, number][] {
     const result: [number, number][] = [];
     if (geom.type === 'Point') {
       if (Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
@@ -2464,14 +2475,18 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     return result;
   }
 
-  private extractPolygonRings(geom: any, coords: WorldCoordinates): [number, number][][][] {
+  private extractPolygonRings(geom: any, coords: CoordinateTransformer): [number, number][][][] {
     const result: [number, number][][][] = [];
+    const mapRing = (ring: [number, number][]) =>
+      coords.transformRing
+        ? coords.transformRing(ring)
+        : ring.map(([lon, lat]) => coords.toLocal(lon, lat));
 
     if (geom.type === 'Polygon') {
       const rings: [number, number][][] = [];
       for (const ring of geom.coordinates) {
         if (Array.isArray(ring) && ring.length >= 3) {
-          rings.push(coords.transformRing(ring as [number, number][]));
+          rings.push(mapRing(ring as [number, number][]));
         }
       }
       if (rings.length > 0 && rings[0].length >= 3) {
@@ -2482,7 +2497,7 @@ export class LocalGeoJsonProvider implements MapDataProvider {
         const rings: [number, number][][] = [];
         for (const ring of poly) {
           if (Array.isArray(ring) && ring.length >= 3) {
-            rings.push(coords.transformRing(ring as [number, number][]));
+            rings.push(mapRing(ring as [number, number][]));
           }
         }
         if (rings.length > 0 && rings[0].length >= 3) {
@@ -2498,17 +2513,21 @@ export class LocalGeoJsonProvider implements MapDataProvider {
     return result;
   }
 
-  private extractLineStrings(geom: any, coords: WorldCoordinates): [number, number][][] {
+  private extractLineStrings(geom: any, coords: CoordinateTransformer): [number, number][][] {
     const result: [number, number][][] = [];
+    const mapLine = (line: [number, number][]) =>
+      coords.transformLine
+        ? coords.transformLine(line)
+        : line.map(([lon, lat]) => coords.toLocal(lon, lat));
 
     if (geom.type === 'LineString') {
       if (Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
-        result.push(coords.transformLine(geom.coordinates as [number, number][]));
+        result.push(mapLine(geom.coordinates as [number, number][]));
       }
     } else if (geom.type === 'MultiLineString') {
       for (const line of geom.coordinates) {
         if (Array.isArray(line) && line.length >= 2) {
-          result.push(coords.transformLine(line as [number, number][]));
+          result.push(mapLine(line as [number, number][]));
         }
       }
     } else if (geom.type === 'GeometryCollection' && Array.isArray(geom.geometries)) {

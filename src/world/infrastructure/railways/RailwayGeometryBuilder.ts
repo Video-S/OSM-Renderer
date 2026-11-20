@@ -55,6 +55,8 @@ import {
   subtractIntervalFromList,
   subtractLateralInterval,
 } from './RailwayTopology';
+import { clipBufferGeometryToBoxXZ } from '../../tiling/MeshBoxClipper';
+import { pointInHalfOpenBox, type WorldBox2D } from '../../tiling/TileGrid';
 
 export type RailwayPrototypeMode = 'production' | 'candidateB';
 
@@ -91,6 +93,12 @@ export interface BuildRailwayPrototypeOptions {
   showHiddenUndergroundGeometry?: boolean;
   /** Canonical per-scene entrance decisions shared with terrain cutouts and road rendering. */
   tunnelEntrances?: VerifiedTunnelEntrances;
+  /** Optional tile XZ bounds for regional tiling; clips emitted railway meshes and filters 3D sleepers by half-open centroid ownership. */
+  tileClipBounds?: WorldBox2D;
+  /** Optional precomputed global continuous track phases keyed by edge/railway ID. */
+  precomputedTrackPhases?: ReadonlyMap<string, number>;
+  /** Optional precomputed global grade-separated plans for railway bridges/tunnels. */
+  precomputedGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
 }
 
 export interface RailwayBuildProfile {
@@ -234,7 +242,20 @@ function mergeItemsWithFaceRanges(
   }
 
   if (geos.length === 0) return { merged: null, faceRanges: [] };
-  const merged = mergeGeometries(geos, false);
+  const hasNonIndexed = geos.some((g) => !g.index);
+  const tempNonIndexed: THREE.BufferGeometry[] = [];
+  const mergeInputs = hasNonIndexed
+    ? geos.map((g) => {
+        if (!g.index) return g;
+        const ni = g.toNonIndexed();
+        tempNonIndexed.push(ni);
+        return ni;
+      })
+    : geos;
+  const merged = mergeGeometries(mergeInputs, false);
+  for (const ni of tempNonIndexed) {
+    ni.dispose();
+  }
   for (const g of geos) {
     resourceManager.releaseIntermediateGeometry(g);
   }
@@ -625,6 +646,7 @@ export function buildRailwayGroupInternal(
   const showUndergroundTunnelTraces = Boolean(options?.showUndergroundTunnelTraces);
   const showHiddenUndergroundGeometry = Boolean(options?.showHiddenUndergroundGeometry);
   const tunnelEntrances = options?.tunnelEntrances ?? new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
+  const tileClipBounds = options?.tileClipBounds;
 
   const effectiveSource: RailwayInfrastructureRenderSource = 'graph-R+';
   const effectiveSwitchPolicy: 'graph' = 'graph';
@@ -798,34 +820,39 @@ export function buildRailwayGroupInternal(
   const railwayEndpointCapPolicy = new Map<string, { capStart: boolean; capEnd: boolean }>();
 
   if (activeDescriptors) {
-    graphGradeSeparatedPlans = resolveGraphGradeSeparatedPlans(
-      activeDescriptors,
-      'railway',
-      (e) => {
-        const railEdge = activeDescriptors.railwayEdgesById.get(e.id);
-        return getRailwayElevations(
-          e.layer,
-          e.placementClassification ? e.placementClassification.isElevatedBridge : e.isBridge,
-          e.placementClassification ? e.placementClassification.isSubterraneanTunnel : e.isTunnel,
-          {
-            railwayType: railEdge?.railwayType,
-            electrified: railEdge?.electrified,
-            maxheightMeters: e.placementClassification?.supportingEvidence.maxheightMeters,
-          }
-        ).ballast;
-      }
-    );
-    Object.assign(gradeTransitionDiagnostics, {
-      ...graphGradeSeparatedPlans.diagnostics,
-      tunnelPortalsEmittedCount: 0,
-      undergroundRoadGeometryCount: 0,
-      undergroundRailwayGeometryCount: 0,
-      conflictingPlacementSkippedCount: skippedRailwayConflicts,
-      conflictingPlacementFallbackCount: conflictingRailwayFallbacks,
-      portalGroundCutoutsCount: 0,
-      hiddenUndergroundMeshCount: 0,
-      undergroundTracesVisible: showUndergroundTunnelTraces,
-    });
+    graphGradeSeparatedPlans =
+      options?.precomputedGradeSeparatedPlans !== undefined
+        ? options.precomputedGradeSeparatedPlans
+        : resolveGraphGradeSeparatedPlans(
+            activeDescriptors,
+            'railway',
+            (e) => {
+              const railEdge = activeDescriptors.railwayEdgesById.get(e.id);
+              return getRailwayElevations(
+                e.layer,
+                e.placementClassification ? e.placementClassification.isElevatedBridge : e.isBridge,
+                e.placementClassification ? e.placementClassification.isSubterraneanTunnel : e.isTunnel,
+                {
+                  railwayType: railEdge?.railwayType,
+                  electrified: railEdge?.electrified,
+                  maxheightMeters: e.placementClassification?.supportingEvidence.maxheightMeters,
+                }
+              ).ballast;
+            }
+          );
+    if (graphGradeSeparatedPlans) {
+      Object.assign(gradeTransitionDiagnostics, {
+        ...graphGradeSeparatedPlans.diagnostics,
+        tunnelPortalsEmittedCount: 0,
+        undergroundRoadGeometryCount: 0,
+        undergroundRailwayGeometryCount: 0,
+        conflictingPlacementSkippedCount: skippedRailwayConflicts,
+        conflictingPlacementFallbackCount: conflictingRailwayFallbacks,
+        portalGroundCutoutsCount: 0,
+        hiddenUndergroundMeshCount: 0,
+        undergroundTracesVisible: showUndergroundTunnelTraces,
+      });
+    }
     if (graphFallbackOccurred) {
       gradeTransitionDiagnostics.legacyFallbacksCount++;
     }
@@ -833,20 +860,21 @@ export function buildRailwayGroupInternal(
     const nodeById = activeDescriptors.railwayNodesById;
     const edgeById = activeDescriptors.railwayEdgesById;
 
-    for (const f of sourceFeatures) {
-      if (!f.points || f.points.length < 2) continue;
-      const plan =
-        graphGradeSeparatedPlans.plansByEdgeId.get(f.id) ??
-        (f.sourceFeatureId ? graphGradeSeparatedPlans.plansByEdgeId.get(f.sourceFeatureId) : undefined);
-      if (plan && plan.points.length >= 2) {
-        f.points = plan.points.map((pt) => [pt[0], pt[1]] as [number, number]);
-      }
+    if (graphGradeSeparatedPlans) {
+      for (const f of sourceFeatures) {
+        if (!f.points || f.points.length < 2) continue;
+        const plan =
+          graphGradeSeparatedPlans.plansByEdgeId.get(f.id) ??
+          (f.sourceFeatureId ? graphGradeSeparatedPlans.plansByEdgeId.get(f.sourceFeatureId) : undefined);
+        if (plan && plan.points.length >= 2) {
+          f.points = plan.points.map((pt) => [pt[0], pt[1]] as [number, number]);
+        }
 
-      const snap =
-        graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.id) ??
-        (f.sourceFeatureId
-          ? graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.sourceFeatureId)
-          : undefined);
+        const snap =
+          graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.id) ??
+          (f.sourceFeatureId
+            ? graphGradeSeparatedPlans.atGradePortalSnapsByEdgeId.get(f.sourceFeatureId)
+            : undefined);
       if (snap) {
         const pts = f.points.map((pt) => [pt[0], pt[1]] as [number, number]);
         if (snap.start) {
@@ -887,13 +915,15 @@ export function buildRailwayGroupInternal(
       }
     }
   }
+  }
 
   const tPhase0 = performance.now();
   const activeRailways = sortRailwaysMainlineFirst(
     sourceFeatures.filter((r) => resolveSurfaceVisibility(r) !== 'concealed_indoor'),
     divergingEdgeIdSet
   );
-  const trackPhaseMap = computeContinuousTrackPhases(activeRailways);
+  const trackPhaseMap =
+    options?.precomputedTrackPhases ?? computeContinuousTrackPhases(activeRailways);
 
   const hostIndexByScope = new Map<string, HostTrackSpatialIndex>();
   const allTracksIndexByScope = new Map<string, HostTrackSpatialIndex>();
@@ -981,7 +1011,8 @@ export function buildRailwayGroupInternal(
       atGradeElev,
       resourceManager,
       getChunkKey,
-      railwayEndpointCapPolicy.size > 0 ? railwayEndpointCapPolicy : undefined
+      railwayEndpointCapPolicy.size > 0 ? railwayEndpointCapPolicy : undefined,
+      tileClipBounds
     );
     if (surfaceFirstBallastResult.ballastItems.length > 0) {
       for (const item of surfaceFirstBallastResult.ballastItems) {
@@ -2008,15 +2039,17 @@ export function buildRailwayGroupInternal(
             isTurnoutBearer: isElongatedBearer,
             isSplitSegment: validIntervals.length > 1,
           };
-          trackSleeperBoxes.push(box);
           cellBucket.push(box);
-          sleeperBoxes3D.push(box);
-          if (sleeper3DMode === 'instanced') {
-            sleeper3DInstancedItems.push({
-              box,
-              info: railInfo,
-              chunkKey: getChunkKey(cx, cz),
-            });
+          if (!tileClipBounds || pointInHalfOpenBox(cx, cz, tileClipBounds)) {
+            trackSleeperBoxes.push(box);
+            sleeperBoxes3D.push(box);
+            if (sleeper3DMode === 'instanced') {
+              sleeper3DInstancedItems.push({
+                box,
+                info: railInfo,
+                chunkKey: getChunkKey(cx, cz),
+              });
+            }
           }
         }
       };
@@ -2177,11 +2210,19 @@ export function buildRailwayGroupInternal(
 
   const buildLayerTarget = (
     layerName: string,
-    items: ChunkedGeoItem[],
+    rawItems: ChunkedGeoItem[],
     material: THREE.Material,
     configureMesh: (mesh: THREE.Mesh) => void,
     isVisible: boolean = true
   ): THREE.Object3D | null => {
+    const items = tileClipBounds
+      ? rawItems.flatMap((it) => {
+          const clipped = clipBufferGeometryToBoxXZ(it.geom, tileClipBounds);
+          if (!clipped) return [];
+          resourceManager.registerGeometry(clipped);
+          return [{ geom: clipped, info: it.info, chunkKey: it.chunkKey }];
+        })
+      : rawItems;
     if (items.length === 0) return null;
     if (spatialChunkSizeMeters <= 0) {
       const { merged, faceRanges } = mergeItemsWithFaceRanges(items, resourceManager);
@@ -2844,5 +2885,9 @@ export function buildRailwayInfrastructure(
     ballastStrategy: options?.ballastStrategy,
     showUndergroundTunnelTraces: options?.showUndergroundTunnelTraces,
     showHiddenUndergroundGeometry: options?.showHiddenUndergroundGeometry,
+    tunnelEntrances: options?.tunnelEntrances,
+    tileClipBounds: options?.tileClipBounds,
+    precomputedTrackPhases: options?.precomputedTrackPhases,
+    precomputedGradeSeparatedPlans: options?.precomputedGradeSeparatedPlans,
   });
 }

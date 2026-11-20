@@ -32,8 +32,11 @@ import {
   generateProfiledRibbon3D,
   generateTunnelPortalAndTraceGeometries,
   GradeTransitionRenderDiagnostics,
+  GraphGradeSeparatedResolutionResult,
   resolveGraphGradeSeparatedPlans,
 } from './BridgeAndTunnelBuilder';
+import { clipBufferGeometryToBoxXZ, clipMultiPolygonToBox2D } from './tiling/MeshBoxClipper';
+import { getRingsBBoxCentroid, pointInHalfOpenBox, type WorldBox2D } from './tiling/TileGrid';
 import { classifyInfrastructurePlacement } from './InfrastructurePlacementClassifier';
 import { resolveSurfaceVisibility, VerifiedTunnelEntrances } from './SurfaceVisibilityPolicy';
 import {
@@ -169,6 +172,18 @@ export interface GeometryBuilderOptions {
   initialCameraZoom?: number;
   infrastructureRenderOptions?: Partial<InfrastructureRenderOptions>;
   infrastructureRenderPreview?: InfrastructureRenderPreviewResult | null;
+  /** Optional XZ tile bounds for regional tiling; clips continuous geometry at boundaries and assigns discrete features by half-open centroid ownership. */
+  tileClipBounds?: WorldBox2D;
+  /** Optional procedural tree cap override (default 2200 for production single-scene builds). */
+  maxSceneTrees?: number;
+  /** Optional precomputed global plans/phases shared across tiles for exact cross-border continuity. */
+  precomputedGlobalPlans?: {
+    roadGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
+    railwayGradeSeparatedPlans?: GraphGradeSeparatedResolutionResult | null;
+    railwayTrackPhases?: ReadonlyMap<string, number>;
+    tunnelEntrances?: VerifiedTunnelEntrances;
+    existingParkingSpaceBoxes?: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
+  };
 }
 
 export interface FaceFeatureRange {
@@ -784,7 +799,20 @@ function mergeWithFaceRanges(
   }
 
   if (geos.length === 0) return { merged: null, faceRanges: [] };
-  const merged = mergeGeometries(geos, false);
+  const hasNonIndexed = geos.some((g) => !g.index);
+  const tempNonIndexed: THREE.BufferGeometry[] = [];
+  const mergeInputs = hasNonIndexed
+    ? geos.map((g) => {
+        if (!g.index) return g;
+        const ni = g.toNonIndexed();
+        tempNonIndexed.push(ni);
+        return ni;
+      })
+    : geos;
+  const merged = mergeGeometries(mergeInputs, false);
+  for (const ni of tempNonIndexed) {
+    ni.dispose();
+  }
   for (const g of geos) {
     if (resourceManager) {
       resourceManager.releaseIntermediateGeometry(g);
@@ -1897,6 +1925,9 @@ export class GeometryBuilder {
     initialCameraZoom: number;
     infrastructureRenderOptions: InfrastructureRenderOptions;
     infrastructureRenderPreview: InfrastructureRenderPreviewResult | null | undefined;
+    tileClipBounds: WorldBox2D | undefined;
+    maxSceneTrees: number;
+    precomputedGlobalPlans: GeometryBuilderOptions['precomputedGlobalPlans'];
   };
 
   constructor(options: GeometryBuilderOptions = {}) {
@@ -1909,6 +1940,9 @@ export class GeometryBuilder {
         options.infrastructureRenderOptions
       ),
       infrastructureRenderPreview: options.infrastructureRenderPreview,
+      tileClipBounds: options.tileClipBounds,
+      maxSceneTrees: options.maxSceneTrees ?? 2200,
+      precomputedGlobalPlans: options.precomputedGlobalPlans,
     };
   }
 
@@ -1916,8 +1950,23 @@ export class GeometryBuilder {
     const tBuildScene0 = performance.now();
     const resourceManager = new SceneResourceManager();
     const infrastructureRenderOptions = this.options.infrastructureRenderOptions;
+    const tileClipBounds = this.options.tileClipBounds;
+    const clipGeomToTile = (g: THREE.BufferGeometry | null): THREE.BufferGeometry | null => {
+      if (!g) return null;
+      if (!tileClipBounds) {
+        resourceManager.registerGeometry(g);
+        return g;
+      }
+      const clipped = clipBufferGeometryToBoxXZ(g, tileClipBounds);
+      g.dispose();
+      if (!clipped) return null;
+      resourceManager.registerGeometry(clipped);
+      return clipped;
+    };
     // A single immutable entrance decision is shared by terrain cutouts, roads and railways.
-    const tunnelEntrances = new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
+    const tunnelEntrances =
+      this.options.precomputedGlobalPlans?.tunnelEntrances ??
+      new VerifiedTunnelEntrances(data.roads || [], data.railways || []);
     let infrastructureRenderPreview: InfrastructureRenderPreviewResult | null =
       this.options.infrastructureRenderPreview !== undefined
         ? this.options.infrastructureRenderPreview
@@ -1961,8 +2010,12 @@ export class GeometryBuilder {
     // 1. GROUND PLANE
     // ==========================================================================
     const b = data.bounds;
-    const groundWidth = Math.max(b.widthMeters * 1.5, 800);
-    const groundDepth = Math.max(b.depthMeters * 1.5, 800);
+    const groundWidth = tileClipBounds
+      ? Math.max(1e-3, tileClipBounds.maxX - tileClipBounds.minX)
+      : Math.max(b.widthMeters * 1.5, 800);
+    const groundDepth = tileClipBounds
+      ? Math.max(1e-3, tileClipBounds.maxZ - tileClipBounds.minZ)
+      : Math.max(b.depthMeters * 1.5, 800);
     const groundGeo = resourceManager.registerGeometry(
       new THREE.PlaneGeometry(groundWidth, groundDepth, 1, 1)
     );
@@ -1977,7 +2030,11 @@ export class GeometryBuilder {
     );
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.name = 'GroundPlane';
-    groundMesh.position.set((b.minX + b.maxX) / 2, ELEVATION_POLICY.GROUND, (b.minZ + b.maxZ) / 2);
+    groundMesh.position.set(
+      tileClipBounds ? (tileClipBounds.minX + tileClipBounds.maxX) * 0.5 : (b.minX + b.maxX) / 2,
+      ELEVATION_POLICY.GROUND,
+      tileClipBounds ? (tileClipBounds.minZ + tileClipBounds.maxZ) * 0.5 : (b.minZ + b.maxZ) / 2
+    );
     groundMesh.receiveShadow = true;
     drawCalls++;
 
@@ -2137,17 +2194,22 @@ export class GeometryBuilder {
 
     // Pre-collect bounding boxes of explicitly mapped individual parking spaces (`amenity=parking_space`)
     // so procedural lot stall lines do not double-draw over mapped individual spaces.
-    const existingParkingSpaceBoxes: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [];
-    for (const item of data.landuse) {
-      if (item.landuseType === 'parking_space' && item.polygon && item.polygon[0]?.length >= 3) {
-        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (const pt of item.polygon[0]) {
-          if (pt[0] < minX) minX = pt[0];
-          if (pt[0] > maxX) maxX = pt[0];
-          if (pt[1] < minZ) minZ = pt[1];
-          if (pt[1] > maxZ) maxZ = pt[1];
+    const existingParkingSpaceBoxes: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> =
+      this.options.precomputedGlobalPlans?.existingParkingSpaceBoxes
+        ? [...this.options.precomputedGlobalPlans.existingParkingSpaceBoxes]
+        : [];
+    if (!this.options.precomputedGlobalPlans?.existingParkingSpaceBoxes) {
+      for (const item of data.landuse) {
+        if (item.landuseType === 'parking_space' && item.polygon && item.polygon[0]?.length >= 3) {
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          for (const pt of item.polygon[0]) {
+            if (pt[0] < minX) minX = pt[0];
+            if (pt[0] > maxX) maxX = pt[0];
+            if (pt[1] < minZ) minZ = pt[1];
+            if (pt[1] > maxZ) maxZ = pt[1];
+          }
+          existingParkingSpaceBoxes.push({ minX, maxX, minZ, maxZ });
         }
-        existingParkingSpaceBoxes.push({ minX, maxX, minZ, maxZ });
       }
     }
 
@@ -2159,17 +2221,20 @@ export class GeometryBuilder {
           continue;
         }
 
-        const shapes =
+        const effectiveMultiPoly =
           resolved && resolved.resolvedMultiPolygon.length > 0
-            ? createShapesFromMultiPolygon(resolved.resolvedMultiPolygon)
+            ? tileClipBounds
+              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
+              : resolved.resolvedMultiPolygon
             : resolved && resolved.resolvedMultiPolygon.length === 0
               ? []
-              : (() => {
-                  const s = createShapeFromRings(item.polygon);
-                  return s ? [s] : [];
-                })();
+              : tileClipBounds
+                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+                : [item.polygon];
+        const shapes =
+          effectiveMultiPoly.length > 0 ? createShapesFromMultiPolygon(effectiveMultiPoly) : [];
         if (shapes.length === 0) {
-          if (data.diagnostics?.featuresFullySubtracted) {
+          if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
               data.diagnostics.featuresFullySubtracted.sampleIds.push(
@@ -2239,7 +2304,7 @@ export class GeometryBuilder {
             ? resolved.markingElevationY
             : ELEVATION_POLICY.PARKING_MARKINGS;
 
-          const markingGeo = generateParkingStallMarkings(
+          const rawMarkingGeo = generateParkingStallMarkings(
             item.polygon,
             subtype === 'parking_space',
             parkingMarkY,
@@ -2247,8 +2312,8 @@ export class GeometryBuilder {
             resolved?.higherOverlappingMultiPolygon,
             resolved?.resolvedMultiPolygon
           );
+          const markingGeo = clipGeomToTile(rawMarkingGeo);
           if (markingGeo) {
-            resourceManager.registerGeometry(markingGeo);
             parkingMarkingItems.push({ geom: markingGeo, info: featureInfo });
           }
         }
@@ -2350,17 +2415,22 @@ export class GeometryBuilder {
           continue;
         }
 
-        const shapes =
+        const effectiveWaterMultiPoly =
           resolved && resolved.resolvedMultiPolygon.length > 0
-            ? createShapesFromMultiPolygon(resolved.resolvedMultiPolygon)
+            ? tileClipBounds
+              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
+              : resolved.resolvedMultiPolygon
             : resolved && resolved.resolvedMultiPolygon.length === 0
               ? []
-              : (() => {
-                  const s = createShapeFromRings(item.polygon);
-                  return s ? [s] : [];
-                })();
+              : tileClipBounds
+                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+                : [item.polygon];
+        const shapes =
+          effectiveWaterMultiPoly.length > 0
+            ? createShapesFromMultiPolygon(effectiveWaterMultiPoly)
+            : [];
         if (shapes.length === 0) {
-          if (data.diagnostics?.featuresFullySubtracted) {
+          if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
               data.diagnostics.featuresFullySubtracted.sampleIds.push(
@@ -2371,8 +2441,8 @@ export class GeometryBuilder {
           continue;
         }
 
-        if (resolved && resolved.resolvedMultiPolygon.length > 0) {
-          placedWaterMultiPolygons.push(...resolved.resolvedMultiPolygon);
+        if (effectiveWaterMultiPoly.length > 0) {
+          placedWaterMultiPolygons.push(...effectiveWaterMultiPoly);
         }
 
         const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
@@ -2410,10 +2480,12 @@ export class GeometryBuilder {
           roundCaps: true,
         });
         if (!ribbon) continue;
-        const geom = resourceManager.registerGeometry(new THREE.BufferGeometry());
-        geom.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
-        geom.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
-        geom.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+        const rawWaterGeom = new THREE.BufferGeometry();
+        rawWaterGeom.setAttribute('position', new THREE.BufferAttribute(ribbon.positions, 3));
+        rawWaterGeom.setAttribute('normal', new THREE.BufferAttribute(ribbon.normals, 3));
+        rawWaterGeom.setIndex(new THREE.BufferAttribute(ribbon.indices, 1));
+        const geom = clipGeomToTile(rawWaterGeom);
+        if (!geom) continue;
         waterItems.push({
           geom,
           info: {
@@ -2491,7 +2563,7 @@ export class GeometryBuilder {
       info: InspectableFeatureInfo;
     }
     const treePlacements: TreePlacement[] = [];
-    const MAX_SCENE_TREES = 2200;
+    const MAX_SCENE_TREES = this.options.maxSceneTrees;
 
     for (const item of data.parks) {
       try {
@@ -2501,17 +2573,22 @@ export class GeometryBuilder {
           continue;
         }
 
-        const shapes =
+        const effectiveParkMultiPoly =
           resolved && resolved.resolvedMultiPolygon.length > 0
-            ? createShapesFromMultiPolygon(resolved.resolvedMultiPolygon)
+            ? tileClipBounds
+              ? clipMultiPolygonToBox2D(resolved.resolvedMultiPolygon, tileClipBounds)
+              : resolved.resolvedMultiPolygon
             : resolved && resolved.resolvedMultiPolygon.length === 0
               ? []
-              : (() => {
-                  const s = createShapeFromRings(item.polygon);
-                  return s ? [s] : [];
-                })();
-        if (shapes.length === 0) {
-          if (data.diagnostics?.featuresFullySubtracted) {
+              : tileClipBounds
+                ? clipMultiPolygonToBox2D([item.polygon], tileClipBounds)
+                : [item.polygon];
+        const shapes =
+          effectiveParkMultiPoly.length > 0
+            ? createShapesFromMultiPolygon(effectiveParkMultiPoly)
+            : [];
+        if (shapes.length === 0 && !item.has3DFoliage) {
+          if (!tileClipBounds && data.diagnostics?.featuresFullySubtracted) {
             data.diagnostics.featuresFullySubtracted.count++;
             if (data.diagnostics.featuresFullySubtracted.sampleIds.length < 10) {
               data.diagnostics.featuresFullySubtracted.sampleIds.push(
@@ -2524,17 +2601,6 @@ export class GeometryBuilder {
 
         const subtype = item.subtype || 'park';
         const exactParkY = resolved ? resolved.elevationY : ELEVATION_POLICY.PARKS;
-
-        const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
-        geom.rotateX(-Math.PI / 2);
-        geom.translate(0, exactParkY, 0);
-        if (geom.hasAttribute('uv')) {
-          geom.deleteAttribute('uv');
-        }
-
-        if (!parksBySubtype.has(subtype)) {
-          parksBySubtype.set(subtype, []);
-        }
 
         const mergedSourceIds =
           resolved && resolved.sourceFeatureIds.length > 0
@@ -2553,9 +2619,22 @@ export class GeometryBuilder {
           osmTags: sanitizeOsmTags(item.osmTags),
         };
 
-        parksBySubtype.get(subtype)!.push({ geom, info: featureInfo, sortY: exactParkY });
-        for (const sid of mergedSourceIds) {
-          if (sid) renderedSourceIds.add(sid);
+        if (shapes.length > 0) {
+          const geom = resourceManager.registerGeometry(new THREE.ShapeGeometry(shapes));
+          geom.rotateX(-Math.PI / 2);
+          geom.translate(0, exactParkY, 0);
+          if (geom.hasAttribute('uv')) {
+            geom.deleteAttribute('uv');
+          }
+
+          if (!parksBySubtype.has(subtype)) {
+            parksBySubtype.set(subtype, []);
+          }
+
+          parksBySubtype.get(subtype)!.push({ geom, info: featureInfo, sortY: exactParkY });
+          for (const sid of mergedSourceIds) {
+            if (sid) renderedSourceIds.add(sid);
+          }
         }
 
         // Generate crisp white court/field markings on sports pitches (`leisure=pitch`)
@@ -2569,15 +2648,15 @@ export class GeometryBuilder {
             }
           }
           const sportTag = String(item.osmTags?.sport || '').toLowerCase();
-          const pitchMarkGeo = generatePitchMarkings(
+          const rawPitchMarkGeo = generatePitchMarkings(
             item.polygon,
             pitchMarkY,
             sportTag,
             higherPolys,
             resolved?.higherOverlappingMultiPolygon
           );
+          const pitchMarkGeo = clipGeomToTile(rawPitchMarkGeo);
           if (pitchMarkGeo) {
-            resourceManager.registerGeometry(pitchMarkGeo);
             pitchMarkingItems.push({ geom: pitchMarkGeo, info: featureInfo });
           }
         }
@@ -2606,7 +2685,10 @@ export class GeometryBuilder {
               const tx = gx + jx;
               const tz = gz + jz;
 
-              if (isPointInPolygonRings(tx, tz, item.polygon)) {
+              if (
+                (!tileClipBounds || pointInHalfOpenBox(tx, tz, tileClipBounds)) &&
+                isPointInPolygonRings(tx, tz, item.polygon)
+              ) {
                 const frac = h1 - Math.floor(h1);
                 const rawLt = item.leafType || 'broadleaved';
                 const resolvedLt =
@@ -2733,6 +2815,10 @@ export class GeometryBuilder {
           showUndergroundTunnelTraces: infrastructureRenderOptions.showUndergroundTunnelTraces,
           showHiddenUndergroundGeometry: infrastructureRenderOptions.showHiddenUndergroundGeometry,
           tunnelEntrances,
+          tileClipBounds,
+          precomputedTrackPhases: this.options.precomputedGlobalPlans?.railwayTrackPhases,
+          precomputedGradeSeparatedPlans:
+            this.options.precomputedGlobalPlans?.railwayGradeSeparatedPlans,
         }
       );
       for (const sid of railwayInfrastructureResult.renderedSourceIds) {
@@ -2823,6 +2909,7 @@ export class GeometryBuilder {
         gradeTransitionCoords,
         resourceManager,
         diagnostics: data.diagnostics,
+        tileClipBounds,
       });
 
       graphRoadResult.roadsByClass.forEach((items, roadClass) => {
@@ -2908,30 +2995,33 @@ export class GeometryBuilder {
     // - Bridges: 3D sloped approach ramps connecting at-grade roads to elevated bridge decks + substructure + parapets + piers
     // - Tunnels: 3D concrete tunnel portal arches + dark recessed entrance mouths + dashed underground traces
     const tRoadBridgeTunnel0 = performance.now();
-    const roadGradeSeparatedPlans = infrastructureRenderPreview?.descriptors
-      ? resolveGraphGradeSeparatedPlans(
-          infrastructureRenderPreview.descriptors,
-          'road',
-          (edge) => {
-            const roadEdge = infrastructureRenderPreview.descriptors!.roadEdgesById.get(edge.id);
-            const roadClass = roadEdge?.roadClass ?? 'residential';
-            const isBridge = edge.placementClassification
-              ? edge.placementClassification.isElevatedBridge
-              : edge.isBridge;
-            const isTunnel = edge.placementClassification
-              ? edge.placementClassification.isSubterraneanTunnel
-              : edge.isTunnel;
-            return getRoadElevation(
-              roadClass,
-              edge.layer,
-              isBridge,
-              isTunnel,
-              edge.sourceFeatureIds[0] || edge.id,
-              edge.placementClassification?.supportingEvidence.maxheightMeters
-            );
-          }
-        )
-      : null;
+    const roadGradeSeparatedPlans =
+      this.options.precomputedGlobalPlans?.roadGradeSeparatedPlans !== undefined
+        ? this.options.precomputedGlobalPlans.roadGradeSeparatedPlans
+        : infrastructureRenderPreview?.descriptors
+          ? resolveGraphGradeSeparatedPlans(
+              infrastructureRenderPreview.descriptors,
+              'road',
+              (edge) => {
+                const roadEdge = infrastructureRenderPreview!.descriptors!.roadEdgesById.get(edge.id);
+                const roadClass = roadEdge?.roadClass ?? 'residential';
+                const isBridge = edge.placementClassification
+                  ? edge.placementClassification.isElevatedBridge
+                  : edge.isBridge;
+                const isTunnel = edge.placementClassification
+                  ? edge.placementClassification.isSubterraneanTunnel
+                  : edge.isTunnel;
+                return getRoadElevation(
+                  roadClass,
+                  edge.layer,
+                  isBridge,
+                  isTunnel,
+                  edge.sourceFeatureIds[0] || edge.id,
+                  edge.placementClassification?.supportingEvidence.maxheightMeters
+                );
+              }
+            )
+          : null;
     const roadGradeTransitionDiagnostics: GradeTransitionRenderDiagnostics =
       roadGradeSeparatedPlans
         ? {
@@ -3013,10 +3103,11 @@ export class GeometryBuilder {
             { roundCaps: false }
           );
           if (fallbackRibbon) {
-            const g = resourceManager.registerGeometry(new THREE.BufferGeometry());
-            g.setAttribute('position', new THREE.BufferAttribute(fallbackRibbon.positions, 3));
-            g.setAttribute('normal', new THREE.BufferAttribute(fallbackRibbon.normals, 3));
-            g.setIndex(new THREE.BufferAttribute(fallbackRibbon.indices, 1));
+            const rawFallbackGeo = new THREE.BufferGeometry();
+            rawFallbackGeo.setAttribute('position', new THREE.BufferAttribute(fallbackRibbon.positions, 3));
+            rawFallbackGeo.setAttribute('normal', new THREE.BufferAttribute(fallbackRibbon.normals, 3));
+            rawFallbackGeo.setIndex(new THREE.BufferAttribute(fallbackRibbon.indices, 1));
+            const g = clipGeomToTile(rawFallbackGeo);
             const rawTags = (edge.primaryOsmTags || {}) as Record<
               string,
               string | number | boolean
@@ -3038,10 +3129,12 @@ export class GeometryBuilder {
               placementClassification: edge.placementClassification,
               osmTags: sanitizeOsmTags(rawTags),
             };
-            if (!roadsByClass.has(edge.roadClass)) {
-              roadsByClass.set(edge.roadClass, []);
+            if (g) {
+              if (!roadsByClass.has(edge.roadClass)) {
+                roadsByClass.set(edge.roadClass, []);
+              }
+              roadsByClass.get(edge.roadClass)!.push({ geom: g, info: fallbackInfo });
             }
-            roadsByClass.get(edge.roadClass)!.push({ geom: g, info: fallbackInfo });
             for (const sid of sids) {
               renderedSourceIds.add(sid);
               const dups = roadLineage.deduplicatedMap[sid];
@@ -3148,21 +3241,21 @@ export class GeometryBuilder {
                 (roadGradeTransitionDiagnostics.portalGroundCutoutsCount ?? 0) +
                 edgePortalCutouts.length;
             }
-            if (portalStructureGeo) {
-              resourceManager.registerGeometry(portalStructureGeo);
-              tunnelPortalItems.push({ geom: portalStructureGeo, info: tunnelInfo });
+            const clippedPortalGeo = clipGeomToTile(portalStructureGeo);
+            if (clippedPortalGeo) {
+              tunnelPortalItems.push({ geom: clippedPortalGeo, info: tunnelInfo });
               roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount =
                 (roadGradeTransitionDiagnostics.tunnelPortalsEmittedCount ?? 0) +
                 (emitStartPortal ? 1 : 0) +
                 (emitEndPortal ? 1 : 0);
             }
-            if (portalMouthGeo) {
-              resourceManager.registerGeometry(portalMouthGeo);
-              tunnelMouthItems.push({ geom: portalMouthGeo, info: tunnelInfo });
+            const clippedMouthGeo = clipGeomToTile(portalMouthGeo);
+            if (clippedMouthGeo) {
+              tunnelMouthItems.push({ geom: clippedMouthGeo, info: tunnelInfo });
             }
-            if (undergroundTraceGeo) {
-              resourceManager.registerGeometry(undergroundTraceGeo);
-              tunnelTraceItems.push({ geom: undergroundTraceGeo, info: tunnelInfo });
+            const clippedTraceGeo = clipGeomToTile(undergroundTraceGeo);
+            if (clippedTraceGeo) {
+              tunnelTraceItems.push({ geom: clippedTraceGeo, info: tunnelInfo });
             }
 
             const canGenerateUnderground = edge.placementClassification
@@ -3179,9 +3272,9 @@ export class GeometryBuilder {
                 endTargetTunnelElevation: plan?.endTargetDeckElevation,
               });
               if (undergroundProf.profile.length >= 2) {
-                const ugRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
+                const rawUgRoadGeo = generateProfiledRibbon3D(undergroundProf.profile, width);
+                const ugRoadGeo = clipGeomToTile(rawUgRoadGeo);
                 if (ugRoadGeo) {
-                  resourceManager.registerGeometry(ugRoadGeo);
                   tunnelUndergroundRoadItems.push({ geom: ugRoadGeo, info: tunnelInfo });
                   roadGradeTransitionDiagnostics.undergroundRoadGeometryCount =
                     (roadGradeTransitionDiagnostics.undergroundRoadGeometryCount ?? 0) + 1;
@@ -3239,7 +3332,7 @@ export class GeometryBuilder {
             endTargetDeckElevation: plan?.endTargetDeckElevation,
           });
 
-          const geom =
+          const rawBridgeGeom =
             profile.length >= 2
               ? generateProfiledRibbon3D(profile, width)
               : (() => {
@@ -3254,8 +3347,8 @@ export class GeometryBuilder {
                   return g;
                 })();
 
-          if (!geom) continue;
-          resourceManager.registerGeometry(geom);
+          if (!rawBridgeGeom) continue;
+          const geom = clipGeomToTile(rawBridgeGeom);
 
           const bridgeInfo: InspectableFeatureInfo = {
             id: edge.id,
@@ -3274,10 +3367,12 @@ export class GeometryBuilder {
             osmTags: sanitizeOsmTags(rawTags),
           };
 
-          if (!roadsByClass.has(edge.roadClass)) {
-            roadsByClass.set(edge.roadClass, []);
+          if (geom) {
+            if (!roadsByClass.has(edge.roadClass)) {
+              roadsByClass.set(edge.roadClass, []);
+            }
+            roadsByClass.get(edge.roadClass)!.push({ geom, info: bridgeInfo });
           }
-          roadsByClass.get(edge.roadClass)!.push({ geom, info: bridgeInfo });
 
           if (profile.length >= 2) {
             const { substructureGeo, parapetGeo, piersGeo } = generateBridgeStructureGeometries(
@@ -3291,17 +3386,17 @@ export class GeometryBuilder {
                 minElevatedDeckY,
               }
             );
-            if (substructureGeo) {
-              resourceManager.registerGeometry(substructureGeo);
-              bridgeSubstructureItems.push({ geom: substructureGeo, info: bridgeInfo });
+            const clippedSub = clipGeomToTile(substructureGeo);
+            if (clippedSub) {
+              bridgeSubstructureItems.push({ geom: clippedSub, info: bridgeInfo });
             }
-            if (parapetGeo) {
-              resourceManager.registerGeometry(parapetGeo);
-              bridgeParapetItems.push({ geom: parapetGeo, info: bridgeInfo });
+            const clippedParapet = clipGeomToTile(parapetGeo);
+            if (clippedParapet) {
+              bridgeParapetItems.push({ geom: clippedParapet, info: bridgeInfo });
             }
-            if (piersGeo) {
-              resourceManager.registerGeometry(piersGeo);
-              bridgePierItems.push({ geom: piersGeo, info: bridgeInfo });
+            const clippedPiers = clipGeomToTile(piersGeo);
+            if (clippedPiers) {
+              bridgePierItems.push({ geom: clippedPiers, info: bridgeInfo });
             }
           }
 
@@ -3669,6 +3764,7 @@ export class GeometryBuilder {
               const t = steps === 0 ? 0 : s / steps;
               const tx = p0[0] + (p1[0] - p0[0]) * t;
               const tz = p0[1] + (p1[1] - p0[1]) * t;
+              if (tileClipBounds && !pointInHalfOpenBox(tx, tz, tileClipBounds)) continue;
               const h = Math.abs(Math.sin(tx * 17.3 + tz * 31.7));
               treePlacements.push({
                 x: tx,
@@ -3684,7 +3780,7 @@ export class GeometryBuilder {
           continue;
         }
 
-        const barGeo =
+        const rawBarGeo =
           ctx && ctx.profile.length >= 2
             ? generateProfiledBarrierRibbon3D(ctx.profile, bar.width)
             : generateExtrudedBarrierRibbon(
@@ -3693,8 +3789,8 @@ export class GeometryBuilder {
                 bar.height,
                 ELEVATION_POLICY.PARKS
               );
+        const barGeo = clipGeomToTile(rawBarGeo);
         if (!barGeo) continue;
-        resourceManager.registerGeometry(barGeo);
 
         if (ctx?.rendersInSubterraneanLayer) {
           subterraneanBarrierItems.push({ geom: barGeo, info });
@@ -3833,6 +3929,13 @@ export class GeometryBuilder {
         elevation: ELEVATION_POLICY.PARKS,
         osmTags: sanitizeOsmTags(lm.osmTags),
       };
+
+      if (
+        tileClipBounds &&
+        !pointInHalfOpenBox(lm.position[0], lm.position[1], tileClipBounds)
+      ) {
+        continue;
+      }
 
       if (lm.landmarkType === 'tree') {
         if (treePlacements.length < MAX_SCENE_TREES) {
@@ -4247,6 +4350,12 @@ export class GeometryBuilder {
 
     for (const bldg of data.buildings) {
       try {
+        if (tileClipBounds) {
+          const centroid = getRingsBBoxCentroid(bldg.footprint);
+          if (!centroid || !pointInHalfOpenBox(centroid[0], centroid[1], tileClipBounds)) {
+            continue;
+          }
+        }
         const shape = createShapeFromRings(bldg.footprint);
         if (!shape) continue;
 

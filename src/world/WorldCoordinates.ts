@@ -13,6 +13,8 @@ export interface CoordinateTransformer {
   originLat: number;
   toLocal(lon: number, lat: number): [number, number]; // [x, z] meters
   toGeo(x: number, z: number): [number, number]; // [lon, lat]
+  transformRing?(coordinates: [number, number][]): [number, number][];
+  transformLine?(coordinates: [number, number][]): [number, number][];
 }
 
 /**

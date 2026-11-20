@@ -50,6 +50,8 @@ export interface MapSceneProps {
   onSpatialBoxChange?: (box: { minX: number; maxX: number; minZ: number; maxZ: number } | null) => void;
   onDeactivateSpatialSelect?: () => void;
   showGraphOverlay?: boolean;
+  tileBoundaryOverlayGroup?: THREE.Group | null;
+  showTileBoundaryOverlay?: boolean;
 }
 
 function computePercentile(sorted: number[], p: number): number {
@@ -116,6 +118,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onSpatialBoxChange,
   onDeactivateSpatialSelect,
   showGraphOverlay = false,
+  tileBoundaryOverlayGroup = null,
+  showTileBoundaryOverlay = false,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
   const lastHoverTimeRef = useRef<number>(0);
@@ -1046,6 +1050,11 @@ export const MapScene: React.FC<MapSceneProps> = ({
             </mesh>
           ))}
         </group>
+      )}
+
+      {/* M1a Developer Visual Acceptance Harness: 512 m Tile Grid Boundary Overlay (8×8 / 112 internal seams) */}
+      {showTileBoundaryOverlay && tileBoundaryOverlayGroup && (
+        <primitive object={tileBoundaryOverlayGroup} raycast={() => null} />
       )}
     </group>
   );

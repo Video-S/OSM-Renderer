@@ -74,6 +74,19 @@ import {
   type MapLoadSourceType,
   MapLoadTimelineTracker,
 } from '../world/dev/MapLoadDiagnostics';
+import { createHengeloStudyGrid } from '../world/tiling/TileGrid';
+import {
+  buildSingleSceneReference,
+  buildTiledStudyScenes,
+  ingestCanonicalStudyGeoJson,
+  type IngestedStudyRegion,
+} from '../world/tiling/TiledStudyPipeline';
+import {
+  assembleTiledStudyCompositeScene,
+  createM1aTileBoundaryOverlay,
+  type M1aTileBoundaryOverlayResult,
+  type M1aVisualComparisonMode,
+} from '../world/tiling/M1aVisualHarness';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
 
@@ -237,12 +250,253 @@ export default function App() {
       railways: data.stats?.totalRailways ?? data.railways?.length ?? 0,
       totalFeaturesParsed: data.diagnostics?.totalFeaturesParsed ?? 0,
     });
+    if (activeLocationIdRef.current !== 'hengelo_m1a') {
+      setIsM1aHarnessActive(false);
+      disposeM1aHarnessScenes();
+    }
     setMapData(data);
   };
 
   // Built scene geometry reference for cleanup and in-place material updates
   const [builtGeometry, setBuiltGeometry] = useState<BuiltSceneGeometry | null>(null);
   const activeSceneRef = useRef<BuiltSceneGeometry | null>(null);
+
+  // TKT-028 M1a Developer-Only Visual Acceptance Harness State
+  const [isM1aHarnessActive, setIsM1aHarnessActive] = useState<boolean>(false);
+  const [m1aViewMode, setM1aViewMode] = useState<M1aVisualComparisonMode>('tiled');
+  const [showM1aTileBoundaries, setShowM1aTileBoundaries] = useState<boolean>(true);
+  const [m1aHarnessMetrics, setM1aHarnessMetrics] = useState<{
+    tileCount: number;
+    internalSeamCount: number;
+    featureCount: number;
+    tiledBuildTimeMs: number;
+    referenceBuildTimeMs: number;
+    tiledTriangles: number;
+    referenceTriangles: number;
+    tiledDrawCalls: number;
+    referenceDrawCalls: number;
+  } | null>(null);
+  const m1aIngestedRef = useRef<IngestedStudyRegion | null>(null);
+  const m1aTiledSceneRef = useRef<BuiltSceneGeometry | null>(null);
+  const m1aReferenceSceneRef = useRef<BuiltSceneGeometry | null>(null);
+  const m1aBoundaryOverlayRef = useRef<M1aTileBoundaryOverlayResult | null>(null);
+
+  const disposeM1aHarnessScenes = () => {
+    if (m1aTiledSceneRef.current) {
+      if (activeSceneRef.current === m1aTiledSceneRef.current) {
+        activeSceneRef.current = null;
+      }
+      m1aTiledSceneRef.current.dispose();
+      m1aTiledSceneRef.current = null;
+    }
+    if (m1aReferenceSceneRef.current) {
+      if (activeSceneRef.current === m1aReferenceSceneRef.current) {
+        activeSceneRef.current = null;
+      }
+      m1aReferenceSceneRef.current.dispose();
+      m1aReferenceSceneRef.current = null;
+    }
+    if (m1aBoundaryOverlayRef.current) {
+      m1aBoundaryOverlayRef.current.dispose();
+      m1aBoundaryOverlayRef.current = null;
+    }
+    m1aIngestedRef.current = null;
+    setM1aHarnessMetrics(null);
+  };
+
+  const switchM1aVisualMode = (nextMode: M1aVisualComparisonMode) => {
+    setM1aViewMode(nextMode);
+    const targetScene =
+      nextMode === 'tiled' ? m1aTiledSceneRef.current : m1aReferenceSceneRef.current;
+    if (!targetScene) return;
+
+    const activeTheme = MAP_THEMES[selectedThemeIdRef.current] || MAP_THEMES.tactical;
+    targetScene.updateTheme(activeTheme);
+    targetScene.updateCameraZoom?.(currentCameraZoomRef.current);
+
+    const revision = ++transitionRevisionRef.current;
+    const sceneMeta: SceneRevisionConfigMeta = {
+      revision,
+      datasetId: nextMode === 'tiled' ? 'hengelo_m1a_tiled' : 'hengelo_m1a_reference',
+      roadsMode: infrastructureRenderOptionsRef.current.roads,
+      railwaysMode: infrastructureRenderOptionsRef.current.railways,
+      railwayPrototypeMode: 'production',
+      themeId: selectedThemeIdRef.current,
+      hasFeatures: true,
+      webglFramesRendered: 0,
+    };
+    targetScene.groundMesh.userData.__sceneMeta = sceneMeta;
+    activeSceneRef.current = targetScene;
+    setBuiltGeometry(targetScene);
+  };
+
+  const loadHengeloM1aVisualHarness = async (
+    initialMode: M1aVisualComparisonMode = 'tiled',
+    overrideZoom?: number,
+    overrideAzimuthDeg?: number,
+    isInitialStartupLoad: boolean = false
+  ) => {
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: 'hengelo_m1a',
+      locationName: 'Hengelo M1a Regional Tiling Study (8×8 · 64 Tiles · 4,096 m)',
+      radiusMeters: 2048,
+      sourceType: 'fixture',
+      isInitialStartupLoad,
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: 'production',
+        themeId: selectedThemeIdRef.current,
+      },
+    });
+
+    setLoading(true);
+    setError(null);
+    setHoveredFeature(null);
+    setSelectedFeature(null);
+    setActiveLocationId('hengelo_m1a');
+    setStatusMessage('Fetching canonical Hengelo M1a 4×4 km study GeoJSON from local Overijssel SQLite store...');
+
+    try {
+      const tFetch0 = performance.now();
+      const res = await fetch('/api/osm-data?preset=hengelo-m1a');
+      if (!res.ok) {
+        let errText = `HTTP ${res.status}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error) errText = errJson.error;
+        } catch {
+          // ignore
+        }
+        throw new Error(errText);
+      }
+      const rawGeoJson = await res.json();
+      const fetchElapsedMs = performance.now() - tFetch0;
+
+      // Let the UI render the next status message before synchronous 64-tile synthesis
+      setStatusMessage('Synthesizing canonical M1a single-scene reference & 64-tile (8×8 · 512 m) geometry...');
+      await new Promise<void>((r) => setTimeout(r, 25));
+
+      disposeM1aHarnessScenes();
+      if (activeSceneRef.current) {
+        activeSceneRef.current.dispose();
+        activeSceneRef.current = null;
+      }
+
+      const grid = createHengeloStudyGrid(512, 64);
+      const tIngest0 = performance.now();
+      const ingested = ingestCanonicalStudyGeoJson(rawGeoJson, grid);
+      const ingestElapsedMs = performance.now() - tIngest0;
+
+      mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+        responseTransferMs: fetchElapsedMs,
+        geoJsonProcessingMs: ingestElapsedMs,
+        featureCount: Array.isArray(rawGeoJson?.features) ? rawGeoJson.features.length : null,
+      });
+
+      const activeTheme = MAP_THEMES[selectedThemeIdRef.current] || MAP_THEMES.tactical;
+
+      const tRef0 = performance.now();
+      const referenceBuild = buildSingleSceneReference(ingested, activeTheme, {
+        initialCameraZoom: currentCameraZoomRef.current,
+      });
+      const referenceScene = referenceBuild.scene;
+      const referenceBuildTimeMs = Number((performance.now() - tRef0).toFixed(1));
+
+      const tTiled0 = performance.now();
+      const tiledBuild = buildTiledStudyScenes(ingested, activeTheme, {
+        initialCameraZoom: currentCameraZoomRef.current,
+      });
+      const compositeTiledScene = assembleTiledStudyCompositeScene(
+        tiledBuild,
+        ingested,
+        activeTheme
+      );
+      const tiledBuildTimeMs = Number((performance.now() - tTiled0).toFixed(1));
+
+      const boundaryOverlay = createM1aTileBoundaryOverlay(grid);
+
+      m1aIngestedRef.current = ingested;
+      m1aReferenceSceneRef.current = referenceScene;
+      m1aTiledSceneRef.current = compositeTiledScene;
+      m1aBoundaryOverlayRef.current = boundaryOverlay;
+
+      setM1aHarnessMetrics({
+        tileCount: tiledBuild.tiles.length,
+        internalSeamCount: boundaryOverlay.internalSeamCount,
+        featureCount: Array.isArray(rawGeoJson?.features) ? rawGeoJson.features.length : 0,
+        tiledBuildTimeMs,
+        referenceBuildTimeMs,
+        tiledTriangles: compositeTiledScene.stats.totalTriangles,
+        referenceTriangles: referenceScene.stats.totalTriangles,
+        tiledDrawCalls: compositeTiledScene.stats.totalDrawCalls,
+        referenceDrawCalls: referenceScene.stats.totalDrawCalls,
+      });
+
+      setIsM1aHarnessActive(true);
+      setM1aViewMode(initialMode);
+      setCurrentRawGeoJson(rawGeoJson);
+
+      const targetScene =
+        initialMode === 'tiled' ? compositeTiledScene : referenceScene;
+      const revision = ++transitionRevisionRef.current;
+      const sceneMeta: SceneRevisionConfigMeta = {
+        revision,
+        datasetId: initialMode === 'tiled' ? 'hengelo_m1a_tiled' : 'hengelo_m1a_reference',
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: 'production',
+        themeId: selectedThemeIdRef.current,
+        hasFeatures: true,
+        webglFramesRendered: 0,
+      };
+      targetScene.groundMesh.userData.__sceneMeta = sceneMeta;
+      targetScene.updateCameraZoom?.(overrideZoom ?? 0.22);
+
+      const totalBuildMs = Number((referenceBuildTimeMs + tiledBuildTimeMs).toFixed(2));
+      latestCpuBuildTimeMsRef.current = totalBuildMs;
+      setCpuBuildTimeMs(totalBuildMs);
+
+      commitMapDataForRequest(requestId, ingested.data);
+      mapLoadTrackerRef.current.recordSceneGeometryBuild(requestId, {
+        effectStartedAtMs: tRef0,
+        buildDurationMs: totalBuildMs,
+        sceneRevision: revision,
+        stageTimingsMs: referenceScene.stageTimingsMs ?? null,
+        rendererConfig: {
+          roadsMode: infrastructureRenderOptionsRef.current.roads,
+          railwaysMode: infrastructureRenderOptionsRef.current.railways,
+          railwayPrototypeMode: 'production',
+          themeId: selectedThemeIdRef.current,
+        },
+        triangles: targetScene.stats.totalTriangles,
+        drawCalls: targetScene.stats.totalDrawCalls,
+      });
+
+      activeSceneRef.current = targetScene;
+      setBuiltGeometry(targetScene);
+      setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+
+      // Frame the full 4,096 × 4,096 m 8×8 tile grid by default
+      setExplicitPose((prev) => ({
+        target: [0, 0, 0],
+        zoom: overrideZoom ?? 0.22,
+        azimuthRad: ((overrideAzimuthDeg ?? 45) * Math.PI) / 180,
+        signal: prev.signal + 1,
+      }));
+    } catch (err: any) {
+      console.error('Failed to load M1a Hengelo Visual Acceptance Harness:', err);
+      setError(`M1a Visual Harness Error: ${err?.message || String(err)}`);
+      setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        err?.message || 'Failed to load M1a Visual Acceptance Harness'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
+    }
+  };
 
   const loadSwitchyardFixture = (
     targetZone: RailwayPrototypeZoneId = 'overview',
@@ -713,6 +967,13 @@ export default function App() {
 
     const isBenchmarkMode =
       params.get('benchmark') === '1' || params.get('benchmark') === 'true' || fixtureParam === 'benchmark';
+    const isM1aHarnessParam =
+      params.get('m1a') === '1' ||
+      params.get('m1a') === 'true' ||
+      fixtureParam === 'hengelo-m1a' ||
+      fixtureParam === 'm1a';
+    const m1aModeParam =
+      params.get('m1aMode') === 'reference' ? 'reference' : 'tiled';
 
     if (isBenchmarkMode) {
       setIsDockCollapsed(true);
@@ -726,6 +987,8 @@ export default function App() {
       setCurrentRawGeoJson(null);
       setMapData(emptyData);
       setLoading(false);
+    } else if (isM1aHarnessParam) {
+      loadHengeloM1aVisualHarness(m1aModeParam, zoomParam, azParam, true);
     } else if (fixtureParam === 'switchyard') {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam, true);
     } else if (fixtureParam === 'prins-fork') {
@@ -749,6 +1012,23 @@ export default function App() {
 
   // Build one shared InfrastructureGraph + render descriptor bundle per dataset.
   const infrastructureRenderPreview = useMemo(() => {
+    if (isM1aHarnessActive && m1aIngestedRef.current) {
+      const ing = m1aIngestedRef.current;
+      const preview =
+        ing.descriptors && ing.previewMeta
+          ? {
+              options: ing.infrastructureRenderOptions,
+              graph: ing.previewMeta.graph,
+              descriptors: ing.descriptors,
+              validation: ing.previewMeta.validation,
+              timing: ing.previewMeta.timing,
+            }
+          : null;
+      latestPreviewTimeMsRef.current = preview?.timing.totalPreviewTimeMs ?? 0;
+      infrastructureRenderPreviewRef.current = preview;
+      return preview;
+    }
+
     const requestId = mapData ? mapDataRequestIdRef.current.get(mapData) : undefined;
     const trackPrep =
       requestId !== undefined && !mapLoadTrackerRef.current.hasFinalizedPresentation(requestId);
@@ -770,13 +1050,12 @@ export default function App() {
       mapLoadTrackerRef.current.recordInfrastructurePrep(requestId, tPrep0, prepDurationMs);
     }
     return preview;
-  }, [mapData, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
+  }, [mapData, isM1aHarnessActive, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
 
   // Generate 3D Scene Geometries when geometric parameters or railway mode change.
-  // When railwayPrototypeMode is 'candidateA', 'candidateB', or 'disabled', pass railways: []
-  // to GeometryBuilder so the non-railway map is 100% identical and railway bridges are never duplicated.
+  // When M1a Visual Acceptance Harness is active, m1aTiledSceneRef and m1aReferenceSceneRef are managed directly.
   useEffect(() => {
-    if (!mapData) return;
+    if (!mapData || isM1aHarnessActive) return;
 
     const tEffectStart = performance.now();
     const requestId = mapDataRequestIdRef.current.get(mapData);
@@ -873,14 +1152,20 @@ export default function App() {
 
   // Separate material theme updates from geometry regeneration (zero GPU re-allocations)
   useEffect(() => {
+    if (isM1aHarnessActive) {
+      m1aTiledSceneRef.current?.updateTheme(currentTheme);
+      m1aReferenceSceneRef.current?.updateTheme(currentTheme);
+      return;
+    }
     if (activeSceneRef.current) {
       activeSceneRef.current.updateTheme(currentTheme);
     }
-  }, [currentTheme]);
+  }, [currentTheme, isM1aHarnessActive]);
 
   // Clean unmount disposal
   useEffect(() => {
     return () => {
+      disposeM1aHarnessScenes();
       if (activeSceneRef.current) {
         activeSceneRef.current.dispose();
         activeSceneRef.current = null;
@@ -1861,6 +2146,8 @@ export default function App() {
                   onSpatialBoxChange={setSelectedBoxMeters}
                   onDeactivateSpatialSelect={() => setIsSpatialSelectActive(false)}
                   showGraphOverlay={showGraphOverlay}
+                  tileBoundaryOverlayGroup={m1aBoundaryOverlayRef.current?.group ?? null}
+                  showTileBoundaryOverlay={isM1aHarnessActive && showM1aTileBoundaries}
                 />
               </Canvas>
             </ErrorBoundary>
@@ -2039,6 +2326,160 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* DEVELOPER-ONLY M1a VISUAL ACCEPTANCE HARNESS FLOATING TOOLBAR */}
+      {isM1aHarnessActive && m1aHarnessMetrics && (
+        <div
+          data-testid="m1a-visual-harness-bar"
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[96vw] max-w-[1040px] bg-slate-900/95 border border-cyan-500/40 rounded-xl shadow-2xl px-4 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
+        >
+          {/* Left: Title & Active Geometry Mode Switcher */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-mono text-[10px] font-bold uppercase tracking-wider">
+                M1a Visual Harness
+              </span>
+              <span className="text-slate-300 font-semibold">
+                Hengelo 8×8 Grid ({m1aHarnessMetrics.tileCount} Tiles · 512 m · EPSG:25832)
+              </span>
+            </div>
+
+            <div
+              className="flex items-center bg-slate-950 border border-slate-800 p-0.5 rounded-lg"
+              role="group"
+              aria-label="M1a geometry comparison mode"
+            >
+              <button
+                type="button"
+                data-testid="btn-m1a-mode-tiled"
+                onClick={() => switchM1aVisualMode('tiled')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                  m1aViewMode === 'tiled'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                M1a Tiled Geometry (64 Tiles)
+              </button>
+              <button
+                type="button"
+                data-testid="btn-m1a-mode-reference"
+                onClick={() => switchM1aVisualMode('reference')}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                  m1aViewMode === 'reference'
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Single-Scene Reference (A)
+              </button>
+            </div>
+          </div>
+
+          {/* Center: 512 m Tile Boundaries Toggle + Camera Seam Jump Presets */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="btn-m1a-toggle-boundaries"
+              onClick={() => setShowM1aTileBoundaries((v) => !v)}
+              aria-pressed={showM1aTileBoundaries}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                showM1aTileBoundaries
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              512m Tile Boundaries ({m1aHarnessMetrics.internalSeamCount} Seams):{' '}
+              <span className="font-mono">{showM1aTileBoundaries ? 'ON' : 'OFF'}</span>
+            </button>
+
+            <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded-lg">
+              <span className="text-[10px] text-slate-500 font-mono mr-1">Views:</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setExplicitPose((prev) => ({
+                    target: [0, 0, 0],
+                    zoom: 0.22,
+                    azimuthRad: Math.PI / 4,
+                    signal: prev.signal + 1,
+                  }))
+                }
+                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
+                title="View entire 4,096 × 4,096 m 64-tile study region"
+              >
+                4×4km Overview
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setExplicitPose((prev) => ({
+                    target: [0, 0, 0],
+                    zoom: 2.2,
+                    azimuthRad: Math.PI / 4,
+                    signal: prev.signal + 1,
+                  }))
+                }
+                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
+                title="Inspect central 4-tile corner seam at (0, 0) near Station Hengelo"
+              >
+                Center Seam (0,0)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setExplicitPose((prev) => ({
+                    target: [0, 0, 0],
+                    zoom: 7.5,
+                    azimuthRad: Math.PI / 4,
+                    signal: prev.signal + 1,
+                  }))
+                }
+                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
+                title="Close-up inspection (>4.5 px/m) across central seam for 3D railway sleepers & road surfaces"
+              >
+                Close 3D Sleepers (7.5x)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setExplicitPose((prev) => ({
+                    target: [-512, 0, 0],
+                    zoom: 3.0,
+                    azimuthRad: Math.PI / 4,
+                    signal: prev.signal + 1,
+                  }))
+                }
+                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
+                title="Inspect West-512m vertical seam crossing railway corridor and roads"
+              >
+                West Seam (-512m)
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Live Parity Readout */}
+          <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
+            <span>
+              Tris:{' '}
+              <strong className="text-slate-200">
+                {(m1aViewMode === 'tiled'
+                  ? m1aHarnessMetrics.tiledTriangles
+                  : m1aHarnessMetrics.referenceTriangles
+                ).toLocaleString()}
+              </strong>
+            </span>
+            <span>
+              Meshes:{' '}
+              <strong className="text-slate-200">
+                {m1aViewMode === 'tiled'
+                  ? m1aHarnessMetrics.tiledDrawCalls
+                  : m1aHarnessMetrics.referenceDrawCalls}
+              </strong>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* FLOATING CURSOR TOOLTIP FOR ANY HOVERED OSM FEATURE */}
       {hoveredFeature && (
@@ -2868,6 +3309,7 @@ export default function App() {
         onLoadSwitchyard={(zone) => loadSwitchyardFixture(zone)}
         onLoadPrinsFork={() => loadPrinsHendrikkadeForkFixture()}
         onLoadHengelo={() => loadLiveHengeloPreset()}
+        onLoadHengeloM1a={() => loadHengeloM1aVisualHarness('tiled')}
         onLoadAmsterdam={() => loadLiveAmsterdamPreset()}
         onImportReproductionPackage={handleImportReproductionPackage}
         roadRenderStats={builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null}

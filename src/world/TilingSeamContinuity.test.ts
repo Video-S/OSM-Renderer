@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { MAP_THEMES } from '../styles/mapThemes';
-import { createAlignedStudyGrid, HENGELO_CENTER_LONLAT } from './tiling/TileGrid';
+import {
+  createAlignedStudyGrid,
+  createHengeloStudyGrid,
+  HENGELO_CENTER_LONLAT,
+} from './tiling/TileGrid';
 import {
   buildSingleSceneReference,
   buildTiledStudyScenes,
@@ -10,6 +14,10 @@ import {
 } from './tiling/TiledStudyPipeline';
 import { validateTiledSeamContinuity } from './tiling/SeamValidator';
 import { runDiagnosticAbcComparison } from './tiling/TiledDiagnostics';
+import {
+  assembleTiledStudyCompositeScene,
+  createM1aTileBoundaryOverlay,
+} from './tiling/M1aVisualHarness';
 import type { StudyGridSpec } from './tiling/TileGrid';
 
 function buildMultiTileCrossingGeoJson(grid: StudyGridSpec) {
@@ -1100,4 +1108,40 @@ test('Regression (B vs C Canonical Cleanup): asymmetric turnout bearers near til
   }
 });
 
+test('M1a Visual Acceptance Harness: assembleTiledStudyCompositeScene and createM1aTileBoundaryOverlay preserve tile geometry and 112 internal seams', () => {
+  const hengeloGrid = createHengeloStudyGrid(512, 64);
+  const overlay = createM1aTileBoundaryOverlay(hengeloGrid);
+  try {
+    assert.equal(overlay.tileCount, 64);
+    assert.equal(overlay.internalSeamCount, 112);
+    assert.equal(overlay.group.children.length, 2);
+  } finally {
+    overlay.dispose();
+  }
 
+  const smallGrid = createAlignedStudyGrid({
+    name: 'harness-composite-check',
+    centerLonLat: HENGELO_CENTER_LONLAT,
+    cols: 2,
+    rows: 2,
+    tileSizeMeters: 512,
+    collarMeters: 64,
+  });
+  const geojson = buildMultiTileCrossingGeoJson(smallGrid);
+  const ingested = ingestCanonicalStudyGeoJson(geojson, smallGrid);
+  const tiled = buildTiledStudyScenes(ingested, MAP_THEMES.tactical);
+  const composite = assembleTiledStudyCompositeScene(tiled, ingested, MAP_THEMES.tactical);
+  try {
+    assert.equal(composite.buildingsGroup.children.length, 4);
+    assert.equal(composite.roadsGroup.children.length, 4);
+    assert.equal(composite.railwaysGroup.children.length, 4);
+    const sumTileTris = tiled.tiles.reduce((acc, t) => acc + t.scene.stats.totalTriangles, 0);
+    assert.equal(composite.stats.totalTriangles, sumTileTris);
+    assert.ok(composite.stats.totalTriangles > 0);
+    // Verify theme and camera zoom forwarding
+    composite.updateTheme(MAP_THEMES.daylight);
+    composite.updateCameraZoom?.(8.0);
+  } finally {
+    composite.dispose();
+  }
+});

@@ -74,6 +74,7 @@ export interface DevToolsPanelProps {
   onLoadSwitchyard: (zone: RailwayPrototypeZoneId) => void;
   onLoadPrinsFork: () => void;
   onLoadHengelo: () => void;
+  onLoadHengeloM1a?: () => void;
   onLoadAmsterdam: () => void;
   // Active context for reproduction
   mapData: ProcessedMapData | null;
@@ -118,6 +119,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   onLoadSwitchyard,
   onLoadPrinsFork,
   onLoadHengelo,
+  onLoadHengeloM1a,
   onLoadAmsterdam,
   mapData,
   currentRawGeoJson,
@@ -1281,6 +1283,32 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* TKT-028 M1a Visual Acceptance Harness */}
+            {onLoadHengeloM1a && (
+              <div className="bg-slate-900/70 border border-cyan-500/40 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-200">
+                    TKT-028 M1a Visual Acceptance Harness
+                  </span>
+                  <span className="text-[10px] font-mono text-cyan-400">
+                    8×8 · 64 Tiles · 512m
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Renders all 64 real M1a Hengelo tiles (4,096 × 4,096 m in EPSG:25832) from the local Overijssel SQLite dataset with a live 512 m boundary toggle and instant A/B switching against the canonical single-scene reference.
+                </p>
+                <button
+                  type="button"
+                  data-testid="btn-load-hengelo-m1a-harness"
+                  onClick={onLoadHengeloM1a}
+                  className="w-full py-1.5 px-3 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400 text-cyan-200 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Launch M1a 64-Tile Visual Harness</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

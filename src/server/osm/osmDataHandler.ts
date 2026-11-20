@@ -13,6 +13,7 @@ import {
   OverijsselIndexMissingError,
   OverijsselOsmStore,
 } from './OverijsselOsmStore';
+import { createHengeloStudyGrid } from '../../world/tiling/TileGrid';
 
 export class BoundedCache<K, V> {
   private map = new Map<K, { value: V; expiresAt: number }>();
@@ -133,6 +134,83 @@ export function createOsmDataHandler(options?: {
 
   const handler = async (req: Request, res: Response) => {
     const tReq0 = performance.now();
+    const presetParam = typeof req.query.preset === 'string' ? req.query.preset.trim() : '';
+    if (presetParam === 'hengelo-m1a') {
+      const tileSizeMeters = Math.max(
+        64,
+        Math.min(2048, parseFloat(String(req.query.tileSize ?? '512')) || 512)
+      );
+      const collarMeters = Math.max(
+        0,
+        Math.min(512, parseFloat(String(req.query.collar ?? '64')) || 64)
+      );
+      const cacheKey = `preset:hengelo-m1a:${tileSizeMeters}:${collarMeters}`;
+      const tCache0 = performance.now();
+      const cachedOsm = osmCache.get(cacheKey);
+      const cacheLookupMs = performance.now() - tCache0;
+      if (cachedOsm) {
+        const totalServerMs = performance.now() - tReq0;
+        res.setHeader(
+          'Access-Control-Expose-Headers',
+          'Server-Timing, X-OSM-Cache, X-OSM-Source, X-OSM-Snapshot, X-OSM-Feature-Count'
+        );
+        res.setHeader('X-OSM-Cache', 'HIT');
+        res.setHeader('X-OSM-Source', 'cache');
+        if (cachedOsm?.metadata?.snapshotId) {
+          res.setHeader('X-OSM-Snapshot', String(cachedOsm.metadata.snapshotId));
+        }
+        res.setHeader('X-OSM-Feature-Count', String(cachedOsm.features?.length ?? 0));
+        res.setHeader(
+          'Server-Timing',
+          `cache;dur=${cacheLookupMs.toFixed(3)}, total;dur=${totalServerMs.toFixed(3)}`
+        );
+        return res.json(cachedOsm);
+      }
+
+      try {
+        if (!fs.existsSync(getIndexPath()) && options?.ensureOverijsselReady) {
+          await options.ensureOverijsselReady();
+        }
+        const store = getOverijsselStore();
+        const grid = createHengeloStudyGrid(tileSizeMeters, collarMeters);
+        const result = store.queryBBox({
+          ...grid.studyExpandedGeoBounds,
+          locationName: grid.name,
+        });
+
+        osmCache.set(cacheKey, result.geojson);
+        const totalServerMs = performance.now() - tReq0;
+        res.setHeader(
+          'Access-Control-Expose-Headers',
+          'Server-Timing, X-OSM-Cache, X-OSM-Source, X-OSM-Snapshot, X-OSM-Feature-Count'
+        );
+        res.setHeader('X-OSM-Cache', 'MISS');
+        res.setHeader('X-OSM-Source', 'overijssel-offline-m1a');
+        res.setHeader('X-OSM-Snapshot', result.snapshotMetadata.snapshotId);
+        res.setHeader('X-OSM-Feature-Count', String(result.counts.features));
+        res.setHeader(
+          'Server-Timing',
+          `cache;dur=${cacheLookupMs.toFixed(3)}, upstream;dur=${result.timings.spatialQueryMs.toFixed(
+            3
+          )}, osmtogeojson;dur=${result.timings.osmtogeojsonMs.toFixed(
+            3
+          )}, enrich;dur=${result.timings.nodeIdEnrichMs.toFixed(
+            3
+          )}, total;dur=${totalServerMs.toFixed(3)}`
+        );
+        return res.json(result.geojson);
+      } catch (err: any) {
+        const isMissing = err instanceof OverijsselIndexMissingError;
+        const status = isMissing ? 503 : 500;
+        console.error('Offline Overijssel M1a study BBox query error:', err);
+        return res.status(status).json({
+          error:
+            err?.message ??
+            'Failed to query canonical Hengelo M1a study BBox from local Overijssel OSM spatial store.',
+        });
+      }
+    }
+
     const lat = parseFloat(req.query.lat as string);
     const lon = parseFloat(req.query.lon as string);
     const radiusMeters = Math.min(Math.max(parseFloat(req.query.radius as string) || 350, 200), 5000);

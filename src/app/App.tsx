@@ -618,11 +618,14 @@ export default function App() {
 
     const targetApiBaseUrl = extraOptions?.apiBaseUrl ?? '/api/tiles';
     const isExperimental1024 = targetApiBaseUrl.includes('1024m');
+    const isRegionalPilot = targetApiBaseUrl.includes('tiles-region');
     const requestId = mapLoadTrackerRef.current.startLoad({
       locationId: 'hengelo_m2a_tiles',
-      locationName: isExperimental1024
-        ? 'Hengelo M2-A Baked Tile Streaming (4×4 · 1,024 m Experiment · OSMTILE1)'
-        : 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
+      locationName: isRegionalPilot
+        ? 'Twente Regional Pilot (16×16 km · Bounded Shard Mosaic · OSMTILE1)'
+        : isExperimental1024
+          ? 'Hengelo M2-A Baked Tile Streaming (4×4 · 1,024 m Experiment · OSMTILE1)'
+          : 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
       radiusMeters: 2048,
       sourceType: 'fixture',
       isInitialStartupLoad,
@@ -715,7 +718,7 @@ export default function App() {
 
       const emptyEnvelopeData = localProvider.parseGeoJson(
         { type: 'FeatureCollection', features: [] },
-        `Hengelo M2-A Baked Tile Pack (${packMeta.snapshotId} · ${totalPackTiles} Tiles)`,
+        `${isRegionalPilot ? 'Twente Regional Pilot' : 'Hengelo'} M2-A Baked Tile Pack (${packMeta.snapshotId} · ${totalPackTiles} Tiles)`,
         centerLonLat,
         Math.max(halfWidthM, halfDepthM)
       );
@@ -1283,7 +1286,8 @@ export default function App() {
       params.get('streaming') === '1' ||
       params.get('tiles') === '1' ||
       fixtureParam === 'hengelo-tiles' ||
-      fixtureParam === 'm2a';
+      fixtureParam === 'm2a' ||
+      params.get('region') === 'twente-pilot';
     const isM1aHarnessParam =
       params.get('m1a') === '1' ||
       params.get('m1a') === 'true' ||
@@ -1297,17 +1301,22 @@ export default function App() {
       : undefined;
     const is1024ExperimentUrl =
       parsedTileSizeParam === 1024 || params.get('pack') === '1024m';
+    const isRegionalPilotUrl = params.get('region') === 'twente-pilot';
     // Developer-only visual parity mode: same physical preload/retain distances as
     // TKT-028-F1 hardware benchmarks, without altering normal streamer defaults.
     const matchedMarginsParam = params.get('matchPhysicalMargins');
     const matchPhysicalMargins =
       matchedMarginsParam === '1' || matchedMarginsParam === 'true';
     const visualStreamingOptions = {
-      ...(is1024ExperimentUrl ? { apiBaseUrl: '/api/tiles-1024m' } : {}),
-      ...(matchPhysicalMargins
+      ...(isRegionalPilotUrl
+        ? { apiBaseUrl: '/api/tiles-region' }
+        : is1024ExperimentUrl
+          ? { apiBaseUrl: '/api/tiles-1024m' }
+          : {}),
+      ...(isRegionalPilotUrl || matchPhysicalMargins
         ? {
-            preloadMarginTiles: is1024ExperimentUrl ? 0.5 : 1,
-            retainMarginTiles: is1024ExperimentUrl ? 1 : 2,
+            preloadMarginTiles: isRegionalPilotUrl || is1024ExperimentUrl ? 0.5 : 1,
+            retainMarginTiles: isRegionalPilotUrl || is1024ExperimentUrl ? 1 : 2,
           }
         : {}),
     };
@@ -1329,7 +1338,7 @@ export default function App() {
         zoomParam,
         azParam,
         true,
-        is1024ExperimentUrl || matchPhysicalMargins
+        isRegionalPilotUrl || is1024ExperimentUrl || matchPhysicalMargins
           ? visualStreamingOptions
           : undefined
       );
@@ -2682,7 +2691,7 @@ export default function App() {
                   frameRegionSignal={frameRegionCount}
                   rotateStepSignal={rotateStepCount}
                   target={CAMERA_TARGET}
-                  minZoom={0.15}
+                  minZoom={isM2aStreamingActive && (m2aStreamDiagnostics?.totalGridTiles ?? 0) > 64 ? 0.015 : 0.15}
                   maxZoom={16.0}
                   explicitPose={explicitPose}
                   onRegisterImperativePoseSetter={(setter) => {

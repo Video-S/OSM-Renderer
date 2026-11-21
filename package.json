@@ -24,6 +24,7 @@
     "osm:bake-hengelo-tiles": "tsx scripts/bake-hengelo-tiles.ts",
     "osm:bake-regional-pilot": "tsx scripts/bake-regional-pilot.ts",
     "osm:verify-regional-mosaic": "tsx scripts/verify-regional-mosaic.ts",
+    "osm:audit-regional-seams": "tsx scripts/audit-regional-seams.ts",
     "osm:audit-tile-batching": "tsx scripts/audit-tile-batching.ts",
     "osm:verify-hengelo-tiles": "tsx scripts/verify-hengelo-tiles.ts"
   },

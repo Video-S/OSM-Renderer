@@ -393,7 +393,8 @@ export class TileStreamManager {
 
   private readonly regionalResources = new SceneResourceManager();
   private readonly compositeScene: BuiltSceneGeometry;
-  private readonly boundaryOverlayResult: M1aTileBoundaryOverlayResult;
+  // Rebuilt after loading a pack manifest while retaining the mounted THREE.Group identity.
+  private boundaryOverlayResult: M1aTileBoundaryOverlayResult;
   private readonly groundMesh: THREE.Mesh;
   private readonly tilesByKey = new Map<string, ManagedTileRecord>();
 

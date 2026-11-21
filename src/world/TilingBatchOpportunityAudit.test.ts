@@ -14,7 +14,7 @@ import {
   getContainedBatchCell,
   getMeshBatchExclusionReason,
 } from './tiling/TileBatchOpportunityAudit';
-import { parseBatchAuditCli } from '../../scripts/audit-tile-batching';
+import { parseBatchAuditCli, formatBatchAuditMarkdown, type BatchAuditReport } from '../../scripts/audit-tile-batching';
 
 function mesh(
   options: Partial<TileMeshRecord> = {},
@@ -233,4 +233,35 @@ test('TKT-030: CLI defaults to 1024m pack and rejects conflicting/invalid sampli
   assert.throws(() => parseBatchAuditCli(['--cell-meters=128,128']), /unique/);
   assert.throws(() => parseBatchAuditCli(['--max-tiles=-5']), /positive/);
   assert.throws(() => parseBatchAuditCli(['--nope=1']), /Unknown/);
+});
+
+test('TKT-030: Markdown report formats OSM semantic flags and spatial profiles', () => {
+  const sample = tile([mesh({ singleFeatureIdx: 0 }), mesh({}, -454, -450)]);
+  sample.featureInfos[0].isTunnel = true;
+  sample.featureInfos[0].layer = -1;
+  const report: BatchAuditReport = {
+    schemaVersion: 1,
+    auditId: 'TKT-030',
+    createdAtIso: '2026-11-21T22:00:00.000Z',
+    mode: 'single-pack',
+    input: 'synthetic-test.sqlite',
+    packsRead: 1,
+    isPartialSample: false,
+    sampleLimit: null,
+    snapshotId: 'synthetic-test',
+    sourceSha256: 'sample-sha',
+    bakeSchemaVersion: '1.1.0',
+    lodPolicyHash: 'test-policy',
+    cellSizesMeters: [256],
+    summary: aggregateTileBatchAudits([
+      analyzeDecodedTileBatching(sample, [256]),
+    ]),
+    interpretation: [],
+  };
+  const markdown = formatBatchAuditMarkdown(report);
+  assert.match(markdown, /nonzero layer 1\)/);
+  assert.match(markdown, /tunnel 1/);
+  assert.match(markdown, /256m-bounded/);
+  assert.match(markdown, /highway=residential/);
+  assert.match(markdown, /No geometry was changed/);
 });

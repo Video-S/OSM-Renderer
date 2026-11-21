@@ -171,6 +171,33 @@ The regional overview submitted **229.7 million triangles per measured frame** (
 
 **Immediate next gate**: rerun `npx tsx benchmarks/regionalFrameCostRunner.ts --compare=viewport --runs=3 ...` and confirm both `baseline` and `viewport` rows and nonzero viewport skip counters. Keep the 16km view separately in the report because its workload is substantially different from ordinary street/city zoom. If viewport gating does not materially change overall frame/GPU timing, prioritize pass-aware rendering diagnostics (e.g., shadow-versus-color and instanced workloads) rather than more stream-manager changes. Keep shadows unchanged in the first A/B tests.
 
+## Owner A/B: viewport selection gate (2026-11-21, 22:52Z)
+
+Inputs: owner-provided `tkt031-viewport.json` and `tkt031-viewport.md`. `protocol.compare=viewport` confirms three baseline/viewport pairs with alternating execution order on RTX 4060 Ti, 1440×900 DPR 1. The 16-shard/256-tile regional manifest verified again.
+
+**Functionality confirmed:** each stationary phase reports baseline 132 scans/0 skips versus viewport 0 scans/132 skips. Each variant submitted the same 7,373 WebGL calls/frame and 229,725,617 triangles/frame in the whole-region phase, with the same 256 loaded tiles and 6,593 estimated main-frustum material groups. No scene-work reduction was expected from the viewport gate, and none occurred. Its potential cost benefit is in stream-manager CPU selection logic, not draw submissions.
+
+**Whole-region A/B** (per-run median; milliseconds, lower is better):
+
+| Repetition | Execution order | Baseline frame | Viewport frame | Baseline gl.render CPU | Viewport gl.render CPU | Baseline GPU timer | Viewport GPU timer |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 1 | baseline → viewport | 42.60 | 64.10 | 42.20 | 63.00 | 42.36 | 44.96 |
+| 2 | viewport → baseline | 68.90 | 68.50 | 67.80 | 67.70 | 62.92 | 58.94 |
+| 3 | baseline → viewport | 72.55 | 71.30 | 71.35 | 69.90 | 70.40 | 62.24 |
+
+**Result: no reproducible gain.** The initial 21.5 ms apparent regression is not a defensible causal estimate: in later pairs the difference is -0.4/-1.25 ms and *both* variants slow markedly over the course of the single Chromium process. In the earlier `compare=none` baseline-only report from 22:45Z, all three consecutive whole-region medians remained 42.6 ms, which makes the degradation across A/B variant switching important to investigate. This is a *correlation*, not proof that the viewport change or resource leak causes the drift.
+
+Code-level caveat: `benchmarks/regionalFrameCostRunner.ts` constructs **one** Playwright browser context and page outside the repetition/variant loop; every variant calls `h.unloadDataset()` and `h.loadM2aStreaming()` within that same WebGL context. `App.tsx` and `TileStreamManager.dispose()` explicitly dispose owned geometry/materials/worker resources, but the current report does **not** measure renderer-side cached GPU allocations, GPU/driver clocks/temperature, or post-unload memory; the tile CPU-geometry field only describes the *current* manager's loaded tile set (~892 MB during full-region view) and is identical across variants.
+
+**Next measurement priority (before changing production defaults):**
+
+1. Fix the **benchmark methodology**: compare baseline and viewport in separately created Chromium/WebGL contexts (ideally fresh browser process per variant); randomize/alternate ordering and include a same-variant control (baseline → baseline) to detect intrinsic run-order drift. Verify no cross-test leftover contexts/loaded scene.
+2. Record renderer memory indicators before loading, after full region, and after unload; capture performance/GPU timers and relevant run-order metadata. Correlate any retained GPU resources or driver throttling rather than assuming a memory leak.
+3. Once stable, compare paired results again. Leave viewport skipping **opt-in**, not production, until its lifecycle/visual behavior is accepted and a practical saving is reproduced.
+4. If still no saving, stop work on viewport gate. Prioritize profiling expensive GPU passes/instanced geometry and offline overview LOD *as a separate design decision*, not ad-hoc generic batching.
+
+Street/city views stayed near the nominal VSync frame interval (~16.6–16.7 ms), which alone does not prove a CPU saving; city GPU timer also drifted from ~6.3 to ~16–18.7 ms with an unchanged 802 WebGL calls/frame. No LOD/shadow/tile geometry change is authorized by this result.
+
 ## Completion checklist
 
 - [ ] Existing canonical 1,024 m Hengelo baseline reproduced with exact settings.

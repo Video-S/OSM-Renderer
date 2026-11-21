@@ -5,12 +5,14 @@ import { OverijsselOsmStore } from '../src/server/osm/OverijsselOsmStore';
 import { resolveOverijsselIndexPath, OVERIJSSEL_PBF_EXPECTED_SHA256 } from '../src/server/osm/overijsselConfig';
 import { TilePackSqliteStore } from '../src/server/tiles/TilePackSqliteStore';
 import { verifyRegionalMosaic } from './verify-regional-mosaic';
+import type { DecodedTilePayload } from '../src/world/tiling/TilePackContract';
 import { createRegionalMosaicPlan, type RegionalMosaicIndex } from '../src/world/tiling/RegionalMosaicPlan';
 import { utmBoundsToGeoBounds } from '../src/world/tiling/TileGrid';
 import {
   collectTileFeatureEvidence, compareFeatureEvidence,
-  enumerateRegionalShardSeams, extractSourceCrossings,
-  type ShardSideInterface, type SourceSeamCrossing, type TileFeatureEvidence,
+  enumerateRegionalShardSeams, extractSourceCrossings, probeSourceSurfaceAtUtm,
+  type ShardSideInterface, type SourceSeamCrossing,
+  type SurfaceProbeResult, type TileFeatureEvidence,
 } from '../src/world/tiling/RegionalSeamAudit';
 
 export interface RegionalSeamAuditOptions {
@@ -64,10 +66,14 @@ export interface SeamCandidate {
   tunnelMismatch: boolean;
   /** Diagnostics only; geometry/sleeper phase is not yet certified. */
   sleeperNearby: [number, number];
+  /** Measured from 0.25m inside each tile edge; not a whole-seam continuity proof. */
+  surfaceSamples?: [SurfaceProbeResult, SurfaceProbeResult];
+  /** Potential discontinuity, never automatically a visual QA verdict. */
+  surfaceReview?: 'coverage-asymmetry' | 'height-step';
   sourceLayer?: string;
   sourceBridge?: string;
   sourceTunnel?: string;
-  review: 'none' | 'source-missing-output' | 'asymmetric-geometry-attribution' | 'metadata-mismatch';
+  review: 'none' | 'source-missing-output' | 'asymmetric-geometry-attribution' | 'metadata-mismatch' | 'surface-coverage-asymmetry' | 'surface-height-step';
 }
 export interface SeamSideSummary {
   id: string;
@@ -102,7 +108,14 @@ export interface RegionalSeamAuditReport {
     checkedJunctions: number;
     sameShardControls: number;
   };
-  totals: { crossingCandidates: number; asymmetric: number; absentBoth: number; metadataMismatches: number };
+  totals: {
+    crossingCandidates: number;
+    asymmetric: number;
+    absentBoth: number;
+    metadataMismatches: number;
+    surfaceAsymmetric: number;
+    surfaceHeightSteps: number;
+  };
   interfaces: SeamSideSummary[];
   junctions: SeamJunctionSummary[];
   limitations: string[];
@@ -115,17 +128,24 @@ function packFile(indexFile: string, file: string): string {
   return path.resolve(path.dirname(indexFile), file);
 }
 
+interface LoadedTileEvidence {
+  evidence: TileFeatureEvidence;
+  decoded: DecodedTilePayload;
+  centerEasting: number;
+  centerNorthing: number;
+}
 function readTileEvidence(
   store: TilePackSqliteStore, tx: number, ty: number
-): TileFeatureEvidence {
+): LoadedTileEvidence {
   const decoded = store.getTileDecoded(0, tx, ty);
   if (!decoded) throw new Error('No decoded tile 0:' + tx + ':' + ty);
   const metadata = store.getMetadata();
-  return collectTileFeatureEvidence(
-    decoded,
-    metadata.studyOriginEasting + decoded.tileCenterX,
-    metadata.studyOriginNorthing - decoded.tileCenterZ
-  );
+  const centerEasting = metadata.studyOriginEasting + decoded.tileCenterX;
+  const centerNorthing = metadata.studyOriginNorthing - decoded.tileCenterZ;
+  return {
+    decoded, centerEasting, centerNorthing,
+    evidence: collectTileFeatureEvidence(decoded, centerEasting, centerNorthing),
+  };
 }
 
 function sourceBBox(side: ShardSideInterface, band: number): ReturnType<typeof utmBoundsToGeoBounds> {
@@ -168,12 +188,41 @@ function auditSide(
     const a = readTileEvidence(aStore, pair.a.tx, pair.a.ty);
     const b = readTileEvidence(bStore, pair.b.tx, pair.b.ty);
     for (const crossing of matching) {
-      const cmp = compareFeatureEvidence(crossing.sourceId, a, b);
+      const cmp = compareFeatureEvidence(crossing.sourceId, a.evidence, b.evidence);
+      let surfaceSamples: [SurfaceProbeResult, SurfaceProbeResult] | undefined;
+      let surfaceReview: SeamCandidate['surfaceReview'];
+      // A 25cm edge-inset point at the original OSM crossing is an
+      // independent triangulation witness; it does not certify connectivity.
+      if (crossing.mode === 'segment' &&
+          cmp.classification === 'both' &&
+          (crossing.category === 'road' || crossing.category === 'water' ||
+           crossing.category === 'landuse')) {
+        const aE = crossing.easting + (side.axis === 'easting' ? -0.25 : 0);
+        const bE = crossing.easting + (side.axis === 'easting' ? 0.25 : 0);
+        const aN = crossing.northing + (side.axis === 'northing' ? 0.25 : 0);
+        const bN = crossing.northing + (side.axis === 'northing' ? -0.25 : 0);
+        surfaceSamples = [
+          probeSourceSurfaceAtUtm(a.decoded, a.centerEasting, a.centerNorthing,
+            crossing.sourceId, aE, aN),
+          probeSourceSurfaceAtUtm(b.decoded, b.centerEasting, b.centerNorthing,
+            crossing.sourceId, bE, bN),
+        ];
+        if ((surfaceSamples[0].status === 'covered') !==
+            (surfaceSamples[1].status === 'covered')) {
+          surfaceReview = 'coverage-asymmetry';
+        } else if (surfaceSamples[0].status === 'covered' &&
+                   surfaceSamples[1].status === 'covered' &&
+                   Math.abs(surfaceSamples[0].heights[0] - surfaceSamples[1].heights[0]) > 0.75) {
+          surfaceReview = 'height-step';
+        }
+      }
       const review: SeamCandidate['review'] = cmp.layerMismatch || cmp.bridgeMismatch || cmp.tunnelMismatch
         ? 'metadata-mismatch'
         : cmp.classification === 'only-a' || cmp.classification === 'only-b'
           ? 'asymmetric-geometry-attribution'
-          : cmp.classification === 'neither' ? 'source-missing-output' : 'none';
+          : cmp.classification === 'neither' ? 'source-missing-output'
+          : surfaceReview === 'coverage-asymmetry' ? 'surface-coverage-asymmetry'
+          : surfaceReview === 'height-step' ? 'surface-height-step' : 'none';
       candidates.push({
         sourceId: crossing.sourceId,
         category: crossing.category,
@@ -189,9 +238,10 @@ function auditSide(
         bridgeMismatch: cmp.bridgeMismatch,
         tunnelMismatch: cmp.tunnelMismatch,
         sleeperNearby: [
-          nearSleeperCount(a, crossing.easting, crossing.northing),
-          nearSleeperCount(b, crossing.easting, crossing.northing),
+          nearSleeperCount(a.evidence, crossing.easting, crossing.northing),
+          nearSleeperCount(b.evidence, crossing.easting, crossing.northing),
         ],
+        surfaceSamples, surfaceReview,
         sourceLayer: crossing.tags.layer === undefined ? undefined : String(crossing.tags.layer),
         sourceBridge: crossing.tags.bridge === undefined ? undefined : String(crossing.tags.bridge),
         sourceTunnel: crossing.tags.tunnel === undefined ? undefined : String(crossing.tags.tunnel),
@@ -278,7 +328,7 @@ function auditJunction(
     { tx: westTx + 1, ty: southTy },
   ];
   const evidences = positions.map((p, i) =>
-    readTileEvidence(openPack(junction.shards[i]), p.tx, p.ty));
+    readTileEvidence(openPack(junction.shards[i]), p.tx, p.ty).evidence);
   return {
     id: junction.id, easting: e, northing: n,
     shards: [...junction.shards],
@@ -383,12 +433,16 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       asymmetric: candidates.filter((c) => c.classification === 'only-a' || c.classification === 'only-b').length,
       absentBoth: candidates.filter((c) => c.classification === 'neither').length,
       metadataMismatches: candidates.filter((c) => c.layerMismatch || c.bridgeMismatch || c.tunnelMismatch).length,
+      surfaceAsymmetric: candidates.filter((c) => c.surfaceReview === 'coverage-asymmetry').length,
+      surfaceHeightSteps: candidates.filter((c) => c.surfaceReview === 'height-step').length,
     },
     interfaces: outSides, junctions: outJunctions,
     limitations: [
       'This is stage A: emitted-feature metadata triage, NOT geometric coverage or graph equivalence.',
       'Source IDs absent on both sides are flagged; intentional omissions and unsupported source tags need review.',
       'Tile feature metadata can describe an emitted mesh well away from the seam: presence alone does not prove continuity.',
+      'Road/planar triangle inset samples are geometric witnesses only, not full edge coverage or connectivity.',
+      'Coverage/height sample warnings may be legitimate source offsets, slopes or parser exclusions; review independently.',
       'Sleeper counts are proximity indicators only; ribbon/3D sleeper phase is not yet measured.',
       'Polygon interior detection currently checks only boundary-line midpoint and ring intersection witnesses.',
       'Owner visual QA and further bounded geometry/reference comparisons are required before TKT-029 acceptance.',
@@ -416,7 +470,9 @@ export function formatSeamAuditMarkdown(report: RegionalSeamAuditReport): string
     '- Source crossings: ' + report.totals.crossingCandidates,
     '- Asymmetric attribution: ' + report.totals.asymmetric +
       '; absent both: ' + report.totals.absentBoth +
-      '; inconsistent layer/bridge/tunnel metadata: ' + report.totals.metadataMismatches,
+      '; inconsistent layer/bridge/tunnel metadata: ' + report.totals.metadataMismatches +
+      '; surface-asymmetry probes: ' + report.totals.surfaceAsymmetric +
+      '; height-step probes: ' + report.totals.surfaceHeightSteps,
     '',
     '## Per-interface triage', '',
     '| Interface | Type | Source crossings | Review candidates |',

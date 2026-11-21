@@ -206,6 +206,15 @@ export function composeRegionalMosaicManifest(
           tile.ty < meta.minTy || tile.ty > meta.maxTy) {
         throw new Error(`Tile ${key} outside declared shard ${shard.id}`);
       }
+      const size = plan.config.tileSizeMeters;
+      if (
+        tile.minEasting !== tile.tx * size ||
+        tile.maxEasting !== (tile.tx + 1) * size ||
+        tile.minNorthing !== tile.ty * size ||
+        tile.maxNorthing !== (tile.ty + 1) * size
+      ) {
+        throw new Error(`Regional mosaic tile ${key} has misaligned absolute UTM bounds`);
+      }
       const expectedX = (tile.minEasting + tile.maxEasting) / 2 - regionOrigin.originEasting;
       const expectedZ = regionOrigin.originNorthing - (tile.minNorthing + tile.maxNorthing) / 2;
       const newX = tile.tileCenterX + offsetX;

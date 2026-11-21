@@ -250,7 +250,7 @@ export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
     '- Tile-local OSM feature-info records: ' + s.featureInfoRecords +
       ' (bridge ' + s.semanticFeatureFlags.bridges +
       ', tunnel ' + s.semanticFeatureFlags.tunnels +
-      ', nonzero layer ' + s.semanticFeatureFlags.nonzeroLayers + '),
+      ', nonzero layer ' + s.semanticFeatureFlags.nonzeroLayers + ')',
     '',
     '## Draw submission proxy by layer',
     '',

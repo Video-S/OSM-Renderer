@@ -23,6 +23,7 @@ import { MAP_THEMES } from '../styles/mapThemes';
 import {
   buildSynthetic4096mGeoJson,
   parseTileStreamingCliArgs,
+  resolveTileBenchmarkStreamMargins,
 } from '../../benchmarks/tileStreamingRunner';
 
 async function startCustomTileServer(packPath: string, snapshotId: string, sourceSha256: string) {
@@ -135,6 +136,29 @@ test('SQLite pack path resolver keeps 512m default separate from 1024m and CLI p
   assert.throws(() => parseTileStreamingCliArgs(['--tile-size=768']), /Unsupported --tile-size/);
 });
 
+test('benchmark physical-margin opt-in preserves 512m defaults and matches both policies in meters', () => {
+  const legacy512 = resolveTileBenchmarkStreamMargins(512, false);
+  const legacy1024 = resolveTileBenchmarkStreamMargins(1024, false);
+  assert.deepEqual(legacy512, {
+    preloadMarginTiles: 1, retainMarginTiles: 2,
+    preloadMarginMeters: 512, retainMarginMeters: 1024,
+  });
+  assert.deepEqual(legacy1024, {
+    preloadMarginTiles: 1, retainMarginTiles: 2,
+    preloadMarginMeters: 1024, retainMarginMeters: 2048,
+  });
+
+  const matched512 = resolveTileBenchmarkStreamMargins(512, true);
+  const matched1024 = resolveTileBenchmarkStreamMargins(1024, true);
+  assert.deepEqual(matched512, legacy512);
+  assert.deepEqual(matched1024, {
+    preloadMarginTiles: 0.5, retainMarginTiles: 1,
+    preloadMarginMeters: 512, retainMarginMeters: 1024,
+  });
+  assert.equal(parseTileStreamingCliArgs(['--compare-tile-sizes', '--no-save']).matchPhysicalMargins, false);
+  assert.equal(parseTileStreamingCliArgs(['--compare-tile-sizes', '--match-physical-margins', '--no-save']).matchPhysicalMargins, true);
+});
+
 test('Full 4,096 m × 4,096 m 1,024 m bake passes TilePackVerifier cleanly (0 seam defects, BVH/theme/determinism)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osm-tkt028-1024m-verify-'));
   const pack512Path = path.join(tmpDir, 'pack-512m.sqlite');
@@ -201,7 +225,7 @@ test('Full 4,096 m × 4,096 m 1,024 m bake passes TilePackVerifier cleanly (0 se
   }
 });
 
-test('TileStreamManager adapts boundary overlay to 1,024 m pack and highlights retainMarginTiles physical distance behavior', async () => {
+test('TileStreamManager adapts boundary overlay and evicts/reloads repeatedly with matched 1,024m physical margins', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osm-tkt028-1024m-stream-'));
   const pack512Path = path.join(tmpDir, 'stream-512m.sqlite');
   const pack1024Path = path.join(tmpDir, 'stream-1024m.sqlite');
@@ -279,11 +303,12 @@ test('TileStreamManager adapts boundary overlay to 1,024 m pack and highlights r
     assert.equal(diag1024Retain2.evictedTilesTotal, 3);
     assert.equal(diag1024Retain2.loadedTiles, 5);
 
-    // With retainMarginTiles=1 on 1,024m (restoring a 1,024m physical retention ring), all 4 NW tiles evict cleanly
+    // Matched 512m preload / 1,024m retain: fractional margins are supported by AABB selection.
+    const matched1024 = resolveTileBenchmarkStreamMargins(1024, true);
     const mgr1024PhysicalParity = new TileStreamManager({
       apiBaseUrl: srv1024.baseUrl,
-      preloadMarginTiles: 1,
-      retainMarginTiles: 1,
+      preloadMarginTiles: matched1024.preloadMarginTiles,
+      retainMarginTiles: matched1024.retainMarginTiles,
       decodeClient: createTileDecodeClient({ forceInlineDecode: true }),
     });
     await mgr1024PhysicalParity.initialize();
@@ -292,10 +317,27 @@ test('TileStreamManager adapts boundary overlay to 1,024 m pack and highlights r
     assert.equal(diag1024Retain1.loadedTiles, 4);
     assert.ok(diag1024Retain1.evictedTilesTotal > diag1024Retain2.evictedTilesTotal);
     assert.ok(diag1024Retain1.loadedTiles < diag1024Retain2.loadedTiles);
+    assert.equal(diag1024Retain1.preloadMarginTiles, 0.5);
+    assert.equal(diag1024Retain1.retainMarginTiles, 1);
+
+    // Every SE revisit must return the same settled geometry/BVH/mesh footprint.
+    // Check repeated reloading rather than only a single successful eviction.
+    for (let cycle = 0; cycle < 5; cycle++) {
+      const revisit = await runNwSeHops(mgr1024PhysicalParity);
+      for (const field of [
+        'loadedTiles', 'tileCpuGeometryBytes', 'tileBvhBytes',
+        'activeTileGeometries', 'activeTileBvhs', 'loadedMeshCount',
+      ] as const) {
+        assert.equal(revisit[field], diag1024Retain1[field], `SE cycle ${cycle + 1}: ${field} changed`);
+      }
+    }
+    assert.ok(mgr1024PhysicalParity.getDiagnostics().evictedTilesTotal >= 24);
 
     mgr512.dispose();
     mgr1024SameMargin.dispose();
     mgr1024PhysicalParity.dispose();
+    assert.equal(mgr1024PhysicalParity.getDiagnostics().activeTileGeometries, 0);
+    assert.equal(mgr1024PhysicalParity.getDiagnostics().activeTileBvhs, 0);
   } finally {
     await srv512.close();
     await srv1024.close();

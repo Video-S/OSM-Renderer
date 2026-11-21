@@ -87,6 +87,17 @@ The existing browser benchmark's `cleanResourceStabilizationVerified` is **false
 
 **Recommendation:** 1,024 m LOD0 is the preferred **candidate**, contingent on human visual inspection of real pan/zoom streaming and willingness to accept the measured close-up geometry-memory cost. No M3 LOD or new batching is justified by these results alone.
 
+## Visual QA on the Matched Policy
+
+The normal URL `?m2a=1&tileSize=1024` still uses **legacy** 1/2-tile preload/retention and does **not** replicate the matched benchmark. An opt-in visual parameter now uses the **exact 512 m/1,024 m physical policy**, for either tile width:
+
+- **512 m baseline:** `http://localhost:3000/?m2a=1&tileSize=512&matchPhysicalMargins=1`
+- **1,024 m candidate:** `http://localhost:3000/?m2a=1&tileSize=1024&matchPhysicalMargins=1`
+
+The streaming HUD displays effective preload/retention distances in metres. Pan from the northwest edge to the southeast edge and back at medium/close zoom, observing the **Evicted** counter (must increase), any gaps/pops/stutters, and the **Tile Mem** counter. Also compare far zoom, rail detail transition, feature inspector, and theme changes. This is human visual QA, not an LLM-judged visual test.
+
+The query setting affects only startup when explicitly supplied; normal production defaults and tile packs are untouched.
+
 ## Reproduction (Windows PowerShell, repository root)
 
 Both canonical SQLite packs must already exist; the 1,024 m pack was previously baked and verified.

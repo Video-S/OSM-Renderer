@@ -47,6 +47,17 @@ This means the existing 1,024 m run **did not test tile unload/reload behavior**
 - [ ] Project-owner visual check for continuity and loading during actual navigation.
 - [ ] Project-owner accepts 512 m or 1,024 m as the production default (or requests follow-up).
 
+## Windows Validation Feedback (2026-11-21)
+
+The project owner ran the first validation pass:
+
+- **5 tests:** 4 passed, 1 failed. The matched-margins CLI test and repeated-eviction/reload lifecycle test **passed**.
+- **TypeScript:** 2 unrelated errors in the 1,024 m experiment implementation: nonexistent `seamReport.tileCount` and an update to `readonly boundaryOverlayResult`.
+- **Vite build:** passed.
+- **Follow-up fixes committed on this PR branch:** cross-platform CLI pack-path expectation, metadata-derived verifier tile count, mutable boundary overlay result field. Pending re-run of Node tests and `npm run lint`.
+
+None of these findings imply a streaming performance or memory regression; they were test portability / type correctness issues and have been addressed without changing production tiling behavior.
+
 ## Reproduction (Windows PowerShell, repository root)
 
 Both canonical SQLite packs must already exist; the 1,024 m pack was previously baked and verified.

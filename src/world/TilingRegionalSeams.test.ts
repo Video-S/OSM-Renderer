@@ -11,6 +11,7 @@ import {
   enumerateRegionalShardSeams,
   extractSourceCrossings,
   getCrossingPairIndex,
+  probeSourceSurfaceAtUtm,
   type ShardSideInterface,
 } from './tiling/RegionalSeamAudit';
 import type { DecodedTilePayload } from './tiling/TilePackContract';
@@ -194,4 +195,55 @@ test('TKT-032: audit CLI is read-only by default and rejects ambiguous filters',
   assert.equal(filtered.bandMeters, 48);
   assert.throws(() => parseRegionalSeamAuditArgs(['--band-meters=0']), /band-meters/);
   assert.throws(() => parseRegionalSeamAuditArgs(['--unknown=1']), /Unknown/);
+});
+
+
+test('TKT-032: source-attributed triangle inset probe measures coverage and height', () => {
+  const payload = tileWithEmission([{ id: 'way/road' }], true);
+  payload.meshes[0] = {
+    ...payload.meshes[0],
+    layer: 'roads',
+    localPositionOffset: [0, 1.25, 0],
+    positions: new Float32Array([0, 0, 0, 2, 0, 0, 0, 0, 2]),
+    indices: new Uint16Array([0, 1, 2]),
+    faceRanges: [],
+    singleFeatureIdx: 0,
+  };
+  const covered = probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/road', 500000.25, 5799999.75);
+  assert.equal(covered.status, 'covered');
+  assert.deepEqual(covered.heights, [1.25]);
+  assert.equal(covered.matchedMeshes, 1);
+  const outside = probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/road', 500003, 5799997);
+  assert.equal(outside.status, 'uncovered');
+  const wrongSource = probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/different', 500000.25, 5799999.75);
+  assert.equal(wrongSource.status, 'unattributed');
+});
+
+test('TKT-032: face-range metadata prevents another overlapping feature from masking omissions', () => {
+  const payload = tileWithEmission([{ id: 'way/alpha' }, { id: 'way/bravo' }], true);
+  payload.meshes[0] = {
+    ...payload.meshes[0],
+    layer: 'roads',
+    localPositionOffset: [0, 0, 0],
+    singleFeatureIdx: -1,
+    positions: new Float32Array([
+      0, 0, 0, 2, 0, 0, 0, 0, 2,
+      0, 3, 0, 2, 3, 0, 0, 3, 2,
+    ]),
+    indices: null,
+    faceRanges: [
+      { startFace: 0, endFace: 1, infoIdx: 0 },
+      { startFace: 1, endFace: 2, infoIdx: 1 },
+    ],
+  };
+  const p = [500000.4, 5799999.6] as const;
+  assert.deepEqual(probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/alpha', ...p).heights, [0]);
+  assert.deepEqual(probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/bravo', ...p).heights, [3]);
+  assert.equal(probeSourceSurfaceAtUtm(payload, 500000, 5800000,
+    'way/unknown', ...p).status, 'unattributed');
 });

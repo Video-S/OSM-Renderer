@@ -2,7 +2,7 @@
 id: TKT-032
 title: Cross-Shard Geometry and Topology Continuity Validation
 type: correctness-validation
-status: proposed
+status: implementation_in_progress
 priority: high
 created: 2026-11-22
 updated: 2026-11-22
@@ -63,6 +63,40 @@ Classify each failure by **source data, query/context, graph preprocessing, per-
 - **Owner-only visual QA:** with `npm run dev` and `http://localhost:3000/?m2a=1&region=twente-pilot`, supply a small location/feature checklist covering crossings in both directions, rail sleeper alignment close/far, bridges and tunnels (negative layers), terrain/planar fills, picking, themes, shadow transitions, 9 shard junctions, and Hengelo–Enschede traversal. **No LLM visual testing or visual sign-off.**
 - **Artifact:** reproducible JSON/Markdown seam report plus a decision section (passed, specific defects fixed, or blocked by a named architectural requirement); compare control seams. Local large artifacts need not be committed, but summary and test fixtures must be reviewable.
 - **Sign-off:** TKT-029 regional continuity acceptance only after automated gate and the owner's human visual approval. An Overijssel-wide bake is a **separate future decision**, not the success criterion of TKT-032.
+
+## Implementation progress — initial bounded audit (2026-11-22)
+
+**This PR is the first correctness-audit implementation, not an accepted seam parity result.** No owner SQLite pack is available in GitHub CI; the 256-tile mosaic must be audited on the owner's Windows checkout. No renderer or baker behavior has been changed.
+
+Current implementation:
+
+- `src/world/tiling/RegionalSeamAudit.ts` enumerates all internal shard interfaces and four-way junctions without fixed coordinates, classifies source crossings, and measures emitted source-ID, `layer` / `bridge` / `tunnel` metadata. Includes conservative, source-attributed triangle coverage/height probes at ±0.25 m from a seam; ignores unrelated overlapping geometry.
+- `scripts/audit-regional-seams.ts` queries the original canonical OSM spatial index near each boundary and separately loads only adjacent SQLite tile payloads. Reports both-sided/one-sided/absent-both attribution, metadata mismatches, local surface coverage/height candidates and railway sleeper proximity counts. Audits all 24 interfaces, 9 junctions and 4 same-shard tile controls, with optional filters. Writes reproducible JSON/Markdown; packs are read-only.
+- `src/world/TilingRegionalSeams.test.ts` covers complete boundary/junction enumeration, road/rail crossings and tangential negative controls in both orientations, long polygons with no ring crossing, negative-layer tunnel metadata disagreement, emitted-vs-unused feature metadata, tile-center sleeper coordinate rebasing, and per-feature triangle probes. Existing regional layout tests added to CI together with these tests.
+
+Run after pulling this branch, with the canonical Overijssel SQLite source index and the previously verified Twente mosaic already present:
+
+```powershell
+npm run lint
+npx tsx --test src/world/TilingRegionalMosaic.test.ts src/world/TilingRegionalSeams.test.ts
+npm run build
+npx tsx scripts/audit-regional-seams.ts
+```
+
+Outputs:
+
+- `benchmarks/results/tkt032-seam-audit.json`
+- `benchmarks/results/tkt032-seam-audit.md`
+
+For focused reproduction (invoke TSX directly because npm has consumed `--name=value` args on the owner's PowerShell/npm version):
+
+```powershell
+npx tsx scripts/audit-regional-seams.ts --boundary=vertical-r0-c0-1 --out=benchmarks/results/tkt032-focus.json --markdown-out=benchmarks/results/tkt032-focus.md
+```
+
+**What is NOT yet proven:** graph topology equivalence, complete road/polygon seam coverage, deterministic ribbon/3D sleeper phase, exact bridge/portal transitions, render-order/picking behavior and the owner's human visual QA. An emitted feature ID can exist in a tile even if its mesh ends away from the seam. Local coverage and height probes are *suspected discrepancy indicators*, not automatic pass/fail verdicts. Any identified candidates require a minimal source/geometry reproduction before fixing baking logic.
+
+Do not mark TKT-029 continuity approved on the basis of this preliminary audit alone. Keep full-Overijssel baking deferred until the geometric/semantic findings are classified and the owner signs off.
 
 ## Completion checklist
 

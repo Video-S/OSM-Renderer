@@ -607,6 +607,8 @@ export default function App() {
       retainMarginTiles?: number;
       maxConcurrentFetches?: number;
       maxCommitsPerFrame?: number;
+      experimentSkipUnchangedViewport?: boolean;
+      experimentSkipUnchangedZoom?: boolean;
       themeId?: string;
       target?: [number, number, number];
     }
@@ -672,6 +674,8 @@ export default function App() {
         retainMarginTiles: extraOptions?.retainMarginTiles,
         maxConcurrentFetches: extraOptions?.maxConcurrentFetches,
         maxCommitsPerFrame: extraOptions?.maxCommitsPerFrame,
+        experimentSkipUnchangedViewport: extraOptions?.experimentSkipUnchangedViewport,
+        experimentSkipUnchangedZoom: extraOptions?.experimentSkipUnchangedZoom,
         initialTheme: activeTheme,
         initialCameraZoom: initialZoom,
         onDiagnosticsChange: (diag) => {
@@ -1307,7 +1311,12 @@ export default function App() {
     const matchedMarginsParam = params.get('matchPhysicalMargins');
     const matchPhysicalMargins =
       matchedMarginsParam === '1' || matchedMarginsParam === 'true';
+    // Explicit TKT-031 A/B flags; normal rendering remains unchanged by default.
+    const experimentSkipUnchangedViewport = params.get('perfViewportGate') === '1';
+    const experimentSkipUnchangedZoom = params.get('perfZoomGate') === '1';
     const visualStreamingOptions = {
+      experimentSkipUnchangedViewport,
+      experimentSkipUnchangedZoom,
       ...(isRegionalPilotUrl
         ? { apiBaseUrl: '/api/tiles-region' }
         : is1024ExperimentUrl
@@ -1338,7 +1347,8 @@ export default function App() {
         zoomParam,
         azParam,
         true,
-        isRegionalPilotUrl || is1024ExperimentUrl || matchPhysicalMargins
+        isRegionalPilotUrl || is1024ExperimentUrl || matchPhysicalMargins ||
+        experimentSkipUnchangedViewport || experimentSkipUnchangedZoom
           ? visualStreamingOptions
           : undefined
       );
@@ -2321,6 +2331,8 @@ export default function App() {
         retainMarginTiles?: number;
         maxConcurrentFetches?: number;
         maxCommitsPerFrame?: number;
+        experimentSkipUnchangedViewport?: boolean;
+        experimentSkipUnchangedZoom?: boolean;
         themeId?: string;
         target?: [number, number, number];
         zoom?: number;
@@ -2338,6 +2350,8 @@ export default function App() {
             retainMarginTiles: params.retainMarginTiles,
             maxConcurrentFetches: params.maxConcurrentFetches,
             maxCommitsPerFrame: params.maxCommitsPerFrame,
+            experimentSkipUnchangedViewport: params.experimentSkipUnchangedViewport,
+            experimentSkipUnchangedZoom: params.experimentSkipUnchangedZoom,
             themeId: params.themeId,
             target: params.target,
           }

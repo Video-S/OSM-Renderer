@@ -406,9 +406,23 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
           };
           try {
             h.setCameraPose([5500, 0, 3500], 2.2, 45);
-            await h.waitForM2aIdle();
-            await new Promise<void>((r) => requestAnimationFrame(() => r()));
-            await new Promise<void>((r) => requestAnimationFrame(() => r()));
+            // Do not call waitForM2aIdle(): it uses an unlimited commit
+            // budget and would distort the active-streaming jank measurement.
+            // Let the normal render loop perform its 4-tile/frame commits.
+            let idleFrames = 0;
+            const startedAt = performance.now();
+            for (let frame = 0; frame < 1800; frame++) {
+              await new Promise<void>((r) => requestAnimationFrame(() => r()));
+              const diag = h.getTileStreamDiagnostics();
+              idleFrames = diag?.loadingTiles === 0 ? idleFrames + 1 : 0;
+              if (idleFrames >= 3) break;
+              if (performance.now() - startedAt > 180000) {
+                throw new Error('Timed out waiting for regional teleport streaming');
+              }
+            }
+            if (idleFrames < 3) {
+              throw new Error('Regional teleport did not settle within 1800 frames');
+            }
           } finally {
             (window as any).__BENCHMARK_FRAME_COLLECTOR__ = null;
             (window as any).__BENCHMARK_COLLECTOR_META__ = undefined;

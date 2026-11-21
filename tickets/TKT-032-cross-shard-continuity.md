@@ -145,6 +145,26 @@ npx tsx scripts/audit-regional-seams.ts --out=benchmarks/results/tkt032-seam-aud
 
 Then investigate selected **one-sided road** cases with the canonical source and decoded adjacent meshes/graph identities. Do not change baker logic or sign off TKT-029 before classifying real geometry and sleeper-phase continuity.
 
+## Owner schema-v2 complete audit — console results (2026-11-22)
+
+Owner pulled `8b6a0bd` and reran the read-only `scripts/audit-regional-seams.ts` against the **unchanged, verified** real Twente mosaic: all **16 packs / 256 non-empty tiles**, 235.68 MiB compressed, passed. All **24 internal shard interfaces, 9 four-way junctions and 4 same-shard controls** were covered. No bake, tile, renderer or OSM source mutation occurred.
+
+The counts below are recomputed by summing the owner's full **console output**, not by inspecting a v2 JSON file (which has not yet been supplied):
+
+| Review class | Shard interfaces (4,240 crossing events) | Same-shard controls (164 crossing events) | All 4,404 events |
+|---|---:|---:|---:|
+| `source-polygon-coverage-mismatch` | 161 | 2 | **163** |
+| `asymmetric-geometry-attribution` | 55 | 0 | **55** |
+| `source-missing-output` | 64 | 2 | **66** |
+| `surface-coverage-asymmetry` | 14 | 0 | **14** |
+| **Total review events** | **294** | **4** | **298** |
+
+Old v1 review events: `2,763` naive surface + `55` one-sided + `66` absent = **2,884** (120 of these in four same-shard controls). Calibrated v2: **298**, or **89.7% fewer**; ordinary controls fell **120→4**. This validates that the earlier broad surface-asymmetry classification was misleading. It does **not** establish all polygons render correctly: 163 mismatches against raw source-polygon interior remain and can be caused by semantic ownership/overrides or true omissions.
+
+The **55 one-sided attribution** and **66 absent-both** event counts did not change, as expected from a polygon-probe-only correction. The **14 nonpolygon surface warnings** are concentrated on shard boundaries and deserve specific source/mesh examination. These are *crossing events*, not unique broken features.
+
+**Next data required:** owner-generated `benchmarks/results/tkt032-seam-audit-v2.json` (Markdown optional) to inspect all **163** polygon expected-vs-emitted coverage pairs, **14** other surface witnesses, **55** attribution cases, and **66** absent-both cases. Prioritize road/rail/negative-layer semantics and source-backed ownership. Deduplicate by source ID, crossing location and feature category. Do not use aggregate warning counts as a go/no-go criterion or modify baker data without a failing narrowed reproduction. Human visual acceptance and railway sleeper/graph continuity are still pending; TKT-029 **not signed off**.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

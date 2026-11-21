@@ -8,6 +8,7 @@ import { utm32NToGeo } from './tiling/RegionalProjection';
 import {
   collectTileFeatureEvidence,
   compareFeatureEvidence,
+  classifySourceSurfaceCoverage,
   enumerateRegionalShardSeams,
   extractSourceCrossings,
   getCrossingPairIndex,
@@ -161,6 +162,66 @@ test('TKT-032: long water/landuse polygon contains border even without edge inte
   assert.equal(out[0].sourceId, 'way/water');
   assert.equal(out[0].mode, 'polygon-interior');
   assert.ok(Math.abs(out[0].northing - mid) < 0.01);
+});
+
+test('TKT-032: genuine polygon-boundary asymmetry is not a seam defect', () => {
+  const { sides } = enumerateRegionalShardSeams();
+  for (const axis of ['easting', 'northing'] as const) {
+    const side = sides.find((s) => s.axis === axis)!;
+    const mid = (side.from + side.to) / 2;
+    // A diagonal polygon boundary crosses the shard edge. Moving 25 cm
+    // across that border can legitimately enter or exit the polygon.
+    const p = (across: number, along: number): [number, number] =>
+      axis === 'easting'
+        ? [side.at + across, mid + along]
+        : [mid + along, side.at + across];
+    const feature = polygonFeature('way/diagonal', { landuse: 'grass' }, [[
+      p(-10, -10), p(10, 10), p(10, 30), p(-10, 30), p(-10, -10),
+    ]]);
+    const crossings = extractSourceCrossings(side, { features: [feature] });
+    const atBorder = crossings.find((x) =>
+      x.mode === 'segment' &&
+      Math.abs((axis === 'easting' ? x.northing : x.easting) - mid) < 0.05
+    );
+    assert.ok(atBorder);
+    assert.ok(atBorder.expectedPolygonCoverage);
+    assert.equal(atBorder.expectedPolygonCoverage[0] !==
+      atBorder.expectedPolygonCoverage[1], true);
+    assert.equal(classifySourceSurfaceCoverage(
+      atBorder.expectedPolygonCoverage,
+      atBorder.expectedPolygonCoverage), 'none');
+    const flipped = [!atBorder.expectedPolygonCoverage[0],
+      atBorder.expectedPolygonCoverage[1]] as [boolean, boolean];
+    assert.equal(classifySourceSurfaceCoverage(
+      flipped, atBorder.expectedPolygonCoverage), 'source-polygon-coverage-mismatch');
+  }
+});
+
+test('TKT-032: nonpolygon roads keep asymmetry warning; polygon holes honour source interior', () => {
+  assert.equal(classifySourceSurfaceCoverage([true, false]), 'coverage-asymmetry');
+  assert.equal(classifySourceSurfaceCoverage([true, true]), 'none');
+  assert.equal(classifySourceSurfaceCoverage([false, true], [false, true]), 'none');
+  assert.equal(classifySourceSurfaceCoverage([true, false], [false, true]),
+    'source-polygon-coverage-mismatch');
+  const side = enumerateRegionalShardSeams().sides.find((s) => s.axis === 'easting')!;
+  const mid = (side.from + side.to) / 2;
+  const poly = polygonFeature('way/with-hole', { landuse: 'forest' }, [
+    [
+      [side.at - 20, mid - 20], [side.at + 20, mid - 20],
+      [side.at + 20, mid + 20], [side.at - 20, mid + 20],
+      [side.at - 20, mid - 20],
+    ],
+    [
+      [side.at - 1, mid - 1], [side.at + 1, mid - 1],
+      [side.at + 1, mid + 1], [side.at - 1, mid + 1],
+      [side.at - 1, mid - 1],
+    ],
+  ]);
+  const candidates = extractSourceCrossings(side, { features: [poly] });
+  const holeCrossing = candidates.find((c) =>
+    Math.abs(c.northing - (mid + 1)) < 0.05 && c.mode === 'segment');
+  assert.ok(holeCrossing);
+  assert.deepEqual(holeCrossing.expectedPolygonCoverage, [true, true]);
 });
 
 test('TKT-032: feature presence counts only geometrically emitted metadata, not unused tile features', () => {

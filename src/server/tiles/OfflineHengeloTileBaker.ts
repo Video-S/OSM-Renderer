@@ -11,6 +11,7 @@ import {
   DEFAULT_COLLAR_METERS,
   DEFAULT_TILE_SIZE_METERS,
   createHengeloStudyGrid,
+  utmBoundsToGeoBounds,
   type StudyGridSpec,
   type TileDescriptor,
 } from '../../world/tiling/TileGrid';
@@ -141,6 +142,10 @@ export interface BakeHengeloFromStoreOptions {
   batchDimension?: number;
   includeBvh?: boolean;
   maxSceneTreesPerTile?: number;
+  /** Optional pre-aligned shard grid, instead of the fixed 4km Hengelo study. */
+  grid?: StudyGridSpec;
+  /** Additional OSM query context around shard bounds, in meters. */
+  queryContextMarginMeters?: number;
 }
 
 export function disposeIngestedStudyRegionPlans(ingested: IngestedStudyRegion): void {
@@ -522,13 +527,29 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
   const batchDimension =
     options.batchDimension ?? Math.min(4, Math.max(1, Math.round(2048 / tileSizeMeters)));
 
-  const grid = createHengeloStudyGrid(tileSizeMeters, collarMeters);
+  const grid = options.grid ?? createHengeloStudyGrid(tileSizeMeters, collarMeters);
+  if (grid.tileSizeMeters !== tileSizeMeters || grid.collarMeters !== collarMeters) {
+    throw new Error('Baker grid tile size/collar must match bake options');
+  }
+  const queryContextMarginMeters = options.queryContextMarginMeters ?? collarMeters;
+  if (!Number.isFinite(queryContextMarginMeters) || queryContextMarginMeters < collarMeters) {
+    throw new Error('Baker context margin must be finite and at least the collar width');
+  }
+  const b = grid.studyUtmBounds;
+  const queryGeoBounds = queryContextMarginMeters === collarMeters
+    ? grid.studyExpandedGeoBounds
+    : utmBoundsToGeoBounds({
+        minEasting: b.minEasting - queryContextMarginMeters,
+        maxEasting: b.maxEasting + queryContextMarginMeters,
+        minNorthing: b.minNorthing - queryContextMarginMeters,
+        maxNorthing: b.maxNorthing + queryContextMarginMeters,
+      });
   const store = new OverijsselOsmStore(indexPath, { expectedSha256 });
   let ingested: IngestedStudyRegion | null = null;
 
   try {
     const queryRes = store.queryBBox({
-      ...grid.studyExpandedGeoBounds,
+      ...queryGeoBounds,
       locationName: grid.name,
     });
     const sqliteQueryTotalMs =

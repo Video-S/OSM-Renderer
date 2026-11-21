@@ -208,6 +208,37 @@ Choose a deliberately varied set, not a random 55-way visual tour:
 
 Only after road diagnosis should we interpret raw source polygon mismatches via the renderer's semantic ownership/picking behavior and address railway ribbon vs 3D sleeper-phase / junction parity. Human visual QA belongs to the owner, not LLM automation. TKT-029 remains open.
 
+## Owner's full v2 JSON analysis and physical road diagnosis (2026-11-22)
+
+Owner provided `tkt032-seam-audit-v2.json` (**4,404 events**, canonical snapshot `overijssel-261114-8ae28196`), plus Markdown. Independently inspected the full structured record rather than relying on console aggregates. All **24 cross-shard side interfaces, 9 four-way junctions and 4 same-shard controls** covered.
+
+**Detailed classification:**
+
+- **55** one-sided feature-ID events = **35 roads (34 distinct `way/` IDs)** and **20 landuse events (9 distinct IDs)**. **None occurred in same-shard controls.** 30 `only-a`, 25 `only-b`. These measure metadata attached to emitted geometry *somewhere in each tile*, not physical road presence at crossing. Asymmetric road examples: `way/44844082` at UTM (348591.719, 5794816); `way/51932698` at (357376, 5798521.137); `way/6655700` crosses two shard interfaces within metres of the (353280, 5786624) four-way junction.
+- **66** source-ID absent-both events, **38 distinct source IDs** (52 water, 13 landuse, **1 road**: `way/6661112`, UTM 357376 / 5791095.095). 40 of these events are relations; previous spatial matching observed alternate same-category features at many exact points. Missing source ID does not automatically imply omitted geometry.
+- **163** source-polygon expected/interior coverage warnings, **125 distinct landuse features**. **152** samples have `uncovered/uncovered` despite polygon geometry expecting one-sided coverage; **9** `covered/covered`, **2** reversed side. Many can be explained by semantic ground ownership, incomplete ring/context processing, or a local probe near a clipped boundary. The current source polygon vs same-feature render mismatch does not prove a visible hole; any source-independent coverage probe must respect surface ownership.
+- **14** nonpolygon source-attributed road surface asymmetry events (**13 distinct ways**), all cross-shard, no same-shard controls. They have emitted attribution in *both* tiles but the 25 cm inset samples are `covered/uncovered` or `uncovered/covered`. Their covered surface height is consistently +0.05 m; the uncovered side often finds nearby candidate triangles but no containing face. Examples: `way/434725829` (348413.445 / 5794816), `way/737394825` (351797.163 / 5794816), `way/971925458` has two crossings on `vertical-r1-c1-2`.
+- **Important previously unreported blind spot:** there are **37 nonpolygon road events** (**35 distinct way IDs**) where both emitted tiles attribute the source, but **neither** 25 cm source-attributed inset probe is covered; v2 reports `review=none` since it only detects one-sided difference. Also **6 polygon-road events** had expected correct one-sided polygon-interior coverage and should **not** be conflated with the 14 warnings. Of **1,205 both-attributed road crossings**, 1,148 have two covered source-attributed road probes, 14 have a flagged one-sided absence, 37 are uncovered on both, and 6 polygon-way cases have correctly expected one-sided geometry.
+- **24 railway crossing events** have source IDs on both adjacent sides and nearby sleeper counts on both; the counts are not a phase/alignment test. **0** observed *cross-tile* layer, bridge or tunnel metadata disagreements and **0** height-step warnings. Only 19 crossing events in the source inventory have explicit `layer` tags, 2 have `bridge=yes`, and 8 `tunnel=culvert`. No claim that all negative-layer portals were actually checked or that source-vs-render metadata is equal in all cases.
+
+**Code inspection and diagnosis:** `collectTileFeatureEvidence()` accepts a feature ID if present in *any* emitted mesh/face-range in the tile. `probeSourceSurfaceAtUtm()` checks only triangles attributed to that exact source way. `GeometryBuilder.ts` has distinct graph-road lineage/deduplication, clipped precomputed at-grade plans and grade-separated handling. Therefore: an ID discrepancy may reflect attribution rather than missing physical coverage; a same-ID absence at one point may conceal a geometry gap or another road surface rendered under a different ID. The current v2 report cannot discriminate those conditions.
+
+### Targeted v3 instrumentation in this branch (source-independent road physical witness)
+
+- Added **`probeAnyRoadSurfaceAtUtm()`** to `RegionalSeamAudit.ts`: geometrically tests *any* emitted road-layer triangle at the same 25 cm UTM point, regardless of source ID. This is deliberately a **second probe**; it cannot establish that the matching triangle belongs to the same road, is visible, or is graph-connected.
+- For **suspicious nonpolygon road crossings only** (one-/no-side source attribution; either-side source surface gap; both-side source surface absence), `audit-regional-seams.ts` records the physical road coverage pair plus separately retained source-attribution classification. Metadata includes source `highway`, `landuse`, and `waterway` tags for semantic filtering. JSON schema bumped to **v3**; Markdown adds a physical-road triage table; totals separate road-physical one-sided, road-physical neither, and road-source uncovered-both counts.
+- Existing canonical packs remain untouched. Synthetic regression tests explicitly demonstrate that another emitted road can cover a point even when the requested source ID is unavailable, and that an unrelated landuse layer must not count as road coverage.
+
+**Owner follow-up** (after this PR's focused CI passes, no rebake):
+
+```powershell
+git pull --ff-only
+npx tsx --test src/world/TilingRegionalMosaic.test.ts src/world/TilingRegionalSeams.test.ts
+npx tsx scripts/audit-regional-seams.ts --out=benchmarks/results/tkt032-seam-audit-v3.json --markdown-out=benchmarks/results/tkt032-seam-audit-v3.md
+```
+
+Review v3 physical-road summaries **before** proposing any baker fix. Prioritize actual road-layer gaps, especially `way/6661112` and the ~14 original asymmetry cases, then refine geometry comparison using OSM line topology / bounded reference at any remaining suspects. Road connections, sleeper-phase and owner visual review remain open; this is **not** a TKT-029 pass.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

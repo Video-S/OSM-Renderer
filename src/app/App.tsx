@@ -1297,6 +1297,20 @@ export default function App() {
       : undefined;
     const is1024ExperimentUrl =
       parsedTileSizeParam === 1024 || params.get('pack') === '1024m';
+    // Developer-only visual parity mode: same physical preload/retain distances as
+    // TKT-028-F1 hardware benchmarks, without altering normal streamer defaults.
+    const matchedMarginsParam = params.get('matchPhysicalMargins');
+    const matchPhysicalMargins =
+      matchedMarginsParam === '1' || matchedMarginsParam === 'true';
+    const visualStreamingOptions = {
+      ...(is1024ExperimentUrl ? { apiBaseUrl: '/api/tiles-1024m' } : {}),
+      ...(matchPhysicalMargins
+        ? {
+            preloadMarginTiles: is1024ExperimentUrl ? 0.5 : 1,
+            retainMarginTiles: is1024ExperimentUrl ? 1 : 2,
+          }
+        : {}),
+    };
 
     if (isBenchmarkMode) {
       setIsDockCollapsed(true);
@@ -1315,7 +1329,9 @@ export default function App() {
         zoomParam,
         azParam,
         true,
-        is1024ExperimentUrl ? { apiBaseUrl: '/api/tiles-1024m' } : undefined
+        is1024ExperimentUrl || matchPhysicalMargins
+          ? visualStreamingOptions
+          : undefined
       );
     } else if (isM1aHarnessParam) {
       void loadHengeloM1aVisualHarness(
@@ -3084,7 +3100,7 @@ export default function App() {
               M2-A Tile Streaming
             </span>
             <span className="font-mono text-[11px] text-slate-300">
-              {m2aStreamDiagnostics.snapshotId} · v{m2aStreamDiagnostics.bakeSchemaVersion} · {m2aStreamDiagnostics.tileSizeMeters}m
+              {m2aStreamDiagnostics.snapshotId} · v{m2aStreamDiagnostics.bakeSchemaVersion} · {m2aStreamDiagnostics.tileSizeMeters}m · preload/retain {m2aStreamDiagnostics.preloadMarginTiles * m2aStreamDiagnostics.tileSizeMeters}/{m2aStreamDiagnostics.retainMarginTiles * m2aStreamDiagnostics.tileSizeMeters}m
             </span>
           </div>
 

@@ -2,7 +2,7 @@
 id: TKT-031
 title: Regional Frame-Cost Attribution and Low-Risk Runtime Efficiency
 type: performance-investigation
-status: proposed
+status: implementation_in_progress
 priority: high
 created: 2026-11-21
 updated: 2026-11-21
@@ -96,6 +96,60 @@ Required engineering gates: `npm run lint`, relevant targeted Node tests, `npm r
 - **No** visual design or shadow policy decision. Shadows must be held constant between A/B tests; distinguish their pass cost if measured, but do not optimize by silently disabling them.
 - **No** automatic PR promotion or claims of regional production readiness without the 256-tile dataset verification and owner hardware results.
 - **No** inference that the 0.2% TKT-030 post-merge result is an upper bound on rendering improvements.
+
+## First implementation pass (2026-11-21)
+
+**Branch:** `tkt-031-regional-frame-cost-investigation`, stacked on TKT-030. First implementation only: no canonical regional frame-cost findings are claimed.
+
+### Implementation
+
+- `src/world/tiling/RenderWorkAttribution.ts` is a pure material-group submission estimator, called only by the existing benchmark scene snapshot. It distinguishes static/instanced meshes and groups. It is a main-camera color-pass proxy; actual shadow draw calls are not attributed.
+- `TileStreamManager.ts` has separately **opt-in** `experimentSkipUnchangedViewport` / `experimentSkipUnchangedZoom` gates. The unchanged viewport gate uses exact projected bounds + focus + zoom equality, retains `tick()` on every frame, resets on manifest reload, and forces re-evaluation after failed async tile fetches. Counters record scans, skips and zoom skips.
+- `App.tsx` permits visual `perfViewportGate=1` and `perfZoomGate=1` URL flags and benchmark-harness equivalents. The ordinary renderer remains unchanged.
+- `benchmarks/tileStreamingRunner.ts` supports `--experiment-skip-unchanged-viewport` and `--experiment-skip-unchanged-zoom`, preserves these flags in report provenance, and records material-group estimates/counters.
+- `benchmarks/regionalFrameCostRunner.ts` is a dedicated, opt-in **actual 16 km** hardware benchmark. It requires an already-baked complete TKT-029 mosaic (verifies every shard/tile), checks the served API against the canonical snapshot, reuses the existing browser harness, and measures street/city/whole-region, active teleport and settled post-teleport phases. `--compare=viewport`, `--compare=zoom` or `--compare=both` includes baseline and alternates order across runs. **Teleport is not a smooth-pan workload.**
+- `src/world/Tiling031RuntimeEfficiency.test.ts` covers pure group counts, instancing, exact viewport equality, CLI options and a stationary-camera HTTP-error retry fixture.
+
+### Commands — Windows PowerShell
+
+Terminal A, project checkout:
+
+    git fetch origin
+    git switch --track origin/tkt-031-regional-frame-cost-investigation
+    npm run lint
+    npx tsx --test src/world/Tiling031RuntimeEfficiency.test.ts
+    npm run build
+    npm run dev
+
+Terminal B, after the 256-tile regional dataset exists (the server from terminal A must be running):
+
+    npm run osm:verify-regional-mosaic
+    npm run bench:regional -- --compare=none --runs=3
+
+For isolated, paired comparisons:
+
+    npm run bench:regional -- --compare=viewport --runs=3
+    npm run bench:regional -- --compare=zoom --runs=3
+
+Output defaults:
+
+- `benchmarks/results/tkt031-regional-frame-cost.json`
+- `benchmarks/results/tkt031-regional-frame-cost.md`
+
+Set distinct `--out=...` and `--markdown-out=...` for each comparison so one run does not overwrite another. Hardware WebGL2 is required by default; `--allow-software` permits a **non-hardware** smoke test only.
+
+Existing 4 km Hengelo benchmark:
+
+    npm run bench:tiles -- --dataset=canonical-hengelo --tile-size=1024 --match-physical-margins --modes=m2a_streaming --scenarios=closeup_station,medium_navigation,far_overview --runs=3 --require-hardware
+
+Add one of the opt-in experiment flags above, capture a separate output path, and compare against an unchanged baseline.
+
+### Uncompleted
+
+- No Windows TypeScript/build/tests, regional SQLite/hardware benchmark, or human visual QA have yet been verified for these changes.
+- Exact draw/pass attribution beyond material-group proxy is not implemented. Improve it only if measured costs justify its intrusion.
+- HUD telemetry throttling and foliage culling remain deferred pending baseline evidence.
+- TKT-029 cross-shard geometry continuity and human visual sign-off are separate gates. The mosaic verifier validates binary/manifest integrity, not visual or graph parity.
 
 ## Completion checklist
 

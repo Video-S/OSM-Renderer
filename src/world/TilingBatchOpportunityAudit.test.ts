@@ -201,6 +201,21 @@ test('TKT-030: different tiles stay separate even if materials and positions mat
   assert.throws(() => aggregateTileBatchAudits([]), /at least one tile/);
 });
 
+test('TKT-030: OSM feature categories, primary tags, bridges and layers survive aggregation', () => {
+  const sample = tile([mesh({ singleFeatureIdx: 0 })]);
+  sample.featureInfos[0].isBridge = true;
+  sample.featureInfos[0].layer = 1;
+  const analyzed = analyzeDecodedTileBatching(sample, [256]);
+  assert.equal(analyzed.featureCategories['Road & Way'], 1);
+  assert.equal(analyzed.featurePrimaryTags['highway=residential'], 1);
+  assert.equal(analyzed.semanticFeatureFlags.bridges, 1);
+  assert.equal(analyzed.semanticFeatureFlags.nonzeroLayers, 1);
+  assert.equal(analyzed.semanticFeatureFlags.tunnels, 0);
+  const combined = aggregateTileBatchAudits([analyzed, analyzed]);
+  assert.equal(combined.featurePrimaryTags['highway=residential'], 2);
+  assert.equal(combined.semanticFeatureFlags.bridges, 2);
+});
+
 test('TKT-030: CLI defaults to 1024m pack and rejects conflicting/invalid sampling flags', () => {
   const parsed = parseBatchAuditCli([]);
   assert.ok(parsed.packPath?.endsWith('1024m.sqlite'));

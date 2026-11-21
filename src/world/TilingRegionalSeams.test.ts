@@ -212,16 +212,18 @@ test('TKT-032: nonpolygon roads keep asymmetry warning; polygon holes honour sou
       [side.at - 20, mid - 20],
     ],
     [
-      [side.at - 1, mid - 1], [side.at + 1, mid - 1],
-      [side.at + 1, mid + 1], [side.at - 1, mid + 1],
-      [side.at - 1, mid - 1],
+      // Diagonal hole edge intersects seam, with each inset 25 cm
+      // clearly on opposite sides (not exactly on a ring boundary).
+      [side.at - 5, mid - 5], [side.at + 5, mid + 5],
+      [side.at + 5, mid + 6], [side.at - 5, mid + 6],
+      [side.at - 5, mid - 5],
     ],
   ]);
   const candidates = extractSourceCrossings(side, { features: [poly] });
   const holeCrossing = candidates.find((c) =>
-    Math.abs(c.northing - (mid + 1)) < 0.05 && c.mode === 'segment');
+    Math.abs(c.northing - mid) < 0.05 && c.mode === 'segment');
   assert.ok(holeCrossing);
-  assert.deepEqual(holeCrossing.expectedPolygonCoverage, [true, true]);
+  assert.deepEqual(holeCrossing.expectedPolygonCoverage, [false, true]);
 });
 
 test('TKT-032: feature presence counts only geometrically emitted metadata, not unused tile features', () => {

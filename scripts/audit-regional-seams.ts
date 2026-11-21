@@ -11,6 +11,7 @@ import { utmBoundsToGeoBounds } from '../src/world/tiling/TileGrid';
 import {
   collectTileFeatureEvidence, compareFeatureEvidence,
   enumerateRegionalShardSeams, extractSourceCrossings, probeSourceSurfaceAtUtm,
+  classifySourceSurfaceCoverage,
   type ShardSideInterface, type SourceSeamCrossing,
   type SurfaceProbeResult, type TileFeatureEvidence,
 } from '../src/world/tiling/RegionalSeamAudit';
@@ -210,22 +211,11 @@ function auditSide(
           probeSourceSurfaceAtUtm(b.decoded, b.centerEasting, b.centerNorthing,
             crossing.sourceId, bE, bN),
         ];
-        if (crossing.expectedPolygonCoverage) {
-          // A polygon boundary often enters one side of the shard seam and
-          // exits the other. Such an asymmetry is *correct* if it agrees with
-          // the source polygon's outer rings and holes. Do not claim a seam
-          // defect from the mere fact that one source-feature triangle is absent.
-          const observed: [boolean, boolean] = [
-            surfaceSamples[0].status === 'covered',
-            surfaceSamples[1].status === 'covered',
-          ];
-          if (observed.some((value, i) => value !== crossing.expectedPolygonCoverage![i])) {
-            surfaceReview = 'source-polygon-coverage-mismatch';
-          }
-        } else if ((surfaceSamples[0].status === 'covered') !==
-                   (surfaceSamples[1].status === 'covered')) {
-          surfaceReview = 'coverage-asymmetry';
-        }
+        const coverageResult = classifySourceSurfaceCoverage(
+          [surfaceSamples[0].status === 'covered', surfaceSamples[1].status === 'covered'],
+          crossing.expectedPolygonCoverage
+        );
+        if (coverageResult !== 'none') surfaceReview = coverageResult;
         if (!surfaceReview &&
             surfaceSamples[0].status === 'covered' &&
             surfaceSamples[1].status === 'covered' &&

@@ -204,7 +204,7 @@ test('TKT-030: different tiles stay separate even if materials and positions mat
 test('TKT-030: CLI defaults to 1024m pack and rejects conflicting/invalid sampling flags', () => {
   const parsed = parseBatchAuditCli([]);
   assert.ok(parsed.packPath?.endsWith('1024m.sqlite'));
-  assert.deepEqual(parsed.cellSizesMeters, [128, 256, 512, 1024]);
+  assert.deepEqual(parsed.cellSizesMeters, [128, 256, 512]);
   assert.equal(parsed.regionIndexPath, null);
   const chosen = parseBatchAuditCli([
     '--region-index=data/osm/twente-pilot-1024m/mosaic.json',

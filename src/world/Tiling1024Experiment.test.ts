@@ -130,7 +130,9 @@ test('SQLite pack path resolver keeps 512m default separate from 1024m and CLI p
   assert.equal(parsed.tileSizeMeters, 1024);
   assert.equal(parsed.compareTileSizes, true);
   assert.equal(parsed.runs, 2);
-  assert.equal(parsed.packPath, path.normalize('data/osm/custom.sqlite'));
+  // CLI parsing preserves the caller's literal path; normalization is deferred until use.
+  // A Windows-normalized expectation would incorrectly fail for forward-slash CLI input.
+  assert.equal(parsed.packPath, 'data/osm/custom.sqlite');
   assert.equal(parsed.useSwiftShader, true);
 
   assert.throws(() => parseTileStreamingCliArgs(['--tile-size=768']), /Unsupported --tile-size/);

@@ -19,6 +19,7 @@ import {
   computeConsecutiveFrameIntervalsMs,
 } from '../src/types/BenchmarkTelemetry';
 import { MAP_THEMES } from '../src/styles/mapThemes';
+import type { SceneLayerDrawWorkEstimate } from '../src/world/tiling/RenderWorkAttribution';
 import {
   createAlignedStudyGrid,
   createHengeloStudyGrid,
@@ -78,6 +79,8 @@ export interface TileStreamingCliOptions {
   compareTileSizes: boolean;
   /** Opt-in: hold preload/retention distances at 512m/1024m for BOTH tile sizes. */
   matchPhysicalMargins: boolean;
+  experimentSkipUnchangedViewport: boolean;
+  experimentSkipUnchangedZoom: boolean;
   runs: number;
   modes: TileBenchmarkModeId[];
   scenarios: TileBenchmarkScenarioId[];
@@ -124,6 +127,12 @@ export function resolveTileBenchmarkStreamMargins(
 }
 
 export interface SceneMeshCountsSnapshot {
+  /** Benchmark-only; a proxy, not WebGL draw calls or shadow-render attribution. */
+  drawWorkEstimate?: {
+    total: SceneLayerDrawWorkEstimate;
+    byLayer: Record<string, SceneLayerDrawWorkEstimate>;
+    caveat: string;
+  };
   total: {
     totalMeshes: number;
     visibleFlagMeshes: number;
@@ -304,6 +313,8 @@ export interface TileStreamingBenchmarkReport {
     retainMarginMeters?: number;
     maxConcurrentFetches: number;
     maxCommitsPerFrame: number;
+    experimentSkipUnchangedViewport?: boolean;
+    experimentSkipUnchangedZoom?: boolean;
   };
   environment: BenchmarkEnvironmentMetadata;
   modes: TileBenchmarkModeResult[];
@@ -459,6 +470,8 @@ export function parseTileStreamingCliArgs(
   let packPath: string | undefined;
   let compareTileSizes = false;
   let matchPhysicalMargins = false;
+  let experimentSkipUnchangedViewport = false;
+  let experimentSkipUnchangedZoom = false;
   let runs = 1;
   let modes: TileBenchmarkModeId[] = [...ALL_TILE_BENCHMARK_MODES];
   let scenarios: TileBenchmarkScenarioId[] = [...ALL_TILE_BENCHMARK_SCENARIOS];
@@ -503,6 +516,10 @@ export function parseTileStreamingCliArgs(
       compareTileSizes = true;
     } else if (arg === '--match-physical-margins') {
       matchPhysicalMargins = true;
+    } else if (arg === '--experiment-skip-unchanged-viewport') {
+      experimentSkipUnchangedViewport = true;
+    } else if (arg === '--experiment-skip-unchanged-zoom') {
+      experimentSkipUnchangedZoom = true;
     } else if (arg === '--runs' || arg.startsWith('--runs=')) {
       const { value, nextIndex } = readSingleValueFlag(argv, i, '--runs');
       runs = parseIntFlag(value, '--runs', 1);
@@ -638,6 +655,8 @@ export function parseTileStreamingCliArgs(
     packPath,
     compareTileSizes,
     matchPhysicalMargins,
+    experimentSkipUnchangedViewport,
+    experimentSkipUnchangedZoom,
     runs,
     modes,
     scenarios,
@@ -1222,6 +1241,14 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
     `- **Dataset & Settings**: \`${report.dataset.id}\` (${report.dataset.gridCols}×${report.dataset.gridRows} = ${report.dataset.totalGridTiles} × ${report.dataset.tileSizeMeters} m tiles), theme \`${report.renderSettings.themeId}\`, \`E2+/R+\`, \`preload=${report.renderSettings.preloadMarginTiles} tiles (${preloadMeters} m)\`, \`retain=${report.renderSettings.retainMarginTiles} tiles (${retainMeters} m)\`, \`maxFetches=${report.renderSettings.maxConcurrentFetches}\`, \`maxCommits=${report.renderSettings.maxCommitsPerFrame}\``
   );
   lines.push('');
+  if (report.renderSettings.experimentSkipUnchangedViewport ||
+      report.renderSettings.experimentSkipUnchangedZoom) {
+    lines.push('- **TKT-031 experiments enabled**: viewport=' +
+      report.renderSettings.experimentSkipUnchangedViewport +
+      ', zoom=' + report.renderSettings.experimentSkipUnchangedZoom +
+      '. Compare against separately recorded unchanged baseline.');
+    lines.push('');
+  }
 
   lines.push('## 1. Initialization & Static Scene Comparison');
   lines.push('');
@@ -1285,6 +1312,24 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
         lines.push(
           `- **Streaming Stage Timings**: fetch=${fmtTimingStats(d.fetchMsStats)} | decode=${fmtTimingStats(d.decodeMsStats)} | reconstruct=${fmtTimingStats(d.reconstructMsStats)} | commit=${fmtTimingStats(d.commitMsStats)}`
         );
+      }
+      if (p.meshCounts?.drawWorkEstimate) {
+        const proxy = p.meshCounts.drawWorkEstimate;
+        lines.push(
+          '- **TKT-031 material-group attribution (estimated, main-camera only)**: ' +
+          'candidate main-pass groups `' + proxy.total.mainPassSubmissions +
+          '`, drawable meshes `' + proxy.total.drawableMeshes +
+          '`, shadow-caster candidate groups `' +
+          proxy.total.mainFrustumShadowCasterSubmissions +
+          '` (NOT actual shadow calls). Observed WebGL calls med `' +
+          p.webglDrawCallsPerFrame.median.toFixed(0) + '`.'
+        );
+      }
+      if (d) {
+        lines.push('- **TKT-031 work gates**: viewport scans `' +
+          d.viewportSelectionPasses + '`, skipped scans `' +
+          d.viewportSelectionSkips + '`, skipped zoom updates `' +
+          d.zoomPropagationSkips + '` (opt-in experiment flags).');
       }
       if (sc.settledSteadyStateMetrics) {
         const st = sc.settledSteadyStateMetrics;
@@ -1577,6 +1622,8 @@ export async function runTileStreamingBenchmark(
     packPath: options.packPath,
     compareTileSizes: options.compareTileSizes ?? false,
     matchPhysicalMargins: options.matchPhysicalMargins ?? false,
+    experimentSkipUnchangedViewport: options.experimentSkipUnchangedViewport ?? false,
+    experimentSkipUnchangedZoom: options.experimentSkipUnchangedZoom ?? false,
     runs: Math.max(1, options.runs ?? 1),
     modes: options.modes ?? [...ALL_TILE_BENCHMARK_MODES],
     scenarios: options.scenarios ?? [...ALL_TILE_BENCHMARK_SCENARIOS],
@@ -2439,7 +2486,14 @@ export async function runTileStreamingBenchmark(
       } else if (modeId === 'm2a_streaming') {
         m1aLoaded = false;
         const m2Init = await page.evaluate(
-          async (p: { apiBaseUrl: string; themeId: string; preloadMarginTiles: number; retainMarginTiles: number }) => {
+          async (p: {
+            apiBaseUrl: string;
+            themeId: string;
+            preloadMarginTiles: number;
+            retainMarginTiles: number;
+            experimentSkipUnchangedViewport: boolean;
+            experimentSkipUnchangedZoom: boolean;
+          }) => {
             await (window as any).__BENCHMARK_HARNESS__.unloadDataset();
             const t0 = performance.now();
             const res = await (window as any).__BENCHMARK_HARNESS__.loadM2aStreaming({
@@ -2448,6 +2502,8 @@ export async function runTileStreamingBenchmark(
               retainMarginTiles: p.retainMarginTiles,
               maxConcurrentFetches: 6,
               maxCommitsPerFrame: 4,
+              experimentSkipUnchangedViewport: p.experimentSkipUnchangedViewport,
+              experimentSkipUnchangedZoom: p.experimentSkipUnchangedZoom,
               themeId: p.themeId,
               target: [0, 0, 0],
               zoom: 1.8,
@@ -2466,6 +2522,8 @@ export async function runTileStreamingBenchmark(
             themeId: opts.themeId,
             preloadMarginTiles: streamMargins.preloadMarginTiles,
             retainMarginTiles: streamMargins.retainMarginTiles,
+            experimentSkipUnchangedViewport: opts.experimentSkipUnchangedViewport,
+            experimentSkipUnchangedZoom: opts.experimentSkipUnchangedZoom,
           }
         );
 
@@ -2495,6 +2553,11 @@ export async function runTileStreamingBenchmark(
       'EXT_disjoint_timer_query_webgl2 GPU pass timing is explicitly marked "unsupported", "unavailable", or "disjoint" whenever hardware timer queries cannot resolve.',
       'Browser performance.memory JS heap numbers are advisory only and recorded as supported=false / null when unavailable.',
     ];
+    if (opts.experimentSkipUnchangedViewport || opts.experimentSkipUnchangedZoom) {
+      notes.push('TKT-031 opt-in skip gates: viewport=' +
+        opts.experimentSkipUnchangedViewport + ', zoom=' +
+        opts.experimentSkipUnchangedZoom + '. The unmodified baseline must be run separately.');
+    }
     if (opts.matchPhysicalMargins) {
       notes.push('Matched physical margins enabled: 512 m preload / 1,024 m retention for both tile widths. The 1,024 m tile counts are fractional (0.5 preload / 1 retain).');
     }
@@ -2538,6 +2601,8 @@ export async function runTileStreamingBenchmark(
         retainMarginMeters,
         maxConcurrentFetches: 6,
         maxCommitsPerFrame: 4,
+        experimentSkipUnchangedViewport: opts.experimentSkipUnchangedViewport,
+        experimentSkipUnchangedZoom: opts.experimentSkipUnchangedZoom,
       },
       environment,
       modes: modeResults,

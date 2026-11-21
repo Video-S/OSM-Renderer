@@ -2,6 +2,11 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { BuiltSceneGeometry, resolveInspectedFeature } from '../world/GeometryBuilder';
+import {
+  addLayerDrawWork,
+  emptyLayerDrawWork,
+  type SceneLayerDrawWorkEstimate,
+} from '../world/tiling/RenderWorkAttribution';
 import { InspectableFeatureInfo, MapStyleTheme } from '../types/MapFeature';
 import { LiveWebGLTelemetrySnapshot } from '../world/prototype/PerformanceBaselineHarness';
 import {
@@ -491,11 +496,15 @@ export const MapScene: React.FC<MapSceneProps> = ({
         let totalMeshes = 0;
         let frustumVisibleMeshes = 0;
         let visibleFlagMeshes = 0;
+        // Run only on a benchmark harness snapshot, never in the frame loop.
+        const drawWorkByLayer: Record<string, SceneLayerDrawWorkEstimate> = {};
+        const drawWorkTotal = emptyLayerDrawWork();
 
         for (const [layerName, rootObj] of layerEntries) {
           let layerTotal = 0;
           let layerFrustumVis = 0;
           let layerVisFlag = 0;
+          const drawWork = emptyLayerDrawWork();
           rootObj.traverse((obj) => {
             if (!(obj as THREE.Mesh).isMesh) return;
             const mesh = obj as THREE.Mesh;
@@ -510,9 +519,16 @@ export const MapScene: React.FC<MapSceneProps> = ({
               layerVisFlag += 1;
               if (!hasValidFrustum || !mesh.frustumCulled || frustum.intersectsObject(mesh)) {
                 layerFrustumVis += 1;
+                addLayerDrawWork(drawWork, mesh);
               }
             }
           });
+          drawWorkByLayer[layerName] = drawWork;
+          drawWorkTotal.mainPassSubmissions += drawWork.mainPassSubmissions;
+          drawWorkTotal.mainFrustumShadowCasterSubmissions +=
+            drawWork.mainFrustumShadowCasterSubmissions;
+          drawWorkTotal.instancedMeshes += drawWork.instancedMeshes;
+          drawWorkTotal.drawableMeshes += drawWork.drawableMeshes;
           byLayer[layerName] = {
             totalMeshes: layerTotal,
             frustumVisibleMeshes: layerFrustumVis,
@@ -530,6 +546,13 @@ export const MapScene: React.FC<MapSceneProps> = ({
             frustumVisibleMeshes,
           },
           byLayer,
+          // Estimate of eligible material groups only, NOT measured GL draws.
+          // Shadow passes have independent frusta and cannot be inferred here.
+          drawWorkEstimate: {
+            total: drawWorkTotal,
+            byLayer: drawWorkByLayer,
+            caveat: 'Main-camera material-group candidate estimate; excludes shadow passes, renderer filtering and overlays.',
+          },
         };
       };
     }

@@ -11,7 +11,7 @@ import { utmBoundsToGeoBounds } from '../src/world/tiling/TileGrid';
 import {
   collectTileFeatureEvidence, compareFeatureEvidence,
   enumerateRegionalShardSeams, extractSourceCrossings, probeSourceSurfaceAtUtm,
-  classifySourceSurfaceCoverage,
+  classifySourceSurfaceCoverage, probeAnyRoadSurfaceAtUtm,
   type ShardSideInterface, type SourceSeamCrossing,
   type SurfaceProbeResult, type TileFeatureEvidence,
 } from '../src/world/tiling/RegionalSeamAudit';
@@ -73,6 +73,14 @@ export interface SeamCandidate {
   surfaceReview?: 'coverage-asymmetry' | 'height-step' | 'source-polygon-coverage-mismatch';
   /** Source polygon interior at each inset, where the source is a polygon. */
   expectedPolygonCoverage?: [boolean, boolean];
+  /** Any emitted road triangle at the exact sample, independent of OSM ID. */
+  roadPhysicalSamples?: [SurfaceProbeResult, SurfaceProbeResult];
+  roadPhysicalClassification?: Classification;
+  /** True if this source's attributed road mesh misses both samples. */
+  roadSourceUncoveredBoth?: boolean;
+  sourceHighway?: string;
+  sourceLanduse?: string;
+  sourceWaterway?: string;
   sourceLayer?: string;
   sourceBridge?: string;
   sourceTunnel?: string;
@@ -100,7 +108,7 @@ export interface SeamJunctionSummary {
 }
 export interface RegionalSeamAuditReport {
   ticket: 'TKT-032';
-  schemaVersion: 2;
+  schemaVersion: 3;
   auditLevel: 'source-to-emitted-feature-metadata-triage';
   createdAt: string;
   input: { index: string; sourceIndex: string; snapshotId: string; sourceSha256: string; bandMeters: number };
@@ -119,6 +127,11 @@ export interface RegionalSeamAuditReport {
     surfaceAsymmetric: number;
     surfaceHeightSteps: number;
     polygonSourceCoverageMismatches: number;
+    /** Suspect road crossings for which any-road physical geometry was sampled. */
+    roadPhysicalProbed: number;
+    roadPhysicalOnlyOneSide: number;
+    roadPhysicalNeitherSide: number;
+    roadSourceUncoveredBoth: number;
   };
   interfaces: SeamSideSummary[];
   junctions: SeamJunctionSummary[];
@@ -223,6 +236,34 @@ function auditSide(
           surfaceReview = 'height-step';
         }
       }
+      // Preserve feature-specific review semantics. A second, independent
+      // check searches all road geometry at the same samples, including merged
+      // road features which no longer attribute these triangles to this way.
+      const roadSourceUncoveredBoth = crossing.category === 'road' &&
+        !!surfaceSamples && !crossing.expectedPolygonCoverage &&
+        surfaceSamples.every((sample) => sample.status !== 'covered');
+      let roadPhysicalSamples: [SurfaceProbeResult, SurfaceProbeResult] | undefined;
+      let roadPhysicalClassification: Classification | undefined;
+      if (crossing.category === 'road' &&
+          crossing.mode === 'segment' &&
+          !crossing.expectedPolygonCoverage &&
+          (cmp.classification !== 'both' || !!surfaceReview || roadSourceUncoveredBoth)) {
+        const aE = crossing.easting + (side.axis === 'easting' ? -0.25 : 0);
+        const bE = crossing.easting + (side.axis === 'easting' ? 0.25 : 0);
+        const aN = crossing.northing + (side.axis === 'northing' ? 0.25 : 0);
+        const bN = crossing.northing + (side.axis === 'northing' ? -0.25 : 0);
+        roadPhysicalSamples = [
+          probeAnyRoadSurfaceAtUtm(
+            a.decoded, a.centerEasting, a.centerNorthing, aE, aN),
+          probeAnyRoadSurfaceAtUtm(
+            b.decoded, b.centerEasting, b.centerNorthing, bE, bN),
+        ];
+        const physicallyA = roadPhysicalSamples[0].status === 'covered';
+        const physicallyB = roadPhysicalSamples[1].status === 'covered';
+        roadPhysicalClassification = physicallyA
+          ? (physicallyB ? 'both' : 'only-a')
+          : (physicallyB ? 'only-b' : 'neither');
+      }
       const review: SeamCandidate['review'] = cmp.layerMismatch || cmp.bridgeMismatch || cmp.tunnelMismatch
         ? 'metadata-mismatch'
         : cmp.classification === 'only-a' || cmp.classification === 'only-b'
@@ -249,8 +290,12 @@ function auditSide(
           nearSleeperCount(a.evidence, crossing.easting, crossing.northing),
           nearSleeperCount(b.evidence, crossing.easting, crossing.northing),
         ],
-        surfaceSamples, surfaceReview,
+        surfaceSamples, surfaceReview, roadPhysicalSamples, roadPhysicalClassification,
+        roadSourceUncoveredBoth: roadSourceUncoveredBoth || undefined,
         expectedPolygonCoverage: crossing.expectedPolygonCoverage,
+        sourceHighway: crossing.tags.highway === undefined ? undefined : String(crossing.tags.highway),
+        sourceLanduse: crossing.tags.landuse === undefined ? undefined : String(crossing.tags.landuse),
+        sourceWaterway: crossing.tags.waterway === undefined ? undefined : String(crossing.tags.waterway),
         sourceLayer: crossing.tags.layer === undefined ? undefined : String(crossing.tags.layer),
         sourceBridge: crossing.tags.bridge === undefined ? undefined : String(crossing.tags.bridge),
         sourceTunnel: crossing.tags.tunnel === undefined ? undefined : String(crossing.tags.tunnel),
@@ -425,7 +470,7 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
   }
   const candidates = outSides.flatMap((s) => s.candidates);
   const report: RegionalSeamAuditReport = {
-    ticket: 'TKT-032', schemaVersion: 2,
+    ticket: 'TKT-032', schemaVersion: 3,
     auditLevel: 'source-to-emitted-feature-metadata-triage',
     createdAt: new Date().toISOString(),
     input: {
@@ -449,6 +494,11 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       surfaceHeightSteps: candidates.filter((c) => c.surfaceReview === 'height-step').length,
       polygonSourceCoverageMismatches:
         candidates.filter((c) => c.surfaceReview === 'source-polygon-coverage-mismatch').length,
+      roadPhysicalProbed: candidates.filter((c) => c.roadPhysicalClassification !== undefined).length,
+      roadPhysicalOnlyOneSide: candidates.filter((c) =>
+        c.roadPhysicalClassification === 'only-a' || c.roadPhysicalClassification === 'only-b').length,
+      roadPhysicalNeitherSide: candidates.filter((c) => c.roadPhysicalClassification === 'neither').length,
+      roadSourceUncoveredBoth: candidates.filter((c) => c.roadSourceUncoveredBoth === true).length,
     },
     interfaces: outSides, junctions: outJunctions,
     limitations: [
@@ -456,6 +506,8 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       'Source IDs absent on both sides are flagged; intentional omissions and unsupported source tags need review.',
       'Tile feature metadata can describe an emitted mesh well away from the seam: presence alone does not prove continuity.',
       'Road/planar triangle inset samples are geometric witnesses only, not full edge coverage or connectivity.',
+      'Physical road probes test any road-classified triangle at the exact inset point when feature-specific coverage or attribution is suspicious; they cannot prove source identity or network connectivity.',
+      'A road with neither side covered at a 25cm probe can be an intentional grade/width policy, a graph path offset, or a real gap. Inspect source tags, tile road geometry and neighborhood before classifying.',
       'Polygon-side probes are compared with expected source geometry interior; expected one-sided polygon boundary coverage is not a seam warning.',
       'Polygon source-coverage mismatches can be intentional semantic ownership / preprocessing, not necessarily an error.',
       'Coverage/height sample warnings may be legitimate source offsets, slopes or parser exclusions; review independently.',
@@ -489,7 +541,10 @@ export function formatSeamAuditMarkdown(report: RegionalSeamAuditReport): string
       '; inconsistent layer/bridge/tunnel metadata: ' + report.totals.metadataMismatches +
       '; surface-asymmetry probes: ' + report.totals.surfaceAsymmetric +
       '; height-step probes: ' + report.totals.surfaceHeightSteps +
-      '; source-polygon coverage mismatches: ' + report.totals.polygonSourceCoverageMismatches,
+      '; source-polygon coverage mismatches: ' + report.totals.polygonSourceCoverageMismatches +
+      '; road physical one-sided: ' + report.totals.roadPhysicalOnlyOneSide +
+      '; road physical neither: ' + report.totals.roadPhysicalNeitherSide +
+      '; road source both-uncovered: ' + report.totals.roadSourceUncoveredBoth,
     '',
     '## Per-interface triage', '',
     '| Interface | Type | Source crossings | Review candidates |',
@@ -507,6 +562,21 @@ export function formatSeamAuditMarkdown(report: RegionalSeamAuditReport): string
     lines.push('| ' + s.id + ' | ' + c.sourceId + ' | ' + c.category + ' | ' +
       c.easting + ' / ' + c.northing + ' | ' + c.review + ' (' +
       c.classification + ') | ' + c.tiles.join(' vs ') + ' |');
+  }
+  lines.push('', '## Physical road triage (independent of OSM feature ID)', '',
+    'These probes check any emitted road-layer triangle at the source crossing. The',
+    'source-feature attribution result remains recorded separately. A physical',
+    'road match can be a *different* road: it is not a network connectivity pass.',
+    '',
+    '| Interface | OSM way | Highway | Source attribution | Physical road geometry | UTM E/N |',
+    '|---|---|---|---|---|---|');
+  for (const side of report.interfaces) for (const candidate of side.candidates) {
+    if (candidate.roadPhysicalClassification === undefined) continue;
+    lines.push('| ' + side.id + ' | ' + candidate.sourceId +
+      ' | ' + (candidate.sourceHighway ?? '-') +
+      ' | ' + candidate.classification +
+      ' | ' + candidate.roadPhysicalClassification +
+      ' | ' + candidate.easting + ' / ' + candidate.northing + ' |');
   }
   lines.push('', '## Four-way junctions', '',
     '| Junction | Source crossings | Source IDs with partial quadrant attribution |',

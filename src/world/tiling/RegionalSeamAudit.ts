@@ -422,3 +422,16 @@ export function probeSourceSurfaceAtUtm(
     matchedMeshes, testedTriangles,
   };
 }
+
+/** Interpret two neighboring source-attributed inset samples in light of OSM polygon ownership. */
+export function classifySourceSurfaceCoverage(
+  observedCovered: [boolean, boolean],
+  expectedPolygonCoverage?: [boolean, boolean]
+): 'none' | 'coverage-asymmetry' | 'source-polygon-coverage-mismatch' {
+  if (expectedPolygonCoverage) {
+    return observedCovered.some((v, i) => v !== expectedPolygonCoverage[i])
+      ? 'source-polygon-coverage-mismatch'
+      : 'none';
+  }
+  return observedCovered[0] !== observedCovered[1] ? 'coverage-asymmetry' : 'none';
+}

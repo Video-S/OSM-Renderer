@@ -142,7 +142,7 @@ Set distinct `--out=...` and `--markdown-out=...` for each comparison so one run
 
 Existing 4 km Hengelo benchmark:
 
-    npm run bench:tiles -- --dataset=canonical-hengelo --tile-size=1024 --match-physical-margins --modes=m2a_streaming --scenarios=closeup_station,medium_navigation,far_overview --runs=3 --require-hardware
+    npx tsx benchmarks/tileStreamingRunner.ts --dataset=canonical-hengelo --tile-size=1024 --match-physical-margins --modes=m2a_streaming --scenarios=closeup_station,medium_navigation,far_overview --runs=3 --require-hardware
 
 Add one of the opt-in experiment flags above, capture a separate output path, and compare against an unchanged baseline.
 

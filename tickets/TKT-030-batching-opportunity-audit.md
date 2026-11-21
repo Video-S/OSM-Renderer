@@ -84,6 +84,12 @@ For a quick regional probe, use --max-tiles=16. This is an **ordered sample, not
 
 **Owner action:** Return the generated Markdown and JSON. We will inspect actual per-material candidates and compare whole-tile with bounded-cell savings before selecting any batching implementation. Keep the PR as a draft until test and data validation complete.
 
+## First Windows Run and Fix (2026-11-21)
+
+The project owner's first Windows run reached the audit CLI but **did not generate a dataset report**: `tsc --noEmit`, the focused Node test loader, and the audit command all stopped at a missing closing quote in `scripts/audit-tile-batching.ts:253`. Vite's production build still passed because it does not bundle this Node-side script.
+
+The formatting syntax was corrected on the same branch, and a Markdown formatter regression test was added. **The corrected commit still requires local test/typecheck and actual SQLite execution**; no analysis results are claimed yet.
+
 ## Acceptance gates
 
 - [x] Read-only audit over OSMTILE1 SQLite packs and regional mosaics.

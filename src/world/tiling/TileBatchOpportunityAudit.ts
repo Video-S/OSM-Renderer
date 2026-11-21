@@ -60,6 +60,8 @@ export interface BatchAuditTile {
   triangles: number;
   featureInfoRecords: number;
   featureCategories: Record<string, number>;
+  featurePrimaryTags: Record<string, number>;
+  semanticFeatureFlags: { bridges: number; tunnels: number; nonzeroLayers: number };
   layers: Record<string, BatchAuditLayer>;
   profiles: BatchAuditProfile[];
 }
@@ -75,6 +77,8 @@ export interface BatchAuditSummary {
   triangles: number;
   featureInfoRecords: number;
   featureCategories: Record<string, number>;
+  featurePrimaryTags: Record<string, number>;
+  semanticFeatureFlags: { bridges: number; tunnels: number; nonzeroLayers: number };
   layers: Record<string, BatchAuditLayer>;
   profiles: BatchAuditProfile[];
   hotspots: Array<{
@@ -327,9 +331,18 @@ export function analyzeDecodedTileBatching(
   const submissionProxy = staticSubmissions + decoded.instancedBatches.length;
   const visibleSubmissionProxy = visibleStaticSubmissions + visibleInstancedBatches;
   const featureCategories: Record<string, number> = {};
+  const featurePrimaryTags: Record<string, number> = {};
+  const semanticFeatureFlags = { bridges: 0, tunnels: 0, nonzeroLayers: 0 };
   for (const feature of decoded.featureInfos) {
     const category = feature.category || '(unknown)';
     featureCategories[category] = (featureCategories[category] ?? 0) + 1;
+    const tag = feature.primaryTag || '(unknown)';
+    featurePrimaryTags[tag] = (featurePrimaryTags[tag] ?? 0) + 1;
+    if (feature.isBridge) semanticFeatureFlags.bridges++;
+    if (feature.isTunnel) semanticFeatureFlags.tunnels++;
+    if (feature.layer !== undefined && feature.layer !== 0) {
+      semanticFeatureFlags.nonzeroLayers++;
+    }
   }
   return {
     key: decoded.lod + ':' + decoded.tx + ':' + decoded.ty,
@@ -342,6 +355,8 @@ export function analyzeDecodedTileBatching(
     triangles,
     featureInfoRecords: decoded.featureInfos.length,
     featureCategories,
+    featurePrimaryTags,
+    semanticFeatureFlags,
     layers,
     profiles: [
       profileForTile(candidates, tileSize, null, submissionProxy, visibleSubmissionProxy),
@@ -376,6 +391,8 @@ export function aggregateTileBatchAudits(
     afterSerializedVisibleSubmissionProxy: 0,
   }));
   const featureCategories: Record<string, number> = {};
+  const featurePrimaryTags: Record<string, number> = {};
+  const semanticFeatureFlags = { bridges: 0, tunnels: 0, nonzeroLayers: 0 };
   const summary: BatchAuditSummary = {
     tiles: tiles.length,
     tileSizeMeters: tiles.every((t) => t.tileSizeMeters === tiles[0].tileSizeMeters)
@@ -388,6 +405,8 @@ export function aggregateTileBatchAudits(
     triangles: 0,
     featureInfoRecords: 0,
     featureCategories,
+    featurePrimaryTags,
+    semanticFeatureFlags,
     layers: mergedLayers,
     profiles: mergedProfiles,
     hotspots: [],
@@ -405,6 +424,10 @@ export function aggregateTileBatchAudits(
     summary.triangles += tile.triangles;
     summary.featureInfoRecords += tile.featureInfoRecords;
     addCounts(featureCategories, tile.featureCategories);
+    addCounts(featurePrimaryTags, tile.featurePrimaryTags);
+    semanticFeatureFlags.bridges += tile.semanticFeatureFlags.bridges;
+    semanticFeatureFlags.tunnels += tile.semanticFeatureFlags.tunnels;
+    semanticFeatureFlags.nonzeroLayers += tile.semanticFeatureFlags.nonzeroLayers;
     for (const [layer, src] of Object.entries(tile.layers)) {
       const dst = (mergedLayers[layer] ??= emptyLayer(src.layer));
       dst.meshes += src.meshes;

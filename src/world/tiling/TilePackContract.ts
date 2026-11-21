@@ -3,7 +3,7 @@ import { EPSG_25832_CODE } from './RegionalProjection';
 
 export const OSMTILE1_MAGIC = 'OSMTILE1';
 export const OSMTILE1_FORMAT_VERSION = 1;
-export const BAKE_SCHEMA_VERSION = '1.0.0';
+export const BAKE_SCHEMA_VERSION = '1.1.0';
 export const DEFAULT_PROJECTION_ID = EPSG_25832_CODE;
 
 export const CANONICAL_HENGELO_SNAPSHOT_ID = 'overijssel-261114-8ae28196';

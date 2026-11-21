@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import { MAP_THEMES } from '../styles/mapThemes';
-import { GeometryBuilder, resolveInspectedFeature } from './GeometryBuilder';
+import {
+  GeometryBuilder,
+  SceneResourceManager,
+  resolveInspectedFeature,
+  type BuiltSceneGeometry,
+} from './GeometryBuilder';
+import { auditGraphRoadMeshIntegrity } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import { buildUnitSleeperBoxGeometry } from './infrastructure/railways/RailwayGeometryBuilder';
+import { DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS } from './infrastructure/rendering/InfrastructureRenderAdapter';
 import { LocalGeoJsonProvider } from './LocalGeoJsonProvider';
-import { createAlignedStudyGrid } from './tiling/TileGrid';
+import { createAlignedStudyGrid, type TileDescriptor } from './tiling/TileGrid';
 import {
   buildSingleSceneReference,
   ingestCanonicalStudyGeoJson,
@@ -20,6 +29,10 @@ import {
 } from './tiling/TilePackContract';
 import { ThemeMaterialRegistry } from './tiling/ThemeMaterialRegistry';
 import { reconstructTileSceneFromDecoded } from './tiling/TileSceneReconstructor';
+import {
+  collectTileRaySampleTargets,
+  verifyStaticMeshBvhSample,
+} from '../server/tiles/TilePackVerifier';
 
 function buildFixtureGeoJson(grid: ReturnType<typeof createAlignedStudyGrid>) {
   const toLonLat = (x: number, z: number): [number, number] => grid.projection.toGeo(x, z);
@@ -452,4 +465,483 @@ test('Browser-safe M1b modules execute with globalThis.process undefined', () =>
       writable: true,
     });
   }
+});
+
+function createSyntheticBuiltSceneShell(): {
+  scene: BuiltSceneGeometry;
+  resources: SceneResourceManager;
+} {
+  const resources = new SceneResourceManager();
+  const buildingsGroup = new THREE.Group();
+  buildingsGroup.name = 'Buildings';
+  const roadsGroup = new THREE.Group();
+  roadsGroup.name = 'Roads';
+  const railwaysGroup = new THREE.Group();
+  railwaysGroup.name = 'Railways';
+  const waterGroup = new THREE.Group();
+  waterGroup.name = 'Water';
+  const parksGroup = new THREE.Group();
+  parksGroup.name = 'Parks';
+  const landuseGroup = new THREE.Group();
+  landuseGroup.name = 'Landuse';
+  const barriersGroup = new THREE.Group();
+  barriersGroup.name = 'Barriers';
+  const foliageGroup = new THREE.Group();
+  foliageGroup.name = 'Foliage';
+  const groundGeo = resources.registerGeometry(new THREE.PlaneGeometry(512, 512, 1, 1));
+  groundGeo.rotateX(-Math.PI / 2);
+  const groundMat = resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#111827' }));
+  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.name = 'GroundPlane';
+
+  const scene: BuiltSceneGeometry = {
+    buildingsGroup,
+    roadsGroup,
+    railwaysGroup,
+    waterGroup,
+    parksGroup,
+    landuseGroup,
+    barriersGroup,
+    foliageGroup,
+    groundMesh,
+    interactiveMeshes: { buildings: [] },
+    stats: {
+      totalVertices: 0,
+      totalTriangles: 0,
+      totalDrawCalls: 0,
+      renderedFeaturesCount: 0,
+      forestTreesCount: 0,
+    },
+    resources,
+    updateTheme: () => {},
+    infrastructureRenderOptions: { ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS },
+    infrastructureRenderPreview: null,
+    dispose: () => resources.dispose(),
+  };
+  return { scene, resources };
+}
+
+function makeFakeTile(tileCenterX: number, tileCenterZ: number): TileDescriptor {
+  const half = 256;
+  return {
+    id: 'tx_test_ty_test',
+    tx: 679,
+    ty: 11313,
+    gridCol: 1,
+    gridRow: 4,
+    localBounds: {
+      minX: tileCenterX - half,
+      maxX: tileCenterX + half,
+      minZ: tileCenterZ - half,
+      maxZ: tileCenterZ + half,
+    },
+    collarLocalBounds: {
+      minX: tileCenterX - half - 64,
+      maxX: tileCenterX + half + 64,
+      minZ: tileCenterZ - half - 64,
+      maxZ: tileCenterZ + half + 64,
+    },
+    utmBounds: { minEasting: 0, maxEasting: 512, minNorthing: 0, maxNorthing: 512 },
+    collarGeoBounds: { minLon: 6.7, maxLon: 6.8, minLat: 52.2, maxLat: 52.3 },
+    isEastBoundaryTile: false,
+    isSouthBoundaryTile: false,
+  };
+}
+
+test('TileBinaryCodec prunes Float32-rebase road sliver flips without masking genuine upstream inverted triangles', () => {
+  // Exact scenario from tx_679_ty_11313 (tileCenter = [-1280, +256]):
+  // Near z = 4 m in study-world coords, Float32 Z ULP is 2^-21; subtracting 256 moves z to -252 where ULP widens to 2^-16.
+  const tile = makeFakeTile(-1280, 256);
+
+  // Pick a micro-triangle valid upward in study-world Float32 whose Z snaps downward upon subtracting 256
+  const x0 = Math.fround(-1280);
+  const x1 = Math.fround(-1280 + 0.8);
+  const x2 = Math.fround(-1280 + 0.6);
+  // Pre-rebase z values sit near +4m (Float32 ULP = 2^-21); subtracting tileCenterZ=256 shifts to -252m (Float32 ULP = 2^-16).
+  // Put z0 and z1 in adjacent Float32 rounding buckets after -256 while placing z2 just below the pre-rebase z0->z1 line
+  // so it snaps UP across the edge in post-rebase Float32 and flips ny from +1 to -1.
+  const sliverZ0 = Math.fround(4.0 + 1.49 / 65536);
+  const sliverZ1 = Math.fround(4.0 + 0.49 / 65536);
+  const sliverZ2 = Math.fround(4.0 + 0.55 / 65536);
+  const t = (x2 - x0) / (x1 - x0);
+  const preLineZ = sliverZ0 + t * (sliverZ1 - sliverZ0);
+  const preArea = 0.5 * ((sliverZ1 - sliverZ0) * (x2 - x0) - (x1 - x0) * (sliverZ2 - sliverZ0));
+  const qx0 = Math.fround(x0 + 1280);
+  const qx1 = Math.fround(x1 + 1280);
+  const qx2 = Math.fround(x2 + 1280);
+  const qz0 = Math.fround(sliverZ0 - 256);
+  const qz1 = Math.fround(sliverZ1 - 256);
+  const qz2 = Math.fround(sliverZ2 - 256);
+  const postArea = 0.5 * ((qz1 - qz0) * (qx2 - qx0) - (qx1 - qx0) * (qz2 - qz0));
+  assert.ok(sliverZ2 < preLineZ && preArea > 1e-6 && postArea < -1e-6, 'Expected deterministic Float32 rebase flip test triangle');
+
+  const roadInfoValid = {
+    id: 'road-valid-1',
+    sourceFeatureId: 'way/road-valid-1',
+    category: 'Road',
+    cartoLabel: 'Footway',
+    primaryTag: 'highway=footway',
+    subtype: 'footway',
+    osmTags: { highway: 'footway' },
+  };
+  const sliverInfo = {
+    id: 'road-sliver-1',
+    sourceFeatureId: 'way/1444701750',
+    category: 'Road',
+    cartoLabel: 'Footway',
+    primaryTag: 'highway=footway',
+    subtype: 'footway',
+    osmTags: { highway: 'footway' },
+  };
+
+  for (const useIndexed of [false, true]) {
+    const { scene, resources } = createSyntheticBuiltSceneShell();
+    // Triangle 0 & 1: valid 2x2m CCW upward road quad; Triangle 2: Float32-rebase micro-sliver; Triangle 3: valid 1x1m CCW quad part
+    const rawPositions = new Float32Array([
+      -1290, 0.05, 10,   -1290, 0.05, 12,   -1288, 0.05, 12,
+      -1290, 0.05, 10,   -1288, 0.05, 12,   -1288, 0.05, 10,
+      x0,    0.05, sliverZ0, x1, 0.05, sliverZ1, x2, 0.05, sliverZ2,
+      -1275, 0.05, 10,   -1275, 0.05, 11,   -1274, 0.05, 11,
+    ]);
+    const normals = new Float32Array(12 * 3);
+    for (let i = 0; i < 12; i++) normals[i * 3 + 1] = 1;
+
+    const geo = resources.registerGeometry(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(rawPositions, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    if (useIndexed) {
+      geo.setIndex([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    }
+    const mat = resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#cbd5e1' }));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'Roads_footway';
+    mesh.userData = {
+      faceRanges: [
+        { startFace: 0, endFace: 2, info: roadInfoValid },
+        { startFace: 2, endFace: 3, info: sliverInfo },
+        { startFace: 3, endFace: 4, info: roadInfoValid },
+      ],
+    };
+    scene.roadsGroup.add(mesh);
+    scene.stats.totalTriangles = 4;
+    scene.stats.totalVertices = 12;
+    scene.stats.renderedFeaturesCount = 2;
+
+    // Pre-rebase mesh passes auditGraphRoadMeshIntegrity cleanly!
+    scene.roadsGroup.updateMatrixWorld(true);
+    const preAudit = auditGraphRoadMeshIntegrity(scene.roadsGroup);
+    assert.equal(preAudit.windingDefects.length, 0);
+    assert.equal(preAudit.degenerateTriangles.length, 0);
+
+    const bytes = encodeBuiltTileToBinary({ tile, scene, lod: 0, includeBvh: true });
+    scene.dispose();
+
+    const decoded = decodeTileBinary(bytes, tile.id);
+    assert.equal(decoded.totalTriangles, 3, `Expected sliver pruned (indexed=${useIndexed})`);
+
+    const registry = new ThemeMaterialRegistry(MAP_THEMES.tactical, 1.0);
+    const recon = reconstructTileSceneFromDecoded(decoded, {
+      materialRegistry: registry,
+      placementMode: 'study-world-mesh-offset',
+    });
+
+    const postAudit = auditGraphRoadMeshIntegrity(recon.scene.roadsGroup);
+    assert.equal(postAudit.windingDefects.length, 0, 'Post-decode must have zero winding defects');
+    assert.equal(postAudit.degenerateTriangles.length, 0, 'Post-decode must have zero degenerate triangles');
+
+    // Verify faceRanges remapped accurately for remaining triangle #2 (was face #3)
+    const reconMesh = recon.scene.roadsGroup.getObjectByName('Roads_footway') as THREE.Mesh;
+    const hitResolved = resolveInspectedFeature({ object: reconMesh, faceIndex: 2 });
+    assert.equal(hitResolved?.sourceFeatureId, 'way/road-valid-1');
+
+    recon.dispose();
+    registry.dispose();
+  }
+
+  // Negative check: a genuine pre-rebase inverted triangle must NOT be suppressed
+  {
+    const { scene, resources } = createSyntheticBuiltSceneShell();
+    const badPositions = new Float32Array([
+      -1280, 0.05, 10,
+      -1279.9, 0.05, 10,
+      -1279.95, 0.05, 10.0005, // CW downward (-Y) already before rebase, area ~ 2.5e-5 > 1e-6
+    ]);
+    const normals = new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]);
+    const geo = resources.registerGeometry(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(badPositions, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    const mat = resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#cbd5e1' }));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'Roads_footway';
+    mesh.userData = {
+      faceRanges: [{ startFace: 0, endFace: 1, info: sliverInfo }],
+    };
+    scene.roadsGroup.add(mesh);
+
+    const bytes = encodeBuiltTileToBinary({ tile, scene, lod: 0, includeBvh: true });
+    scene.dispose();
+
+    const decoded = decodeTileBinary(bytes, tile.id);
+    const registry = new ThemeMaterialRegistry(MAP_THEMES.tactical, 1.0);
+    const recon = reconstructTileSceneFromDecoded(decoded, {
+      materialRegistry: registry,
+      placementMode: 'study-world-mesh-offset',
+    });
+
+    const postAudit = auditGraphRoadMeshIntegrity(recon.scene.roadsGroup);
+    assert.equal(postAudit.negativelyWoundCount, 1, 'Genuine upstream inverted triangle must remain detectable');
+
+    recon.dispose();
+    registry.dispose();
+  }
+});
+
+test('BVH raycast & inspection parity covers vertical facades, occluding overlap, matrixWorld, >65k Uint32 indirect BVH, and instanced sleepers', () => {
+  const tile = makeFakeTile(0, 0);
+  const { scene, resources } = createSyntheticBuiltSceneShell();
+
+  // 1. Merged Buildings_default with roof + vertical facades, including an occluding building 0.25m in front
+  const backBox = new THREE.BoxGeometry(10, 12, 10).toNonIndexed();
+  backBox.translate(0, 6, 0); // +Z front wall at z = +5
+  const frontOccluder = new THREE.BoxGeometry(10, 12, 0.1).toNonIndexed();
+  frontOccluder.translate(0, 6, 5.25); // Thin occluding facade at z = +5.25..+5.3, leaving 0.2m gap in front of z=+5
+
+  const mergedVertCount =
+    backBox.attributes.position.count + frontOccluder.attributes.position.count;
+  const bPos = new Float32Array(mergedVertCount * 3);
+  const bNorm = new Float32Array(mergedVertCount * 3);
+  bPos.set(backBox.attributes.position.array as Float32Array, 0);
+  bPos.set(
+    frontOccluder.attributes.position.array as Float32Array,
+    backBox.attributes.position.count * 3
+  );
+  bNorm.set(backBox.attributes.normal.array as Float32Array, 0);
+  bNorm.set(
+    frontOccluder.attributes.normal.array as Float32Array,
+    backBox.attributes.normal.count * 3
+  );
+  backBox.dispose();
+  frontOccluder.dispose();
+
+  const backTris = 12;
+  const frontTris = 12;
+  const backInfo = {
+    id: 'bldg-back',
+    sourceFeatureId: 'way/bldg-back',
+    category: 'Building',
+    cartoLabel: 'Building',
+    primaryTag: 'building=yes',
+    subtype: 'yes',
+    osmTags: { building: 'yes' },
+  };
+  const occluderInfo = {
+    id: 'bldg-front-occluder',
+    sourceFeatureId: 'way/bldg-front-occluder',
+    category: 'Building',
+    cartoLabel: 'Building',
+    primaryTag: 'building=yes',
+    subtype: 'yes',
+    osmTags: { building: 'yes' },
+  };
+
+  const bGeo = resources.registerGeometry(new THREE.BufferGeometry());
+  bGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+  bGeo.setAttribute('normal', new THREE.BufferAttribute(bNorm, 3));
+  // Multi-material BufferGeometry requires groups covering all vertices for Three.js/BVH raycasting
+  bGeo.addGroup(0, backTris * 3, 0);
+  bGeo.addGroup(backTris * 3, frontTris * 3, 1);
+  const bMat = [
+    resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#475569' })),
+    resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#64748b' })),
+  ];
+  const bMesh = new THREE.Mesh(bGeo, bMat);
+  bMesh.name = 'Buildings_default';
+  bMesh.userData = {
+    faceRanges: [
+      { startFace: 0, endFace: backTris, info: backInfo },
+      { startFace: backTris, endFace: backTris + frontTris, info: occluderInfo },
+    ],
+  };
+  scene.buildingsGroup.add(bMesh);
+
+  // 2. Single-feature building (userData.id with no faceRanges) + >65,536 triangles exercising Uint32Array indirectBuffer
+  const highTriCount = 65540;
+  const hiVertCount = highTriCount * 3;
+  const hiPos = new Float32Array(hiVertCount * 3);
+  const hiNorm = new Float32Array(hiVertCount * 3);
+  const cols = 256;
+  for (let f = 0; f < highTriCount; f++) {
+    const gx = (f % cols) * 0.25 + 40;
+    const gz = Math.floor(f / cols) * 0.25 - 40;
+    const base = f * 9;
+    hiPos[base + 0] = gx;         hiPos[base + 1] = 10; hiPos[base + 2] = gz;
+    hiPos[base + 3] = gx;         hiPos[base + 4] = 10; hiPos[base + 5] = gz + 0.2;
+    hiPos[base + 6] = gx + 0.2;   hiPos[base + 7] = 10; hiPos[base + 8] = gz + 0.2;
+    for (let v = 0; v < 3; v++) hiNorm[base + v * 3 + 1] = 1;
+  }
+  const hiGeo = resources.registerGeometry(new THREE.BufferGeometry());
+  hiGeo.setAttribute('position', new THREE.BufferAttribute(hiPos, 3));
+  hiGeo.setAttribute('normal', new THREE.BufferAttribute(hiNorm, 3));
+  hiGeo.addGroup(0, hiVertCount, 0);
+  const hiMesh = new THREE.Mesh(hiGeo, bMat);
+  hiMesh.name = 'Buildings_arch_religious';
+  hiMesh.userData = {
+    id: 'bldg-huge-single',
+    sourceFeatureId: 'way/bldg-huge-single',
+    category: 'Building',
+    cartoLabel: 'Church',
+    primaryTag: 'building=church',
+    subtype: 'church',
+    osmTags: { building: 'church' },
+  };
+  scene.buildingsGroup.add(hiMesh);
+
+  // 3. Instanced sleepers (Railway_Sleepers_3D)
+  const unitSleeperGeo = resources.registerGeometry(buildUnitSleeperBoxGeometry());
+  const sleeperMat = resources.registerMaterial(new THREE.MeshStandardMaterial({ color: '#78716c' }));
+  const sleeperInst = new THREE.InstancedMesh(unitSleeperGeo, sleeperMat, 2);
+  sleeperInst.name = 'Railway_Sleepers_3D';
+  sleeperInst.visible = false;
+  const m0 = new THREE.Matrix4().compose(
+    new THREE.Vector3(-40, 0.1, 40),
+    new THREE.Quaternion(),
+    new THREE.Vector3(2.6, 0.16, 0.26)
+  );
+  const m1 = new THREE.Matrix4().compose(
+    new THREE.Vector3(-40, 0.1, 40.6),
+    new THREE.Quaternion(),
+    new THREE.Vector3(2.6, 0.16, 0.26)
+  );
+  sleeperInst.setMatrixAt(0, m0);
+  sleeperInst.setMatrixAt(1, m1);
+  sleeperInst.instanceMatrix.needsUpdate = true;
+  const sleeperInfo0 = {
+    id: 'rail-slp-0',
+    sourceFeatureId: 'way/rail-slp-0',
+    category: 'Railway',
+    cartoLabel: 'Railway',
+    primaryTag: 'railway=rail',
+    subtype: 'rail',
+    osmTags: { railway: 'rail' },
+  };
+  const sleeperInfo1 = {
+    id: 'rail-slp-1',
+    sourceFeatureId: 'way/rail-slp-1',
+    category: 'Railway',
+    cartoLabel: 'Railway',
+    primaryTag: 'railway=rail',
+    subtype: 'rail',
+    osmTags: { railway: 'rail' },
+  };
+  sleeperInst.userData = {
+    isInstanced: true,
+    isStructural3D: true,
+    instanceInfos: [sleeperInfo0, sleeperInfo1],
+    instanceBoxes: [
+      { cx: -40, cz: 40, yBottom: 0.1, yTop: 0.26, tx: 0, tz: 1, nx: 1, nz: 0, halfLen: 1.3, halfWidthLeft: 0.13, halfWidthRight: 0.13, trackId: 't0' },
+      { cx: -40, cz: 40.6, yBottom: 0.1, yTop: 0.26, tx: 0, tz: 1, nx: 1, nz: 0, halfLen: 1.3, halfWidthLeft: 0.13, halfWidthRight: 0.13, trackId: 't0' },
+    ],
+  };
+  scene.railwaysGroup.add(sleeperInst);
+
+  const bytes = encodeBuiltTileToBinary({ tile, scene, lod: 0, includeBvh: true });
+  scene.dispose();
+
+  const decoded = decodeTileBinary(bytes, tile.id);
+  const hugeMeshRec = decoded.meshes.find((m) => m.name === 'Buildings_arch_religious');
+  assert.ok(hugeMeshRec?.bvh?.indirectBuffer instanceof Uint32Array, 'Expected Uint32Array indirectBuffer for >65,536 triangles');
+
+  const registry = new ThemeMaterialRegistry(MAP_THEMES.tactical, 1.0);
+  const recon = reconstructTileSceneFromDecoded(decoded, {
+    materialRegistry: registry,
+    placementMode: 'study-world-mesh-offset',
+  });
+
+  // Move parent buildingsGroup to verify matrixWorld transforms are respected
+  recon.scene.buildingsGroup.position.set(120, 0, -80);
+  recon.scene.buildingsGroup.updateMatrixWorld(true);
+
+  const reconMerged = recon.scene.buildingsGroup.getObjectByName('Buildings_default') as THREE.Mesh;
+  assert.ok(reconMerged);
+  assert.equal(reconMerged.raycast, acceleratedRaycast);
+
+  // Target the occluded +Z vertical facade on backInfo (face 8 or whichever has normal (0, 0, +1))
+  const posAttr = reconMerged.geometry.getAttribute('position') as THREE.BufferAttribute;
+  let targetFacadeFace = -1;
+  const v0 = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const v2 = new THREE.Vector3();
+  const nVec = new THREE.Vector3();
+  for (let f = 0; f < backTris; f++) {
+    v0.fromBufferAttribute(posAttr, f * 3).applyMatrix4(reconMerged.matrixWorld);
+    v1.fromBufferAttribute(posAttr, f * 3 + 1).applyMatrix4(reconMerged.matrixWorld);
+    v2.fromBufferAttribute(posAttr, f * 3 + 2).applyMatrix4(reconMerged.matrixWorld);
+    nVec.crossVectors(v1.clone().sub(v0), v2.clone().sub(v0)).normalize();
+    if (nVec.z > 0.9) {
+      targetFacadeFace = f;
+      break;
+    }
+  }
+  assert.ok(targetFacadeFace >= 0, 'Expected +Z vertical wall face on back building');
+  const wallCentroid = v0.clone().add(v1).add(v2).multiplyScalar(1 / 3);
+  const occludedWallErr = verifyStaticMeshBvhSample({
+    sample: {
+      kind: 'static',
+      category: 'building_facade',
+      layer: 'buildings',
+      mesh: reconMerged,
+      faceIndex: targetFacadeFace,
+      centroidWorld: wallCentroid,
+      normalWorld: nVec.clone(),
+      expectedInfo: backInfo,
+    },
+    tileId: tile.id,
+    expectBvhAttached: true,
+  });
+  assert.equal(occludedWallErr, null, `Expected occluded vertical facade check to pass, got: ${occludedWallErr}`);
+
+  // Verify >65,536 triangle faceIndex raycast hits tail face cleanly
+  const reconHuge = recon.scene.buildingsGroup.getObjectByName('Buildings_arch_religious') as THREE.Mesh;
+  const tailFace = 65538;
+  const hiPosAttr = reconHuge.geometry.getAttribute('position') as THREE.BufferAttribute;
+  v0.fromBufferAttribute(hiPosAttr, tailFace * 3).applyMatrix4(reconHuge.matrixWorld);
+  v1.fromBufferAttribute(hiPosAttr, tailFace * 3 + 1).applyMatrix4(reconHuge.matrixWorld);
+  v2.fromBufferAttribute(hiPosAttr, tailFace * 3 + 2).applyMatrix4(reconHuge.matrixWorld);
+  const tailErr = verifyStaticMeshBvhSample({
+    sample: {
+      kind: 'static',
+      category: 'building_single_feature',
+      layer: 'buildings',
+      mesh: reconHuge,
+      faceIndex: tailFace,
+      centroidWorld: v0.clone().add(v1).add(v2).multiplyScalar(1 / 3),
+      normalWorld: new THREE.Vector3(0, 1, 0),
+      expectedInfo: reconHuge.userData as typeof backInfo,
+    },
+    tileId: tile.id,
+    expectBvhAttached: true,
+  });
+  assert.equal(tailErr, null, `Expected >65k Uint32 BVH tail face check to pass, got: ${tailErr}`);
+
+  // Verify collectTileRaySampleTargets discovers roof, facade, single-feature, and instanced sleeper samples
+  const targets = collectTileRaySampleTargets(recon.scene, 8);
+  assert.ok(targets.some((t) => t.category === 'building_roof'));
+  assert.ok(targets.some((t) => t.category === 'building_facade'));
+  assert.ok(targets.some((t) => t.category === 'building_single_feature'));
+  const sleeperTarget = targets.find((t) => t.category === 'sleeper_instanced');
+  assert.ok(sleeperTarget && sleeperTarget.kind === 'instanced_sleeper');
+
+  recon.scene.updateCameraZoom?.(6.0);
+  sleeperTarget.instancedMesh.updateMatrixWorld(true);
+  const sleeperHits = new THREE.Raycaster(sleeperTarget.rayOrigin, sleeperTarget.rayDirection, 0, 10)
+    .intersectObject(sleeperTarget.instancedMesh, false);
+  assert.ok(sleeperHits.length > 0 && sleeperHits[0].instanceId === sleeperTarget.instanceId);
+  assert.equal(resolveInspectedFeature(sleeperHits[0])?.sourceFeatureId, sleeperTarget.expectedInfo?.sourceFeatureId);
+
+  // Sanity check that MeshBVH indirect property is true
+  assert.equal(((reconHuge.geometry as unknown as { boundsTree: MeshBVH }).boundsTree).indirect, true);
+  assert.equal(typeof acceleratedRaycast, 'function');
+
+  recon.dispose();
+  registry.dispose();
 });

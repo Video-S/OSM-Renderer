@@ -428,6 +428,335 @@ function extractInspectableInfoDirect(ud: Record<string, unknown>): InspectableF
   };
 }
 
+const STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES = new Set<string>([
+  'Bridge_Substructure',
+  'Bridge_Piers',
+  'Bridge_Parapets',
+  'Tunnel_Portals',
+  'Tunnel_Entrances',
+  'Tunnel_Underground_Trace',
+  'Tunnel_Underground_Roads',
+]);
+const REBASE_MICRO_SLIVER_MAX_AREA_M2 = 1e-3;
+const REBASE_MIN_NONDEGENERATE_AREA_M2 = 1e-6;
+
+interface PruneRebasedRoadSliversResult {
+  positions: Float32Array;
+  normals: Float32Array | null;
+  uvs: Float32Array | null;
+  switchAttrs: Float32Array | null;
+  colors: Float32Array | null;
+  indices: Uint32Array | Uint16Array | null;
+  groups: TileMeshGroupRecord[];
+  faceRanges: TileFaceRangeRecord[];
+  prunedTriangles: number;
+  prunedVertices: number;
+  remainingTriangles: number;
+}
+
+function pruneRebasedHorizontalRoadSlivers(params: {
+  prePos: Float32Array;
+  postPos: Float32Array;
+  meshPosX: number;
+  meshPosY: number;
+  meshPosZ: number;
+  normals: Float32Array | null;
+  uvs: Float32Array | null;
+  switchAttrs: Float32Array | null;
+  colors: Float32Array | null;
+  indices: Uint32Array | Uint16Array | null;
+  groups: TileMeshGroupRecord[];
+  faceRanges: TileFaceRangeRecord[];
+  featureInfos: readonly InspectableFeatureInfo[];
+  directInfo: InspectableFeatureInfo | null;
+}): PruneRebasedRoadSliversResult {
+  const {
+    prePos,
+    postPos,
+    meshPosX,
+    meshPosY,
+    meshPosZ,
+    normals,
+    uvs,
+    switchAttrs,
+    colors,
+    indices,
+    groups,
+    faceRanges,
+    featureInfos,
+    directInfo,
+  } = params;
+
+  const vertCount = Math.floor(postPos.length / 3);
+  const triCount = indices ? Math.floor(indices.length / 3) : Math.floor(vertCount / 3);
+  if (triCount <= 0) {
+    return {
+      positions: postPos,
+      normals,
+      uvs,
+      switchAttrs,
+      colors,
+      indices,
+      groups,
+      faceRanges,
+      prunedTriangles: 0,
+      prunedVertices: 0,
+      remainingTriangles: 0,
+    };
+  }
+
+  const keepFace = new Uint8Array(triCount);
+  keepFace.fill(1);
+  let droppedCount = 0;
+  let rangeCursor = 0;
+
+  for (let f = 0; f < triCount; f++) {
+    while (rangeCursor < faceRanges.length && f >= faceRanges[rangeCursor].endFace) {
+      rangeCursor++;
+    }
+    const r =
+      rangeCursor < faceRanges.length &&
+      f >= faceRanges[rangeCursor].startFace &&
+      f < faceRanges[rangeCursor].endFace
+        ? faceRanges[rangeCursor]
+        : null;
+    const faceInfo = r ? featureInfos[r.infoIdx] : directInfo;
+    if (faceInfo?.isBridge) {
+      continue;
+    }
+
+    const i0 = indices ? indices[f * 3] : f * 3;
+    const i1 = indices ? indices[f * 3 + 1] : f * 3 + 1;
+    const i2 = indices ? indices[f * 3 + 2] : f * 3 + 2;
+
+    const px0 = prePos[i0 * 3] + meshPosX;
+    const py0 = prePos[i0 * 3 + 1] + meshPosY;
+    const pz0 = prePos[i0 * 3 + 2] + meshPosZ;
+    const px1 = prePos[i1 * 3] + meshPosX;
+    const py1 = prePos[i1 * 3 + 1] + meshPosY;
+    const pz1 = prePos[i1 * 3 + 2] + meshPosZ;
+    const px2 = prePos[i2 * 3] + meshPosX;
+    const py2 = prePos[i2 * 3 + 1] + meshPosY;
+    const pz2 = prePos[i2 * 3 + 2] + meshPosZ;
+
+    if (!faceInfo) {
+      const maxY = Math.max(py0, py1, py2);
+      const minY = Math.min(py0, py1, py2);
+      if (maxY > 0.12 || minY < -0.05) {
+        continue;
+      }
+    }
+
+    const ax0 = px1 - px0;
+    const ay0 = py1 - py0;
+    const az0 = pz1 - pz0;
+    const bx0 = px2 - px0;
+    const by0 = py2 - py0;
+    const bz0 = pz2 - pz0;
+    const cx0 = ay0 * bz0 - az0 * by0;
+    const cy0 = az0 * bx0 - ax0 * bz0;
+    const cz0 = ax0 * by0 - ay0 * bx0;
+    const dPre = Math.hypot(cx0, cy0, cz0);
+    const areaPre = dPre * 0.5;
+    const nyPre = dPre > 0 ? cy0 / dPre : 0;
+
+    // Never mask pre-existing non-finite or non-degenerate inverted/non-upward triangles
+    if (!Number.isFinite(areaPre) || (areaPre > REBASE_MIN_NONDEGENERATE_AREA_M2 && nyPre <= 0.99)) {
+      continue;
+    }
+
+    const qx0 = postPos[i0 * 3];
+    const qy0 = postPos[i0 * 3 + 1];
+    const qz0 = postPos[i0 * 3 + 2];
+    const qx1 = postPos[i1 * 3];
+    const qy1 = postPos[i1 * 3 + 1];
+    const qz1 = postPos[i1 * 3 + 2];
+    const qx2 = postPos[i2 * 3];
+    const qy2 = postPos[i2 * 3 + 1];
+    const qz2 = postPos[i2 * 3 + 2];
+
+    const ax1 = qx1 - qx0;
+    const ay1 = qy1 - qy0;
+    const az1 = qz1 - qz0;
+    const bx1 = qx2 - qx0;
+    const by1 = qy2 - qy0;
+    const bz1 = qz2 - qz0;
+    const cx1 = ay1 * bz1 - az1 * by1;
+    const cy1 = az1 * bx1 - ax1 * bz1;
+    const cz1 = ax1 * by1 - ay1 * bx1;
+    const dPost = Math.hypot(cx1, cy1, cz1);
+    const areaPost = dPost * 0.5;
+    const nyPost = dPost > 0 ? cy1 / dPost : 0;
+
+    const isMicroSliver =
+      areaPre <= REBASE_MICRO_SLIVER_MAX_AREA_M2 &&
+      (!Number.isFinite(areaPost) || areaPost <= REBASE_MICRO_SLIVER_MAX_AREA_M2);
+    const postFailed =
+      !Number.isFinite(areaPost) ||
+      areaPost <= REBASE_MIN_NONDEGENERATE_AREA_M2 ||
+      nyPost <= 0.99;
+
+    if (isMicroSliver && postFailed) {
+      keepFace[f] = 0;
+      droppedCount++;
+    }
+  }
+
+  if (droppedCount === 0) {
+    return {
+      positions: postPos,
+      normals,
+      uvs,
+      switchAttrs,
+      colors,
+      indices,
+      groups,
+      faceRanges,
+      prunedTriangles: 0,
+      prunedVertices: 0,
+      remainingTriangles: triCount,
+    };
+  }
+
+  const keptTriCount = triCount - droppedCount;
+  if (keptTriCount === 0) {
+    return {
+      positions: new Float32Array(0),
+      normals: normals ? new Float32Array(0) : null,
+      uvs: uvs ? new Float32Array(0) : null,
+      switchAttrs: switchAttrs ? new Float32Array(0) : null,
+      colors: colors ? new Float32Array(0) : null,
+      indices: indices
+        ? indices instanceof Uint32Array
+          ? new Uint32Array(0)
+          : new Uint16Array(0)
+        : null,
+      groups: [],
+      faceRanges: [],
+      prunedTriangles: droppedCount,
+      prunedVertices: indices ? 0 : droppedCount * 3,
+      remainingTriangles: 0,
+    };
+  }
+
+  const faceRemap = new Int32Array(triCount);
+  let nextNewFace = 0;
+  for (let f = 0; f < triCount; f++) {
+    if (keepFace[f]) {
+      faceRemap[f] = nextNewFace++;
+    } else {
+      faceRemap[f] = -1;
+    }
+  }
+
+  let newPositions = postPos;
+  let newNormals = normals;
+  let newUvs = uvs;
+  let newSwitchAttrs = switchAttrs;
+  let newColors = colors;
+  let newIndices = indices;
+
+  if (indices) {
+    newIndices =
+      indices instanceof Uint32Array
+        ? new Uint32Array(keptTriCount * 3)
+        : new Uint16Array(keptTriCount * 3);
+    for (let f = 0; f < triCount; f++) {
+      const nf = faceRemap[f];
+      if (nf < 0) continue;
+      newIndices[nf * 3] = indices[f * 3];
+      newIndices[nf * 3 + 1] = indices[f * 3 + 1];
+      newIndices[nf * 3 + 2] = indices[f * 3 + 2];
+    }
+  } else {
+    newPositions = new Float32Array(keptTriCount * 9);
+    newNormals = normals ? new Float32Array(keptTriCount * 9) : null;
+    newUvs = uvs ? new Float32Array(keptTriCount * 6) : null;
+    newSwitchAttrs = switchAttrs ? new Float32Array(keptTriCount * 6) : null;
+    newColors = colors ? new Float32Array(keptTriCount * 9) : null;
+
+    for (let f = 0; f < triCount; f++) {
+      const nf = faceRemap[f];
+      if (nf < 0) continue;
+      const src9 = f * 9;
+      const dst9 = nf * 9;
+      for (let k = 0; k < 9; k++) {
+        newPositions[dst9 + k] = postPos[src9 + k];
+        if (newNormals && normals) newNormals[dst9 + k] = normals[src9 + k];
+        if (newColors && colors) newColors[dst9 + k] = colors[src9 + k];
+      }
+      if (newUvs && uvs) {
+        const src6 = f * 6;
+        const dst6 = nf * 6;
+        for (let k = 0; k < 6; k++) newUvs[dst6 + k] = uvs[src6 + k];
+      }
+      if (newSwitchAttrs && switchAttrs) {
+        const src6 = f * 6;
+        const dst6 = nf * 6;
+        for (let k = 0; k < 6; k++) newSwitchAttrs[dst6 + k] = switchAttrs[src6 + k];
+      }
+    }
+  }
+
+  const newFaceRanges: TileFaceRangeRecord[] = [];
+  for (const r of faceRanges) {
+    const start = Math.max(0, r.startFace);
+    const end = Math.min(triCount, r.endFace);
+    let minNew = -1;
+    let maxNew = -1;
+    for (let f = start; f < end; f++) {
+      const nf = faceRemap[f];
+      if (nf >= 0) {
+        if (minNew === -1) minNew = nf;
+        maxNew = nf;
+      }
+    }
+    if (minNew !== -1) {
+      newFaceRanges.push({
+        startFace: minNew,
+        endFace: maxNew + 1,
+        infoIdx: r.infoIdx,
+      });
+    }
+  }
+
+  const newGroups: TileMeshGroupRecord[] = [];
+  for (const g of groups) {
+    const startTri = Math.max(0, Math.floor(g.start / 3));
+    const endTri = Math.min(triCount, Math.floor((g.start + g.count) / 3));
+    let minNew = -1;
+    let maxNew = -1;
+    for (let f = startTri; f < endTri; f++) {
+      const nf = faceRemap[f];
+      if (nf >= 0) {
+        if (minNew === -1) minNew = nf;
+        maxNew = nf;
+      }
+    }
+    if (minNew !== -1) {
+      newGroups.push({
+        start: minNew * 3,
+        count: (maxNew - minNew + 1) * 3,
+        materialIndex: g.materialIndex,
+      });
+    }
+  }
+
+  return {
+    positions: newPositions,
+    normals: newNormals,
+    uvs: newUvs,
+    switchAttrs: newSwitchAttrs,
+    colors: newColors,
+    indices: newIndices,
+    groups: newGroups,
+    faceRanges: newFaceRanges,
+    prunedTriangles: droppedCount,
+    prunedVertices: indices ? 0 : droppedCount * 3,
+    remainingTriangles: keptTriCount,
+  };
+}
+
 export interface EncodeTileBinaryOptions {
   tile: TileDescriptor;
   scene: BuiltSceneGeometry;
@@ -472,6 +801,8 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
 
   const meshRecords: TileMeshRecord[] = [];
   const instancedRecords: TileInstancedBatchRecord[] = [];
+  let totalPrunedTriangles = 0;
+  let totalPrunedVertices = 0;
 
   let overMinX = Infinity;
   let overMinY = Infinity;
@@ -616,6 +947,14 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
         const dz = mesh.position.z - tileCenterZ;
         const isGround = layer === 'ground' || mesh.name === 'GroundPlane';
 
+        const isRebasedHorizontalRoad =
+          layer === 'roads' &&
+          !isGround &&
+          (dx !== 0 || dz !== 0) &&
+          !STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES.has(mesh.name) &&
+          mesh.name !== 'Roads_bridge';
+        const prePos = isRebasedHorizontalRoad ? rawPos.slice() : null;
+
         let localPositionOffset: [number, number, number];
         if (isGround) {
           localPositionOffset = [dx, dy, dz];
@@ -627,32 +966,33 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
           localPositionOffset = [0, dy, 0];
         }
 
-        const normals = extractCompactAttributeFloat32(
+        let finalPositions = rawPos;
+        let normals = extractCompactAttributeFloat32(
           geo.getAttribute('normal') as THREE.BufferAttribute | undefined,
           3
         );
-        const uvs = extractCompactAttributeFloat32(
+        let uvs = extractCompactAttributeFloat32(
           geo.getAttribute('uv') as THREE.BufferAttribute | undefined,
           2
         );
-        const switchAttrs = extractCompactAttributeFloat32(
+        let switchAttrs = extractCompactAttributeFloat32(
           geo.getAttribute('aSwitchAttr') as THREE.BufferAttribute | undefined,
           2
         );
-        const colors = extractCompactAttributeFloat32(
+        let colors = extractCompactAttributeFloat32(
           geo.getAttribute('color') as THREE.BufferAttribute | undefined,
           3
         );
-        const indices = extractCompactIndices(geo.getIndex(), posAttr.count);
+        let indices = extractCompactIndices(geo.getIndex(), posAttr.count);
 
-        const groups: TileMeshGroupRecord[] = geo.groups.map((g) => ({
+        let groups: TileMeshGroupRecord[] = geo.groups.map((g) => ({
           start: g.start,
           count: g.count,
           materialIndex: g.materialIndex ?? 0,
         }));
 
         const rawRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
-        const faceRanges: TileFaceRangeRecord[] = Array.isArray(rawRanges)
+        let faceRanges: TileFaceRangeRecord[] = Array.isArray(rawRanges)
           ? rawRanges.map((r) => ({
               startFace: r.startFace,
               endFace: r.endFace,
@@ -663,7 +1003,41 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
         const directInfo = extractInspectableInfoDirect(mesh.userData || {});
         const singleFeatureIdx = directInfo ? internFeatureInfo(directInfo) : -1;
 
-        const bbox = computePositionBBox(rawPos);
+        if (prePos) {
+          const pruned = pruneRebasedHorizontalRoadSlivers({
+            prePos,
+            postPos: finalPositions,
+            meshPosX: mesh.position.x,
+            meshPosY: mesh.position.y,
+            meshPosZ: mesh.position.z,
+            normals,
+            uvs,
+            switchAttrs,
+            colors,
+            indices,
+            groups,
+            faceRanges,
+            featureInfos,
+            directInfo,
+          });
+          if (pruned.prunedTriangles > 0) {
+            totalPrunedTriangles += pruned.prunedTriangles;
+            totalPrunedVertices += pruned.prunedVertices;
+            if (pruned.remainingTriangles === 0) {
+              return;
+            }
+            finalPositions = pruned.positions;
+            normals = pruned.normals;
+            uvs = pruned.uvs;
+            switchAttrs = pruned.switchAttrs;
+            colors = pruned.colors;
+            indices = pruned.indices;
+            groups = pruned.groups;
+            faceRanges = pruned.faceRanges;
+          }
+        }
+
+        const bbox = computePositionBBox(finalPositions);
         const worldCheckMin: [number, number, number] = [
           bbox.min[0] + localPositionOffset[0],
           bbox.min[1] + localPositionOffset[1],
@@ -678,7 +1052,7 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
           expandOverhang(worldCheckMin, worldCheckMax);
         }
 
-        const bvh = includeBvh ? buildTileLocalBvh(rawPos, indices) : null;
+        const bvh = includeBvh ? buildTileLocalBvh(finalPositions, indices) : null;
         const materialSlotKeys = resolveMaterialSlotKeysFromMesh(layer, mesh.name);
 
         meshRecords.push({
@@ -690,7 +1064,7 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
           localPositionOffset,
           bboxMin: bbox.min,
           bboxMax: bbox.max,
-          positions: rawPos,
+          positions: finalPositions,
           normals,
           uvs,
           switchAttrs,
@@ -795,8 +1169,10 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
   writer.writeUint32(scene.stats.renderedFeaturesCount); // 36..40
   writer.writeUint32(scene.stats.forestTreesCount ?? 0); // 40..44
   writer.writeUint32(sleeper3DBoxCount); // 44..48
-  writer.writeUint32(scene.stats.totalVertices); // 48..52
-  writer.writeUint32(scene.stats.totalTriangles); // 52..56
+  const adjustedTotalVertices = Math.max(0, scene.stats.totalVertices - totalPrunedVertices);
+  const adjustedTotalTriangles = Math.max(0, scene.stats.totalTriangles - totalPrunedTriangles);
+  writer.writeUint32(adjustedTotalVertices); // 48..52
+  writer.writeUint32(adjustedTotalTriangles); // 52..56
   writer.writeUint32(scene.stats.totalDrawCalls); // 56..60
   writer.writeUint32(meshRecords.length); // 60..64
   writer.writeFloat64(tileCenterX); // 64..72

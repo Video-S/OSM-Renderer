@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as THREE from 'three';
+import { acceleratedRaycast } from 'three-mesh-bvh';
 import { MAP_THEMES } from '../../styles/mapThemes';
+import type { InspectableFeatureInfo } from '../../types/MapFeature';
 import {
   resolveInspectedFeature,
   type BuiltSceneGeometry,
@@ -112,70 +114,402 @@ export interface TilePackVerificationReport {
   failures: string[];
 }
 
-function collectSampleRayTargets(
-  scene: BuiltSceneGeometry,
-  maxSamples = 12
-): Array<{
+export type SampleRayCategory =
+  | 'building_roof'
+  | 'building_facade'
+  | 'building_single_feature'
+  | 'surface_horizontal'
+  | 'sleeper_instanced';
+
+export interface StaticMeshRaySample {
+  kind: 'static';
+  category: Exclude<SampleRayCategory, 'sleeper_instanced'>;
   layer: string;
   mesh: THREE.Mesh;
-  sampleXZ: [number, number];
-  expectedSourceFeatureId?: string;
-}> {
-  const candidates: Array<{
-    layer: string;
-    mesh: THREE.Mesh;
-    sampleXZ: [number, number];
-    expectedSourceFeatureId?: string;
-  }> = [];
+  faceIndex: number;
+  centroidWorld: THREE.Vector3;
+  normalWorld: THREE.Vector3;
+  expectedInfo: InspectableFeatureInfo | null;
+}
 
-  const groups: Array<[string, THREE.Group]> = [
-    ['buildings', scene.buildingsGroup],
+export interface InstancedSleeperRaySample {
+  kind: 'instanced_sleeper';
+  category: 'sleeper_instanced';
+  layer: 'railways';
+  instancedMesh: THREE.InstancedMesh;
+  instanceId: number;
+  rayOrigin: THREE.Vector3;
+  rayDirection: THREE.Vector3;
+  expectedInfo: InspectableFeatureInfo | null;
+}
+
+export type TileRaySampleTarget = StaticMeshRaySample | InstancedSleeperRaySample;
+
+function resolveExpectedFeatureForMeshFace(
+  mesh: THREE.Mesh,
+  faceIndex: number
+): InspectableFeatureInfo | null {
+  const faceRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
+  if (Array.isArray(faceRanges) && faceRanges.length > 0) {
+    let lo = 0;
+    let hi = faceRanges.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const r = faceRanges[mid];
+      if (faceIndex < r.startFace) {
+        hi = mid - 1;
+      } else if (faceIndex >= r.endFace) {
+        lo = mid + 1;
+      } else {
+        return r.info;
+      }
+    }
+  }
+  if (typeof mesh.userData?.id === 'string') {
+    return mesh.userData as InspectableFeatureInfo;
+  }
+  return null;
+}
+
+function findMatchingTriangleInMesh(
+  mesh: THREE.Mesh,
+  predicate: (normalY: number, area: number) => boolean
+): {
+  faceIndex: number;
+  centroidWorld: THREE.Vector3;
+  normalWorld: THREE.Vector3;
+  expectedInfo: InspectableFeatureInfo | null;
+} | null {
+  const geo = mesh.geometry;
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos || pos.count < 3) return null;
+  const idx = geo.getIndex();
+  const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+  if (triCount <= 0) return null;
+
+  mesh.updateMatrixWorld(true);
+  const v0 = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+  const v2 = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const cross = new THREE.Vector3();
+
+  // Probe deterministic spread across triangles (including midpoint, quartiles, start)
+  const probeOrder: number[] = [];
+  const step = Math.max(1, Math.floor(triCount / 24));
+  for (let offset = 0; offset < triCount && probeOrder.length < 32; offset += step) {
+    probeOrder.push(offset);
+  }
+  const mid = Math.floor(triCount / 2);
+  if (!probeOrder.includes(mid)) probeOrder.unshift(mid);
+
+  for (const f of probeOrder) {
+    const i0 = idx ? idx.getX(f * 3) : f * 3;
+    const i1 = idx ? idx.getX(f * 3 + 1) : f * 3 + 1;
+    const i2 = idx ? idx.getX(f * 3 + 2) : f * 3 + 2;
+    v0.fromBufferAttribute(pos, i0).applyMatrix4(mesh.matrixWorld);
+    v1.fromBufferAttribute(pos, i1).applyMatrix4(mesh.matrixWorld);
+    v2.fromBufferAttribute(pos, i2).applyMatrix4(mesh.matrixWorld);
+
+    e1.subVectors(v1, v0);
+    e2.subVectors(v2, v0);
+    cross.crossVectors(e1, e2);
+    const doubleArea = cross.length();
+    const area = doubleArea * 0.5;
+    if (!Number.isFinite(area) || area <= 1e-4) continue;
+    cross.divideScalar(doubleArea);
+
+    if (!predicate(cross.y, area)) continue;
+
+    const expectedInfo = resolveExpectedFeatureForMeshFace(mesh, f);
+    if (!expectedInfo || !expectedInfo.id) continue;
+
+    const centroidWorld = new THREE.Vector3()
+      .addVectors(v0, v1)
+      .add(v2)
+      .multiplyScalar(1 / 3);
+    return {
+      faceIndex: f,
+      centroidWorld,
+      normalWorld: cross.clone(),
+      expectedInfo,
+    };
+  }
+  return null;
+}
+
+export function collectTileRaySampleTargets(
+  scene: BuiltSceneGeometry,
+  maxStaticSamples = 4
+): TileRaySampleTarget[] {
+  const samples: TileRaySampleTarget[] = [];
+  scene.buildingsGroup.updateMatrixWorld(true);
+  scene.roadsGroup.updateMatrixWorld(true);
+  scene.waterGroup.updateMatrixWorld(true);
+  scene.parksGroup.updateMatrixWorld(true);
+  scene.landuseGroup.updateMatrixWorld(true);
+  scene.railwaysGroup.updateMatrixWorld(true);
+
+  const buildingMeshes: THREE.Mesh[] = [];
+  scene.buildingsGroup.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh && !(obj as THREE.InstancedMesh).isInstancedMesh) {
+      const m = obj as THREE.Mesh;
+      if (m.visible) buildingMeshes.push(m);
+    }
+  });
+
+  // 1. Merged or primary building roof (horizontal upward face)
+  for (const m of buildingMeshes) {
+    if (samples.length >= maxStaticSamples) break;
+    const hit = findMatchingTriangleInMesh(m, (ny, area) => ny > 0.7 && area > 1e-3);
+    if (hit) {
+      samples.push({
+        kind: 'static',
+        category: 'building_roof',
+        layer: 'buildings',
+        mesh: m,
+        ...hit,
+      });
+      break;
+    }
+  }
+
+  // 2. Building vertical facade (|normal.y| < 0.25)
+  for (const m of buildingMeshes) {
+    if (samples.length >= maxStaticSamples) break;
+    const hit = findMatchingTriangleInMesh(m, (ny, area) => Math.abs(ny) < 0.25 && area > 1e-2);
+    if (hit) {
+      samples.push({
+        kind: 'static',
+        category: 'building_facade',
+        layer: 'buildings',
+        mesh: m,
+        ...hit,
+      });
+      break;
+    }
+  }
+
+  // 3. Single-feature building mesh if present (userData.id with empty faceRanges)
+  for (const m of buildingMeshes) {
+    if (samples.length >= maxStaticSamples) break;
+    const ranges = m.userData?.faceRanges as FaceFeatureRange[] | undefined;
+    const isSingle = (!Array.isArray(ranges) || ranges.length === 0) && typeof m.userData?.id === 'string';
+    if (!isSingle) continue;
+    const hit = findMatchingTriangleInMesh(m, (_ny, area) => area > 1e-3);
+    if (hit) {
+      samples.push({
+        kind: 'static',
+        category: 'building_single_feature',
+        layer: 'buildings',
+        mesh: m,
+        ...hit,
+      });
+      break;
+    }
+  }
+
+  // 4. Horizontal infrastructure/surface layers (roads, water, parks, landuse, railways)
+  const surfaceGroups: Array<[string, THREE.Group]> = [
     ['roads', scene.roadsGroup],
     ['water', scene.waterGroup],
     ['parks', scene.parksGroup],
     ['landuse', scene.landuseGroup],
     ['railways', scene.railwaysGroup],
   ];
-
-  for (const [layerName, grp] of groups) {
+  for (const [layerName, grp] of surfaceGroups) {
+    if (samples.length >= maxStaticSamples) break;
+    let picked = false;
     grp.traverse((obj) => {
-      if (candidates.length >= maxSamples) return;
+      if (picked || samples.length >= maxStaticSamples) return;
       if (!(obj as THREE.Mesh).isMesh || (obj as THREE.InstancedMesh).isInstancedMesh) return;
-      const mesh = obj as THREE.Mesh;
-      if (!mesh.visible) return;
-      const geo = mesh.geometry;
-      const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
-      if (!pos || pos.count < 3) return;
-      const idx = geo.getIndex();
-      const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
-      if (triCount === 0) return;
-
-      const faceRanges = mesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
-      const f = Math.floor(triCount / 2);
-      const i0 = idx ? idx.getX(f * 3) : f * 3;
-      const i1 = idx ? idx.getX(f * 3 + 1) : f * 3 + 1;
-      const i2 = idx ? idx.getX(f * 3 + 2) : f * 3 + 2;
-      const cx = (pos.getX(i0) + pos.getX(i1) + pos.getX(i2)) / 3 + mesh.position.x;
-      const cz = (pos.getZ(i0) + pos.getZ(i1) + pos.getZ(i2)) / 3 + mesh.position.z;
-
-      let expectedSid: string | undefined;
-      if (Array.isArray(faceRanges)) {
-        const match = faceRanges.find((r) => f >= r.startFace && f < r.endFace);
-        expectedSid = match?.info.sourceFeatureId;
-      } else if (typeof mesh.userData?.sourceFeatureId === 'string') {
-        expectedSid = mesh.userData.sourceFeatureId;
+      const m = obj as THREE.Mesh;
+      if (!m.visible) return;
+      const hit = findMatchingTriangleInMesh(m, (ny, area) => ny > 0.7 && area > 1e-4);
+      if (hit) {
+        samples.push({
+          kind: 'static',
+          category: 'surface_horizontal',
+          layer: layerName,
+          mesh: m,
+          ...hit,
+        });
+        picked = true;
       }
-
-      candidates.push({
-        layer: layerName,
-        mesh,
-        sampleXZ: [cx, cz],
-        expectedSourceFeatureId: expectedSid,
-      });
     });
   }
 
-  return candidates;
+  // 5. Instanced sleeper batch sample if present
+  let sleeperSampleAdded = false;
+  scene.railwaysGroup.traverse((obj) => {
+    if (sleeperSampleAdded) return;
+    if (!(obj as THREE.InstancedMesh).isInstancedMesh) return;
+    const im = obj as THREE.InstancedMesh;
+    if (!im.name.startsWith('Railway_Sleepers_3D') || im.count <= 0) return;
+    im.updateMatrixWorld(true);
+    const instIdx = Math.floor(im.count / 2);
+    const instMat = new THREE.Matrix4();
+    im.getMatrixAt(instIdx, instMat);
+    const worldMat = new THREE.Matrix4().multiplyMatrices(im.matrixWorld, instMat);
+    // Unit sleeper box spans y in [0, 1] centered at x=0, z=0
+    const topCenter = new THREE.Vector3(0, 1.0, 0).applyMatrix4(worldMat);
+    const infos = im.userData?.instanceInfos as InspectableFeatureInfo[] | undefined;
+    const expectedInfo = Array.isArray(infos) ? infos[instIdx] ?? null : null;
+    if (expectedInfo && expectedInfo.id) {
+      samples.push({
+        kind: 'instanced_sleeper',
+        category: 'sleeper_instanced',
+        layer: 'railways',
+        instancedMesh: im,
+        instanceId: instIdx,
+        rayOrigin: new THREE.Vector3(topCenter.x, topCenter.y + 0.5, topCenter.z),
+        rayDirection: new THREE.Vector3(0, -1, 0),
+        expectedInfo,
+      });
+      sleeperSampleAdded = true;
+    }
+  });
+
+  return samples;
+}
+
+function sameFeatureIdentity(
+  a: InspectableFeatureInfo | null,
+  b: InspectableFeatureInfo | null
+): boolean {
+  if (!a || !b) return false;
+  return a.id === b.id && a.sourceFeatureId === b.sourceFeatureId;
+}
+
+export function verifyStaticMeshBvhSample(params: {
+  sample: StaticMeshRaySample;
+  tileId: string;
+  expectBvhAttached: boolean;
+}): string | null {
+  const { sample, tileId, expectBvhAttached } = params;
+  const { mesh, faceIndex, centroidWorld, normalWorld, expectedInfo, category } = sample;
+
+  if (expectBvhAttached) {
+    const bvh = (mesh.geometry as unknown as { boundsTree?: unknown }).boundsTree;
+    if (!bvh) {
+      return `Mesh ${mesh.name} (${category}) in ${tileId} missing deserialized boundsTree`;
+    }
+    if (mesh.raycast !== acceleratedRaycast) {
+      return `Mesh ${mesh.name} (${category}) in ${tileId} does not use acceleratedRaycast`;
+    }
+  }
+
+  const runPair = (standoff: number) => {
+    const rayDir = normalWorld.clone().negate().normalize();
+    const rayOrigin = centroidWorld.clone().addScaledVector(normalWorld, standoff);
+
+    const rayAll = new THREE.Raycaster(rayOrigin, rayDir, 0, 2000);
+    (rayAll as unknown as { firstHitOnly?: boolean }).firstHitOnly = false;
+    const bvhHits = rayAll.intersectObject(mesh, false);
+
+    const rayFirst = new THREE.Raycaster(rayOrigin, rayDir, 0, 2000);
+    (rayFirst as unknown as { firstHitOnly?: boolean }).firstHitOnly = true;
+    const bvhFirstHits = rayFirst.intersectObject(mesh, false);
+
+    const prevRaycast = mesh.raycast;
+    let stdHits: THREE.Intersection[];
+    mesh.raycast = THREE.Mesh.prototype.raycast;
+    try {
+      const rayStd = new THREE.Raycaster(rayOrigin, rayDir, 0, 2000);
+      stdHits = rayStd.intersectObject(mesh, false);
+    } finally {
+      mesh.raycast = prevRaycast;
+    }
+
+    return { bvhHits, bvhFirstHits, stdHits };
+  };
+
+  const primary = runPair(0.5);
+  if (primary.bvhHits.length === 0 || primary.stdHits.length === 0 || primary.bvhFirstHits.length === 0) {
+    return `BVH/standard raycast missed ${mesh.name} (${category}) face ${faceIndex} in ${tileId} (bvh=${primary.bvhHits.length}, std=${primary.stdHits.length})`;
+  }
+  if (primary.bvhHits.length !== primary.stdHits.length) {
+    return `BVH vs standard hit-count mismatch on ${mesh.name} (${category}) in ${tileId}: bvh=${primary.bvhHits.length}, std=${primary.stdHits.length}`;
+  }
+
+  const checkHitParity = (
+    bvhHits: THREE.Intersection[],
+    bvhFirstHits: THREE.Intersection[],
+    stdHits: THREE.Intersection[],
+    label: string
+  ): string | null => {
+    const b0 = bvhHits[0];
+    const f0 = bvhFirstHits[0];
+    const s0 = stdHits[0];
+
+    if (Math.abs(b0.distance - s0.distance) > 1e-4 || Math.abs(f0.distance - s0.distance) > 1e-4) {
+      return `BVH vs standard nearest distance mismatch (${label}) on ${mesh.name} (${category}) in ${tileId}: bvh=${b0.distance.toFixed(5)}, firstHit=${f0.distance.toFixed(5)}, std=${s0.distance.toFixed(5)}`;
+    }
+
+    // Compare faceIndex; if coplanar tie at same distance (within 1e-4), ensure both exist in hit sets
+    if (b0.faceIndex !== s0.faceIndex) {
+      const sHasB0 = stdHits.some(
+        (h) => h.faceIndex === b0.faceIndex && Math.abs(h.distance - s0.distance) <= 1e-4
+      );
+      if (!sHasB0) {
+        return `BVH vs standard nearest faceIndex mismatch (${label}) on ${mesh.name} (${category}) in ${tileId}: bvh=${b0.faceIndex}, std=${s0.faceIndex}`;
+      }
+    }
+    if (f0.faceIndex !== s0.faceIndex) {
+      const sHasF0 = stdHits.some(
+        (h) => h.faceIndex === f0.faceIndex && Math.abs(h.distance - s0.distance) <= 1e-4
+      );
+      if (!sHasF0) {
+        return `BVH firstHitOnly vs standard nearest faceIndex mismatch (${label}) on ${mesh.name} (${category}) in ${tileId}: firstHit=${f0.faceIndex}, std=${s0.faceIndex}`;
+      }
+    }
+
+    // Verify metadata resolution for the frontmost hit against its exact face owner
+    for (const hit of [b0, f0]) {
+      if (typeof hit.faceIndex !== 'number') {
+        return `Hit missing faceIndex on ${mesh.name} (${category}) in ${tileId}`;
+      }
+      const resolved = resolveInspectedFeature(hit);
+      const expectedForHit = resolveExpectedFeatureForMeshFace(mesh, hit.faceIndex);
+      if (!resolved || !expectedForHit || !sameFeatureIdentity(resolved, expectedForHit)) {
+        return `resolveInspectedFeature mismatch (${label}) on ${mesh.name} (${category}) face ${hit.faceIndex} in ${tileId}: got ${resolved?.sourceFeatureId ?? 'null'}, expected ${expectedForHit?.sourceFeatureId ?? 'null'}`;
+      }
+    }
+
+    // Target triangle must appear in both BVH and standard raycast hit lists
+    const bvhTargetHit = bvhHits.find((h) => h.faceIndex === faceIndex);
+    const stdTargetHit = stdHits.find((h) => h.faceIndex === faceIndex);
+    if (!bvhTargetHit || !stdTargetHit) {
+      return `Target triangle ${faceIndex} missing from ray hits (${label}) on ${mesh.name} (${category}) in ${tileId} (bvhHit=${Boolean(bvhTargetHit)}, stdHit=${Boolean(stdTargetHit)})`;
+    }
+    const targetResolved = resolveInspectedFeature(bvhTargetHit);
+    if (!sameFeatureIdentity(targetResolved, expectedInfo)) {
+      return `Inspected sourceFeatureId mismatch (${label}) on ${mesh.name} (${category}) face ${faceIndex} in ${tileId}: got ${targetResolved?.sourceFeatureId ?? 'null'}, expected ${expectedInfo?.sourceFeatureId ?? 'null'}`;
+    }
+
+    return null;
+  };
+
+  const primaryErr = checkHitParity(primary.bvhHits, primary.bvhFirstHits, primary.stdHits, 'd=0.5m');
+  if (primaryErr) return primaryErr;
+
+  // If primary standoff hit a closer occluding triangle (< 0.5m - 1e-4) rather than the target triangle,
+  // verify at close standoff (0.05m) so target triangle itself is verified unobstructed.
+  const b0 = primary.bvhHits[0];
+  if (b0.faceIndex !== faceIndex && b0.distance < 0.5 - 1e-4) {
+    const close = runPair(0.05);
+    if (close.bvhHits.length === 0 || close.stdHits.length === 0 || close.bvhFirstHits.length === 0) {
+      return `Close-standoff raycast missed ${mesh.name} (${category}) face ${faceIndex} in ${tileId}`;
+    }
+    if (close.bvhHits.length !== close.stdHits.length) {
+      return `Close-standoff BVH vs standard hit-count mismatch on ${mesh.name} (${category}) in ${tileId}`;
+    }
+    const closeErr = checkHitParity(close.bvhHits, close.bvhFirstHits, close.stdHits, 'd=0.05m');
+    if (closeErr) return closeErr;
+  }
+
+  return null;
 }
 
 export function verifyBakedTilePackAgainstIngested(params: {
@@ -430,39 +764,70 @@ export function verifyBakedTilePackAgainstIngested(params: {
     // Restore tactical theme
     materialRegistry.applyTheme(MAP_THEMES.tactical);
 
-    // BVH raycast + inspection parity
-    const raycaster = new THREE.Raycaster();
+    // BVH raycast + inspection parity across roofs, vertical facades, single-feature meshes, surfaces, and instanced sleepers
     let samplesAttempted = 0;
     let samplesPassed = 0;
     const bvhFailures: string[] = [];
 
-    for (const { tile, recon } of reconstructedList) {
-      if (samplesAttempted >= 16) break;
-      const samples = collectSampleRayTargets(recon.scene, 4);
+    const nonEmptyTiles = reconstructedList.filter(
+      ({ recon }) =>
+        recon.scene.stats.renderedFeaturesCount > 0 || recon.scene.stats.totalTriangles > 2
+    );
+    const maxTilesToSample = 8;
+    const tileStride = Math.max(1, Math.floor(nonEmptyTiles.length / maxTilesToSample));
+    const sampledTiles: typeof reconstructedList = [];
+    for (let i = 0; i < nonEmptyTiles.length && sampledTiles.length < maxTilesToSample; i += tileStride) {
+      sampledTiles.push(nonEmptyTiles[i]);
+    }
+
+    for (const { tile, recon } of sampledTiles) {
+      const samples = collectTileRaySampleTargets(recon.scene, 8);
       for (const s of samples) {
-        if (samplesAttempted >= 16) break;
         samplesAttempted++;
-        raycaster.set(
-          new THREE.Vector3(s.sampleXZ[0], 500, s.sampleXZ[1]),
-          new THREE.Vector3(0, -1, 0)
-        );
-        const hits = raycaster.intersectObject(s.mesh, false);
-        if (hits.length === 0) {
-          bvhFailures.push(`BVH raycast missed ${s.mesh.name} in ${tile.id} at (${s.sampleXZ[0].toFixed(2)}, ${s.sampleXZ[1].toFixed(2)})`);
-          continue;
+        if (s.kind === 'static') {
+          const err = verifyStaticMeshBvhSample({
+            sample: s,
+            tileId: tile.id,
+            expectBvhAttached: includeBvh,
+          });
+          if (err) {
+            bvhFailures.push(err);
+          } else {
+            samplesPassed++;
+          }
+        } else {
+          // Instanced sleeper check: activate close zoom so Railway_Sleepers_3D is visible
+          recon.scene.updateCameraZoom?.(6.0);
+          try {
+            s.instancedMesh.updateMatrixWorld(true);
+            const ray = new THREE.Raycaster(s.rayOrigin, s.rayDirection, 0, 10);
+            const hits = ray.intersectObject(s.instancedMesh, false);
+            if (hits.length === 0 || typeof hits[0].instanceId !== 'number') {
+              bvhFailures.push(
+                `Instanced sleeper raycast missed ${s.instancedMesh.name} instance ${s.instanceId} in ${tile.id}`
+              );
+              continue;
+            }
+            const resolved = resolveInspectedFeature(hits[0]);
+            const infos = s.instancedMesh.userData?.instanceInfos as InspectableFeatureInfo[] | undefined;
+            const ownerForHit = Array.isArray(infos) ? infos[hits[0].instanceId] ?? null : null;
+            if (!resolved || !ownerForHit || !sameFeatureIdentity(resolved, ownerForHit)) {
+              bvhFailures.push(
+                `Instanced sleeper resolveInspectedFeature mismatch on ${s.instancedMesh.name} instance ${hits[0].instanceId} in ${tile.id}: got ${resolved?.sourceFeatureId ?? 'null'}, expected ${ownerForHit?.sourceFeatureId ?? 'null'}`
+              );
+              continue;
+            }
+            if (!hits.some((h) => h.instanceId === s.instanceId)) {
+              bvhFailures.push(
+                `Target sleeper instance ${s.instanceId} missing from raycast hits on ${s.instancedMesh.name} in ${tile.id}`
+              );
+              continue;
+            }
+            samplesPassed++;
+          } finally {
+            recon.scene.updateCameraZoom?.(1.0);
+          }
         }
-        const info = resolveInspectedFeature(hits[0]);
-        if (!info || !info.id) {
-          bvhFailures.push(`resolveInspectedFeature returned null on ${s.mesh.name} in ${tile.id}`);
-          continue;
-        }
-        if (s.expectedSourceFeatureId && info.sourceFeatureId !== s.expectedSourceFeatureId) {
-          bvhFailures.push(
-            `Inspected sourceFeatureId mismatch on ${s.mesh.name} in ${tile.id}: got ${info.sourceFeatureId}, expected ${s.expectedSourceFeatureId}`
-          );
-          continue;
-        }
-        samplesPassed++;
       }
     }
     if (bvhFailures.length > 0) {

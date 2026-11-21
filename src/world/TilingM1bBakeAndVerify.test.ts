@@ -267,6 +267,26 @@ test('Synthetic 4x4 macro-block bake -> SQLite -> zero-synthesis decode -> SeamV
     assert.ok(bakeReport.dbSizeBytes > 0);
     assert.ok(bakeReport.sizeStats.compressionRatio > 0 && bakeReport.sizeStats.compressionRatio < 1);
 
+    // Non-overlapping stage timing consistency invariants
+    const t = bakeReport.timingsMs;
+    assert.equal(t.totalBakeMs, t.totalEndToEndMs);
+    assert.ok(
+      t.totalEndToEndMs >= t.ingestMs + t.tileBakePhaseMs - 0.1,
+      `Expected totalEndToEndMs (${t.totalEndToEndMs}) >= ingestMs (${t.ingestMs}) + tileBakePhaseMs (${t.tileBakePhaseMs})`
+    );
+    assert.ok(
+      t.tileBakePhaseMs >= t.tileSynthesisAndEncodeMs + t.compressionMs + t.sqliteWriteMs - 2.0,
+      `Expected tileBakePhaseMs (${t.tileBakePhaseMs}) >= sub-stages sum`
+    );
+    assert.ok(
+      Math.abs(t.avgTileSynthAndEncodeMs - t.tileSynthesisAndEncodeMs / 16) <= 0.05,
+      `Expected avgTileSynthAndEncodeMs (${t.avgTileSynthAndEncodeMs}) == synth+encode / 16`
+    );
+    assert.ok(
+      Math.abs(t.avgTileBakeMs - t.tileBakePhaseMs / 16) <= 0.05,
+      `Expected avgTileBakeMs (${t.avgTileBakeMs}) == tileBakePhaseMs / 16`
+    );
+
     const verifyReport = verifyBakedTilePackAgainstIngested({
       packPath,
       ingested,
@@ -285,7 +305,7 @@ test('Synthetic 4x4 macro-block bake -> SQLite -> zero-synthesis decode -> SeamV
     assert.equal(verifyReport.determinismCheck.passed, true);
     assert.equal(verifyReport.themeSwapChecks.length, 4);
     assert.ok(verifyReport.themeSwapChecks.every((c) => c.passed));
-    assert.ok(verifyReport.bvhInspectionCheck.samplesAttempted > 0);
+    assert.ok(verifyReport.bvhInspectionCheck.samplesAttempted >= 10);
     assert.equal(verifyReport.bvhInspectionCheck.samplesPassed, verifyReport.bvhInspectionCheck.samplesAttempted);
     assert.equal(verifyReport.attributeAndInstanceChecks.railwayUvAndSwitchAttrPresent, true);
     assert.equal(verifyReport.attributeAndInstanceChecks.sleeperInstancedParity, true);

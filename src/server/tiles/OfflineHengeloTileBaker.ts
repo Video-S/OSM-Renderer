@@ -96,11 +96,15 @@ export interface TileBakeReport {
     maxCompressedBytesTile: { id: string; bytes: number };
   };
   timingsMs: {
+    sqliteQueryMs: number;
     ingestMs: number;
     tileSynthesisAndEncodeMs: number;
     compressionMs: number;
     sqliteWriteMs: number;
+    tileBakePhaseMs: number;
+    totalEndToEndMs: number;
     totalBakeMs: number;
+    avgTileSynthAndEncodeMs: number;
     avgTileBakeMs: number;
     maxTileBakeMs: number;
   };
@@ -123,6 +127,8 @@ export interface BakeStudyRegionOptions {
   theme?: MapStyleTheme;
   initialCameraZoom?: number;
   maxSceneTreesPerTile?: number;
+  sqliteQueryMs?: number;
+  endToEndStartMs?: number;
 }
 
 export interface BakeHengeloFromStoreOptions {
@@ -203,7 +209,7 @@ function partitionTilesIntoMacroBlocks(
 }
 
 export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): TileBakeReport {
-  const tAll0 = performance.now();
+  const tBakePhase0 = performance.now();
   const {
     ingested,
     outPath,
@@ -279,6 +285,7 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
       let blockNonEmpty = 0;
       let blockRawBytes = 0;
       let blockCompressedBytes = 0;
+      let blockCompMs = 0;
 
       for (const tile of block.tiles) {
         const tTile0 = performance.now();
@@ -324,7 +331,10 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
         const tComp0 = performance.now();
         const compressedPayload = deflateTilePayload(rawBytes, 6);
         const contentHash = sha256Hex(compressedPayload);
-        compressionMs += performance.now() - tComp0;
+        const tCompEnd = performance.now();
+        const tileCompMs = tCompEnd - tComp0;
+        compressionMs += tileCompMs;
+        blockCompMs += tileCompMs;
 
         const isEmpty =
           statsSnapshot.renderedFeaturesCount === 0 && statsSnapshot.totalTriangles <= 2;
@@ -378,15 +388,16 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
 
         batchItems.push({ manifest, compressedPayload });
 
-        const tileElapsed = performance.now() - tTile0;
+        const tileElapsed = tCompEnd - tTile0;
         if (tileElapsed > maxTileBakeMs) {
           maxTileBakeMs = tileElapsed;
         }
       }
 
       const tEncodeEnd = performance.now();
-      const blockEncodeMs = tEncodeEnd - tBlock0;
-      tileSynthesisAndEncodeMs += blockEncodeMs;
+      const blockTotalEncodeMs = tEncodeEnd - tBlock0;
+      const blockPureSynthMs = Math.max(0, blockTotalEncodeMs - blockCompMs);
+      tileSynthesisAndEncodeMs += blockPureSynthMs;
 
       const tSql0 = performance.now();
       writer.writeTileBatch(batchItems);
@@ -402,7 +413,7 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
         nonEmptyTileCount: blockNonEmpty,
         rawBytes: blockRawBytes,
         compressedBytes: blockCompressedBytes,
-        bakeAndEncodeMs: Number(blockEncodeMs.toFixed(2)),
+        bakeAndEncodeMs: Number(blockPureSynthMs.toFixed(2)),
         sqliteCommitMs: Number(blockSqlMs.toFixed(2)),
       });
     }
@@ -415,8 +426,15 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
     throw err;
   }
 
+  const tDone = performance.now();
   const dbSizeBytes = fs.statSync(outPath).size;
-  const totalBakeMs = Number((performance.now() - tAll0).toFixed(2));
+  const tileBakePhaseMs = Number((tDone - tBakePhase0).toFixed(2));
+  const sqliteQueryMs = Number((options.sqliteQueryMs ?? 0).toFixed(2));
+  const ingestMs = Number(ingested.ingestTimeMs.toFixed(2));
+  const totalEndToEndMs =
+    typeof options.endToEndStartMs === 'number'
+      ? Number(Math.max(tDone - options.endToEndStartMs, sqliteQueryMs + ingestMs + tileBakePhaseMs).toFixed(2))
+      : Number((sqliteQueryMs + ingestMs + tileBakePhaseMs).toFixed(2));
   const tileCount = grid.tiles.length;
   const afterFinalize = captureProcessMemorySnapshot();
   peakMemory = mergeProcessMemoryPeak(peakMemory, afterFinalize);
@@ -463,14 +481,17 @@ export function bakeStudyRegionTilesToSqlite(options: BakeStudyRegionOptions): T
       maxCompressedBytesTile,
     },
     timingsMs: {
-      ingestMs: ingested.ingestTimeMs,
-      tileSynthesisAndEncodeMs: Number(
-        Math.max(0, tileSynthesisAndEncodeMs - compressionMs).toFixed(2)
-      ),
+      sqliteQueryMs,
+      ingestMs,
+      tileSynthesisAndEncodeMs: Number(tileSynthesisAndEncodeMs.toFixed(2)),
       compressionMs: Number(compressionMs.toFixed(2)),
       sqliteWriteMs: Number(sqliteWriteMs.toFixed(2)),
-      totalBakeMs,
-      avgTileBakeMs: tileCount > 0 ? Number((tileSynthesisAndEncodeMs / tileCount).toFixed(2)) : 0,
+      tileBakePhaseMs,
+      totalEndToEndMs,
+      totalBakeMs: totalEndToEndMs,
+      avgTileSynthAndEncodeMs:
+        tileCount > 0 ? Number((tileSynthesisAndEncodeMs / tileCount).toFixed(2)) : 0,
+      avgTileBakeMs: tileCount > 0 ? Number((tileBakePhaseMs / tileCount).toFixed(2)) : 0,
       maxTileBakeMs: Number(maxTileBakeMs.toFixed(2)),
     },
     memoryMB: {
@@ -491,6 +512,7 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
     nodeIdEnrichMs: number;
   };
 } {
+  const tEndToEnd0 = performance.now();
   const indexPath = options.indexPath ?? resolveOverijsselIndexPath();
   const expectedSha256 = options.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256;
   const outPath = options.outPath ?? resolveDefaultTilePackPath();
@@ -506,6 +528,10 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
       ...grid.studyExpandedGeoBounds,
       locationName: grid.name,
     });
+    const sqliteQueryTotalMs =
+      queryRes.timings.spatialQueryMs +
+      queryRes.timings.osmtogeojsonMs +
+      queryRes.timings.nodeIdEnrichMs;
     ingested = ingestCanonicalStudyGeoJson(queryRes.geojson, grid);
 
     const report = bakeStudyRegionTilesToSqlite({
@@ -517,6 +543,8 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
       includeBvh: options.includeBvh ?? true,
       batchDimension: options.batchDimension ?? 4,
       maxSceneTreesPerTile: options.maxSceneTreesPerTile ?? 50000,
+      sqliteQueryMs: sqliteQueryTotalMs,
+      endToEndStartMs: tEndToEnd0,
     });
 
     return {

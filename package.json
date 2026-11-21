@@ -21,6 +21,7 @@
     "osm:build-overijssel-index": "tsx scripts/build-overijssel-index.ts",
     "osm:setup-overijssel": "tsx scripts/setup-overijssel.ts",
     "osm:bake-hengelo-tiles": "tsx scripts/bake-hengelo-tiles.ts",
+    "osm:bake-regional-pilot": "tsx scripts/bake-regional-pilot.ts",
     "osm:verify-hengelo-tiles": "tsx scripts/verify-hengelo-tiles.ts"
   },
   "dependencies": {

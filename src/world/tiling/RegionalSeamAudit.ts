@@ -306,3 +306,85 @@ export function compareFeatureEvidence(
     tunnelMismatch: hasA && hasB && unequalSets(a.taggedTunnel.get(sourceId), b.taggedTunnel.get(sourceId)),
   };
 }
+
+
+export interface SurfaceProbeResult {
+  status: 'covered' | 'uncovered' | 'unattributed';
+  /** Heights of matched surfaces covering the sample point (metres). */
+  heights: number[];
+  matchedMeshes: number;
+  testedTriangles: number;
+}
+
+/**
+ * Test a single source-attributed XZ sample in the emitted geometry.
+ * Query is in global UTM easting/northing. Only face ranges attributed to
+ * the requested source ID are checked; unrelated nearby surfaces cannot
+ * create a false-positive match. This is a geometric witness, NOT a
+ * connectivity, portal or continuous full-edge equivalence proof.
+ */
+export function probeSourceSurfaceAtUtm(
+  tile: DecodedTilePayload,
+  centerEasting: number,
+  centerNorthing: number,
+  sourceId: string,
+  easting: number,
+  northing: number
+): SurfaceProbeResult {
+  const localX = easting - centerEasting;
+  const localZ = centerNorthing - northing;
+  const heights: number[] = [];
+  let matchedMeshes = 0;
+  let testedTriangles = 0;
+  const featureMatches = (idx: number): boolean => {
+    if (idx < 0 || idx >= tile.featureInfos.length) return false;
+    const info = tile.featureInfos[idx];
+    return info.sourceFeatureId === sourceId ||
+      info.sourceFeatureIds?.includes(sourceId) === true;
+  };
+  for (const mesh of tile.meshes) {
+    const positions = mesh.positions;
+    if (positions.length < 9 || mesh.layer === 'ground') continue;
+    const direct = featureMatches(mesh.singleFeatureIdx);
+    const ranges = direct
+      ? [{ startFace: 0, endFace: Math.floor((mesh.indices?.length ?? positions.length / 3) / 3) }]
+      : mesh.faceRanges.filter((r) => featureMatches(r.infoIdx));
+    if (!ranges.length) continue;
+    matchedMeshes++;
+    const triCount = Math.floor((mesh.indices?.length ?? positions.length / 3) / 3);
+    const xOffset = mesh.localPositionOffset[0], yOffset = mesh.localPositionOffset[1];
+    const zOffset = mesh.localPositionOffset[2];
+    for (const range of ranges) {
+      for (let face = Math.max(0, range.startFace); face < Math.min(triCount, range.endFace); face++) {
+        const ia = (mesh.indices ? mesh.indices[face * 3] : face * 3) * 3;
+        const ib = (mesh.indices ? mesh.indices[face * 3 + 1] : face * 3 + 1) * 3;
+        const ic = (mesh.indices ? mesh.indices[face * 3 + 2] : face * 3 + 2) * 3;
+        if (ic + 2 >= positions.length || ib + 2 >= positions.length || ia + 2 >= positions.length) continue;
+        const ax = positions[ia] + xOffset, az = positions[ia + 2] + zOffset;
+        const bx = positions[ib] + xOffset, bz = positions[ib + 2] + zOffset;
+        const cx = positions[ic] + xOffset, cz = positions[ic + 2] + zOffset;
+        if (localX < Math.min(ax, bx, cx) - 0.002 ||
+            localX > Math.max(ax, bx, cx) + 0.002 ||
+            localZ < Math.min(az, bz, cz) - 0.002 ||
+            localZ > Math.max(az, bz, cz) + 0.002) continue;
+        testedTriangles++;
+        const denom = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+        if (Math.abs(denom) < 1e-10) continue;
+        const u = ((bz - cz) * (localX - cx) + (cx - bx) * (localZ - cz)) / denom;
+        const v = ((cz - az) * (localX - cx) + (ax - cx) * (localZ - cz)) / denom;
+        const w = 1 - u - v;
+        if (Math.min(u, v, w) < -0.0001) continue;
+        const y = (u * positions[ia + 1] +
+          v * positions[ib + 1] + w * positions[ic + 1]) + yOffset;
+        if (Number.isFinite(y) && !heights.some((existing) => Math.abs(existing - y) < 0.001)) {
+          heights.push(y);
+        }
+      }
+    }
+  }
+  return {
+    status: !matchedMeshes ? 'unattributed' : heights.length ? 'covered' : 'uncovered',
+    heights: heights.map((v) => Number(v.toFixed(4))).sort((a, b) => a - b),
+    matchedMeshes, testedTriangles,
+  };
+}

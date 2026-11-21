@@ -131,6 +131,21 @@ test('TKT-032: source crossing inventory checks vertical and horizontal lines an
   }
 });
 
+test('TKT-032: crossing through an explicit seam vertex counts, but tangent does not', () => {
+  const { sides } = enumerateRegionalShardSeams();
+  for (const side of sides.filter((s) => s.axis === 'easting' || s.axis === 'northing').slice(0, 2)) {
+    const at = side.pairs[0].from + 100;
+    const crossing = lineFeature('way/via-node', { highway: 'primary' }, side.axis === 'easting'
+      ? [[side.at - 10, at], [side.at, at], [side.at + 10, at]]
+      : [[at, side.at - 10], [at, side.at], [at, side.at + 10]]);
+    const tangent = lineFeature('way/tangent', { highway: 'primary' }, side.axis === 'easting'
+      ? [[side.at - 10, at], [side.at, at], [side.at - 10, at]]
+      : [[at, side.at - 10], [at, side.at], [at, side.at - 10]]);
+    const matches = extractSourceCrossings(side, { features: [crossing, tangent] });
+    assert.deepEqual(matches.map((x) => x.sourceId), ['way/via-node']);
+  }
+});
+
 test('TKT-032: long water/landuse polygon contains border even without edge intersection', () => {
   const side = enumerateRegionalShardSeams().sides.find((s) => s.axis === 'easting')!;
   const mid = (side.from + side.to) / 2;

@@ -13,6 +13,7 @@ import {
   extractSourceCrossings,
   getCrossingPairIndex,
   probeSourceSurfaceAtUtm,
+  probeAnyRoadSurfaceAtUtm,
   type ShardSideInterface,
 } from './tiling/RegionalSeamAudit';
 import type { DecodedTilePayload } from './tiling/TilePackContract';
@@ -324,4 +325,29 @@ test('TKT-032: face-range metadata prevents another overlapping feature from mas
     'way/bravo', ...p).heights, [3]);
   assert.equal(probeSourceSurfaceAtUtm(payload, 500000, 5800000,
     'way/unknown', ...p).status, 'unattributed');
+});
+
+
+test('TKT-032: physical road probe sees an alternate emitted road, but excludes other surface layers', () => {
+  const payload = tileWithEmission([{ id: 'way/survivor' }], true);
+  payload.meshes[0] = {
+    ...payload.meshes[0],
+    layer: 'roads',
+    localPositionOffset: [0, 0.05, 0],
+    positions: new Float32Array([0, 0, 0, 2, 0, 0, 0, 0, 2]),
+    indices: new Uint16Array([0, 1, 2]),
+    singleFeatureIdx: 0,
+    faceRanges: [],
+  };
+  const e = 500000.3, n = 5799999.7;
+  assert.equal(probeSourceSurfaceAtUtm(
+    payload, 500000, 5800000, 'way/merged-away', e, n).status, 'unattributed');
+  const physical = probeAnyRoadSurfaceAtUtm(payload, 500000, 5800000, e, n);
+  assert.equal(physical.status, 'covered');
+  assert.deepEqual(physical.heights, [0.05]);
+  assert.equal(probeAnyRoadSurfaceAtUtm(
+    payload, 500000, 5800000, 500005, 5799995).status, 'uncovered');
+  payload.meshes[0].layer = 'landuse';
+  assert.equal(probeAnyRoadSurfaceAtUtm(
+    payload, 500000, 5800000, e, n).status, 'unattributed');
 });

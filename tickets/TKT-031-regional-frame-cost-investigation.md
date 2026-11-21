@@ -124,12 +124,14 @@ Terminal A, project checkout:
 Terminal B, after the 256-tile regional dataset exists (the server from terminal A must be running):
 
     npm run osm:verify-regional-mosaic
-    npm run bench:regional -- --compare=none --runs=3
+    npx tsx benchmarks/regionalFrameCostRunner.ts --compare=none --runs=3
 
 For isolated, paired comparisons:
 
-    npm run bench:regional -- --compare=viewport --runs=3
-    npm run bench:regional -- --compare=zoom --runs=3
+    npx tsx benchmarks/regionalFrameCostRunner.ts --compare=viewport --runs=3 --out=benchmarks/results/tkt031-viewport.json --markdown-out=benchmarks/results/tkt031-viewport.md
+    npx tsx benchmarks/regionalFrameCostRunner.ts --compare=zoom --runs=3 --out=benchmarks/results/tkt031-zoom.json --markdown-out=benchmarks/results/tkt031-zoom.md
+
+On the owner's npm/PowerShell setup, `npm run bench:regional -- --compare=viewport --runs=3` did **not** forward options. npm emitted `Unknown cli config` and the actual benchmark report declared `compare=none`. Invoke `npx tsx` directly as shown above and verify the report's `protocol.compare` is `viewport` or `zoom`. Do not interpret repeated baseline-only runs as an A/B result.
 
 Output defaults:
 
@@ -146,16 +148,34 @@ Add one of the opt-in experiment flags above, capture a separate output path, an
 
 ### Uncompleted
 
-- No Windows TypeScript/build/tests, regional SQLite/hardware benchmark, or human visual QA have yet been verified for these changes.
+- The owner has verified the actual regional SQLite mosaic and recorded a 3-run hardware **baseline** on an RTX 4060 Ti. GitHub CI typecheck/build passed on the implementation branch; targeted tests/other acceptance gates need separate confirmation. No *optimized variant* has yet been measured, and human visual QA is still outstanding.
 - Exact draw/pass attribution beyond material-group proxy is not implemented. Improve it only if measured costs justify its intrusion.
 - HUD telemetry throttling and foliage culling remain deferred pending baseline evidence.
 - TKT-029 cross-shard geometry continuity and human visual sign-off are separate gates. The mosaic verifier validates binary/manifest integrity, not visual or graph parity.
 
+### Owner's regional hardware baseline (2026-11-21)
+
+Attached owner outputs: `tkt031-regional-frame-cost.json` and `tkt031-regional-frame-cost.md` (generated at 22:45Z). Source is the complete 16×16 1024m pilot mosaic: 16 verified shards, 256/256 nonempty tiles, 235.68 MiB compressed; renderer ANGLE/D3D11 NVIDIA RTX 4060 Ti, 1440×900×1. The report says **`protocol.compare=none` and all 3 experiments `baseline`**; therefore no viewport-gating speedup, safety or regression has been established.
+
+Repeated **measured** steady-state results (range of 3 run medians):
+
+| Pose | Loaded tiles | WebGL calls/frame | Main-camera material-group proxy | Frame median | CPU gl.render median | GPU pass median |
+|---|---:|---:|---:|---:|---:|---:|
+| Street | 16 | 366 | 162 | 16.60–16.65 ms | 2.05–2.50 ms | 3.60–3.93 ms |
+| City | 36 | 802 | 506 | 16.60–16.70 ms | 3.40–3.50 ms | 6.29–6.46 ms |
+| Region overview | 256 | 7,373 | 6,593 | 42.60 ms (~23.5 FPS) | 42.10–42.20 ms | 42.29–42.46 ms |
+
+The regional overview submitted **229.7 million triangles per measured frame** (driver/renderer-reported, includes instances and multiple passes; **not** distinct map geometry) with ~15.9 million loaded unique/source triangles. The ~42 ms GPU timer and `gl.render()` measurements implicate render workload/driver/GPU activity rather than proving that tile membership scans dominate. The proxy is **not** precise per-pass attribution and cannot by itself determine the contribution of shadow passes.
+
+**TKT-030 separate canonical Hengelo 16-tile pack audit**: 1,351 submission proxy; at 256 m bounded batching only 3 submissions potentially saved (0.2%), whole-tile unbounded just 7 (0.5%). This is not an upper bound on *all* batch strategies or region-wide opportunities, but is poor justification for implementing the currently conservative batching candidate.
+
+**Immediate next gate**: rerun `npx tsx benchmarks/regionalFrameCostRunner.ts --compare=viewport --runs=3 ...` and confirm both `baseline` and `viewport` rows and nonzero viewport skip counters. Keep the 16km view separately in the report because its workload is substantially different from ordinary street/city zoom. If viewport gating does not materially change overall frame/GPU timing, prioritize pass-aware rendering diagnostics (e.g., shadow-versus-color and instanced workloads) rather than more stream-manager changes. Keep shadows unchanged in the first A/B tests.
+
 ## Completion checklist
 
 - [ ] Existing canonical 1,024 m Hengelo baseline reproduced with exact settings.
-- [ ] Regional pilot dataset existence/validation confirmed (or regional stage explicitly blocked and ticket left open).
-- [ ] Hardware baseline for street/city/16 km overview and pan/settled state recorded.
+- [x] Regional pilot dataset existence/validation confirmed (16 shard/256 tile integrity verification).
+- [x] Hardware baseline for street/city/16 km overview and teleport/settled state recorded; **not** an optimization comparison.
 - [ ] Actual draw-work and frame-work attribution delivered, with estimates clearly differentiated.
 - [ ] Each approved low-risk change A/B tested in isolation; regressions removed.
 - [ ] Relevant Node, typecheck, build and lifecycle/E2+/R+ checks pass.

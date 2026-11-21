@@ -18,7 +18,7 @@ import {
  * and NOT permission to merge semantic geometry without renderer tests.
  * Batch boundaries never cross a source tile.
  */
-export const DEFAULT_BATCH_AUDIT_CELL_SIZES = [128, 256, 512, 1024] as const;
+export const DEFAULT_BATCH_AUDIT_CELL_SIZES = [128, 256, 512] as const;
 
 export interface BatchAuditLayer {
   layer: TileLayerKind;

@@ -303,7 +303,7 @@ export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
     '| Tag | Tile-local records |',
     '|---|---:|');
   for (const [key, count] of topEntries(s.featurePrimaryTags, 15)) {
-    lines.push('| ' + key.replaceAll('|', '\|') + ' | ' + count + ' |');
+    lines.push('| ' + key.replaceAll('|', String.fromCharCode(92) + '|') + ' | ' + count + ' |');
   }
   lines.push('', '## Important limitations', '');
   for (const note of report.interpretation) lines.push('- ' + note);

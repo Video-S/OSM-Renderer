@@ -105,7 +105,9 @@ export function computeProjectedBoundsFraming(
 
   const zoomU = viewportWidth / spanU;
   const zoomV = viewportHeight / spanV;
-  const zoom = Math.max(0.15, Math.min(zoomU, zoomV, 8.0));
+  // Regional packs may span many kilometres; the actual MapControls minZoom
+  // still gates normal maps at 0.15 and permits wide overview only for larger packs.
+  const zoom = Math.max(0.015, Math.min(zoomU, zoomV, 8.0));
 
   const dist = Math.min(Math.max(spanU, spanV) * 1.5, 25000);
   const camX = cx + dist * Math.sin(fixedTiltAngle) * sinAz;

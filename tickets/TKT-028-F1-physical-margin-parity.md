@@ -41,9 +41,9 @@ This means the existing 1,024 m run **did not test tile unload/reload behavior**
 - [x] Opt-in matched margins wired into the actual benchmark streaming manager (default remains legacy).
 - [x] Exact 512 m / 1,024 m margins reported for both variants, with fractional 1,024 m margin support.
 - [x] New deterministic unit/integration assertions authored for repeated evictions, resource stability, and disposal.
-- [ ] Test suite / typecheck / build executed successfully in a dependency-equipped checkout.
-- [ ] Windows RTX 4060 Ti paired canonical comparison rerun with physical margins matched.
-- [ ] Confirm 1,024 m actually evicts and reloads tiles, and measure p95/p99 pan spikes, decode/commit latencies, geometry/BVH memory, draw calls, and far-overview frame time.
+- [x] Windows verification: 5/5 focused tests passed, `npm run lint` / `tsc --noEmit` passed, `npm run build` passed (Vite emitted only its existing native-loader warning).
+- [x] Windows RTX 4060 Ti canonical 512 m vs 1,024 m comparison rerun with `--match-physical-margins`, `--runs=2`, `--require-hardware`; JSON/Markdown supplied by the project owner.
+- [x] Confirmed active 1,024 m evictions and reloads: 38 repeated-hop evictions in **each** run, 7 settled tiles; stable 7-tile working set/geometry/BVH across six NW/SE cycles in both runs; p95/p99 frame timing, decode/commit, and memory recorded in canonical benchmark JSON.
 - [ ] Project-owner visual check for continuity and loading during actual navigation.
 - [ ] Project-owner accepts 512 m or 1,024 m as the production default (or requests follow-up).
 
@@ -57,6 +57,35 @@ The project owner ran the first validation pass:
 - **Follow-up fixes committed on this PR branch:** cross-platform CLI pack-path expectation, metadata-derived verifier tile count, mutable boundary overlay result field. Pending re-run of Node tests and `npm run lint`.
 
 None of these findings imply a streaming performance or memory regression; they were test portability / type correctness issues and have been addressed without changing production tiling behavior.
+
+## Matched-Margin Canonical Hardware Results (2026-11-21)
+
+**Provenance:** Project owner, Windows + RTX 4060 Ti (ANGLE D3D11), Chromium 159, canonical 4,096 × 4,096 m Hengelo, two runs per tile width, 1× DPR 1440×900, 512 m physical preload / 1,024 m physical retention for both variants. Input: `benchmarks/results/tkt028-f1-matched-margins-hengelo.json` and corresponding Markdown generated locally, supplied in chat (not committed due to benchmark size).
+
+| Scenario | 512 m calls | 1,024 m calls | 512 m median frame | 1,024 m median frame |
+|---|---:|---:|---:|---:|
+| Close-up | 848 | 523 (-38.3%) | 16.80 ms | 16.65 ms |
+| Medium | 1,104 | 727 (-34.1%) | 16.23 ms | 15.85 ms |
+| Far overview | 2,900 | 1,224 (-57.8%) | 19.60 ms | 16.38 ms |
+| Continuous pan | 720 | 456 (-36.7%) | 17.08 ms | 16.95 ms |
+| Repeated NW↔SE | 349 | 225 (-35.7%) | 16.40 ms | 16.60 ms |
+
+- **Actual streaming:** Repeated NW↔SE hops evicted **186–187** 512 m tiles versus **38** 1,024 m tiles per run (different number of reloadable tiles, not a normalized eviction rate). The 1,024 m layout went from the original **0 evictions** to **38** under matched margins.
+- **Memory trade-off:** settled SE repeated-pan geometry buffers **48.296 MiB** at 512 m versus **76.497 MiB** at 1,024 m (+58%); BVH **6.427 MiB** versus **10.736 MiB** (+67%). Close-up at study center retained all 16 larger tiles (137.53 MiB geometry) versus 36 small tiles (106.945 MiB): the finite 4×4 study area and intersecting retention AABB still drive a larger near-view working set.
+- **Decode:** repeated-pan median tile decode times: **11.6/13.5 ms** (512 m) vs **39.85/22.5 ms** (1,024 m), for runs 1/2 respectively. Larger payloads are slower per tile; tile count is lower.
+- **Jank variability:** repeated-pan p95 frame interval 512 m **27.33/25.72 ms**, 1,024 m **32.03/24.00 ms** (run 1/run 2). Run 1 1,024 m had five frames above 33.3 ms, versus one at 512 m; run 2 had zero versus two. This is not strong enough evidence of a persistent regression, but human navigation QA matters.
+- **Reference variability:** far-overview medians varied between runs (512 m: **22.65 / 16.55 ms**; 1,024 m: **15.60 / 17.15 ms**). The aggregate favors 1,024 m, but a two-run sample should not be treated as a guaranteed 16.4% speedup on every run. Draw-call reduction is deterministic and more robust.
+
+### Initial-Cycle Resource-Check Interpretation
+
+The existing browser benchmark's `cleanResourceStabilizationVerified` is **false for 512 m** and **true for 1,024 m** in both runs. Inspection of every raw hop reveals why:
+
+- At 512 m, the **first** NW visit has **20 loaded tiles / 43.97 MiB geometry**, while every later NW visit has exactly **19 loaded tiles / 40.30 MiB**. All SE visits have exactly **19 loaded tiles / 48.296 MiB**. BVH bytes show the same stable pattern after the first NW.
+- At 1,024 m all six NW visits retain exactly **7 tiles / 70.99 MiB**, and all six SE visits exactly **7 tiles / 76.497 MiB**.
+- The raw validator compares the *first* NW to the *final* NW, so a one-time settling change from the previous scenario is flagged as unequal. **This is not evidence of progressive resource growth or a leak.** Keep the recorded strict/raw result, but evaluate steady-state cycles independently; improve the checker in a narrowly scoped benchmarking follow-up if needed.
+- Do not equate fluctuating V8 heap snapshots with leaks. Actual tile-owned geometry/BVH footprints and the Node lifecycle disposal tests give stronger evidence.
+
+**Recommendation:** 1,024 m LOD0 is the preferred **candidate**, contingent on human visual inspection of real pan/zoom streaming and willingness to accept the measured close-up geometry-memory cost. No M3 LOD or new batching is justified by these results alone.
 
 ## Reproduction (Windows PowerShell, repository root)
 
@@ -86,4 +115,4 @@ Remove-Item Env:DISABLE_OVERIJSSEL_BOOTSTRAP
 
 Favor 1,024 m **only if** the draw-call and far-zoom gains persist with physically matched margins, repeated navigation truly evicts/reloads without stutter or uncontrolled working-set growth, and geometry/feature inspection remain valid. If close-up streaming suffers, consider alternative margins or targeted batching before introducing M3 coarse LOD.
 
-**Status:** Implementation prepared for review. Runtime / local GPU validation and production tile-size promotion are **not** claimed complete.
+**Status:** Engineering validation complete on canonical Windows hardware. The remaining acceptance gates are project-owner visual navigation QA and a separate decision whether to promote 1,024 m tiles to production. No production default has changed.

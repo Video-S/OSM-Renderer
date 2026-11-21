@@ -11,6 +11,7 @@ import {
   type TileViewportGroundBounds,
 } from './tiling/TileStreamManager';
 import { parseTileStreamingCliArgs } from '../../benchmarks/tileStreamingRunner';
+import { parseRegionalFrameCostCli } from '../../benchmarks/regionalFrameCostRunner';
 
 const viewport: TileViewportGroundBounds = {
   minX: -80, maxX: 80, minZ: -60, maxZ: 60,
@@ -95,4 +96,34 @@ test('TKT-031: existing benchmark CLI gates are opt-in and mutually independent'
   ]);
   assert.equal(zoom.experimentSkipUnchangedViewport, false);
   assert.equal(zoom.experimentSkipUnchangedZoom, true);
+});
+
+
+test('TKT-031: regional benchmark validates CLI flags without opening or modifying packs', () => {
+  const defaults = parseRegionalFrameCostCli([]);
+  assert.equal(defaults.compare, 'none');
+  assert.equal(defaults.runs, 3);
+  assert.equal(defaults.requireHardware, true);
+  assert.ok(defaults.mosaicIndex.endsWith('mosaic.json'));
+
+  const paired = parseRegionalFrameCostCli([
+    '--compare=viewport',
+    '--runs=4',
+    '--warmup-frames=8',
+    '--measured-frames=80',
+    '--allow-software',
+    '--url=http://localhost:3000',
+  ]);
+  assert.equal(paired.compare, 'viewport');
+  assert.equal(paired.runs, 4);
+  assert.equal(paired.warmupFrames, 8);
+  assert.equal(paired.measuredFrames, 80);
+  assert.equal(paired.requireHardware, false);
+  assert.equal(paired.serverUrl, 'http://localhost:3000');
+
+  assert.throws(() => parseRegionalFrameCostCli(['--compare=something']), /compare must/);
+  assert.throws(() => parseRegionalFrameCostCli(['--runs=-1']), /integer/);
+  assert.throws(() => parseRegionalFrameCostCli(['--index=']), /Empty/);
+  assert.throws(() => parseRegionalFrameCostCli(['--url=file:\/\/\/tmp\/x']), /HTTP/);
+  assert.throws(() => parseRegionalFrameCostCli(['--unknown=1']), /Unknown/);
 });

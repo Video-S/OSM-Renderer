@@ -25,6 +25,7 @@ jobs:
       max-parallel: 2
       matrix:
         include:
+          - files: "src/world/TilingRegionalMosaic.test.ts src/world/TilingRegionalSeams.test.ts"
           - files: "src/world/SurfaceVisibilityPolicy.test.ts src/world/TunnelClassificationAndRendering.test.ts"
           - files: "src/world/SubterraneanVisualIntegration.test.ts"
           - files: "src/world/GraphRoadRendering.test.ts"
@@ -36,7 +37,6 @@ jobs:
           - files: "src/world/AdjacentServiceJunctions.test.ts src/world/BuswayRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts"
           - files: "src/world/PathJunctionCornerSmoothing.test.ts src/world/DevToolsAndReproduction.test.ts"
           - files: "src/world/BenchmarkInfrastructure.test.ts src/world/BenchmarkReliability.test.ts src/world/TilingBatchOpportunityAudit.test.ts src/world/Tiling031RuntimeEfficiency.test.ts"
-          - files: "src/world/TilingRegionalMosaic.test.ts src/world/TilingRegionalSeams.test.ts"
           - files: "src/world/InfrastructureRenderAdapter.test.ts"
             pattern: '1\. defaults|2\. produces|3\. maps road|4\. maps railway|5\. maps cross-domain'
           - files: "src/world/InfrastructureRenderAdapter.test.ts"

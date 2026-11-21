@@ -76,6 +76,8 @@ export interface TileStreamingCliOptions {
   tileSizeMeters: SupportedExperimentTileSizeMeters;
   packPath?: string;
   compareTileSizes: boolean;
+  /** Opt-in: hold preload/retention distances at 512m/1024m for BOTH tile sizes. */
+  matchPhysicalMargins: boolean;
   runs: number;
   modes: TileBenchmarkModeId[];
   scenarios: TileBenchmarkScenarioId[];
@@ -95,6 +97,30 @@ export interface TileStreamingCliOptions {
   viewportHeight: number;
   devicePixelRatio: number;
   themeId: string;
+}
+
+/**
+ * Resolve tile-count margins without silently changing production streaming defaults.
+ * The matched physical policy uses half a 1024m tile for preload, which is valid:
+ * TileStreamManager calculates its padded AABB in meters (no integer tile-ring math).
+ */
+export function resolveTileBenchmarkStreamMargins(
+  tileSizeMeters: SupportedExperimentTileSizeMeters,
+  matchPhysicalMargins: boolean
+): {
+  preloadMarginTiles: number;
+  retainMarginTiles: number;
+  preloadMarginMeters: number;
+  retainMarginMeters: number;
+} {
+  const preloadMarginMeters = matchPhysicalMargins ? 512 : tileSizeMeters;
+  const retainMarginMeters = matchPhysicalMargins ? 1024 : 2 * tileSizeMeters;
+  return {
+    preloadMarginTiles: preloadMarginMeters / tileSizeMeters,
+    retainMarginTiles: retainMarginMeters / tileSizeMeters,
+    preloadMarginMeters,
+    retainMarginMeters,
+  };
 }
 
 export interface SceneMeshCountsSnapshot {
@@ -432,6 +458,7 @@ export function parseTileStreamingCliArgs(
   let tileSizeMeters: SupportedExperimentTileSizeMeters = 512;
   let packPath: string | undefined;
   let compareTileSizes = false;
+  let matchPhysicalMargins = false;
   let runs = 1;
   let modes: TileBenchmarkModeId[] = [...ALL_TILE_BENCHMARK_MODES];
   let scenarios: TileBenchmarkScenarioId[] = [...ALL_TILE_BENCHMARK_SCENARIOS];
@@ -474,6 +501,8 @@ export function parseTileStreamingCliArgs(
       i = nextIndex;
     } else if (arg === '--compare-tile-sizes') {
       compareTileSizes = true;
+    } else if (arg === '--match-physical-margins') {
+      matchPhysicalMargins = true;
     } else if (arg === '--runs' || arg.startsWith('--runs=')) {
       const { value, nextIndex } = readSingleValueFlag(argv, i, '--runs');
       runs = parseIntFlag(value, '--runs', 1);
@@ -608,6 +637,7 @@ export function parseTileStreamingCliArgs(
     tileSizeMeters,
     packPath,
     compareTileSizes,
+    matchPhysicalMargins,
     runs,
     modes,
     scenarios,
@@ -1546,6 +1576,7 @@ export async function runTileStreamingBenchmark(
     tileSizeMeters,
     packPath: options.packPath,
     compareTileSizes: options.compareTileSizes ?? false,
+    matchPhysicalMargins: options.matchPhysicalMargins ?? false,
     runs: Math.max(1, options.runs ?? 1),
     modes: options.modes ?? [...ALL_TILE_BENCHMARK_MODES],
     scenarios: options.scenarios ?? [...ALL_TILE_BENCHMARK_SCENARIOS],
@@ -1570,6 +1601,8 @@ export async function runTileStreamingBenchmark(
   if (opts.useSwiftShader && opts.requireHardwareGpu) {
     throw new Error('Cannot combine useSwiftShader=true with requireHardwareGpu=true.');
   }
+
+  const streamMargins = resolveTileBenchmarkStreamMargins(opts.tileSizeMeters, opts.matchPhysicalMargins);
 
   const isCanonical = opts.dataset === 'canonical-hengelo';
   const isSynthetic4096m = opts.dataset === 'synthetic-4096m';
@@ -2406,13 +2439,13 @@ export async function runTileStreamingBenchmark(
       } else if (modeId === 'm2a_streaming') {
         m1aLoaded = false;
         const m2Init = await page.evaluate(
-          async (p: { apiBaseUrl: string; themeId: string }) => {
+          async (p: { apiBaseUrl: string; themeId: string; preloadMarginTiles: number; retainMarginTiles: number }) => {
             await (window as any).__BENCHMARK_HARNESS__.unloadDataset();
             const t0 = performance.now();
             const res = await (window as any).__BENCHMARK_HARNESS__.loadM2aStreaming({
               apiBaseUrl: p.apiBaseUrl,
-              preloadMarginTiles: 1,
-              retainMarginTiles: 2,
+              preloadMarginTiles: p.preloadMarginTiles,
+              retainMarginTiles: p.retainMarginTiles,
               maxConcurrentFetches: 6,
               maxCommitsPerFrame: 4,
               themeId: p.themeId,
@@ -2428,7 +2461,12 @@ export async function runTileStreamingBenchmark(
               diagnostics: res.diagnostics ?? null,
             };
           },
-          { apiBaseUrl: tilesApiBaseUrl, themeId: opts.themeId }
+          {
+            apiBaseUrl: tilesApiBaseUrl,
+            themeId: opts.themeId,
+            preloadMarginTiles: streamMargins.preloadMarginTiles,
+            retainMarginTiles: streamMargins.retainMarginTiles,
+          }
         );
 
         const res = await runModeScenarioSet(
@@ -2449,10 +2487,7 @@ export async function runTileStreamingBenchmark(
     }
 
     const comparisons = computeCrossModeComparisonSummary(modeResults, opts.scenarios);
-    const preloadMarginTiles = 1;
-    const retainMarginTiles = 2;
-    const preloadMarginMeters = preloadMarginTiles * opts.tileSizeMeters;
-    const retainMarginMeters = retainMarginTiles * opts.tileSizeMeters;
+    const { preloadMarginTiles, retainMarginTiles, preloadMarginMeters, retainMarginMeters } = streamMargins;
 
     const notes: string[] = [
       'All three modes execute at identical 1440x900 @ 1x DPR viewport, tactical theme, and E2+/R+ production render settings.',
@@ -2460,6 +2495,9 @@ export async function runTileStreamingBenchmark(
       'EXT_disjoint_timer_query_webgl2 GPU pass timing is explicitly marked "unsupported", "unavailable", or "disjoint" whenever hardware timer queries cannot resolve.',
       'Browser performance.memory JS heap numbers are advisory only and recorded as supported=false / null when unavailable.',
     ];
+    if (opts.matchPhysicalMargins) {
+      notes.push('Matched physical margins enabled: 512 m preload / 1,024 m retention for both tile widths. The 1,024 m tile counts are fractional (0.5 preload / 1 retain).');
+    }
     if (opts.tileSizeMeters === 1024 && retainMarginMeters >= 2048) {
       notes.push(
         `With retainMarginTiles=${retainMarginTiles} at 1,024 m tile size, the physical retain ring is ${retainMarginMeters} m around visible tiles; inside a 4,096 × 4,096 m study span this covers nearly the entire grid so few/zero tiles evict during NW<->SE hops.`
@@ -2742,7 +2780,12 @@ export async function runTileSizeExperimentComparison(
     scenarioDeltas,
     notes: [
       `Comparison executed ${runs} paired run(s) per tile size under identical viewport, theme, E2+/R+ settings, and camera trajectories.`,
-      'With preloadMarginTiles=1 and retainMarginTiles=2 kept constant, physical retain margins scale from 1,024 m (512 m tiles) to 2,048 m (1,024 m tiles).',
+      options.matchPhysicalMargins
+        ? 'Matched physical margins: both configurations use exactly 512 m preload and 1,024 m retention. Tile-count margins are 1/2 at 512 m and 0.5/1 at 1,024 m.'
+        : 'Legacy tile-count margins: preload=1 tile / retain=2 tiles, corresponding to 512/1,024 m at 512 m and 1,024/2,048 m at 1,024 m.',
+      ...(options.matchPhysicalMargins && scenarioDeltas.some(d => d.scenarioId === 'repeated_pan_eviction' && (d.m2a1024.evictedTilesTotal ?? 0) === 0)
+        ? ['WARNING: the matched-margins 1,024 m run recorded no tile evictions. The streaming/eviction trade-off is not yet validated on this trajectory; do not select a default on this evidence alone.']
+        : []),
     ],
   };
 

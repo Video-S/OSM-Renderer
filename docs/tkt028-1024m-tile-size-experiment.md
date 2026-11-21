@@ -164,6 +164,17 @@ Next step: complete the matched-margin canonical Windows run and confirm actual 
 
 ## 8. Matched-Margin Windows GPU Verification (2026-11-21)
 
+### Human Visual Comparison — Exact Matched Margins
+
+For the acceptance check, use:
+
+- Baseline: `http://localhost:3000/?m2a=1&tileSize=512&matchPhysicalMargins=1`
+- Candidate: `http://localhost:3000/?m2a=1&tileSize=1024&matchPhysicalMargins=1`
+
+Both use **512 m preload / 1,024 m retention**, visible in the streaming diagnostics bar. Pan across opposite Hengelo corners at close and medium zoom and verify that `Evicted` increases, map continuity is maintained, OSM feature inspection works, and zoom-dependent railways/themes remain correct. The plain `&tileSize=1024` viewer uses **legacy 1,024 m preload / 2,048 m retention**, and is not a valid visual test of matched-margin streaming.
+
+
+
 **TKT-028-F1** follow-up is now implemented and canonical hardware-tested. Physical preload/retain distances were fixed to **512 m / 1,024 m** for both tile widths; the production defaults remain unchanged. The project owner verified **5/5** 1,024 m tests, **0 TypeScript errors**, and a successful Vite build.
 
 The new paired RTX 4060 Ti comparison shows **2,900 → 1,224** far-overview draw calls (-57.8%) and **19.60 → 16.38 ms** aggregate median frame interval (two runs each). During NW↔SE repeated navigation, 1,024 m tiles now **evicted 38 tiles per run** and retained **7** tiles instead of holding all 16 resident. Repeated-pan draw calls fell from **349 to 225**, but 1,024 m had higher settled SE tile-owned geometry memory (**76.50 MiB** versus **48.30 MiB**, +58%) and slower per-tile decoding.

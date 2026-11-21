@@ -45,18 +45,19 @@ test('TKT-031: estimated submissions count compatible material groups and draw r
     box.setDrawRange(0, 0);
     assert.equal(estimateMainPassSubmissions(mesh), 0);
     box.setDrawRange(0, Infinity);
-    mesh.material = new THREE.MeshBasicMaterial();
-    assert.equal(estimateMainPassSubmissions(mesh), 1);
-    mesh.castShadow = true;
+    const singleMaterial = new THREE.MeshBasicMaterial();
+    const singleMesh = new THREE.Mesh(box, singleMaterial);
+    assert.equal(estimateMainPassSubmissions(singleMesh), 1);
+    singleMesh.castShadow = true;
     const estimate = emptyLayerDrawWork();
-    addLayerDrawWork(estimate, mesh);
+    addLayerDrawWork(estimate, singleMesh);
     assert.deepEqual(estimate, {
       drawableMeshes: 1,
       mainPassSubmissions: 1,
       mainFrustumShadowCasterSubmissions: 1,
       instancedMeshes: 0,
     });
-    (mesh.material as THREE.Material).dispose();
+    singleMaterial.dispose();
   } finally {
     box.dispose();
     for (const material of materials) material.dispose();

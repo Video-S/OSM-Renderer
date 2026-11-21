@@ -105,6 +105,47 @@ After fixing the Markdown formatter, the owner reran the audit on Windows using 
 
 **Preliminary decision:** The conservative 256 m cell approach alone offers negligible *structural submission* reduction on the Hengelo 1,024 m pack, so **do not implement it based on this result**. The complete Markdown/JSON reports are needed to compare 128/512 m and whole-tile profiles, inspect exclusions, material/feature hotspots, and separate existing batching from overly restrictive candidate rules. The 0.2% estimate is **not** measured WebGL draw-call or FPS improvement. No change to rendering or tile-size decisions is indicated.
 
+## Code-Level Architecture Review: What the First Audit Missed
+
+The first 0.2% result is **correct only for the audit's restricted question**: how much can be saved by merging *existing* meshes in the same source tile, with exactly matching rendering flags/material/attribute state, and contained wholly within the same 256 m cell? It is **not** an estimate of the possible global rendering optimization or even all possible batching opportunities.
+
+### Already implemented during geometry generation
+
+The source geometry pipeline already performs extensive merging before OSMTILE1 serialization:
+
+| Source | Existing mechanism | Significance |
+| --- | --- | --- |
+| `src/world/GeometryBuilder.ts` `mergeWithFaceRanges()` | Combines geometry into one mesh while preserving per-feature triangle ranges | Existing roads, parks, landuse and barriers are already merged by semantic buckets |
+| `GeometryBuilder.ts` road grouping | `roadsByClass` yields one merged mesh per class per build tile | The post-bake audit will rarely find another compatible road mesh of the same class within that same tile |
+| `GeometryBuilder.ts` planar grouping | `landuseBySubtype`, `parksBySubtype` and merged water | Spatial cell-based post-merging cannot improve much on already grouped bucket meshes |
+| `GeometryBuilder.ts` `mergeBuildingItemsByMaterial()` | Consolidates building faces into material-contiguous groups, preserving inspection metadata | Already avoids many material-group draws for individual buildings |
+| `GeometryBuilder.ts` trees and `RailwayGeometryBuilder.ts` sleepers | Hardware instancing | No one-draw-per-tree/sleeper problem to solve |
+| `RailwayGeometryBuilder.ts` `buildRailwayInfrastructure()` | Defaults to **128 m railway chunks** | These intentional meshes are deliberately excluded from the audit, but are plausible draw-call/culling tradeoffs |
+
+See `src/world/GeometryBuilder.ts` around 775–1021, 2380–2409, 2804–2829, 3550–3607, 4097–4256 and 4589–4607; `src/world/infrastructure/railways/RailwayGeometryBuilder.ts` around 2298–2381 and 2954–2972.
+
+### A more important draw-call accounting issue
+
+`GeometryBuilder.ts` uses `drawCalls++` once for a newly built building bucket mesh, even though `mergeBuildingItemsByMaterial()` can put **multiple material groups** (roof/wall) inside that one mesh. The same estimate is serialized in the tile header and reused by `TileSceneReconstructor.ts` and `TileStreamManager.getDiagnostics().loadedDrawCallsEstimate`.
+
+Thus **the builder's estimated draw calls are not necessarily real render submissions**. The main WebGL frame counter includes visibility, material groups and potentially additional render passes (e.g. shadows). The prior 1,224 WebGL calls and 844 frustum-visible meshes must not be naively compared or attributed by dividing the audit's 1,118 static records and 150 instanced batches.
+
+The next instrumentation should attribute **actual** frame render work by layer, material group and pass, then compare with an exact serialized-visible *main-pass* estimator. A source-mesh count alone cannot prove what limits the frame.
+
+### Genuine code-level opportunities
+
+1. **Railway chunk-size A/B, not generic mesh merging.** Production currently hardcodes 128 m default railway chunks; 256/512 m tests could reduce batch count at city scale, but may increase overdraw/culling costs at street scale. This requires a new bake-policy identity and equivalent geometry/feature tests. Do not merge independent source tiles or remove rail zoom alternatives.
+2. **Cull already-instanced foliage batches when offscreen.** `GeometryBuilder.ts` builds trunks/leaf canopies as `InstancedMesh` with `frustumCulled=false`, which is serialized and restored by `TileSceneReconstructor.ts`. The decoder already provides instance batch bounding boxes/spheres. Evaluate setting **per-batch** frustum culling true only once valid bounds are verified, with rotation, tiling overhang, shadows and hover tests. This does not provide per-tree culling, but is a low-risk candidate.
+3. **Stop repeated streaming/zoom/diagnostic scans.** `TileStreamManager.updateFromCamera()` calls `updateViewport()` and `tick()` every frame; `updateViewport()`, `tick()` and `updateCameraZoom()` all traverse tile records in different ways. `ThemeMaterialRegistry.setCameraZoom()` does not early-return on unchanged zoom if railway controls are present. `MapScene.tsx` ordinary telemetry sorts frame samples and evaluates cached railway visibility every frame. This is CPU overhead; measure before claiming it causes far-zoom GPU degradation.
+4. **Material/pass consolidation** is a different, higher-risk class of optimization. Shared colors/material slots for road classes, landuse subtypes and building wall/roof pairs could reduce per-tile draw groups, but render order, depth and stencil rules from E2+/R+ are hard constraints. It may require shader/vertex attribute changes, not merely buffer concatenation.
+5. **Spatial culling granularity.** The already-merged per-class/per-subtype planar meshes may span an entire 1,024 m tile, so they are efficient in draw calls but coarse for sub-tile culling. Splitting them into 256 m chunks could **increase** calls at city overview while reducing vertex work at street zoom. This must be evaluated as a culling tradeoff, not mislabeled as batching savings.
+
+### Decision revised
+
+**Do not implement the naive post-bake 256 m merge pass** (3 hypothetical submissions / 0.2% on the existing 16-tile 1,024 m Hengelo pack). This does **not** mean no optimization remains, nor does it justify implementing untested larger railway chunks, foliage culling, changing tile sizes or switching materials now.
+
+Prioritize a **render-work attribution diagnostic** and **specific isolated experiments** (railway chunk size, instanced tree batch culling, CPU work gating). Compare actual frame times and WebGL draw calls at street, city and regional overview at identical scene/camera positions; preserve inspectability, scene layering and visual parity. The user's full generated JSON/Markdown can improve category-specific prioritization, but the architectural conclusions above already follow from the repository source.
+
 ## Acceptance gates
 
 - [x] Read-only audit over OSMTILE1 SQLite packs and regional mosaics.

@@ -19,6 +19,7 @@ import {
   computeConsecutiveFrameIntervalsMs,
 } from '../src/types/BenchmarkTelemetry';
 import { MAP_THEMES } from '../src/styles/mapThemes';
+import type { SceneLayerDrawWorkEstimate } from '../src/world/tiling/RenderWorkAttribution';
 import {
   createAlignedStudyGrid,
   createHengeloStudyGrid,
@@ -124,6 +125,12 @@ export function resolveTileBenchmarkStreamMargins(
 }
 
 export interface SceneMeshCountsSnapshot {
+  /** Benchmark-only; a proxy, not WebGL draw calls or shadow-render attribution. */
+  drawWorkEstimate?: {
+    total: SceneLayerDrawWorkEstimate;
+    byLayer: Record<string, SceneLayerDrawWorkEstimate>;
+    caveat: string;
+  };
   total: {
     totalMeshes: number;
     visibleFlagMeshes: number;

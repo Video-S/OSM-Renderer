@@ -147,6 +147,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
   const activeRailwaysGroup = builtGeometry.railwaysGroup;
   const cachedRailwayIndexRef = useRef<CachedRailwayIndex | null>(null);
+  const lastRailwayCompositeRevRef = useRef<number>(-1);
   const committedBuiltGeometryRef = useRef<BuiltSceneGeometry | null>(null);
   const showRailwaysRef = useRef<boolean>(showRailways);
   const cameraRef = useRef<THREE.Camera>(camera);
@@ -161,6 +162,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
   }, [builtGeometry]);
 
   useLayoutEffect(() => {
+    lastRailwayCompositeRevRef.current =
+      typeof activeRailwaysGroup.userData?.compositeRevision === 'number'
+        ? activeRailwaysGroup.userData.compositeRevision
+        : -1;
     cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
   }, [activeRailwaysGroup, builtGeometry]);
 
@@ -429,6 +434,102 @@ export const MapScene: React.FC<MapSceneProps> = ({
         }
         drainPendingQueries(true);
       };
+
+      (window as any).__BENCHMARK_GET_CAMERA_STATE__ = () => {
+        const cam = cameraRef.current as THREE.OrthographicCamera;
+        if (!cam) return null;
+        return {
+          isOrthographicCamera: Boolean((cam as any).isOrthographicCamera),
+          position: [
+            Number(cam.position.x.toFixed(3)),
+            Number(cam.position.y.toFixed(3)),
+            Number(cam.position.z.toFixed(3)),
+          ],
+          zoom: Number((cam.zoom ?? 1).toFixed(4)),
+          left: cam.left,
+          right: cam.right,
+          top: cam.top,
+          bottom: cam.bottom,
+          near: cam.near,
+          far: cam.far,
+        };
+      };
+
+      (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__ = () => {
+        const geo = committedBuiltGeometryRef.current;
+        const cam = cameraRef.current as THREE.OrthographicCamera;
+        if (!geo) return null;
+        const frustum = new THREE.Frustum();
+        const projScreen = new THREE.Matrix4();
+        let hasValidFrustum = false;
+        if (cam) {
+          cam.updateMatrixWorld(true);
+          cam.updateProjectionMatrix();
+          projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+          frustum.setFromProjectionMatrix(projScreen);
+          hasValidFrustum = true;
+        }
+
+        const layerEntries: Array<[string, THREE.Object3D]> = [
+          ['ground', geo.groundMesh],
+          ['landuse', geo.landuseGroup],
+          ['water', geo.waterGroup],
+          ['parks', geo.parksGroup],
+          ['railways', geo.railwaysGroup],
+          ['roads', geo.roadsGroup],
+          ['barriers', geo.barriersGroup],
+          ['foliage', geo.foliageGroup],
+          ['buildings', geo.buildingsGroup],
+        ];
+
+        const byLayer: Record<
+          string,
+          { totalMeshes: number; frustumVisibleMeshes: number; visibleFlagMeshes: number }
+        > = {};
+        let totalMeshes = 0;
+        let frustumVisibleMeshes = 0;
+        let visibleFlagMeshes = 0;
+
+        for (const [layerName, rootObj] of layerEntries) {
+          let layerTotal = 0;
+          let layerFrustumVis = 0;
+          let layerVisFlag = 0;
+          rootObj.traverse((obj) => {
+            if (!(obj as THREE.Mesh).isMesh) return;
+            const mesh = obj as THREE.Mesh;
+            layerTotal += 1;
+            let ancestorVisible = mesh.visible;
+            let p = mesh.parent;
+            while (ancestorVisible && p) {
+              ancestorVisible = p.visible;
+              p = p.parent;
+            }
+            if (ancestorVisible) {
+              layerVisFlag += 1;
+              if (!hasValidFrustum || !mesh.frustumCulled || frustum.intersectsObject(mesh)) {
+                layerFrustumVis += 1;
+              }
+            }
+          });
+          byLayer[layerName] = {
+            totalMeshes: layerTotal,
+            frustumVisibleMeshes: layerFrustumVis,
+            visibleFlagMeshes: layerVisFlag,
+          };
+          totalMeshes += layerTotal;
+          frustumVisibleMeshes += layerFrustumVis;
+          visibleFlagMeshes += layerVisFlag;
+        }
+
+        return {
+          total: {
+            totalMeshes,
+            visibleFlagMeshes,
+            frustumVisibleMeshes,
+          },
+          byLayer,
+        };
+      };
     }
 
     const emitPostRenderTelemetry = (
@@ -605,6 +706,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
       gl.render = origRender;
       if (typeof window !== 'undefined') {
         delete (window as any).__BENCHMARK_RESET_GPU_TIMERS__;
+        delete (window as any).__BENCHMARK_GET_CAMERA_STATE__;
+        delete (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__;
       }
       drainPendingQueries(false);
     };
@@ -627,6 +730,16 @@ export const MapScene: React.FC<MapSceneProps> = ({
       if (onCameraZoomChange) {
         onCameraZoomChange(cam.zoom);
       }
+    }
+
+    if (onViewportFrameUpdate && (cam as THREE.OrthographicCamera).isOrthographicCamera) {
+      onViewportFrameUpdate(cam);
+    }
+
+    const compositeRev = activeRailwaysGroup.userData?.compositeRevision;
+    if (typeof compositeRev === 'number' && compositeRev !== lastRailwayCompositeRevRef.current) {
+      lastRailwayCompositeRevRef.current = compositeRev;
+      cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
     }
 
     // During active automated frame benchmarking, skip ring sorting, HUD stats, and React updates;

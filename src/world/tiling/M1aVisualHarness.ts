@@ -140,6 +140,51 @@ export function assembleTiledStudyCompositeScene(
         }
       : null;
 
+  const baseGetCpuStats = compositeResources.getCpuBufferMemoryStats.bind(compositeResources);
+  const baseGetBvhStats = compositeResources.getBvhMemoryStats.bind(compositeResources);
+  compositeResources.getCpuBufferMemoryStats = () => {
+    const base = baseGetCpuStats();
+    let geometryCount = base.geometryCount;
+    let attributeBytes = base.attributeBytes;
+    let indexBytes = base.indexBytes;
+    for (const entry of tiled.tiles) {
+      const s = entry.scene.resources?.getCpuBufferMemoryStats?.();
+      if (!s) continue;
+      geometryCount += s.geometryCount;
+      attributeBytes += s.attributeBytes;
+      indexBytes += s.indexBytes;
+    }
+    const totalBytes = attributeBytes + indexBytes;
+    return {
+      geometryCount,
+      attributeBytes,
+      indexBytes,
+      totalBytes,
+      totalMB: Number((totalBytes / (1024 * 1024)).toFixed(3)),
+    };
+  };
+  compositeResources.getBvhMemoryStats = () => {
+    const base = baseGetBvhStats();
+    let bvhCount = base.bvhCount;
+    let rootBytes = base.rootBytes;
+    let indirectBufferBytes = base.indirectBufferBytes;
+    for (const entry of tiled.tiles) {
+      const s = entry.scene.resources?.getBvhMemoryStats?.();
+      if (!s) continue;
+      bvhCount += s.bvhCount;
+      rootBytes += s.rootBytes;
+      indirectBufferBytes += s.indirectBufferBytes;
+    }
+    const totalBytes = rootBytes + indirectBufferBytes;
+    return {
+      bvhCount,
+      rootBytes,
+      indirectBufferBytes,
+      totalBytes,
+      totalMB: Number((totalBytes / (1024 * 1024)).toFixed(3)),
+    };
+  };
+
   return {
     buildingsGroup,
     roadsGroup,

@@ -56,19 +56,32 @@ export interface TileMemoryFootprint {
   vertexCount: number;
 }
 
+export interface TileTimingSummaryStats {
+  count: number;
+  minMs: number;
+  medianMs: number;
+  p95Ms: number;
+  maxMs: number;
+  avgMs: number;
+}
+
 export interface TileStreamDiagnosticsSnapshot {
   snapshotId: string;
   bakeSchemaVersion: string;
   tileSizeMeters: number;
   preloadMarginTiles: number;
   retainMarginTiles: number;
+  totalGridCols: number;
+  totalGridRows: number;
   totalGridTiles: number;
   visibleTiles: number;
   fetchTargetTiles: number;
   keepTargetTiles: number;
   loadedTiles: number;
+  peakLoadedTiles: number;
   emptyLoadedTiles: number;
   loadingTiles: number;
+  peakLoadingTiles: number;
   queuedTiles: number;
   fetchingTiles: number;
   decodingTiles: number;
@@ -88,12 +101,17 @@ export interface TileStreamDiagnosticsSnapshot {
   sharedMaterialCount: number;
   tileCpuGeometryBytes: number;
   tileBvhBytes: number;
+  compositeSceneRevision: number;
   lastManifestLoadMs: number;
   avgFetchMs: number;
   avgDecodeMs: number;
   avgReconstructMs: number;
   lastCommitMs: number;
   maxCommitMs: number;
+  fetchMsStats: TileTimingSummaryStats | null;
+  decodeMsStats: TileTimingSummaryStats | null;
+  reconstructMsStats: TileTimingSummaryStats | null;
+  commitMsStats: TileTimingSummaryStats | null;
   viewportBounds: TileViewportGroundBounds | null;
   loadedTileKeys: string[];
   visibleTileKeys: string[];
@@ -172,6 +190,44 @@ const STREAMED_LAYER_KINDS: ReadonlyArray<Exclude<TileLayerKind, 'ground'>> = [
   'barriers',
   'foliage',
 ];
+
+const MAX_TIMING_SAMPLES = 256;
+
+function pushBoundedSample(samples: number[], value: number): void {
+  if (!Number.isFinite(value) || value < 0) return;
+  samples.push(value);
+  if (samples.length > MAX_TIMING_SAMPLES) {
+    samples.shift();
+  }
+}
+
+function summarizeTimingSamples(
+  samples: readonly number[]
+): TileTimingSummaryStats | null {
+  if (samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  let sum = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    sum += sorted[i];
+  }
+  const p95Idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(0.95 * (sorted.length - 1)))
+  );
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 1
+      ? sorted[mid]
+      : (sorted[mid - 1] + sorted[mid]) * 0.5;
+  return {
+    count: sorted.length,
+    minMs: Number(sorted[0].toFixed(3)),
+    medianMs: Number(median.toFixed(3)),
+    p95Ms: Number(sorted[p95Idx].toFixed(3)),
+    maxMs: Number(sorted[sorted.length - 1].toFixed(3)),
+    avgMs: Number((sum / sorted.length).toFixed(3)),
+  };
+}
 
 export function computeDecodedTileMemoryFootprint(
   decoded: DecodedTilePayload
@@ -354,6 +410,9 @@ export class TileStreamManager {
   private cancelledRequestsTotal = 0;
   private duplicateRequestsSkippedTotal = 0;
   private completedLoadsTotal = 0;
+  private peakLoadedTiles = 0;
+  private peakLoadingTiles = 0;
+  private compositeSceneRevision = 0;
   private lastManifestLoadMs = 0;
   private totalFetchMs = 0;
   private fetchSamples = 0;
@@ -363,6 +422,10 @@ export class TileStreamManager {
   private reconstructSamples = 0;
   private lastCommitMs = 0;
   private maxCommitMs = 0;
+  private readonly fetchMsRing: number[] = [];
+  private readonly decodeMsRing: number[] = [];
+  private readonly reconstructMsRing: number[] = [];
+  private readonly commitMsRing: number[] = [];
 
   // Idle synchronization waiters
   private idleWaiters: Array<() => void> = [];
@@ -725,6 +788,7 @@ export class TileStreamManager {
     }
 
     this.pumpFetchQueue();
+    this.updatePeakTileCounters();
     if (anyEvictedOrCancelled) {
       this.rebuildCompositeStats();
       this.emitDiagnostics();
@@ -755,6 +819,7 @@ export class TileStreamManager {
     readyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
     const limit = Math.min(maxCommits, readyRecords.length);
     let committed = 0;
+    const tBatch0 = performance.now();
 
     for (let i = 0; i < limit; i++) {
       const record = readyRecords[i];
@@ -773,8 +838,7 @@ export class TileStreamManager {
 
       this.totalReconstructMs += reconstructMs;
       this.reconstructSamples += 1;
-      this.lastCommitMs = reconstructMs;
-      this.maxCommitMs = Math.max(this.maxCommitMs, reconstructMs);
+      pushBoundedSample(this.reconstructMsRing, reconstructMs);
 
       record.reconstructed = reconstructed;
       record.decodedPayload = null;
@@ -785,10 +849,16 @@ export class TileStreamManager {
     }
 
     if (committed > 0) {
+      const batchCommitMs = performance.now() - tBatch0;
+      this.lastCommitMs = batchCommitMs;
+      this.maxCommitMs = Math.max(this.maxCommitMs, batchCommitMs);
+      pushBoundedSample(this.commitMsRing, batchCommitMs);
+
       if (this.currentWireframe) {
         this.materialRegistry.setWireframe(true);
       }
       this.rebuildCompositeStats();
+      this.updatePeakTileCounters();
       this.emitDiagnostics();
     }
 
@@ -922,6 +992,8 @@ export class TileStreamManager {
 
     const loadingTiles =
       queuedTiles + fetchingTiles + decodingTiles + readyToCommitTiles;
+    this.peakLoadedTiles = Math.max(this.peakLoadedTiles, loadedTiles);
+    this.peakLoadingTiles = Math.max(this.peakLoadingTiles, loadingTiles);
 
     return {
       snapshotId: this.metadata?.snapshotId ?? 'uninitialized',
@@ -929,13 +1001,17 @@ export class TileStreamManager {
       tileSizeMeters: this.metadata?.tileSizeMeters ?? 512,
       preloadMarginTiles: this.preloadMarginTiles,
       retainMarginTiles: this.retainMarginTiles,
+      totalGridCols: this.metadata?.gridCols ?? 8,
+      totalGridRows: this.metadata?.gridRows ?? 8,
       totalGridTiles: this.tilesByKey.size,
       visibleTiles,
       fetchTargetTiles,
       keepTargetTiles,
       loadedTiles,
+      peakLoadedTiles: this.peakLoadedTiles,
       emptyLoadedTiles,
       loadingTiles,
+      peakLoadingTiles: this.peakLoadingTiles,
       queuedTiles,
       fetchingTiles,
       decodingTiles,
@@ -955,6 +1031,7 @@ export class TileStreamManager {
       sharedMaterialCount: this.materialRegistry.materialCount,
       tileCpuGeometryBytes,
       tileBvhBytes,
+      compositeSceneRevision: this.compositeSceneRevision,
       lastManifestLoadMs: this.lastManifestLoadMs,
       avgFetchMs:
         this.fetchSamples > 0 ? this.totalFetchMs / this.fetchSamples : 0,
@@ -966,11 +1043,52 @@ export class TileStreamManager {
           : 0,
       lastCommitMs: this.lastCommitMs,
       maxCommitMs: this.maxCommitMs,
+      fetchMsStats: summarizeTimingSamples(this.fetchMsRing),
+      decodeMsStats: summarizeTimingSamples(this.decodeMsRing),
+      reconstructMsStats: summarizeTimingSamples(this.reconstructMsRing),
+      commitMsStats: summarizeTimingSamples(this.commitMsRing),
       viewportBounds: this.currentViewport,
       loadedTileKeys,
       visibleTileKeys,
       loadingTileKeys,
     };
+  }
+
+  /**
+   * Resets cumulative scenario counters and latency sample rings without altering loaded tiles.
+   */
+  resetPerformanceCounters(): void {
+    let loadedNow = 0;
+    let loadingNow = 0;
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'loaded') loadedNow += 1;
+      else if (
+        record.state === 'queued' ||
+        record.state === 'fetching' ||
+        record.state === 'decoding' ||
+        record.state === 'ready_to_commit'
+      ) {
+        loadingNow += 1;
+      }
+    }
+    this.evictedTilesTotal = 0;
+    this.cancelledRequestsTotal = 0;
+    this.duplicateRequestsSkippedTotal = 0;
+    this.completedLoadsTotal = 0;
+    this.peakLoadedTiles = loadedNow;
+    this.peakLoadingTiles = loadingNow;
+    this.totalFetchMs = 0;
+    this.fetchSamples = 0;
+    this.totalDecodeMs = 0;
+    this.decodeSamples = 0;
+    this.totalReconstructMs = 0;
+    this.reconstructSamples = 0;
+    this.lastCommitMs = 0;
+    this.maxCommitMs = 0;
+    this.fetchMsRing.length = 0;
+    this.decodeMsRing.length = 0;
+    this.reconstructMsRing.length = 0;
+    this.commitMsRing.length = 0;
   }
 
   dispose(): void {
@@ -1068,8 +1186,10 @@ export class TileStreamManager {
         const fetchMs = performance.now() - fetchStart;
         this.totalFetchMs += fetchMs;
         this.fetchSamples += 1;
+        pushBoundedSample(this.fetchMsRing, fetchMs);
 
         record.state = 'decoding';
+        this.updatePeakTileCounters();
         const decodeResult = await this.decodeClient.decodeTile(
           arrayBuffer,
           tileKey,
@@ -1085,6 +1205,7 @@ export class TileStreamManager {
 
         this.totalDecodeMs += decodeResult.decodeDurationMs;
         this.decodeSamples += 1;
+        pushBoundedSample(this.decodeMsRing, decodeResult.decodeDurationMs);
 
         record.decodedPayload = decodeResult.decoded;
         record.decodedFootprint = computeDecodedTileMemoryFootprint(
@@ -1092,6 +1213,7 @@ export class TileStreamManager {
         );
         record.abortController = null;
         record.state = 'ready_to_commit';
+        this.updatePeakTileCounters();
       } catch (err) {
         if (
           abortController.signal.aborted ||
@@ -1207,6 +1329,7 @@ export class TileStreamManager {
       interactiveBuildings.push(...s.interactiveMeshes.buildings);
     }
 
+    this.compositeSceneRevision += 1;
     this.compositeScene.stats.totalVertices = totalVertices;
     this.compositeScene.stats.totalTriangles = totalTriangles;
     this.compositeScene.stats.totalDrawCalls = totalDrawCalls;
@@ -1217,11 +1340,32 @@ export class TileStreamManager {
       sleeper3DBoxCount: totalSleeper3DBoxCount,
       railwayRenderSource: 'graph_extrusion',
     };
+    this.compositeScene.railwaysGroup.userData.compositeRevision =
+      this.compositeSceneRevision;
+    this.groundMesh.userData.__compositeRevision = this.compositeSceneRevision;
 
     for (const layerKind of STREAMED_LAYER_KINDS) {
       const grp = this.compositeScene[`${layerKind}Group` as const];
       grp.updateMatrixWorld(true);
     }
+  }
+
+  private updatePeakTileCounters(): void {
+    let loadedNow = 0;
+    let loadingNow = 0;
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'loaded') loadedNow += 1;
+      else if (
+        record.state === 'queued' ||
+        record.state === 'fetching' ||
+        record.state === 'decoding' ||
+        record.state === 'ready_to_commit'
+      ) {
+        loadingNow += 1;
+      }
+    }
+    if (loadedNow > this.peakLoadedTiles) this.peakLoadedTiles = loadedNow;
+    if (loadingNow > this.peakLoadingTiles) this.peakLoadingTiles = loadingNow;
   }
 
   private hasPendingAsyncWork(): boolean {

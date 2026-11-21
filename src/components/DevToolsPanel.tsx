@@ -1311,6 +1311,32 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
                 </button>
               </div>
             )}
+
+            {/* TKT-028 M2-A Runtime Tile Streaming */}
+            {onLoadHengeloM2aTiles && (
+              <div className="bg-slate-900/70 border border-emerald-500/40 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-200">
+                    TKT-028 M2-A Runtime Tile Streaming
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    OSMTILE1 · 512m · SQLite
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Streams pre-baked 512 m Hengelo tiles directly from the offline SQLite tile pack via Web Worker decode, viewport preload/retention margins, shared ThemeMaterialRegistry, and zero-leak tile eviction.
+                </p>
+                <button
+                  type="button"
+                  data-testid="btn-load-hengelo-m2a-streaming"
+                  onClick={onLoadHengeloM2aTiles}
+                  className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Launch M2-A Baked Tile Streaming</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

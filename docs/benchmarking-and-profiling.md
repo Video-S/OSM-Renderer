@@ -33,6 +33,7 @@ The benchmarking system is organized under `/benchmarks/` (with the shared brows
 | `benchmarks/environment.ts` | Git commit/branch/dirty state, OS/CPU/RAM metadata, browser/GPU driver strings, hardware vs. software WebGL detection (`SwiftShader` / `llvmpipe`), and canonical metric definitions. |
 | `benchmarks/cpuRunner.ts` | Node.js CPU benchmark runner (`npm run bench:cpu`) measuring direct pipeline stages, deterministic typed-array memory, V8 heap snapshots, and `SceneResourceManager` disposal verification. |
 | `benchmarks/browserRunner.ts` | Playwright + Chromium WebGL benchmark runner (`npm run bench:browser`) measuring post-`gl.render()` frame intervals, CPU `gl.render()` time, async GPU timer queries, actual `gl.info.render.calls` / `triangles`, static & sampled railway visibility, and scene reload lifecycle leaks. |
+| `benchmarks/tileStreamingRunner.ts` | `TKT-028` M2-B 3-mode WebGL streaming comparison runner (`npm run bench:tiles`) comparing `m1a_single_scene`, `m1a_tiled_64`, and `m2a_streaming` across closeup, medium, far overview, active vs. settled pan, and `>= 10`-hop eviction lifecycle on `canonical-hengelo` or `synthetic-smoke-4x4`. |
 | `benchmarks/serializer.ts` | Schema validation (`validateBenchmarkReport` supporting `1.0.0` & `1.1.0`), JSON serialization, and human-readable terminal table formatting. |
 | `benchmarks/compare.ts` | Automated baseline vs. candidate comparison engine (`npm run bench:compare`) with schema/dataset/GPU parity checks and configurable regression thresholds. |
 
@@ -148,6 +149,37 @@ npx tsx benchmarks/browserRunner.ts --datasets "small-real-europatunnel,syntheti
 3. `automated_pan_sweep`: Deterministic linear camera pan sweep across the map extent at `zoom = 5.5` (driven imperatively via `CameraController` without triggering React state re-renders).
 4. `zoom_and_orbit_sweep`: Simultaneous zoom (`1.2` to `8.5`) and `270°` azimuth orbit sweep exercising LOD transitions (`4.5 CSS px/m`) and frustum culling.
 5. `repeated_scene_reload`: Repeatedly unloads and reloads the dataset on the same WebGL2 context and audits `gl.info.memory.geometries` and `gl.info.memory.textures` for GPU resource leaks (`reloadLifecycleAudit`).
+
+### 3.2.1 Three-Mode Tile Streaming Benchmarks (`npm run bench:tiles`, `TKT-028` M2-B)
+
+`benchmarks/tileStreamingRunner.ts` runs identical `1440×900 @ 1x` WebGL2 comparisons across `m1a_single_scene` (Mode 1 Reference A), `m1a_tiled_64` (Mode 2 All Tiles Mounted C), and `m2a_streaming` (Mode 3 M2-A Runtime Tile Streaming) over 5 deterministic scenarios (`closeup_station` `zoom=6.5`, `medium_navigation` `zoom=1.8`, `far_overview` `zoom=0.22`, `continuous_pan` active + settled steady state, and `repeated_pan_eviction` `>= 10` opposing-quadrant distant hops + `unloadDataset()` audit).
+
+- **`--dataset=canonical-hengelo` (default)**: Exercises the real `8 × 8` (`64 × 512 m` tiles) Hengelo region. Requires local `data/osm/overijssel-261114-8ae28196.sqlite` and `data/osm/overijssel-tiles-261114-8ae28196.sqlite` (fails fast with actionable setup guidance if missing).
+- **`--dataset=synthetic-smoke-4x4`**: Exercises a deterministic self-contained `4 × 4` (`16 × 512 m` tiles) multi-category OSM fixture baked on the fly without requiring local Overijssel SQLite files.
+
+**Windows PowerShell (Canonical `8 × 8` Hengelo & Hardware GPU):**
+> Remember to invoke `npx tsx` directly whenever passing flags on Windows PowerShell, quote `--out=` / `--markdown-out=` paths, and quote comma-separated mode/scenario lists.
+
+```powershell
+# Canonical 8x8 Hengelo full 3-mode x 5-scenario comparison on hardware GPU (ANGLE D3D11)
+npx tsx benchmarks/tileStreamingRunner.ts --dataset=canonical-hengelo --require-hardware "--out=benchmarks/results/tkt028-m2b-hengelo-streaming.json" "--markdown-out=benchmarks/results/tkt028-m2b-hengelo-streaming.md"
+
+# Quick canonical subset on Windows hardware GPU
+npx tsx benchmarks/tileStreamingRunner.ts --dataset=canonical-hengelo --quick --require-hardware --modes "m1a_single_scene,m2a_streaming" --scenarios "closeup_station,far_overview,repeated_pan_eviction" "--out=benchmarks/results/tkt028-m2b-hengelo-quick.json"
+
+# Synthetic 4x4 WebGL smoke suite on Windows hardware GPU (or omit --require-hardware / pass --swiftshader)
+npx tsx benchmarks/tileStreamingRunner.ts --dataset=synthetic-smoke-4x4 --require-hardware --quick --eviction-hops=10 --no-save
+```
+
+**Bash / macOS / Linux CI (Headless SwiftShader):**
+```bash
+# Synthetic 4x4 WebGL smoke suite in headless containers without SQLite datasets
+DISABLE_OVERIJSSEL_BOOTSTRAP=1 npx tsx benchmarks/tileStreamingRunner.ts \
+  --dataset=synthetic-smoke-4x4 --swiftshader --quick --eviction-hops=10 --no-save
+
+# Zero-argument default (runs canonical-hengelo when local SQLite files are present)
+npm run bench:tiles
+```
 
 ### 3.3 Comparing Baseline and Candidate Reports (`npx tsx benchmarks/compare.ts`)
 

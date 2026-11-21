@@ -465,8 +465,20 @@ export async function terminateChildProcessTree(
     return;
   }
 
+  const sendPosixSignal = (sig: NodeJS.Signals) => {
+    if (typeof child.pid === 'number') {
+      try {
+        process.kill(-child.pid, sig);
+        return;
+      } catch {
+        // Fallback to direct child kill if not a process group leader
+      }
+    }
+    child.kill(sig);
+  };
+
   try {
-    child.kill('SIGTERM');
+    sendPosixSignal('SIGTERM');
   } catch {
     return;
   }
@@ -474,7 +486,7 @@ export async function terminateChildProcessTree(
   await new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       try {
-        child.kill('SIGKILL');
+        sendPosixSignal('SIGKILL');
       } catch {
         // ignore
       }

@@ -44,6 +44,7 @@ export interface BatchAuditProfile {
   submissionReductionProxy: number;
   serializedVisibleReductionProxy: number;
   afterSubmissionProxy: number;
+  afterSerializedVisibleSubmissionProxy: number;
   byLayerReduction: Record<string, number>;
   byMaterialReduction: Record<string, number>;
 }
@@ -256,6 +257,7 @@ function profileForTile(
     submissionReductionProxy: saved,
     serializedVisibleReductionProxy: visibleSaved,
     afterSubmissionProxy: baseSubmissions - saved,
+    afterSerializedVisibleSubmissionProxy: baseVisibleSubmissions - visibleSaved,
     byLayerReduction,
     byMaterialReduction,
   };
@@ -371,6 +373,7 @@ export function aggregateTileBatchAudits(
     submissionReductionProxy: 0,
     serializedVisibleReductionProxy: 0,
     afterSubmissionProxy: 0,
+    afterSerializedVisibleSubmissionProxy: 0,
   }));
   const featureCategories: Record<string, number> = {};
   const summary: BatchAuditSummary = {
@@ -425,6 +428,7 @@ export function aggregateTileBatchAudits(
       dst.submissionReductionProxy += src.submissionReductionProxy;
       dst.serializedVisibleReductionProxy += src.serializedVisibleReductionProxy;
       dst.afterSubmissionProxy += src.afterSubmissionProxy;
+      dst.afterSerializedVisibleSubmissionProxy += src.afterSerializedVisibleSubmissionProxy;
       addCounts(dst.byLayerReduction, src.byLayerReduction);
       addCounts(dst.byMaterialReduction, src.byMaterialReduction);
     }

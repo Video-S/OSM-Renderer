@@ -2,7 +2,7 @@
 id: TKT-030
 title: Read-only OSM-derived mesh batching opportunity audit
 type: research
-status: implementation_ready_for_local_validation
+status: audit_executed_pending_report_review
 priority: high
 created: 2026-11-21
 updated: 2026-11-21
@@ -90,6 +90,21 @@ The project owner's first Windows run reached the audit CLI but **did not genera
 
 The formatting syntax was corrected on the same branch, and a Markdown formatter regression test was added. **The corrected commit still requires local test/typecheck and actual SQLite execution**; no analysis results are claimed yet.
 
+## Canonical Hengelo Audit — Owner Windows Results (2026-11-21)
+
+After fixing the Markdown formatter, the owner reran the audit on Windows using Node.js v22.16.0:
+
+- `npm run lint`: **passed** (`tsc --noEmit`, no diagnostics).
+- Focused `npx tsx --test src/world/TilingBatchOpportunityAudit.test.ts`: **8/8 passed**.
+- `npm run osm:audit-tile-batching`: **completed**, reading all **16** LOD0 tiles from `overijssel-tiles-261114-8ae28196-1024m.sqlite`.
+- Reported **1,118 static mesh records**, **150 existing instanced batches**.
+- **256 m bounded scenario: 3 theoretical fewer mesh submissions (0.2%)**.
+- Generated `benchmarks/results/tkt030-batching-hengelo-1024m.json` and `.md` in the owner's local checkout; **their contents have not yet been supplied for review**.
+- The rerun did **not** include `npm run build`; an earlier Vite build succeeded before the syntax fix, but the final branch build is not newly verified in this run.
+- Node emitted an experimental SQLite API warning; tests and audit passed regardless.
+
+**Preliminary decision:** The conservative 256 m cell approach alone offers negligible *structural submission* reduction on the Hengelo 1,024 m pack, so **do not implement it based on this result**. The complete Markdown/JSON reports are needed to compare 128/512 m and whole-tile profiles, inspect exclusions, material/feature hotspots, and separate existing batching from overly restrictive candidate rules. The 0.2% estimate is **not** measured WebGL draw-call or FPS improvement. No change to rendering or tile-size decisions is indicated.
+
 ## Acceptance gates
 
 - [x] Read-only audit over OSMTILE1 SQLite packs and regional mosaics.
@@ -97,8 +112,9 @@ The formatting syntax was corrected on the same branch, and a Markdown formatter
 - [x] Existing instancing excluded from new batching candidates.
 - [x] Synthetic tests for matching state, feature references, spatial boundaries, tile isolation, and CLI.
 - [x] Actual existing Hengelo hardware counts recorded for context (not confused with audit estimates).
-- [ ] Local typecheck, synthetic tests and build pass.
-- [ ] Canonical 1,024 m Hengelo SQLite data audited and reports reviewed.
+- [x] Local typecheck and 8/8 synthetic tests pass; latest Vite build not rerun after syntax fix.
+- [x] Canonical 1,024 m Hengelo SQLite audit completed (16/16 LOD0 tiles).
+- [ ] Generated detailed Markdown/JSON reports supplied and reviewed.
 - [ ] 512 m audit compared where useful.
 - [ ] Optional regional sample and full 256-tile audit.
 - [ ] Decision on whether an opt-in batched-pack implementation is warranted and which layers to tackle first.

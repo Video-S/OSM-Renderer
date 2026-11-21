@@ -69,11 +69,13 @@ export interface SeamCandidate {
   /** Measured from 0.25m inside each tile edge; not a whole-seam continuity proof. */
   surfaceSamples?: [SurfaceProbeResult, SurfaceProbeResult];
   /** Potential discontinuity, never automatically a visual QA verdict. */
-  surfaceReview?: 'coverage-asymmetry' | 'height-step';
+  surfaceReview?: 'coverage-asymmetry' | 'height-step' | 'source-polygon-coverage-mismatch';
+  /** Source polygon interior at each inset, where the source is a polygon. */
+  expectedPolygonCoverage?: [boolean, boolean];
   sourceLayer?: string;
   sourceBridge?: string;
   sourceTunnel?: string;
-  review: 'none' | 'source-missing-output' | 'asymmetric-geometry-attribution' | 'metadata-mismatch' | 'surface-coverage-asymmetry' | 'surface-height-step';
+  review: 'none' | 'source-missing-output' | 'asymmetric-geometry-attribution' | 'metadata-mismatch' | 'surface-coverage-asymmetry' | 'surface-height-step' | 'source-polygon-coverage-mismatch';
 }
 export interface SeamSideSummary {
   id: string;
@@ -97,7 +99,7 @@ export interface SeamJunctionSummary {
 }
 export interface RegionalSeamAuditReport {
   ticket: 'TKT-032';
-  schemaVersion: 1;
+  schemaVersion: 2;
   auditLevel: 'source-to-emitted-feature-metadata-triage';
   createdAt: string;
   input: { index: string; sourceIndex: string; snapshotId: string; sourceSha256: string; bandMeters: number };
@@ -115,6 +117,7 @@ export interface RegionalSeamAuditReport {
     metadataMismatches: number;
     surfaceAsymmetric: number;
     surfaceHeightSteps: number;
+    polygonSourceCoverageMismatches: number;
   };
   interfaces: SeamSideSummary[];
   junctions: SeamJunctionSummary[];
@@ -207,12 +210,26 @@ function auditSide(
           probeSourceSurfaceAtUtm(b.decoded, b.centerEasting, b.centerNorthing,
             crossing.sourceId, bE, bN),
         ];
-        if ((surfaceSamples[0].status === 'covered') !==
-            (surfaceSamples[1].status === 'covered')) {
+        if (crossing.expectedPolygonCoverage) {
+          // A polygon boundary often enters one side of the shard seam and
+          // exits the other. Such an asymmetry is *correct* if it agrees with
+          // the source polygon's outer rings and holes. Do not claim a seam
+          // defect from the mere fact that one source-feature triangle is absent.
+          const observed: [boolean, boolean] = [
+            surfaceSamples[0].status === 'covered',
+            surfaceSamples[1].status === 'covered',
+          ];
+          if (observed.some((value, i) => value !== crossing.expectedPolygonCoverage![i])) {
+            surfaceReview = 'source-polygon-coverage-mismatch';
+          }
+        } else if ((surfaceSamples[0].status === 'covered') !==
+                   (surfaceSamples[1].status === 'covered')) {
           surfaceReview = 'coverage-asymmetry';
-        } else if (surfaceSamples[0].status === 'covered' &&
-                   surfaceSamples[1].status === 'covered' &&
-                   Math.abs(surfaceSamples[0].heights[0] - surfaceSamples[1].heights[0]) > 0.75) {
+        }
+        if (!surfaceReview &&
+            surfaceSamples[0].status === 'covered' &&
+            surfaceSamples[1].status === 'covered' &&
+            Math.abs(surfaceSamples[0].heights[0] - surfaceSamples[1].heights[0]) > 0.75) {
           surfaceReview = 'height-step';
         }
       }
@@ -222,6 +239,7 @@ function auditSide(
           ? 'asymmetric-geometry-attribution'
           : cmp.classification === 'neither' ? 'source-missing-output'
           : surfaceReview === 'coverage-asymmetry' ? 'surface-coverage-asymmetry'
+          : surfaceReview === 'source-polygon-coverage-mismatch' ? 'source-polygon-coverage-mismatch'
           : surfaceReview === 'height-step' ? 'surface-height-step' : 'none';
       candidates.push({
         sourceId: crossing.sourceId,
@@ -242,6 +260,7 @@ function auditSide(
           nearSleeperCount(b.evidence, crossing.easting, crossing.northing),
         ],
         surfaceSamples, surfaceReview,
+        expectedPolygonCoverage: crossing.expectedPolygonCoverage,
         sourceLayer: crossing.tags.layer === undefined ? undefined : String(crossing.tags.layer),
         sourceBridge: crossing.tags.bridge === undefined ? undefined : String(crossing.tags.bridge),
         sourceTunnel: crossing.tags.tunnel === undefined ? undefined : String(crossing.tags.tunnel),
@@ -396,9 +415,12 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       const result = withStores((open) =>
         auditSide(side, type, store, open, opts.bandMeters, opts.featureId));
       outSides.push(result);
-      const needsReview = result.candidates.filter((x) => x.review !== 'none').length;
+      const counts = new Map<string, number>();
+      for (const c of result.candidates) {
+        if (c.review !== 'none') counts.set(c.review, (counts.get(c.review) ?? 0) + 1);
+      }
       console.log('[seams] ' + side.id + ': ' + result.sourceCrossings + ' crossings, ' +
-        needsReview + ' metadata candidates');
+        [...counts.entries()].map(([reason, count]) => reason + '=' + count).join(', '));
     }
     for (const junction of junctions) {
       if (opts.boundaryId && opts.boundaryId !== junction.id) continue;
@@ -413,7 +435,7 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
   }
   const candidates = outSides.flatMap((s) => s.candidates);
   const report: RegionalSeamAuditReport = {
-    ticket: 'TKT-032', schemaVersion: 1,
+    ticket: 'TKT-032', schemaVersion: 2,
     auditLevel: 'source-to-emitted-feature-metadata-triage',
     createdAt: new Date().toISOString(),
     input: {
@@ -435,6 +457,8 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       metadataMismatches: candidates.filter((c) => c.layerMismatch || c.bridgeMismatch || c.tunnelMismatch).length,
       surfaceAsymmetric: candidates.filter((c) => c.surfaceReview === 'coverage-asymmetry').length,
       surfaceHeightSteps: candidates.filter((c) => c.surfaceReview === 'height-step').length,
+      polygonSourceCoverageMismatches:
+        candidates.filter((c) => c.surfaceReview === 'source-polygon-coverage-mismatch').length,
     },
     interfaces: outSides, junctions: outJunctions,
     limitations: [
@@ -442,6 +466,8 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
       'Source IDs absent on both sides are flagged; intentional omissions and unsupported source tags need review.',
       'Tile feature metadata can describe an emitted mesh well away from the seam: presence alone does not prove continuity.',
       'Road/planar triangle inset samples are geometric witnesses only, not full edge coverage or connectivity.',
+      'Polygon-side probes are compared with expected source geometry interior; expected one-sided polygon boundary coverage is not a seam warning.',
+      'Polygon source-coverage mismatches can be intentional semantic ownership / preprocessing, not necessarily an error.',
       'Coverage/height sample warnings may be legitimate source offsets, slopes or parser exclusions; review independently.',
       'Sleeper counts are proximity indicators only; ribbon/3D sleeper phase is not yet measured.',
       'Polygon interior detection currently checks only boundary-line midpoint and ring intersection witnesses.',
@@ -472,7 +498,8 @@ export function formatSeamAuditMarkdown(report: RegionalSeamAuditReport): string
       '; absent both: ' + report.totals.absentBoth +
       '; inconsistent layer/bridge/tunnel metadata: ' + report.totals.metadataMismatches +
       '; surface-asymmetry probes: ' + report.totals.surfaceAsymmetric +
-      '; height-step probes: ' + report.totals.surfaceHeightSteps,
+      '; height-step probes: ' + report.totals.surfaceHeightSteps +
+      '; source-polygon coverage mismatches: ' + report.totals.polygonSourceCoverageMismatches,
     '',
     '## Per-interface triage', '',
     '| Interface | Type | Source crossings | Review candidates |',

@@ -445,6 +445,8 @@ export class TileStreamManager {
   private peakLoadedTiles = 0;
   private peakLoadingTiles = 0;
   private compositeSceneRevision = 0;
+  /** Failed fetches may require viewport re-evaluation even if the camera remains still. */
+  private needsViewportRefresh = false;
   private viewportSelectionPasses = 0;
   private viewportSelectionSkips = 0;
   private zoomPropagationSkips = 0;
@@ -633,6 +635,7 @@ export class TileStreamManager {
     this.metadata = payload.metadata;
     this.tilesByKey.clear();
     this.currentViewport = null;
+    this.needsViewportRefresh = false;
     this.previousFocus = null;
     this.panLeadVector = { x: 0, z: 0 };
 
@@ -771,6 +774,7 @@ export class TileStreamManager {
       this.updateCameraZoom(bounds.cameraZoom);
     }
     if (this.experimentSkipUnchangedViewport &&
+        !this.needsViewportRefresh &&
         equalTileViewportBounds(this.currentViewport, bounds)) {
       this.viewportSelectionSkips++;
     } else {
@@ -788,6 +792,7 @@ export class TileStreamManager {
   updateViewport(viewport: TileViewportGroundBounds): void {
     if (this.isDisposed || !this.metadata) return;
     this.currentViewport = viewport;
+    this.needsViewportRefresh = false;
     this.viewportSelectionPasses++;
 
     if (this.previousFocus) {
@@ -1372,6 +1377,9 @@ export class TileStreamManager {
           record.lastError =
             err instanceof Error ? err.message : String(err);
           record.abortController = null;
+          // updateViewport normally retries fetch errors on the next frame.
+          // Invalidate the opt-in identical-camera gate to preserve that behavior.
+          this.needsViewportRefresh = true;
         }
       } finally {
         this.activeFetchCount = Math.max(0, this.activeFetchCount - 1);

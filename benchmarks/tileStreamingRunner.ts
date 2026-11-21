@@ -1241,6 +1241,14 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
     `- **Dataset & Settings**: \`${report.dataset.id}\` (${report.dataset.gridCols}×${report.dataset.gridRows} = ${report.dataset.totalGridTiles} × ${report.dataset.tileSizeMeters} m tiles), theme \`${report.renderSettings.themeId}\`, \`E2+/R+\`, \`preload=${report.renderSettings.preloadMarginTiles} tiles (${preloadMeters} m)\`, \`retain=${report.renderSettings.retainMarginTiles} tiles (${retainMeters} m)\`, \`maxFetches=${report.renderSettings.maxConcurrentFetches}\`, \`maxCommits=${report.renderSettings.maxCommitsPerFrame}\``
   );
   lines.push('');
+  if (report.renderSettings.experimentSkipUnchangedViewport ||
+      report.renderSettings.experimentSkipUnchangedZoom) {
+    lines.push('- **TKT-031 experiments enabled**: viewport=' +
+      report.renderSettings.experimentSkipUnchangedViewport +
+      ', zoom=' + report.renderSettings.experimentSkipUnchangedZoom +
+      '. Compare against separately recorded unchanged baseline.');
+    lines.push('');
+  }
 
   lines.push('## 1. Initialization & Static Scene Comparison');
   lines.push('');
@@ -1304,6 +1312,24 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
         lines.push(
           `- **Streaming Stage Timings**: fetch=${fmtTimingStats(d.fetchMsStats)} | decode=${fmtTimingStats(d.decodeMsStats)} | reconstruct=${fmtTimingStats(d.reconstructMsStats)} | commit=${fmtTimingStats(d.commitMsStats)}`
         );
+      }
+      if (p.meshCounts?.drawWorkEstimate) {
+        const proxy = p.meshCounts.drawWorkEstimate;
+        lines.push(
+          '- **TKT-031 material-group attribution (estimated, main-camera only)**: ' +
+          'candidate main-pass groups `' + proxy.total.mainPassSubmissions +
+          '`, drawable meshes `' + proxy.total.drawableMeshes +
+          '`, shadow-caster candidate groups `' +
+          proxy.total.mainFrustumShadowCasterSubmissions +
+          '` (NOT actual shadow calls). Observed WebGL calls med `' +
+          p.webglDrawCallsPerFrame.median.toFixed(0) + '`.'
+        );
+      }
+      if (d) {
+        lines.push('- **TKT-031 work gates**: viewport scans `' +
+          d.viewportSelectionPasses + '`, skipped scans `' +
+          d.viewportSelectionSkips + '`, skipped zoom updates `' +
+          d.zoomPropagationSkips + '` (opt-in experiment flags).');
       }
       if (sc.settledSteadyStateMetrics) {
         const st = sc.settledSteadyStateMetrics;

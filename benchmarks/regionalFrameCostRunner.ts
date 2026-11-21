@@ -5,6 +5,10 @@ import { computeSampleStatistics } from './stats';
 import { resolveChromiumLaunchArgs } from './browserRunner';
 import { isSoftwareWebGLRenderer } from './environment';
 import { verifyRegionalMosaic } from '../scripts/verify-regional-mosaic';
+import {
+  CANONICAL_HENGELO_SNAPSHOT_ID,
+  CANONICAL_HENGELO_SOURCE_SHA256,
+} from '../src/world/tiling/TilePackContract';
 import type { BenchmarkFrameTelemetry } from '../src/types/BenchmarkTelemetry';
 import type { SceneMeshCountsSnapshot } from './tileStreamingRunner';
 import type { TileStreamDiagnosticsSnapshot } from '../src/world/tiling/TileStreamManager';
@@ -248,11 +252,19 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
   if (!manifest?.metadata || !Array.isArray(manifest?.tiles) ||
       manifest.tiles.length !== verified.tiles ||
       manifest.metadata.gridCols !== 16 || manifest.metadata.gridRows !== 16 ||
-      manifest.metadata.tileSizeMeters !== 1024) {
+      manifest.metadata.tileSizeMeters !== 1024 ||
+      manifest.metadata.snapshotId !== CANONICAL_HENGELO_SNAPSHOT_ID ||
+      manifest.metadata.sourceSha256 !== CANONICAL_HENGELO_SOURCE_SHA256) {
     throw new Error('Regional API manifest does not match the complete validated 16x16 1024m pilot.');
   }
   const playwrightName = 'playwright';
-  const playwright: any = await import(playwrightName);
+  let playwright: any;
+  try {
+    playwright = await import(playwrightName);
+  } catch {
+    throw new Error('Playwright is required for the regional benchmark. ' +
+      'Install the project benchmark dependencies and Chromium first.');
+  }
   const browser = await playwright.chromium.launch({
     headless: true,
     args: resolveChromiumLaunchArgs(),

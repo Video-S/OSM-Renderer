@@ -110,6 +110,41 @@ Owner ran `npm run osm:audit-regional-seams` successfully against the canonical 
 3. Tighten the audit's **specificity and presentation** using controls and regression fixtures before treating anything as a high-severity defect. Keep full geometry and sleeper-phase parity open.
 4. Owner human visual checks remain separate. TKT-029 continuity **not approved**.
 
+## Full JSON/Markdown triage and probe calibration (2026-11-22)
+
+Owner provided the complete generated `tkt032-seam-audit.json` (schema v1, 4,404 crossing events, 24/24 shard interfaces, 9/9 four-way corners, four same-shard controls) and Markdown. All 16 original packs still passed integrity. Exact **per-event** classifications:
+
+| Reason | Cross-shard (4,240 events) | Same-shard control (164 events) | Total |
+|---|---:|---:|---:|
+| No review | 1,476 | 44 | 1,520 |
+| Polygon/line inset source-surface asymmetry | 2,645 | 118 | **2,763** |
+| One-sided emitted feature ID | 55 | 0 | **55** |
+| Source feature ID absent from both emitted sides | 64 | 2 | **66** |
+| Layer/bridge/tunnel metadata disagreement | 0 | 0 | **0** |
+
+**Critical false-positive explanation**: 2,618/2,763 (94.8%) surface-asymmetry warnings are landuse polygon crossings; 125 are water, only 20 road. The old probe tests 25 cm on both sides of an **OSM polygon boundary** intersecting the shard line, so one side being within the polygon and the other outside can be perfectly correct. Same-shard control landuse warnings (116/123 source crossings) reinforce this calibration error. A source-attributed polygon on just one side must **not** be construed as a terrain hole without checking which side the original polygon covers. Roughly 1,150/1,206 cross-shard road crossings had no review, but this is not a network connectivity proof.
+
+**Road/railway and semantic priorities**:
+
+- **55 one-sided emitted-ID crossing events** (43 distinct original `way/` IDs): **35 road events from 34 distinct OSM ways**, 20 landuse events; **none among the four ordinary tile-seam controls**. The real sample is larger and not directly comparable in frequency to four controls, but the road cases warrant focused investigation. Initial examples: `way/44844082` (UTM 348591.719, 5794816, `horizontal-r0-1-c0`, only-B); `way/51932698` (357376, 5798521.137, `vertical-r0-c2-3`, only-B); `way/6655700` (353280, 5786626.158, `vertical-r2-c1-2`, only-B; also crosses an adjacent horizontal shard border). **An emitted ID somewhere in a tile is not proof of coverage at the seam**; missing IDs likewise may reflect graph chaining/source attribution rather than missing roads.
+- All **24 detected cross-shard railway source crossings** have IDs emitted on both sides, and **zero observed layer/bridge/tunnel metadata disagreements** across categories. Railway sleepers were counted near crossings but their 3D phase, geometry, turnout matching and hidden underground behavior were **not** compared.
+- **66 absent-both crossing events**: 52 water, 13 landuse, **one road** (`way/6661112`, UTM 357376, 5791095.095, `vertical-r1-c2-3`). **40** missing events reference OSM relations; **36/40** have a different emitted source feature of the *same category at the same crossing coordinate* (within ~0.2 m), strongly suggesting alternate way/relation ownership for many cases. This is not yet proof of equivalent render geometry. Several absent `way/` water crossings are tagged `layer=-1` and `tunnel=culvert`, so *hidden subterranean policy* is a plausible intentional omission needing deliberate validation; never force-render negative-layer geometry just to silence the audit.
+- Raw `source-crossings` count includes multiple crossings per feature, and an OSM relation can share geometry with member ways. **Do not treat warning counts as unique broken features.**
+
+### Audit calibration implemented (schema v2; rerun required)
+
+`RegionalSeamAudit.ts` now records each source polygon's expected **A/B interior membership** at precisely the same ±0.25 m positions as the decoded triangle probes. `audit-regional-seams.ts` evaluates polygon-emission mismatches **against source interior**, instead of flagging any legitimate one-sided polygon boundary as `surface-coverage-asymmetry`. The result is a more specific `source-polygon-coverage-mismatch` candidate, still **not** automatic proof of a bug because landuse/ground-cover ownership and portal policies may intentionally override raw OSM polygon occupancy. Ordinary road line probes retain their symmetric-coverage diagnostics. Reason labels are now separated in console output; JSON schema incremented to v2, with explicit expected polygon membership and mismatch counts. Synthetic source-polygon tests include diagonal ring crossings in both orientations, negative expected mismatches, and source polygon holes.
+
+After pulling latest PR #8 branch, rerun the unchanged canonical data through:
+
+```powershell
+git pull --ff-only
+npx tsx --test src/world/TilingRegionalMosaic.test.ts src/world/TilingRegionalSeams.test.ts
+npx tsx scripts/audit-regional-seams.ts --out=benchmarks/results/tkt032-seam-audit-v2.json --markdown-out=benchmarks/results/tkt032-seam-audit-v2.md
+```
+
+Then investigate selected **one-sided road** cases with the canonical source and decoded adjacent meshes/graph identities. Do not change baker logic or sign off TKT-029 before classifying real geometry and sleeper-phase continuity.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

@@ -61,7 +61,8 @@ export function computeProjectedBoundsFraming(
   viewportHeight: number,
   fixedTiltAngle: number = DEFAULT_TILT_ANGLE,
   azimuthAngle: number = DEFAULT_AZIMUTH,
-  paddingFactor: number = 1.25
+  paddingFactor: number = 1.25,
+  minZoom: number = 0.15
 ): { target: [number, number, number]; position: [number, number, number]; zoom: number } {
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
@@ -105,7 +106,9 @@ export function computeProjectedBoundsFraming(
 
   const zoomU = viewportWidth / spanU;
   const zoomV = viewportHeight / spanV;
-  const zoom = Math.max(0.15, Math.min(zoomU, zoomV, 8.0));
+  // Regional packs may span many kilometres; the actual MapControls minZoom
+  // still gates normal maps at 0.15 and permits wide overview only for larger packs.
+  const zoom = Math.max(minZoom, Math.min(zoomU, zoomV, 8.0));
 
   const dist = Math.min(Math.max(spanU, spanV) * 1.5, 25000);
   const camX = cx + dist * Math.sin(fixedTiltAngle) * sinAz;
@@ -236,7 +239,8 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       size.height || 800,
       fixedTiltAngle,
       DEFAULT_AZIMUTH,
-      1.05
+      1.05,
+      minZoom
     );
   }, [
     bounds?.minX,
@@ -246,6 +250,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     size.width,
     size.height,
     fixedTiltAngle,
+    minZoom,
   ]);
 
   // Prevent right-click browser context menu

@@ -14,6 +14,7 @@ import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 import { createTilePackHttpHandler } from './src/server/tiles/tilePackHttpHandler';
 import { resolveTilePackPathForTileSize } from './src/server/tiles/TilePackSqliteStore';
+import { createRegionalMosaicHttpHandler } from './src/server/tiles/RegionalMosaicHttpHandler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +79,11 @@ const osmDataController = createOsmDataHandler({
 const tilePackController = createTilePackHttpHandler();
 const tilePack1024Controller = createTilePackHttpHandler({
   packPath: resolveTilePackPathForTileSize(1024),
+});
+// Lazily opened, isolated 16km pilot; missing mosaic index returns a clear 503.
+const regionalMosaicController = createRegionalMosaicHttpHandler({
+  indexPath: process.env.OVERIJSSEL_REGIONAL_MOSAIC_PATH?.trim() ||
+    path.resolve('data/osm/twente-pilot-1024m/mosaic.json'),
 });
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
@@ -147,6 +153,10 @@ app.get(
 
 // 3b. Reversible 1,024 m Tile-Size Experiment Baked Pack API (lazy-opened on request)
 app.get('/api/tiles-1024m/manifest', tilePack1024Controller.manifestHandler);
+// TKT-029 bounded regional pilot: same OSMTILE1 codec, same streaming client.
+app.get('/api/tiles-region/manifest', regionalMosaicController.manifestHandler);
+app.get('/api/tiles-region/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
+app.get('/api/tiles-region/:snapshotId/:schemaVersion/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
 app.get('/api/tiles-1024m/:lod/:tx/:ty', tilePack1024Controller.tilePayloadHandler);
 app.get(
   '/api/tiles-1024m/:snapshotId/:schemaVersion/:lod/:tx/:ty',
@@ -199,6 +209,7 @@ async function startServer() {
     osmDataController.close();
     tilePackController.close();
     tilePack1024Controller.close();
+    regionalMosaicController.close();
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);

@@ -124,6 +124,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onViewportFrameUpdate,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
+  const sunLightRef = useRef<THREE.DirectionalLight>(null);
+  const sunDirectionRef = useRef(new THREE.Vector3());
   const lastHoverTimeRef = useRef<number>(0);
   const lastHoverRaycastMsRef = useRef<number>(0);
   const lastRaycastIntersectMsRef = useRef<number>(0);
@@ -715,6 +717,25 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
   // Measure actual WebGL frame rate, camera zoom LOD updates, and live HUD telemetry
   useFrame((state) => {
+    // The 3km shadow frustum must follow the camera over regional maps.
+    // Moving the light, not enlarging the frustum, preserves shadow precision.
+    if (
+      (builtGeometry.groundMesh.userData.__regionalStreamingWidthMeters as number | undefined) &&
+      (builtGeometry.groundMesh.userData.__regionalStreamingWidthMeters as number) > 4096 &&
+      sunLightRef.current
+    ) {
+      const dir = sunDirectionRef.current;
+      state.camera.getWorldDirection(dir);
+      if (Math.abs(dir.y) > 1e-5) {
+        const t = -state.camera.position.y / dir.y;
+        const x = state.camera.position.x + dir.x * t;
+        const z = state.camera.position.z + dir.z * t;
+        const light = sunLightRef.current;
+        light.position.set(x + 300, 500, z + 200);
+        light.target.position.set(x, 0, z);
+        light.target.updateMatrixWorld();
+      }
+    }
     const now = performance.now();
     const frameDt = now - lastFrameTimestampRef.current;
     lastFrameTimestampRef.current = now;
@@ -945,6 +966,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         ]}
       />
       <directionalLight
+        ref={sunLightRef}
         position={[300, 500, 200]}
         intensity={theme.lightIntensity * 1.1}
         castShadow

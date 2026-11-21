@@ -13,6 +13,7 @@ import { OverijsselOsmStore } from './src/server/osm/OverijsselOsmStore';
 import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 import { createTilePackHttpHandler } from './src/server/tiles/tilePackHttpHandler';
+import { resolveTilePackPathForTileSize } from './src/server/tiles/TilePackSqliteStore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,9 @@ const osmDataController = createOsmDataHandler({
   ensureOverijsselReady: isOverijsselAutoBootstrapDisabled() ? undefined : ensureOverijsselReady,
 });
 const tilePackController = createTilePackHttpHandler();
+const tilePack1024Controller = createTilePackHttpHandler({
+  packPath: resolveTilePackPathForTileSize(1024),
+});
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
 app.get('/api/geocode', async (req, res) => {
@@ -141,6 +145,14 @@ app.get(
   tilePackController.tilePayloadHandler
 );
 
+// 3b. Reversible 1,024 m Tile-Size Experiment Baked Pack API (lazy-opened on request)
+app.get('/api/tiles-1024m/manifest', tilePack1024Controller.manifestHandler);
+app.get('/api/tiles-1024m/:lod/:tx/:ty', tilePack1024Controller.tilePayloadHandler);
+app.get(
+  '/api/tiles-1024m/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+  tilePack1024Controller.tilePayloadHandler
+);
+
 // Vite middleware in development or static hosting in production
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -186,6 +198,7 @@ async function startServer() {
   const shutdown = () => {
     osmDataController.close();
     tilePackController.close();
+    tilePack1024Controller.close();
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);

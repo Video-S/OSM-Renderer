@@ -41,6 +41,7 @@ import { deflateTilePayload, sha256Hex } from './TileCompression';
 import {
   TilePackSqliteWriter,
   resolveDefaultTilePackPath,
+  resolveTilePackPathForTileSize,
   type TileWriteBatchItem,
 } from './TilePackSqliteStore';
 
@@ -515,9 +516,11 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
   const tEndToEnd0 = performance.now();
   const indexPath = options.indexPath ?? resolveOverijsselIndexPath();
   const expectedSha256 = options.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256;
-  const outPath = options.outPath ?? resolveDefaultTilePackPath();
   const tileSizeMeters = options.tileSizeMeters ?? DEFAULT_TILE_SIZE_METERS;
   const collarMeters = options.collarMeters ?? DEFAULT_COLLAR_METERS;
+  const outPath = options.outPath ?? resolveTilePackPathForTileSize(tileSizeMeters);
+  const batchDimension =
+    options.batchDimension ?? Math.min(4, Math.max(1, Math.round(2048 / tileSizeMeters)));
 
   const grid = createHengeloStudyGrid(tileSizeMeters, collarMeters);
   const store = new OverijsselOsmStore(indexPath, { expectedSha256 });
@@ -541,7 +544,7 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
       sourceSha256: queryRes.snapshotMetadata.sourceSha256,
       lod: 0,
       includeBvh: options.includeBvh ?? true,
-      batchDimension: options.batchDimension ?? 4,
+      batchDimension,
       maxSceneTreesPerTile: options.maxSceneTreesPerTile ?? 50000,
       sqliteQueryMs: sqliteQueryTotalMs,
       endToEndStartMs: tEndToEnd0,

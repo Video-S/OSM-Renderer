@@ -54,7 +54,7 @@ import {
 } from './OfflineHengeloTileBaker';
 import {
   TilePackSqliteStore,
-  resolveDefaultTilePackPath,
+  resolveTilePackPathForTileSize,
 } from './TilePackSqliteStore';
 
 export interface ThemeParityResult {
@@ -545,6 +545,39 @@ export function verifyBakedTilePackAgainstIngested(params: {
   const dbSizeBytes = store.getFileSizeBytes();
   let peakMemory = captureProcessMemorySnapshot();
 
+  if (
+    metadata.tileSizeMeters !== ingested.grid.tileSizeMeters ||
+    metadata.gridCols !== ingested.grid.cols ||
+    metadata.gridRows !== ingested.grid.rows
+  ) {
+    failures.push(
+      `Tile pack grid mismatch: pack has ${metadata.gridCols}x${metadata.gridRows} @ ${metadata.tileSizeMeters}m, expected ${ingested.grid.cols}x${ingested.grid.rows} @ ${ingested.grid.tileSizeMeters}m`
+    );
+  }
+
+  // Verify alignment with canonical 512m Hengelo study bounds/origin when verifying alternate tile sizes
+  if (ingested.grid.name.startsWith('hengelo-') && ingested.grid.tileSizeMeters !== DEFAULT_TILE_SIZE_METERS) {
+    const canonical512 = createHengeloStudyGrid(DEFAULT_TILE_SIZE_METERS, ingested.grid.collarMeters);
+    const utmBoundsMatch =
+      ingested.grid.studyUtmBounds.minEasting === canonical512.studyUtmBounds.minEasting &&
+      ingested.grid.studyUtmBounds.maxEasting === canonical512.studyUtmBounds.maxEasting &&
+      ingested.grid.studyUtmBounds.minNorthing === canonical512.studyUtmBounds.minNorthing &&
+      ingested.grid.studyUtmBounds.maxNorthing === canonical512.studyUtmBounds.maxNorthing;
+    if (!utmBoundsMatch) {
+      failures.push(`Study UTM bounds for ${ingested.grid.tileSizeMeters}m grid deviate from canonical 512m bounds`);
+    }
+    const localEdgesAligned = ingested.grid.tiles.every(
+      (t) =>
+        Math.abs(t.localBounds.minX % DEFAULT_TILE_SIZE_METERS) < 1e-6 &&
+        Math.abs(t.localBounds.maxX % DEFAULT_TILE_SIZE_METERS) < 1e-6 &&
+        Math.abs(t.localBounds.minZ % DEFAULT_TILE_SIZE_METERS) < 1e-6 &&
+        Math.abs(t.localBounds.maxZ % DEFAULT_TILE_SIZE_METERS) < 1e-6
+    );
+    if (!localEdgesAligned) {
+      failures.push(`Tile edges for ${ingested.grid.tileSizeMeters}m grid do not align with 512m boundaries`);
+    }
+  }
+
   const reference = buildSingleSceneReference(ingested, MAP_THEMES.tactical);
   peakMemory = mergeProcessMemoryPeak(peakMemory, reference.memoryAfterBuild);
 
@@ -851,11 +884,16 @@ export function verifyBakedTilePackAgainstIngested(params: {
       );
       try {
         const tDet0 = performance.now();
+        const detBatchDimension = Math.min(
+          4,
+          Math.max(1, Math.round(2048 / ingested.grid.tileSizeMeters))
+        );
         bakeStudyRegionTilesToSqlite({
           ingested,
           outPath: tmpPack,
           snapshotId: metadata.snapshotId,
           sourceSha256: metadata.sourceSha256,
+          batchDimension: detBatchDimension,
           includeBvh,
         });
         determinismBakeMs = Number((performance.now() - tDet0).toFixed(2));
@@ -964,10 +1002,38 @@ export function verifyHengeloTilePackFromStore(options: {
   maxCaseSamples?: number;
 } = {}): TilePackVerificationReport {
   const indexPath = options.indexPath ?? resolveOverijsselIndexPath();
-  const packPath = options.packPath ?? resolveDefaultTilePackPath();
   const expectedSha256 = options.expectedSha256 ?? OVERIJSSEL_PBF_EXPECTED_SHA256;
-  const tileSizeMeters = options.tileSizeMeters ?? DEFAULT_TILE_SIZE_METERS;
-  const collarMeters = options.collarMeters ?? DEFAULT_COLLAR_METERS;
+  const requestedTileSize = options.tileSizeMeters;
+  const packPath =
+    options.packPath ??
+    resolveTilePackPathForTileSize(requestedTileSize ?? DEFAULT_TILE_SIZE_METERS);
+
+  // Peek pack metadata so `--pack=...-1024m.sqlite` works automatically without requiring `--tile-size=1024`,
+  // while still rejecting explicit `--tile-size` conflicts.
+  let packMeta: TilePackMetadata;
+  const peekStore = new TilePackSqliteStore(packPath, {
+    expectedSourceSha256: expectedSha256,
+    expectedBakeSchemaVersion: BAKE_SCHEMA_VERSION,
+    expectedProjectionId: DEFAULT_PROJECTION_ID,
+    verifyTileCount: true,
+  });
+  try {
+    packMeta = peekStore.getMetadata();
+  } finally {
+    peekStore.close();
+  }
+
+  if (
+    requestedTileSize !== undefined &&
+    packMeta.tileSizeMeters !== requestedTileSize
+  ) {
+    throw new Error(
+      `Requested tileSizeMeters=${requestedTileSize} does not match pack "${packPath}" tileSizeMeters=${packMeta.tileSizeMeters}.`
+    );
+  }
+
+  const tileSizeMeters = requestedTileSize ?? packMeta.tileSizeMeters ?? DEFAULT_TILE_SIZE_METERS;
+  const collarMeters = options.collarMeters ?? packMeta.collarMeters ?? DEFAULT_COLLAR_METERS;
 
   const grid = createHengeloStudyGrid(tileSizeMeters, collarMeters);
   const store = new OverijsselOsmStore(indexPath, { expectedSha256 });

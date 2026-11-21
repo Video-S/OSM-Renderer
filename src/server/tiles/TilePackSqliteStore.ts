@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { resolveOverijsselDataDir } from '../osm/overijsselConfig';
 import { decodeTileBinary } from '../../world/tiling/TileBinaryCodec';
+import { DEFAULT_TILE_SIZE_METERS } from '../../world/tiling/TileGrid';
 import {
   BAKE_SCHEMA_VERSION,
   CANONICAL_HENGELO_SNAPSHOT_ID,
@@ -41,6 +42,27 @@ export function resolveDefaultTilePackPath(repoRoot: string = process.cwd()): st
     return path.resolve(repoRoot, custom);
   }
   return path.join(resolveOverijsselDataDir(repoRoot), DEFAULT_TILE_PACK_FILENAME);
+}
+
+/**
+ * Resolves the offline SQLite tile pack path for a given LOD0 tile dimension without
+ * overwriting the accepted 512 m default (`overijssel-tiles-261114-8ae28196.sqlite`).
+ */
+export function resolveTilePackPathForTileSize(
+  tileSizeMeters: number = DEFAULT_TILE_SIZE_METERS,
+  repoRoot: string = process.cwd()
+): string {
+  if (tileSizeMeters === DEFAULT_TILE_SIZE_METERS) {
+    return resolveDefaultTilePackPath(repoRoot);
+  }
+  const envKey = `OVERIJSSEL_TILE_PACK_${tileSizeMeters}M_PATH`;
+  const customForSize = process.env[envKey]?.trim();
+  if (customForSize) {
+    return path.resolve(repoRoot, customForSize);
+  }
+  const ext = path.extname(DEFAULT_TILE_PACK_FILENAME) || '.sqlite';
+  const base = path.basename(DEFAULT_TILE_PACK_FILENAME, ext);
+  return path.join(resolveOverijsselDataDir(repoRoot), `${base}-${tileSizeMeters}m${ext}`);
 }
 
 const SQLITE_SCHEMA_DDL = `

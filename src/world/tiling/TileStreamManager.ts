@@ -25,7 +25,11 @@ import {
   type TileManifestEntry,
   type TilePackMetadata,
 } from './TilePackContract';
-import { createHengeloStudyGrid, formatTileId } from './TileGrid';
+import {
+  createHengeloStudyGrid,
+  formatTileId,
+  type StudyGridSpec,
+} from './TileGrid';
 
 export type TileStreamLifecycleState =
   | 'unloaded'
@@ -642,8 +646,65 @@ export class TileStreamManager {
       });
     }
 
+    this.rebuildBoundaryOverlayFromManifest(payload.metadata);
     this.emitDiagnostics();
     return payload.metadata;
+  }
+
+  private rebuildBoundaryOverlayFromManifest(metadata: TilePackMetadata): void {
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+    for (const record of this.tilesByKey.values()) {
+      if (record.worldBounds.minX < minX) minX = record.worldBounds.minX;
+      if (record.worldBounds.maxX > maxX) maxX = record.worldBounds.maxX;
+      if (record.worldBounds.minZ < minZ) minZ = record.worldBounds.minZ;
+      if (record.worldBounds.maxZ > maxZ) maxZ = record.worldBounds.maxZ;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
+      const halfSpanX = (metadata.gridCols * metadata.tileSizeMeters) / 2;
+      const halfSpanZ = (metadata.gridRows * metadata.tileSizeMeters) / 2;
+      minX = -halfSpanX;
+      maxX = halfSpanX;
+      minZ = -halfSpanZ;
+      maxZ = halfSpanZ;
+    }
+
+    const prevGroup = this.boundaryOverlayResult.group;
+    const wasVisible = prevGroup.visible;
+    this.boundaryOverlayResult.dispose();
+    prevGroup.clear();
+
+    const syntheticGridSpec = {
+      cols: metadata.gridCols,
+      rows: metadata.gridRows,
+      tileSizeMeters: metadata.tileSizeMeters,
+      studyLocalBounds: {
+        minX,
+        maxX,
+        minZ,
+        maxZ,
+        includeMaxEdgeX: true,
+        includeMaxEdgeZ: true,
+      },
+      tiles: new Array(this.tilesByKey.size),
+    } as unknown as StudyGridSpec;
+
+    const nextOverlay = createM1aTileBoundaryOverlay(syntheticGridSpec);
+    while (nextOverlay.group.children.length > 0) {
+      const child = nextOverlay.group.children[0];
+      nextOverlay.group.remove(child);
+      prevGroup.add(child);
+    }
+    prevGroup.visible = wasVisible;
+
+    this.boundaryOverlayResult = {
+      group: prevGroup,
+      tileCount: nextOverlay.tileCount,
+      internalSeamCount: nextOverlay.internalSeamCount,
+      dispose: nextOverlay.dispose,
+    };
   }
 
   /**

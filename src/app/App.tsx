@@ -285,6 +285,9 @@ export default function App() {
   const [showM1aTileBoundaries, setShowM1aTileBoundaries] = useState<boolean>(true);
   const [m1aHarnessMetrics, setM1aHarnessMetrics] = useState<{
     tileCount: number;
+    gridCols: number;
+    gridRows: number;
+    tileSizeMeters: number;
     internalSeamCount: number;
     featureCount: number;
     tiledBuildTimeMs: number;
@@ -382,14 +385,28 @@ export default function App() {
       osmDataUrl?: string;
       gridCols?: number;
       gridRows?: number;
+      tileSizeMeters?: number;
       centerLonLat?: [number, number];
       themeId?: string;
       target?: [number, number, number];
     }
   ) => {
+    const requestedTileSizeMeters = extraOptions?.tileSizeMeters ?? 512;
+    const grid =
+      typeof extraOptions?.gridCols === 'number' || typeof extraOptions?.gridRows === 'number'
+        ? createAlignedStudyGrid({
+            name: 'study-m1a-custom',
+            centerLonLat: extraOptions?.centerLonLat ?? [6.7935, 52.2625],
+            cols: extraOptions?.gridCols ?? 8,
+            rows: extraOptions?.gridRows ?? 8,
+            tileSizeMeters: requestedTileSizeMeters,
+            collarMeters: 64,
+          })
+        : createHengeloStudyGrid(requestedTileSizeMeters, 64);
+
     const requestId = mapLoadTrackerRef.current.startLoad({
       locationId: 'hengelo_m1a',
-      locationName: 'Hengelo M1a Regional Tiling Study (8×8 · 64 Tiles · 4,096 m)',
+      locationName: `Hengelo M1a Regional Tiling Study (${grid.cols}×${grid.rows} · ${grid.tiles.length} Tiles · ${grid.tileSizeMeters} m)`,
       radiusMeters: 2048,
       sourceType: 'fixture',
       isInitialStartupLoad,
@@ -433,8 +450,10 @@ export default function App() {
       const rawGeoJson = await res.json();
       const fetchElapsedMs = performance.now() - tFetch0;
 
-      // Let the UI render the next status message before synchronous 64-tile synthesis
-      setStatusMessage('Synthesizing canonical M1a single-scene reference & 64-tile (8×8 · 512 m) geometry...');
+      // Let the UI render the next status message before synchronous tiled synthesis
+      setStatusMessage(
+        `Synthesizing canonical M1a single-scene reference & ${grid.tiles.length}-tile (${grid.cols}×${grid.rows} · ${grid.tileSizeMeters} m) geometry...`
+      );
       await new Promise<void>((r) => setTimeout(r, 25));
 
       disposeM1aHarnessScenes();
@@ -442,18 +461,6 @@ export default function App() {
         activeSceneRef.current.dispose();
         activeSceneRef.current = null;
       }
-
-      const grid =
-        typeof extraOptions?.gridCols === 'number' || typeof extraOptions?.gridRows === 'number'
-          ? createAlignedStudyGrid({
-              name: 'study-m1a-custom',
-              centerLonLat: extraOptions?.centerLonLat ?? [6.7935, 52.2625],
-              cols: extraOptions?.gridCols ?? 8,
-              rows: extraOptions?.gridRows ?? 8,
-              tileSizeMeters: 512,
-              collarMeters: 64,
-            })
-          : createHengeloStudyGrid(512, 64);
 
       const tIngest0 = performance.now();
       const ingested = ingestCanonicalStudyGeoJson(rawGeoJson, grid);
@@ -495,6 +502,9 @@ export default function App() {
 
       const metricsPayload = {
         tileCount: tiledBuild.tiles.length,
+        gridCols: grid.cols,
+        gridRows: grid.rows,
+        tileSizeMeters: grid.tileSizeMeters,
         internalSeamCount: boundaryOverlay.internalSeamCount,
         featureCount: Array.isArray(rawGeoJson?.features) ? rawGeoJson.features.length : 0,
         tiledBuildTimeMs,
@@ -606,9 +616,13 @@ export default function App() {
         ? extraOptions.themeId
         : selectedThemeIdRef.current;
 
+    const targetApiBaseUrl = extraOptions?.apiBaseUrl ?? '/api/tiles';
+    const isExperimental1024 = targetApiBaseUrl.includes('1024m');
     const requestId = mapLoadTrackerRef.current.startLoad({
       locationId: 'hengelo_m2a_tiles',
-      locationName: 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
+      locationName: isExperimental1024
+        ? 'Hengelo M2-A Baked Tile Streaming (4×4 · 1,024 m Experiment · OSMTILE1)'
+        : 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
       radiusMeters: 2048,
       sourceType: 'fixture',
       isInitialStartupLoad,
@@ -635,7 +649,9 @@ export default function App() {
       activeSceneRef.current = null;
     }
 
-    setStatusMessage('Initializing M2-A TileStreamManager from baked SQLite tile pack (/api/tiles/manifest)...');
+    setStatusMessage(
+      `Initializing M2-A TileStreamManager from baked SQLite tile pack (${targetApiBaseUrl}/manifest)...`
+    );
 
     try {
       if (extraOptions?.themeId && MAP_THEMES[extraOptions.themeId]) {
@@ -1275,6 +1291,12 @@ export default function App() {
       fixtureParam === 'm1a';
     const m1aModeParam =
       params.get('m1aMode') === 'reference' ? 'reference' : 'tiled';
+    const tileSizeParamRaw = params.get('tileSize') ?? params.get('tileSizeMeters');
+    const parsedTileSizeParam = tileSizeParamRaw
+      ? Number.parseInt(tileSizeParamRaw, 10)
+      : undefined;
+    const is1024ExperimentUrl =
+      parsedTileSizeParam === 1024 || params.get('pack') === '1024m';
 
     if (isBenchmarkMode) {
       setIsDockCollapsed(true);
@@ -1289,9 +1311,20 @@ export default function App() {
       setMapData(emptyData);
       setLoading(false);
     } else if (isM2aStreamingParam) {
-      void loadHengeloM2aTileStreaming(zoomParam, azParam, true);
+      void loadHengeloM2aTileStreaming(
+        zoomParam,
+        azParam,
+        true,
+        is1024ExperimentUrl ? { apiBaseUrl: '/api/tiles-1024m' } : undefined
+      );
     } else if (isM1aHarnessParam) {
-      void loadHengeloM1aVisualHarness(m1aModeParam, zoomParam, azParam, true);
+      void loadHengeloM1aVisualHarness(
+        m1aModeParam,
+        zoomParam,
+        azParam,
+        true,
+        is1024ExperimentUrl ? { tileSizeMeters: 1024 } : undefined
+      );
     } else if (fixtureParam === 'switchyard') {
       loadSwitchyardFixture(zoneParam, zoomParam, azParam, true);
     } else if (fixtureParam === 'prins-fork') {
@@ -2180,6 +2213,7 @@ export default function App() {
         initialMode?: M1aVisualComparisonMode;
         gridCols?: number;
         gridRows?: number;
+        tileSizeMeters?: number;
         centerLonLat?: [number, number];
         themeId?: string;
         target?: [number, number, number];
@@ -2197,6 +2231,7 @@ export default function App() {
             osmDataUrl: params.osmDataUrl,
             gridCols: params.gridCols,
             gridRows: params.gridRows,
+            tileSizeMeters: params.tileSizeMeters,
             centerLonLat: params.centerLonLat,
             themeId: params.themeId,
             target: params.target,
@@ -2897,7 +2932,7 @@ export default function App() {
                 M1a Visual Harness
               </span>
               <span className="text-slate-300 font-semibold">
-                Hengelo 8×8 Grid ({m1aHarnessMetrics.tileCount} Tiles · 512 m · EPSG:25832)
+                Hengelo {m1aHarnessMetrics.gridCols}×{m1aHarnessMetrics.gridRows} Grid ({m1aHarnessMetrics.tileCount} Tiles · {m1aHarnessMetrics.tileSizeMeters} m · EPSG:25832)
               </span>
             </div>
 
@@ -2916,7 +2951,7 @@ export default function App() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                M1a Tiled Geometry (64 Tiles)
+                M1a Tiled Geometry ({m1aHarnessMetrics.tileCount} Tiles)
               </button>
               <button
                 type="button"
@@ -2933,7 +2968,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center: 512 m Tile Boundaries Toggle + Camera Seam Jump Presets */}
+          {/* Center: Tile Boundaries Toggle + Camera Seam Jump Presets */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -2946,7 +2981,7 @@ export default function App() {
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
-              512m Tile Boundaries ({m1aHarnessMetrics.internalSeamCount} Seams):{' '}
+              {m1aHarnessMetrics.tileSizeMeters}m Tile Boundaries ({m1aHarnessMetrics.internalSeamCount} Seams):{' '}
               <span className="font-mono">{showM1aTileBoundaries ? 'ON' : 'OFF'}</span>
             </button>
 
@@ -3095,7 +3130,8 @@ export default function App() {
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
-              512m Grid: <span className="font-mono">{showM2aTileBoundaries ? 'ON' : 'OFF'}</span>
+              {m2aStreamDiagnostics.tileSizeMeters}m Grid:{' '}
+              <span className="font-mono">{showM2aTileBoundaries ? 'ON' : 'OFF'}</span>
             </button>
           </div>
         </div>

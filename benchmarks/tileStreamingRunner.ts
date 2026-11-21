@@ -19,20 +19,31 @@ import {
   computeConsecutiveFrameIntervalsMs,
 } from '../src/types/BenchmarkTelemetry';
 import { MAP_THEMES } from '../src/styles/mapThemes';
-import { createAlignedStudyGrid } from '../src/world/tiling/TileGrid';
+import {
+  createAlignedStudyGrid,
+  createHengeloStudyGrid,
+  formatTileId,
+} from '../src/world/tiling/TileGrid';
 import { ingestCanonicalStudyGeoJson } from '../src/world/tiling/TiledStudyPipeline';
 import {
   bakeStudyRegionTilesToSqlite,
   disposeIngestedStudyRegionPlans,
 } from '../src/server/tiles/OfflineHengeloTileBaker';
-import { TilePackSqliteStore } from '../src/server/tiles/TilePackSqliteStore';
+import {
+  resolveTilePackPathForTileSize,
+  TilePackSqliteStore,
+} from '../src/server/tiles/TilePackSqliteStore';
 import { inflateTilePayload } from '../src/server/tiles/TileCompression';
-import { formatTileId } from '../src/world/tiling/TileGrid';
 import type { TileStreamDiagnosticsSnapshot, TileTimingSummaryStats } from '../src/world/tiling/TileStreamManager';
 
 export const M2B_BENCHMARK_SCHEMA_VERSION = '1.0.0' as const;
 
-export type TileBenchmarkDatasetKind = 'canonical-hengelo' | 'synthetic-smoke-4x4';
+export type TileBenchmarkDatasetKind =
+  | 'canonical-hengelo'
+  | 'synthetic-4096m'
+  | 'synthetic-smoke-4x4';
+
+export type SupportedExperimentTileSizeMeters = 512 | 1024;
 
 export type TileBenchmarkModeId =
   | 'm1a_single_scene'
@@ -62,6 +73,10 @@ export const ALL_TILE_BENCHMARK_SCENARIOS: readonly TileBenchmarkScenarioId[] = 
 
 export interface TileStreamingCliOptions {
   dataset: TileBenchmarkDatasetKind;
+  tileSizeMeters: SupportedExperimentTileSizeMeters;
+  packPath?: string;
+  compareTileSizes: boolean;
+  runs: number;
   modes: TileBenchmarkModeId[];
   scenarios: TileBenchmarkScenarioId[];
   warmupFrames: number;
@@ -204,6 +219,7 @@ export interface TileBenchmarkModeResult {
     tiledBuildMs: number | null;
     totalInitToFirstFrameMs: number;
     sharedMaterialCount: number | null;
+    initialStreamingDiagnostics?: TileStreamDiagnosticsSnapshot | null;
   };
   scenarios: TileBenchmarkScenarioResult[];
 }
@@ -237,6 +253,7 @@ export interface TileStreamingBenchmarkReport {
   benchmarkName: string;
   ticket: 'TKT-028';
   milestone: 'M2-B';
+  runIndex?: number;
   dataset: {
     id: TileBenchmarkDatasetKind;
     description: string;
@@ -245,6 +262,8 @@ export interface TileStreamingBenchmarkReport {
     totalGridTiles: number;
     tileSizeMeters: number;
     isCanonicalHengelo: boolean;
+    packPath?: string | null;
+    packDbSizeBytes?: number | null;
   };
   renderSettings: {
     viewportWidth: number;
@@ -255,12 +274,90 @@ export interface TileStreamingBenchmarkReport {
     railwaysMode: 'graph-R+';
     preloadMarginTiles: number;
     retainMarginTiles: number;
+    preloadMarginMeters?: number;
+    retainMarginMeters?: number;
     maxConcurrentFetches: number;
     maxCommitsPerFrame: number;
   };
   environment: BenchmarkEnvironmentMetadata;
   modes: TileBenchmarkModeResult[];
   comparisons: CrossModeScenarioComparison[];
+  notes: string[];
+}
+
+export interface TileSizeComparisonScenarioDelta {
+  scenarioId: TileBenchmarkScenarioId;
+  m2a512: {
+    loadedTiles: number | null;
+    visibleTiles: number | null;
+    totalMeshes: number | null;
+    frustumMeshes: number | null;
+    drawCallsMedian: number | null;
+    trianglesMedian: number | null;
+    frameIntervalMedianMs: number | null;
+    cpuRenderMedianMs: number | null;
+    cpuBufferMB: number | null;
+    bvhMemoryMB: number | null;
+    driverGeometries: number | null;
+    evictedTilesTotal: number | null;
+    decodeMedianMs: number | null;
+    reconstructMedianMs: number | null;
+    commitMedianMs: number | null;
+  };
+  m2a1024: {
+    loadedTiles: number | null;
+    visibleTiles: number | null;
+    totalMeshes: number | null;
+    frustumMeshes: number | null;
+    drawCallsMedian: number | null;
+    trianglesMedian: number | null;
+    frameIntervalMedianMs: number | null;
+    cpuRenderMedianMs: number | null;
+    cpuBufferMB: number | null;
+    bvhMemoryMB: number | null;
+    driverGeometries: number | null;
+    evictedTilesTotal: number | null;
+    decodeMedianMs: number | null;
+    reconstructMedianMs: number | null;
+    commitMedianMs: number | null;
+  };
+  m1aTiled512DrawCalls: number | null;
+  m1aTiled1024DrawCalls: number | null;
+  drawCallChange1024Vs512Pct: number | null;
+  meshChange1024Vs512Pct: number | null;
+  frameTimeChange1024Vs512Pct: number | null;
+  cpuRenderChange1024Vs512Pct: number | null;
+}
+
+export interface TileSizeExperimentComparisonReport {
+  schemaVersion: '1.0.0';
+  benchmarkName: string;
+  ticket: 'TKT-028';
+  experiment: '1024m-tile-size-evaluation';
+  datasetId: TileBenchmarkDatasetKind;
+  runsPerTileSize: number;
+  environment: BenchmarkEnvironmentMetadata;
+  tileSize512: {
+    gridCols: number;
+    gridRows: number;
+    totalGridTiles: number;
+    packPath: string | null;
+    packDbSizeBytes: number | null;
+    preloadMarginMeters: number;
+    retainMarginMeters: number;
+    reports: TileStreamingBenchmarkReport[];
+  };
+  tileSize1024: {
+    gridCols: number;
+    gridRows: number;
+    totalGridTiles: number;
+    packPath: string | null;
+    packDbSizeBytes: number | null;
+    preloadMarginMeters: number;
+    retainMarginMeters: number;
+    reports: TileStreamingBenchmarkReport[];
+  };
+  scenarioDeltas: TileSizeComparisonScenarioDelta[];
   notes: string[];
 }
 
@@ -315,6 +412,16 @@ function parseIntFlag(raw: string, flagName: string, min: number): number {
   return parsed;
 }
 
+function parseTileSizeFlag(raw: string): SupportedExperimentTileSizeMeters {
+  const parsed = parseIntFlag(raw, '--tile-size', 512);
+  if (parsed !== 512 && parsed !== 1024) {
+    throw new Error(
+      `Unsupported --tile-size "${raw}". Reversible experiment supports 512 or 1024 meters.`
+    );
+  }
+  return parsed;
+}
+
 /**
  * Parses CLI flags for `benchmarks/tileStreamingRunner.ts` with PowerShell comma-split compatibility.
  */
@@ -322,6 +429,10 @@ export function parseTileStreamingCliArgs(
   argv: readonly string[]
 ): TileStreamingCliOptions {
   let dataset: TileBenchmarkDatasetKind = 'canonical-hengelo';
+  let tileSizeMeters: SupportedExperimentTileSizeMeters = 512;
+  let packPath: string | undefined;
+  let compareTileSizes = false;
+  let runs = 1;
   let modes: TileBenchmarkModeId[] = [...ALL_TILE_BENCHMARK_MODES];
   let scenarios: TileBenchmarkScenarioId[] = [...ALL_TILE_BENCHMARK_SCENARIOS];
   let warmupFrames = 6;
@@ -342,12 +453,30 @@ export function parseTileStreamingCliArgs(
     const arg = argv[i];
     if (arg === '--dataset' || arg.startsWith('--dataset=')) {
       const { value, nextIndex } = readSingleValueFlag(argv, i, '--dataset');
-      if (value !== 'canonical-hengelo' && value !== 'synthetic-smoke-4x4') {
+      if (
+        value !== 'canonical-hengelo' &&
+        value !== 'synthetic-4096m' &&
+        value !== 'synthetic-smoke-4x4'
+      ) {
         throw new Error(
-          `Unsupported --dataset "${value}". Expected "canonical-hengelo" or "synthetic-smoke-4x4".`
+          `Unsupported --dataset "${value}". Expected "canonical-hengelo", "synthetic-4096m", or "synthetic-smoke-4x4".`
         );
       }
       dataset = value;
+      i = nextIndex;
+    } else if (arg === '--tile-size' || arg.startsWith('--tile-size=')) {
+      const { value, nextIndex } = readSingleValueFlag(argv, i, '--tile-size');
+      tileSizeMeters = parseTileSizeFlag(value);
+      i = nextIndex;
+    } else if (arg === '--pack' || arg.startsWith('--pack=')) {
+      const { value, nextIndex } = readSingleValueFlag(argv, i, '--pack');
+      packPath = value;
+      i = nextIndex;
+    } else if (arg === '--compare-tile-sizes') {
+      compareTileSizes = true;
+    } else if (arg === '--runs' || arg.startsWith('--runs=')) {
+      const { value, nextIndex } = readSingleValueFlag(argv, i, '--runs');
+      runs = parseIntFlag(value, '--runs', 1);
       i = nextIndex;
     } else if (
       arg === '--modes' ||
@@ -460,13 +589,26 @@ export function parseTileStreamingCliArgs(
     evictionHops = Math.max(10, Math.min(evictionHops, 10));
   }
 
-  const defaultOut =
-    dataset === 'canonical-hengelo'
-      ? 'benchmarks/results/tkt028-m2b-hengelo-streaming.json'
-      : 'benchmarks/results/tkt028-m2b-synthetic-smoke.json';
+  const defaultOut = compareTileSizes
+    ? dataset === 'canonical-hengelo'
+      ? 'benchmarks/results/tkt028-1024m-hengelo-comparison.json'
+      : 'benchmarks/results/tkt028-1024m-synthetic-comparison.json'
+    : dataset === 'canonical-hengelo'
+    ? tileSizeMeters === 1024
+      ? 'benchmarks/results/tkt028-m2b-hengelo-1024m-streaming.json'
+      : 'benchmarks/results/tkt028-m2b-hengelo-streaming.json'
+    : dataset === 'synthetic-4096m'
+    ? tileSizeMeters === 1024
+      ? 'benchmarks/results/tkt028-synthetic-4096m-1024m.json'
+      : 'benchmarks/results/tkt028-synthetic-4096m-512m.json'
+    : 'benchmarks/results/tkt028-m2b-synthetic-smoke.json';
 
   return {
     dataset,
+    tileSizeMeters,
+    packPath,
+    compareTileSizes,
+    runs,
     modes,
     scenarios,
     warmupFrames,
@@ -493,13 +635,15 @@ export function parseTileStreamingCliArgs(
  * aligned to the EPSG:25832 Hengelo study center so synthetic WebGL E2E runs exercise roads,
  * buildings, railway sleepers/switches, water, park, landuse, and trees across all 16 tiles.
  */
-export function buildSynthetic4x4GeoJson() {
+export function buildSynthetic4x4GeoJson(tileSizeMeters: number = 512) {
+  const cols = Math.round(2048 / tileSizeMeters);
+  const rows = Math.round(2048 / tileSizeMeters);
   const grid = createAlignedStudyGrid({
     name: 'study-m1a-custom',
     centerLonLat: [6.7935, 52.2625],
-    cols: 4,
-    rows: 4,
-    tileSizeMeters: 512,
+    cols,
+    rows,
+    tileSizeMeters,
     collarMeters: 64,
   });
 
@@ -512,7 +656,7 @@ export function buildSynthetic4x4GeoJson() {
   const features: any[] = [];
   let featureSeq = 1;
 
-  // Regional residential & forest landuse quadrants across all 4x4 tiles [-1024..1024]
+  // Regional residential & forest landuse quadrants across all [-1024..1024]
   features.push({
     type: 'Feature',
     id: 'way/syn-res-west',
@@ -636,7 +780,7 @@ export function buildSynthetic4x4GeoJson() {
     },
   });
 
-  // Populate deterministic buildings in all 16 tiles (512 m tiles centered at -768,-256,256,768)
+  // Populate deterministic buildings in all 16 sub-cells (centered at -768,-256,256,768)
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
       const tileCx = -768 + col * 512;
@@ -681,6 +825,216 @@ export function buildSynthetic4x4GeoJson() {
         geometry: {
           type: 'Point',
           coordinates: toLonLat(tileCx - 45, tileCz + 60),
+        },
+      });
+    }
+  }
+
+  return {
+    grid,
+    geoJson: {
+      type: 'FeatureCollection',
+      features,
+    },
+  };
+}
+
+/**
+ * Generates a realistic 4,096 m × 4,096 m multi-category OSM fixture aligned to
+ * `createHengeloStudyGrid(tileSizeMeters, 64)` (`[-2048..+2048]`) so 8×8 (512 m) and
+ * 4×4 (1,024 m) tile configurations compare bit-identical source geometry and trajectories.
+ */
+export function buildSynthetic4096mGeoJson(tileSizeMeters: SupportedExperimentTileSizeMeters = 512) {
+  const grid = createHengeloStudyGrid(tileSizeMeters, 64);
+  const toLonLat = (x: number, z: number): [number, number] =>
+    grid.projection.toGeo(x, z);
+  const ringToLonLat = (pts: Array<[number, number]>) => [
+    pts.map(([x, z]) => toLonLat(x, z)),
+  ];
+
+  const features: any[] = [];
+  let featureSeq = 1;
+
+  // Regional landuse, parks, and water basins across all 4 quadrants of [-2048..+2048]
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-res-nw',
+    properties: { id: 'way/s4096-res-nw', landuse: 'residential', name: 'Synthetic Hengelo NW' },
+    geometry: {
+      type: 'Polygon',
+      coordinates: ringToLonLat([
+        [-1960, -1960],
+        [-110, -1960],
+        [-110, -110],
+        [-1960, -110],
+        [-1960, -1960],
+      ]),
+    },
+  });
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-ind-sw',
+    properties: { id: 'way/s4096-ind-sw', landuse: 'industrial', name: 'Synthetic Hengelo SW' },
+    geometry: {
+      type: 'Polygon',
+      coordinates: ringToLonLat([
+        [-1960, 120],
+        [-120, 120],
+        [-120, 1960],
+        [-1960, 1960],
+        [-1960, 120],
+      ]),
+    },
+  });
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-park-ne',
+    properties: { id: 'way/s4096-park-ne', leisure: 'park', name: 'Synthetic Park NE' },
+    geometry: {
+      type: 'Polygon',
+      coordinates: ringToLonLat([
+        [140, -1920],
+        [1920, -1920],
+        [1920, -140],
+        [140, -140],
+        [140, -1920],
+      ]),
+    },
+  });
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-water-se',
+    properties: { id: 'way/s4096-water-se', natural: 'water', water: 'canal', name: 'SE Canal Basin' },
+    geometry: {
+      type: 'Polygon',
+      coordinates: ringToLonLat([
+        [420, 420],
+        [1460, 420],
+        [1460, 1460],
+        [420, 1460],
+        [420, 420],
+      ]),
+    },
+  });
+
+  // 8x8 arterial + secondary + footway grid crossing every 512 m & 1,024 m seam
+  const offsets = [-1792, -1280, -768, -256, 256, 768, 1280, 1792];
+  for (const offset of offsets) {
+    const hwType =
+      offset === -256 || offset === 768
+        ? 'primary'
+        : offset === -1280 || offset === 1280
+        ? 'secondary'
+        : offset === -1792
+        ? 'footway'
+        : 'residential';
+    const idEW = `way/s4096-road-ew-${featureSeq++}`;
+    features.push({
+      type: 'Feature',
+      id: idEW,
+      properties: { id: idEW, highway: hwType, name: `Corridor EW ${offset}` },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          toLonLat(-1980, offset),
+          toLonLat(-1024, offset),
+          toLonLat(0, offset),
+          toLonLat(1024, offset),
+          toLonLat(1980, offset),
+        ],
+      },
+    });
+    const idNS = `way/s4096-road-ns-${featureSeq++}`;
+    features.push({
+      type: 'Feature',
+      id: idNS,
+      properties: { id: idNS, highway: hwType, name: `Corridor NS ${offset}` },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          toLonLat(offset, -1980),
+          toLonLat(offset, -1024),
+          toLonLat(offset, 0),
+          toLonLat(offset, 1024),
+          toLonLat(offset, 1980),
+        ],
+      },
+    });
+  }
+
+  // Dual-track electrified mainline + station switches + NW/SE spur spanning full 4,096 m width
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-rail-main-n',
+    properties: { id: 'way/s4096-rail-main-n', railway: 'rail', electrified: 'contact_line', name: 'Main N' },
+    geometry: {
+      type: 'LineString',
+      coordinates: [toLonLat(-1990, -12), toLonLat(-1024, -12), toLonLat(0, -12), toLonLat(1024, -12), toLonLat(1990, -12)],
+    },
+  });
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-rail-main-s',
+    properties: { id: 'way/s4096-rail-main-s', railway: 'rail', electrified: 'contact_line', name: 'Main S' },
+    geometry: {
+      type: 'LineString',
+      coordinates: [toLonLat(-1990, 12), toLonLat(-1024, 12), toLonLat(0, 12), toLonLat(1024, 12), toLonLat(1990, 12)],
+    },
+  });
+  features.push({
+    type: 'Feature',
+    id: 'way/s4096-rail-branch-diag',
+    properties: { id: 'way/s4096-rail-branch-diag', railway: 'rail', service: 'spur' },
+    geometry: {
+      type: 'LineString',
+      coordinates: [toLonLat(-1800, -1100), toLonLat(-400, -12), toLonLat(0, 12), toLonLat(1400, 1100)],
+    },
+  });
+
+  // Deterministic multi-type buildings + trees populated in all 64 canonical 512 m sub-cells
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const cellCx = -1792 + col * 512;
+      const cellCz = -1792 + row * 512;
+      const buildingDefs: Array<[number, number, number, number, string]> = [
+        [-145, -145, 34, 24, 'residential'],
+        [125, -140, 40, 26, 'commercial'],
+        [-130, 130, 30, 32, 'apartments'],
+        [135, 135, 36, 22, 'industrial'],
+      ];
+      for (const [dx, dz, w, d, bType] of buildingDefs) {
+        const bx = cellCx + dx;
+        const bz = cellCz + dz;
+        const bid = `way/s4096-bldg-${row}-${col}-${featureSeq++}`;
+        features.push({
+          type: 'Feature',
+          id: bid,
+          properties: {
+            id: bid,
+            building: bType,
+            name: `Block ${row}-${col}-${featureSeq}`,
+            height: String(9 + ((row * 3 + col) % 5) * 4),
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: ringToLonLat([
+              [bx - w / 2, bz - d / 2],
+              [bx + w / 2, bz - d / 2],
+              [bx + w / 2, bz + d / 2],
+              [bx - w / 2, bz + d / 2],
+              [bx - w / 2, bz - d / 2],
+            ]),
+          },
+        });
+      }
+      const treeId = `node/s4096-tree-${row}-${col}-${featureSeq++}`;
+      features.push({
+        type: 'Feature',
+        id: treeId,
+        properties: { id: treeId, natural: 'tree', leaf_type: 'broadleaved' },
+        geometry: {
+          type: 'Point',
+          coordinates: toLonLat(cellCx - 50, cellCz + 55),
         },
       });
     }
@@ -809,11 +1163,14 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
   const lines: string[] = [];
   const env = report.environment;
   const b = env.browser;
+  const gridDesc = `${report.dataset.gridCols}×${report.dataset.gridRows} (${report.dataset.totalGridTiles} × ${report.dataset.tileSizeMeters} m tiles)`;
   const provenanceBanner = report.dataset.isCanonicalHengelo
     ? b?.isSoftwareRenderer
-      ? 'Canonical 8×8 Hengelo dataset rendered on **software WebGL (SwiftShader)** — geometry/draw-call/mesh/resource counts are exact, while frame/GPU timings reflect CPU rasterization.'
-      : 'Canonical 8×8 Hengelo dataset rendered on **hardware GPU WebGL2**.'
-    : `**Synthetic 4×4 smoke dataset (${report.dataset.totalGridTiles} tiles)** rendered on **${b?.isSoftwareRenderer ? 'software WebGL (SwiftShader)' : 'hardware GPU'}** — validates streaming pipeline end-to-end; canonical 8×8 Hengelo (64 tiles) metrics require running on a machine with \`data/osm/overijssel-tiles-261114-8ae28196.sqlite\`.`;
+      ? `Canonical ${gridDesc} Hengelo dataset rendered on **software WebGL (SwiftShader)** — geometry/draw-call/mesh/resource counts are exact, while frame/GPU timings reflect CPU rasterization.`
+      : `Canonical ${gridDesc} Hengelo dataset rendered on **hardware GPU WebGL2**.`
+    : report.dataset.id === 'synthetic-4096m'
+    ? `**Synthetic 4,096 × 4,096 m ${gridDesc} dataset** rendered on **${b?.isSoftwareRenderer ? 'software WebGL (SwiftShader)' : 'hardware GPU'}** — validates streaming & tile-size trade-offs end-to-end across identical 4×4 km bounds and trajectories; canonical Hengelo metrics require running on a machine with the local Overijssel SQLite store.`
+    : `**Synthetic 4×4 smoke dataset (${report.dataset.totalGridTiles} tiles @ ${report.dataset.tileSizeMeters} m)** rendered on **${b?.isSoftwareRenderer ? 'software WebGL (SwiftShader)' : 'hardware GPU'}** — validates streaming pipeline end-to-end; canonical 8×8 Hengelo (64 tiles) metrics require running on a machine with \`data/osm/overijssel-tiles-261114-8ae28196.sqlite\`.`;
 
   lines.push(`# M2-B Streaming Performance & Memory Comparison Summary`);
   lines.push('');
@@ -825,8 +1182,14 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
       `- **Browser & WebGL**: ${b.browserName} ${b.browserVersion}, \`${b.viewportWidth}×${b.viewportHeight}\` @ \`${b.devicePixelRatio}x\`, \`${b.webglVersion}\`, Renderer: \`${b.gpuRenderer}\` (${b.isSoftwareRenderer ? 'SOFTWARE' : 'HARDWARE'})`
     );
   }
+  const preloadMeters =
+    report.renderSettings.preloadMarginMeters ??
+    report.renderSettings.preloadMarginTiles * report.dataset.tileSizeMeters;
+  const retainMeters =
+    report.renderSettings.retainMarginMeters ??
+    report.renderSettings.retainMarginTiles * report.dataset.tileSizeMeters;
   lines.push(
-    `- **Dataset & Settings**: \`${report.dataset.id}\` (${report.dataset.gridCols}×${report.dataset.gridRows} = ${report.dataset.totalGridTiles} × ${report.dataset.tileSizeMeters} m tiles), theme \`${report.renderSettings.themeId}\`, \`E2+/R+\`, \`preload=${report.renderSettings.preloadMarginTiles}\`, \`retain=${report.renderSettings.retainMarginTiles}\`, \`maxFetches=${report.renderSettings.maxConcurrentFetches}\`, \`maxCommits=${report.renderSettings.maxCommitsPerFrame}\``
+    `- **Dataset & Settings**: \`${report.dataset.id}\` (${report.dataset.gridCols}×${report.dataset.gridRows} = ${report.dataset.totalGridTiles} × ${report.dataset.tileSizeMeters} m tiles), theme \`${report.renderSettings.themeId}\`, \`E2+/R+\`, \`preload=${report.renderSettings.preloadMarginTiles} tiles (${preloadMeters} m)\`, \`retain=${report.renderSettings.retainMarginTiles} tiles (${retainMeters} m)\`, \`maxFetches=${report.renderSettings.maxConcurrentFetches}\`, \`maxCommits=${report.renderSettings.maxCommitsPerFrame}\``
   );
   lines.push('');
 
@@ -842,10 +1205,18 @@ export function formatM2bMarkdownReport(report: TileStreamingBenchmarkReport): s
         ? m.initialization.tiledBuildMs
         : m.initialization.totalInitToFirstFrameMs;
     lines.push(
-      `| \`${m.modeId}\` | ${m.tileCountInGrid} | ${fmtNum(m.initialization.fetchOrManifestMs, 2)} | ${fmtNum(m.initialization.ingestMs, 2)} | ${fmtNum(buildOrTiled, 2)} | ${m.initialization.sharedMaterialCount ?? 'n/a'} |`
+      `| \`${m.modeId}\` (${m.modeLabel}) | ${m.tileCountInGrid} | ${fmtNum(m.initialization.fetchOrManifestMs, 2)} | ${fmtNum(m.initialization.ingestMs, 2)} | ${fmtNum(buildOrTiled, 2)} | ${m.initialization.sharedMaterialCount ?? 'n/a'} |`
     );
   }
   lines.push('');
+  const m2InitDiag = report.modes.find((m) => m.modeId === 'm2a_streaming')?.initialization
+    .initialStreamingDiagnostics;
+  if (m2InitDiag) {
+    lines.push(
+      `- **M2-A Cold-Load Streaming Stage Timings**: loaded \`${m2InitDiag.loadedTiles}/${m2InitDiag.totalGridTiles}\`, fetch=${fmtTimingStats(m2InitDiag.fetchMsStats)} | decode=${fmtTimingStats(m2InitDiag.decodeMsStats)} | reconstruct=${fmtTimingStats(m2InitDiag.reconstructMsStats)} | commit=${fmtTimingStats(m2InitDiag.commitMsStats)}`
+    );
+    lines.push('');
+  }
 
   lines.push('## 2. Cross-Mode Mesh, Draw Call, Triangle & Frame Time Comparison');
   lines.push('');
@@ -1168,8 +1539,14 @@ function summarizePhasePayload(raw: RawBrowserPhasePayload): TileStreamingPhaseM
 export async function runTileStreamingBenchmark(
   options: Partial<TileStreamingCliOptions> = {}
 ): Promise<TileStreamingBenchmarkReport> {
+  const tileSizeMeters: SupportedExperimentTileSizeMeters =
+    options.tileSizeMeters === 1024 ? 1024 : 512;
   const opts: TileStreamingCliOptions = {
     dataset: options.dataset ?? 'canonical-hengelo',
+    tileSizeMeters,
+    packPath: options.packPath,
+    compareTileSizes: options.compareTileSizes ?? false,
+    runs: Math.max(1, options.runs ?? 1),
     modes: options.modes ?? [...ALL_TILE_BENCHMARK_MODES],
     scenarios: options.scenarios ?? [...ALL_TILE_BENCHMARK_SCENARIOS],
     warmupFrames: options.warmupFrames ?? 6,
@@ -1194,21 +1571,37 @@ export async function runTileStreamingBenchmark(
     throw new Error('Cannot combine useSwiftShader=true with requireHardwareGpu=true.');
   }
 
+  const isCanonical = opts.dataset === 'canonical-hengelo';
+  const isSynthetic4096m = opts.dataset === 'synthetic-4096m';
+  const regionSpanMeters = isCanonical || isSynthetic4096m ? 4096 : 2048;
+  const gridCols = Math.round(regionSpanMeters / opts.tileSizeMeters);
+  const gridRows = Math.round(regionSpanMeters / opts.tileSizeMeters);
+
+  const resolvedCanonicalPackPath = isCanonical
+    ? opts.packPath
+      ? path.resolve(opts.packPath)
+      : resolveTilePackPathForTileSize(opts.tileSizeMeters)
+    : null;
+  let canonicalPackDbSizeBytes: number | null = null;
+
   // Fail fast with actionable PowerShell guidance when canonical Hengelo SQLite inputs are missing
-  if (opts.dataset === 'canonical-hengelo' && !opts.serverUrl) {
+  if (isCanonical && !opts.serverUrl && resolvedCanonicalPackPath) {
     const osmIndexPath = path.resolve('data/osm/overijssel-261114-8ae28196.sqlite');
-    const tilePackPath = path.resolve('data/osm/overijssel-tiles-261114-8ae28196.sqlite');
     const missing: string[] = [];
     if (!fs.existsSync(osmIndexPath)) missing.push(osmIndexPath);
-    if (!fs.existsSync(tilePackPath)) missing.push(tilePackPath);
+    if (!fs.existsSync(resolvedCanonicalPackPath)) missing.push(resolvedCanonicalPackPath);
     if (missing.length > 0) {
+      const bakeCmd =
+        opts.tileSizeMeters === 512
+          ? 'npm run osm:bake-hengelo-tiles'
+          : `npm run osm:bake-hengelo-tiles -- --tile-size=${opts.tileSizeMeters}`;
       throw new Error(
         `Canonical Hengelo dataset requires local Overijssel SQLite + baked tile pack:\n` +
           missing.map((p) => `  - Missing: ${p}`).join('\n') +
           `\nRun on Windows:\n` +
           `  npm run osm:setup-overijssel\n` +
-          `  npm run osm:bake-hengelo-tiles\n` +
-          `Or run "--dataset=synthetic-smoke-4x4" to execute the synthetic 4x4 WebGL smoke suite.`
+          `  ${bakeCmd}\n` +
+          `Or run "--dataset=synthetic-4096m" / "--dataset=synthetic-smoke-4x4" to execute the synthetic WebGL suite.`
       );
     }
   }
@@ -1217,39 +1610,66 @@ export async function runTileStreamingBenchmark(
     process.env.PLAYWRIGHT_BROWSERS_PATH = '/ms-playwright';
   }
 
-  const isCanonical = opts.dataset === 'canonical-hengelo';
-  const gridCols = isCanonical ? 8 : 4;
-  const gridRows = isCanonical ? 8 : 4;
-
-  // Prepare temporary synthetic 4x4 GeoJSON + SQLite tile pack when requested
+  // Prepare temporary synthetic GeoJSON + SQLite tile pack when running synthetic fixtures,
+  // or open an explicit --pack override for canonical Hengelo.
   let syntheticTmpDir: string | null = null;
-  let syntheticStore: TilePackSqliteStore | null = null;
+  let routeTileStore: TilePackSqliteStore | null = null;
   let syntheticGeoJsonString: string | null = null;
+  let activePackLabel: string | null = resolvedCanonicalPackPath;
+  let activePackDbSizeBytes: number | null = null;
 
-  if (!isCanonical) {
-    syntheticTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osm-m2b-bench-4x4-'));
-    const packPath = path.join(syntheticTmpDir, 'synthetic-4x4-tiles.sqlite');
-    const { grid, geoJson } = buildSynthetic4x4GeoJson();
-    syntheticGeoJsonString = JSON.stringify(geoJson);
-    const ingested = ingestCanonicalStudyGeoJson(geoJson, grid);
+  if (isCanonical && resolvedCanonicalPackPath && fs.existsSync(resolvedCanonicalPackPath)) {
+    const probeStore = new TilePackSqliteStore(resolvedCanonicalPackPath);
+    try {
+      const meta = probeStore.getMetadata();
+      if (meta.tileSizeMeters !== opts.tileSizeMeters) {
+        throw new Error(
+          `Tile pack "${resolvedCanonicalPackPath}" has tileSizeMeters=${meta.tileSizeMeters} m, expected ${opts.tileSizeMeters} m.`
+        );
+      }
+      canonicalPackDbSizeBytes = probeStore.getFileSizeBytes();
+      activePackDbSizeBytes = canonicalPackDbSizeBytes;
+      if (opts.packPath) {
+        routeTileStore = probeStore;
+      } else {
+        probeStore.close();
+      }
+    } catch (err) {
+      probeStore.close();
+      throw err;
+    }
+  } else if (!isCanonical) {
+    syntheticTmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `osm-m2b-bench-${opts.dataset}-${opts.tileSizeMeters}m-`)
+    );
+    const packPath = path.join(syntheticTmpDir, `synthetic-${opts.dataset}-${opts.tileSizeMeters}m.sqlite`);
+    const generated = isSynthetic4096m
+      ? buildSynthetic4096mGeoJson(opts.tileSizeMeters)
+      : buildSynthetic4x4GeoJson(opts.tileSizeMeters);
+    syntheticGeoJsonString = JSON.stringify(generated.geoJson);
+    const ingested = ingestCanonicalStudyGeoJson(generated.geoJson, generated.grid);
+    const batchDim = Math.min(4, Math.max(1, gridCols >= 8 ? 4 : 2));
+    const snapshotId = `synthetic-${opts.dataset}-${opts.tileSizeMeters}m`;
     try {
       bakeStudyRegionTilesToSqlite({
         ingested,
         outPath: packPath,
-        snapshotId: 'synthetic-m2b-4x4',
+        snapshotId,
         sourceSha256: 'c'.repeat(64),
-        batchDimension: 2,
+        batchDimension: batchDim,
         includeBvh: true,
         theme: MAP_THEMES[opts.themeId] ?? MAP_THEMES.tactical,
       });
     } finally {
       disposeIngestedStudyRegionPlans(ingested);
     }
-    syntheticStore = new TilePackSqliteStore(packPath, {
-      expectedSnapshotId: 'synthetic-m2b-4x4',
+    routeTileStore = new TilePackSqliteStore(packPath, {
+      expectedSnapshotId: snapshotId,
       expectedSourceSha256: 'c'.repeat(64),
       allowCustomSnapshot: true,
     });
+    activePackLabel = `synthetic-${opts.dataset}-${opts.tileSizeMeters}m`;
+    activePackDbSizeBytes = routeTileStore.getFileSizeBytes();
   }
 
   const launchFlags = resolveChromiumLaunchArgs({
@@ -1289,40 +1709,46 @@ export async function runTileStreamingBenchmark(
       deviceScaleFactor: opts.devicePixelRatio,
     });
 
-    // Block external OSM/Overpass requests; serve synthetic 4x4 routes when active
+    // Block external OSM/Overpass requests; serve synthetic or --pack override routes when active
     await context.route('**/*', async (route: any) => {
       const reqUrl: string = route.request().url();
-      if (!isCanonical && syntheticStore && syntheticGeoJsonString) {
-        if (reqUrl.includes('/__m2b_synthetic__/osm-data')) {
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: syntheticGeoJsonString,
-          });
-          return;
-        }
-        if (reqUrl.includes('/__m2b_synthetic__/tiles/manifest')) {
-          const metadata = syntheticStore.getMetadata();
-          const tiles = syntheticStore.listManifestEntries(0);
+      if (!isCanonical && syntheticGeoJsonString && reqUrl.includes('/__m2b_synthetic__/osm-data')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: syntheticGeoJsonString,
+        });
+        return;
+      }
+      if (
+        routeTileStore &&
+        (reqUrl.includes('/__m2b_synthetic__/tiles/') ||
+          reqUrl.includes('/__m2b_custom_pack__/tiles/'))
+      ) {
+        if (reqUrl.includes('/manifest')) {
+          const metadata = routeTileStore.getMetadata();
+          const tiles = routeTileStore.listManifestEntries(0);
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
             body: JSON.stringify({
               available: true,
-              packPath: 'synthetic-4x4',
-              dbSizeBytes: syntheticStore.getFileSizeBytes(),
+              packPath: activePackLabel,
+              dbSizeBytes: routeTileStore.getFileSizeBytes(),
               metadata,
               tiles,
             }),
           });
           return;
         }
-        const tileMatch = reqUrl.match(/\/__m2b_synthetic__\/tiles\/(\d+)\/(-?\d+)\/(-?\d+)$/);
+        const tileMatch = reqUrl.match(
+          /\/(?:__m2b_synthetic__|__m2b_custom_pack__)\/tiles\/(\d+)\/(-?\d+)\/(-?\d+)$/
+        );
         if (tileMatch) {
           const lod = Number.parseInt(tileMatch[1], 10);
           const tx = Number.parseInt(tileMatch[2], 10);
           const ty = Number.parseInt(tileMatch[3], 10);
-          const rec = syntheticStore.getTileCompressed(lod, tx, ty);
+          const rec = routeTileStore.getTileCompressed(lod, tx, ty);
           if (!rec) {
             await route.fulfill({ status: 404, body: 'Tile not found' });
             return;
@@ -1418,15 +1844,21 @@ export async function runTileStreamingBenchmark(
       ? '/api/osm-data?preset=hengelo-m1a'
       : '/__m2b_synthetic__/osm-data';
     const tilesApiBaseUrl = isCanonical
-      ? '/api/tiles'
+      ? opts.packPath
+        ? '/__m2b_custom_pack__/tiles'
+        : opts.tileSizeMeters === 1024
+        ? '/api/tiles-1024m'
+        : '/api/tiles'
       : '/__m2b_synthetic__/tiles';
 
-    // Shared trajectory parameters scaled strictly only in pan/hop extents when running 4x4 smoke
-    const panHalfExtentX = isCanonical ? 1200 : 650;
-    const panHalfExtentZ = isCanonical ? 900 : 500;
-    const panZoom = isCanonical ? 2.2 : 2.5;
-    const hopOffset = isCanonical ? 1300 : 760;
-    const hopZoom = isCanonical ? 2.8 : 3.2;
+    // Shared 4,096 m × 4,096 m trajectory for both canonical-hengelo and synthetic-4096m;
+    // scaled only for legacy 2,048 m × 2,048 m synthetic-smoke-4x4.
+    const isFull4kmRegion = isCanonical || isSynthetic4096m;
+    const panHalfExtentX = isFull4kmRegion ? 1200 : 650;
+    const panHalfExtentZ = isFull4kmRegion ? 900 : 500;
+    const panZoom = isFull4kmRegion ? 2.2 : 2.5;
+    const hopOffset = isFull4kmRegion ? 1300 : 760;
+    const hopZoom = isFull4kmRegion ? 2.8 : 3.2;
 
     const modeResults: TileBenchmarkModeResult[] = [];
     let m1aLoaded = false;
@@ -1906,6 +2338,7 @@ export async function runTileStreamingBenchmark(
               initialMode: 'reference' | 'tiled';
               gridCols: number;
               gridRows: number;
+              tileSizeMeters: number;
               themeId: string;
             }) => {
               const t0 = performance.now();
@@ -1914,6 +2347,7 @@ export async function runTileStreamingBenchmark(
                 initialMode: p.initialMode,
                 gridCols: p.gridCols,
                 gridRows: p.gridRows,
+                tileSizeMeters: p.tileSizeMeters,
                 themeId: p.themeId,
                 target: [0, 0, 0],
                 zoom: 1.8,
@@ -1929,6 +2363,7 @@ export async function runTileStreamingBenchmark(
               initialMode: targetM1aView,
               gridCols,
               gridRows,
+              tileSizeMeters: opts.tileSizeMeters,
               themeId: opts.themeId,
             }
           );
@@ -1952,7 +2387,7 @@ export async function runTileStreamingBenchmark(
           modeId,
           modeId === 'm1a_single_scene'
             ? 'M1a Single-Scene Reference (A)'
-            : `M1a All ${gridCols * gridRows} Tiles Mounted Together (C)`,
+            : `M1a All ${gridCols * gridRows} Tiles Mounted Together (${opts.tileSizeMeters} m · C)`,
           {
             fetchOrManifestMs: initInfo.fetchElapsedMs ?? 0,
             ingestMs: initInfo.ingestElapsedMs ?? null,
@@ -1990,6 +2425,7 @@ export async function runTileStreamingBenchmark(
               initElapsedMs: res.initElapsedMs,
               wallTotalMs: Number((performance.now() - t0).toFixed(2)),
               sharedMaterialCount: res.diagnostics?.sharedMaterialCount ?? null,
+              diagnostics: res.diagnostics ?? null,
             };
           },
           { apiBaseUrl: tilesApiBaseUrl, themeId: opts.themeId }
@@ -1997,7 +2433,7 @@ export async function runTileStreamingBenchmark(
 
         const res = await runModeScenarioSet(
           'm2a_streaming',
-          'M2-A Runtime Tile Streaming (OSMTILE1 + Worker + TileStreamManager)',
+          `M2-A Runtime Tile Streaming (${opts.tileSizeMeters} m OSMTILE1 + Worker + TileStreamManager)`,
           {
             fetchOrManifestMs: m2Init.initElapsedMs,
             ingestMs: 0,
@@ -2005,6 +2441,7 @@ export async function runTileStreamingBenchmark(
             tiledBuildMs: null,
             totalInitToFirstFrameMs: m2Init.wallTotalMs,
             sharedMaterialCount: m2Init.sharedMaterialCount,
+            initialStreamingDiagnostics: m2Init.diagnostics,
           }
         );
         modeResults.push(res);
@@ -2012,23 +2449,43 @@ export async function runTileStreamingBenchmark(
     }
 
     const comparisons = computeCrossModeComparisonSummary(modeResults, opts.scenarios);
+    const preloadMarginTiles = 1;
+    const retainMarginTiles = 2;
+    const preloadMarginMeters = preloadMarginTiles * opts.tileSizeMeters;
+    const retainMarginMeters = retainMarginTiles * opts.tileSizeMeters;
+
+    const notes: string[] = [
+      'All three modes execute at identical 1440x900 @ 1x DPR viewport, tactical theme, and E2+/R+ production render settings.',
+      'totalMeshes reports every THREE.Mesh inside the active composite scene groups; frustumVisibleMeshes counts THREE.Mesh leaves intersecting the OrthographicCamera frustum.',
+      'EXT_disjoint_timer_query_webgl2 GPU pass timing is explicitly marked "unsupported", "unavailable", or "disjoint" whenever hardware timer queries cannot resolve.',
+      'Browser performance.memory JS heap numbers are advisory only and recorded as supported=false / null when unavailable.',
+    ];
+    if (opts.tileSizeMeters === 1024 && retainMarginMeters >= 2048) {
+      notes.push(
+        `With retainMarginTiles=${retainMarginTiles} at 1,024 m tile size, the physical retain ring is ${retainMarginMeters} m around visible tiles; inside a 4,096 × 4,096 m study span this covers nearly the entire grid so few/zero tiles evict during NW<->SE hops.`
+      );
+    }
 
     const report: TileStreamingBenchmarkReport = {
       schemaVersion: M2B_BENCHMARK_SCHEMA_VERSION,
       benchmarkName:
-        'TKT-028 M2-B — Three-Mode Tile Streaming Performance & Memory Comparison',
+        `TKT-028 M2-B — Three-Mode Tile Streaming Performance & Memory Comparison (${opts.tileSizeMeters} m tiles)`,
       ticket: 'TKT-028',
       milestone: 'M2-B',
       dataset: {
         id: opts.dataset,
         description: isCanonical
-          ? 'Canonical Hengelo 8x8 (4,096 x 4,096 m, 512 m LOD0 tiles) from overijssel-261114-8ae28196 & overijssel-tiles-261114-8ae28196.sqlite'
-          : 'Synthetic 4x4 (2,048 x 2,048 m, 512 m LOD0 tiles) multi-category OSM smoke fixture',
+          ? `Canonical Hengelo ${gridCols}x${gridRows} (4,096 x 4,096 m, ${opts.tileSizeMeters} m LOD0 tiles)`
+          : isSynthetic4096m
+          ? `Synthetic 4,096 x 4,096 m ${gridCols}x${gridRows} (${opts.tileSizeMeters} m LOD0 tiles) multi-category OSM fixture`
+          : `Synthetic 2,048 x 2,048 m ${gridCols}x${gridRows} (${opts.tileSizeMeters} m LOD0 tiles) multi-category OSM smoke fixture`,
         gridCols,
         gridRows,
         totalGridTiles: gridCols * gridRows,
-        tileSizeMeters: 512,
+        tileSizeMeters: opts.tileSizeMeters,
         isCanonicalHengelo: isCanonical,
+        packPath: activePackLabel,
+        packDbSizeBytes: activePackDbSizeBytes,
       },
       renderSettings: {
         viewportWidth: opts.viewportWidth,
@@ -2037,43 +2494,39 @@ export async function runTileStreamingBenchmark(
         themeId: opts.themeId,
         roadsMode: 'graph-surface',
         railwaysMode: 'graph-R+',
-        preloadMarginTiles: 1,
-        retainMarginTiles: 2,
+        preloadMarginTiles,
+        retainMarginTiles,
+        preloadMarginMeters,
+        retainMarginMeters,
         maxConcurrentFetches: 6,
         maxCommitsPerFrame: 4,
       },
       environment,
       modes: modeResults,
       comparisons,
-      notes: [
-        'All three modes execute at identical 1440x900 @ 1x DPR viewport, tactical theme, and E2+/R+ production render settings.',
-        'totalMeshes reports every THREE.Mesh inside the active composite scene groups; frustumVisibleMeshes counts THREE.Mesh leaves intersecting the OrthographicCamera frustum.',
-        'EXT_disjoint_timer_query_webgl2 GPU pass timing is explicitly marked "unsupported", "unavailable", or "disjoint" whenever hardware timer queries cannot resolve.',
-        'Browser performance.memory JS heap numbers are advisory only and recorded as supported=false / null when unavailable.',
-      ],
+      notes,
     };
 
-    const markdown = formatM2bMarkdownReport(report);
-
-    if (opts.outputPath) {
-      const resolvedJson = path.resolve(opts.outputPath);
-      fs.mkdirSync(path.dirname(resolvedJson), { recursive: true });
-      fs.writeFileSync(resolvedJson, JSON.stringify(report, null, 2) + '\n', 'utf8');
-    }
-
-    if (opts.markdownOutputPath) {
-      const resolvedMd = path.resolve(opts.markdownOutputPath);
-      fs.mkdirSync(path.dirname(resolvedMd), { recursive: true });
-      fs.writeFileSync(resolvedMd, markdown + '\n', 'utf8');
-    }
-
-    if (!opts.quiet) {
-      console.log(markdown);
+    if (!opts.compareTileSizes) {
+      const markdown = formatM2bMarkdownReport(report);
       if (opts.outputPath) {
-        console.log(`\nSaved M2-B JSON report to: ${path.resolve(opts.outputPath)}`);
+        const resolvedJson = path.resolve(opts.outputPath);
+        fs.mkdirSync(path.dirname(resolvedJson), { recursive: true });
+        fs.writeFileSync(resolvedJson, JSON.stringify(report, null, 2) + '\n', 'utf8');
       }
       if (opts.markdownOutputPath) {
-        console.log(`Saved M2-B Markdown summary to: ${path.resolve(opts.markdownOutputPath)}`);
+        const resolvedMd = path.resolve(opts.markdownOutputPath);
+        fs.mkdirSync(path.dirname(resolvedMd), { recursive: true });
+        fs.writeFileSync(resolvedMd, markdown + '\n', 'utf8');
+      }
+      if (!opts.quiet) {
+        console.log(markdown);
+        if (opts.outputPath) {
+          console.log(`\nSaved M2-B JSON report to: ${path.resolve(opts.outputPath)}`);
+        }
+        if (opts.markdownOutputPath) {
+          console.log(`Saved M2-B Markdown summary to: ${path.resolve(opts.markdownOutputPath)}`);
+        }
       }
     }
 
@@ -2083,11 +2536,238 @@ export async function runTileStreamingBenchmark(
       await browser.close().catch(() => {});
     }
     await stopServer();
-    syntheticStore?.close();
+    routeTileStore?.close();
     if (syntheticTmpDir) {
       fs.rmSync(syntheticTmpDir, { recursive: true, force: true });
     }
   }
+}
+
+function medianOf(values: readonly (number | null | undefined)[]): number | null {
+  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).sort((a, b) => a - b);
+  if (nums.length === 0) return null;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 === 0 ? (nums[mid - 1] + nums[mid]) / 2 : nums[mid];
+}
+
+function pctChange(baseline: number | null, candidate: number | null): number | null {
+  if (baseline === null || candidate === null || baseline === 0) return null;
+  return Number((((candidate - baseline) / baseline) * 100).toFixed(2));
+}
+
+function aggregateM2aScenarioAcrossReports(
+  reports: readonly TileStreamingBenchmarkReport[],
+  scenarioId: TileBenchmarkScenarioId
+): TileSizeComparisonScenarioDelta['m2a512'] {
+  const phases = reports
+    .map((r) =>
+      r.modes
+        .find((m) => m.modeId === 'm2a_streaming')
+        ?.scenarios.find((s) => s.scenarioId === scenarioId)?.primaryMetrics
+    )
+    .filter((p): p is TileStreamingPhaseMetrics => Boolean(p));
+
+  return {
+    loadedTiles: medianOf(phases.map((p) => p.streamingDiagnostics?.loadedTiles)),
+    visibleTiles: medianOf(phases.map((p) => p.streamingDiagnostics?.visibleTiles)),
+    totalMeshes: medianOf(phases.map((p) => p.meshCounts?.total.totalMeshes)),
+    frustumMeshes: medianOf(phases.map((p) => p.meshCounts?.total.frustumVisibleMeshes)),
+    drawCallsMedian: medianOf(phases.map((p) => p.webglDrawCallsPerFrame.median)),
+    trianglesMedian: medianOf(phases.map((p) => p.renderedTrianglesPerFrame.median)),
+    frameIntervalMedianMs: medianOf(phases.map((p) => p.frameIntervalMs.median)),
+    cpuRenderMedianMs: medianOf(phases.map((p) => p.cpuRenderTimeMs.median)),
+    cpuBufferMB: medianOf(phases.map((p) => p.cpuBufferMB)),
+    bvhMemoryMB: medianOf(phases.map((p) => p.bvhMemoryMB)),
+    driverGeometries: medianOf(phases.map((p) => p.driverResourcesEnd.driverGeometries)),
+    evictedTilesTotal: medianOf(phases.map((p) => p.streamingDiagnostics?.evictedTilesTotal)),
+    decodeMedianMs: medianOf(phases.map((p) => p.streamingDiagnostics?.decodeMsStats?.medianMs)),
+    reconstructMedianMs: medianOf(
+      phases.map((p) => p.streamingDiagnostics?.reconstructMsStats?.medianMs)
+    ),
+    commitMedianMs: medianOf(phases.map((p) => p.streamingDiagnostics?.commitMsStats?.medianMs)),
+  };
+}
+
+/**
+ * Formats a side-by-side 512 m vs 1,024 m experiment comparison report in Markdown.
+ */
+export function formatTileSizeComparisonMarkdown(
+  comparison: TileSizeExperimentComparisonReport
+): string {
+  const lines: string[] = [];
+  const b = comparison.environment.browser;
+  lines.push(`# TKT-028 — 512 m vs 1,024 m Tile Size Experiment Comparison`);
+  lines.push('');
+  lines.push(
+    `- **Dataset**: \`${comparison.datasetId}\` | **Runs per tile size**: \`${comparison.runsPerTileSize}\` | **Renderer**: \`${b?.gpuRenderer ?? 'unknown'}\` (${b?.isSoftwareRenderer ? 'SOFTWARE' : 'HARDWARE'})`
+  );
+  lines.push(
+    `- **512 m Grid**: \`${comparison.tileSize512.gridCols}×${comparison.tileSize512.gridRows}\` (${comparison.tileSize512.totalGridTiles} tiles) · Preload/Retain = \`${comparison.tileSize512.preloadMarginMeters} m / ${comparison.tileSize512.retainMarginMeters} m\` · Pack DB = ${comparison.tileSize512.packDbSizeBytes ? `${(comparison.tileSize512.packDbSizeBytes / (1024 * 1024)).toFixed(2)} MiB` : 'n/a'}`
+  );
+  lines.push(
+    `- **1,024 m Grid**: \`${comparison.tileSize1024.gridCols}×${comparison.tileSize1024.gridRows}\` (${comparison.tileSize1024.totalGridTiles} tiles) · Preload/Retain = \`${comparison.tileSize1024.preloadMarginMeters} m / ${comparison.tileSize1024.retainMarginMeters} m\` · Pack DB = ${comparison.tileSize1024.packDbSizeBytes ? `${(comparison.tileSize1024.packDbSizeBytes / (1024 * 1024)).toFixed(2)} MiB` : 'n/a'}`
+  );
+  lines.push('');
+  lines.push(
+    '| Scenario | 512m Calls | 1024m Calls | Call Delta | 512m Meshes (Tot/Frust) | 1024m Meshes (Tot/Frust) | 512m Frame (ms) | 1024m Frame (ms) | 512m Loaded/Evicted | 1024m Loaded/Evicted | 512m Decode/Commit (ms) | 1024m Decode/Commit (ms) |'
+  );
+  lines.push('|---|---:|---:|---:|---|---|---:|---:|---|---|---|---|');
+  for (const d of comparison.scenarioDeltas) {
+    const callDelta =
+      d.drawCallChange1024Vs512Pct !== null
+        ? `${d.drawCallChange1024Vs512Pct >= 0 ? '+' : ''}${d.drawCallChange1024Vs512Pct.toFixed(1)}%`
+        : 'n/a';
+    lines.push(
+      `| \`${d.scenarioId}\` | ${fmtNum(d.m2a512.drawCallsMedian, 0)} | ${fmtNum(d.m2a1024.drawCallsMedian, 0)} | ${callDelta} | ${fmtNum(d.m2a512.totalMeshes, 0)} / ${fmtNum(d.m2a512.frustumMeshes, 0)} | ${fmtNum(d.m2a1024.totalMeshes, 0)} / ${fmtNum(d.m2a1024.frustumMeshes, 0)} | ${fmtNum(d.m2a512.frameIntervalMedianMs, 2)} | ${fmtNum(d.m2a1024.frameIntervalMedianMs, 2)} | ${fmtNum(d.m2a512.loadedTiles, 0)} / ${fmtNum(d.m2a512.evictedTilesTotal, 0)} | ${fmtNum(d.m2a1024.loadedTiles, 0)} / ${fmtNum(d.m2a1024.evictedTilesTotal, 0)} | ${fmtNum(d.m2a512.decodeMedianMs, 2)} / ${fmtNum(d.m2a512.commitMedianMs, 2)} | ${fmtNum(d.m2a1024.decodeMedianMs, 2)} / ${fmtNum(d.m2a1024.commitMedianMs, 2)} |`
+    );
+  }
+  lines.push('');
+  for (const note of comparison.notes) {
+    lines.push(`- ${note}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Runs paired 512 m vs 1,024 m benchmark comparisons (`--compare-tile-sizes`) over identical
+ * dataset, camera trajectories, and render settings.
+ */
+export async function runTileSizeExperimentComparison(
+  options: Partial<TileStreamingCliOptions> = {}
+): Promise<TileSizeExperimentComparisonReport> {
+  const runs = Math.max(1, options.runs ?? 1);
+  const runs512: TileStreamingBenchmarkReport[] = [];
+  const runs1024: TileStreamingBenchmarkReport[] = [];
+
+  for (let r = 0; r < runs; r++) {
+    if (!options.quiet) {
+      console.log(`\n[bench:tiles] === 512 m Baseline Run ${r + 1}/${runs} ===`);
+    }
+    const rep512 = await runTileStreamingBenchmark({
+      ...options,
+      tileSizeMeters: 512,
+      compareTileSizes: true,
+      outputPath: undefined,
+      markdownOutputPath: undefined,
+    });
+    rep512.runIndex = r + 1;
+    runs512.push(rep512);
+
+    if (!options.quiet) {
+      console.log(`\n[bench:tiles] === 1,024 m Experiment Run ${r + 1}/${runs} ===`);
+    }
+    const rep1024 = await runTileStreamingBenchmark({
+      ...options,
+      tileSizeMeters: 1024,
+      compareTileSizes: true,
+      outputPath: undefined,
+      markdownOutputPath: undefined,
+    });
+    rep1024.runIndex = r + 1;
+    runs1024.push(rep1024);
+  }
+
+  const base512 = runs512[0];
+  const base1024 = runs1024[0];
+  const scenarios = options.scenarios ?? [...ALL_TILE_BENCHMARK_SCENARIOS];
+
+  const scenarioDeltas: TileSizeComparisonScenarioDelta[] = scenarios.map((scenarioId) => {
+    const m2a512 = aggregateM2aScenarioAcrossReports(runs512, scenarioId);
+    const m2a1024 = aggregateM2aScenarioAcrossReports(runs1024, scenarioId);
+    const m1a512Calls = medianOf(
+      runs512.map(
+        (r) =>
+          r.modes
+            .find((m) => m.modeId === 'm1a_tiled_64')
+            ?.scenarios.find((s) => s.scenarioId === scenarioId)
+            ?.primaryMetrics.webglDrawCallsPerFrame.median
+      )
+    );
+    const m1a1024Calls = medianOf(
+      runs1024.map(
+        (r) =>
+          r.modes
+            .find((m) => m.modeId === 'm1a_tiled_64')
+            ?.scenarios.find((s) => s.scenarioId === scenarioId)
+            ?.primaryMetrics.webglDrawCallsPerFrame.median
+      )
+    );
+    return {
+      scenarioId,
+      m2a512,
+      m2a1024,
+      m1aTiled512DrawCalls: m1a512Calls,
+      m1aTiled1024DrawCalls: m1a1024Calls,
+      drawCallChange1024Vs512Pct: pctChange(m2a512.drawCallsMedian, m2a1024.drawCallsMedian),
+      meshChange1024Vs512Pct: pctChange(m2a512.totalMeshes, m2a1024.totalMeshes),
+      frameTimeChange1024Vs512Pct: pctChange(
+        m2a512.frameIntervalMedianMs,
+        m2a1024.frameIntervalMedianMs
+      ),
+      cpuRenderChange1024Vs512Pct: pctChange(
+        m2a512.cpuRenderMedianMs,
+        m2a1024.cpuRenderMedianMs
+      ),
+    };
+  });
+
+  const comparison: TileSizeExperimentComparisonReport = {
+    schemaVersion: '1.0.0',
+    benchmarkName: 'TKT-028 Reversible 1,024 m vs 512 m Tile Size Experiment Comparison',
+    ticket: 'TKT-028',
+    experiment: '1024m-tile-size-evaluation',
+    datasetId: base512.dataset.id,
+    runsPerTileSize: runs,
+    environment: base512.environment,
+    tileSize512: {
+      gridCols: base512.dataset.gridCols,
+      gridRows: base512.dataset.gridRows,
+      totalGridTiles: base512.dataset.totalGridTiles,
+      packPath: base512.dataset.packPath ?? null,
+      packDbSizeBytes: base512.dataset.packDbSizeBytes ?? null,
+      preloadMarginMeters: base512.renderSettings.preloadMarginMeters ?? 512,
+      retainMarginMeters: base512.renderSettings.retainMarginMeters ?? 1024,
+      reports: runs512,
+    },
+    tileSize1024: {
+      gridCols: base1024.dataset.gridCols,
+      gridRows: base1024.dataset.gridRows,
+      totalGridTiles: base1024.dataset.totalGridTiles,
+      packPath: base1024.dataset.packPath ?? null,
+      packDbSizeBytes: base1024.dataset.packDbSizeBytes ?? null,
+      preloadMarginMeters: base1024.renderSettings.preloadMarginMeters ?? 1024,
+      retainMarginMeters: base1024.renderSettings.retainMarginMeters ?? 2048,
+      reports: runs1024,
+    },
+    scenarioDeltas,
+    notes: [
+      `Comparison executed ${runs} paired run(s) per tile size under identical viewport, theme, E2+/R+ settings, and camera trajectories.`,
+      'With preloadMarginTiles=1 and retainMarginTiles=2 kept constant, physical retain margins scale from 1,024 m (512 m tiles) to 2,048 m (1,024 m tiles).',
+    ],
+  };
+
+  const md = formatTileSizeComparisonMarkdown(comparison);
+  if (options.outputPath) {
+    const resolvedJson = path.resolve(options.outputPath);
+    fs.mkdirSync(path.dirname(resolvedJson), { recursive: true });
+    fs.writeFileSync(resolvedJson, JSON.stringify(comparison, null, 2) + '\n', 'utf8');
+  }
+  if (options.markdownOutputPath) {
+    const resolvedMd = path.resolve(options.markdownOutputPath);
+    fs.mkdirSync(path.dirname(resolvedMd), { recursive: true });
+    fs.writeFileSync(resolvedMd, md + '\n', 'utf8');
+  }
+  if (!options.quiet) {
+    console.log('\n' + md);
+    if (options.outputPath) {
+      console.log(`\nSaved 512m vs 1024m comparison JSON to: ${path.resolve(options.outputPath)}`);
+    }
+    if (options.markdownOutputPath) {
+      console.log(`Saved 512m vs 1024m comparison Markdown to: ${path.resolve(options.markdownOutputPath)}`);
+    }
+  }
+
+  return comparison;
 }
 
 const isMainModule =
@@ -2099,7 +2779,28 @@ const isMainModule =
 if (isMainModule) {
   try {
     const cliOptions = parseTileStreamingCliArgs(process.argv.slice(2));
-    runTileStreamingBenchmark(cliOptions).catch((err: any) => {
+    const entryPromise = cliOptions.compareTileSizes
+      ? runTileSizeExperimentComparison(cliOptions)
+      : cliOptions.runs > 1
+      ? (async () => {
+          let last: TileStreamingBenchmarkReport | null = null;
+          for (let r = 0; r < cliOptions.runs; r++) {
+            last = await runTileStreamingBenchmark({
+              ...cliOptions,
+              outputPath:
+                cliOptions.outputPath && cliOptions.runs > 1
+                  ? cliOptions.outputPath.replace(/\.json$/i, `-run${r + 1}.json`)
+                  : cliOptions.outputPath,
+              markdownOutputPath:
+                cliOptions.markdownOutputPath && cliOptions.runs > 1
+                  ? cliOptions.markdownOutputPath.replace(/\.md$/i, `-run${r + 1}.md`)
+                  : cliOptions.markdownOutputPath,
+            });
+          }
+          return last;
+        })()
+      : runTileStreamingBenchmark(cliOptions);
+    entryPromise.catch((err: any) => {
       console.error(`Tile streaming benchmark runner failed: ${err?.message || String(err)}`);
       process.exit(1);
     });

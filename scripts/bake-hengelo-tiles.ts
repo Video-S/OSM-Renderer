@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bakeHengeloTilesFromStore } from '../src/server/tiles/OfflineHengeloTileBaker';
-import { resolveDefaultTilePackPath } from '../src/server/tiles/TilePackSqliteStore';
+import { resolveTilePackPathForTileSize } from '../src/server/tiles/TilePackSqliteStore';
+import { DEFAULT_TILE_SIZE_METERS } from '../src/world/tiling/TileGrid';
 import {
   OVERIJSSEL_PBF_EXPECTED_SHA256,
   resolveOverijsselIndexPath,
@@ -11,18 +12,31 @@ import {
 interface BakeCliArgs {
   indexPath?: string;
   outPath?: string;
+  tileSizeMeters: number;
   batchSize?: number;
   includeBvh: boolean;
   jsonOutPath?: string;
+}
+
+function parseTileSizeArg(raw: string | undefined): number {
+  if (!raw) return DEFAULT_TILE_SIZE_METERS;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid --tile-size "${raw}". Expected positive integer meters (e.g. 512 or 1024).`);
+  }
+  return parsed;
 }
 
 function parseArgs(
   argv: readonly string[] = process.argv.slice(2),
   env: NodeJS.ProcessEnv = process.env
 ): BakeCliArgs {
+  const envTileSize =
+    env.OVERIJSSEL_TILE_SIZE_METERS?.trim() || env.npm_config_tile_size?.trim();
   const args: BakeCliArgs = {
     indexPath: env.OVERIJSSEL_INDEX_PATH?.trim() || env.npm_config_index?.trim() || undefined,
-    outPath: env.OVERIJSSEL_TILE_PACK_PATH?.trim() || env.npm_config_out?.trim() || undefined,
+    outPath: env.npm_config_out?.trim() || undefined,
+    tileSizeMeters: parseTileSizeArg(envTileSize),
     includeBvh: !(env.npm_config_no_bvh === 'true' || argv.includes('--no-bvh')),
     jsonOutPath: env.npm_config_json_out?.trim() || undefined,
   };
@@ -37,6 +51,10 @@ function parseArgs(
       args.outPath = arg.slice('--out='.length);
     } else if (arg === '--out' && argv[i + 1]) {
       args.outPath = argv[++i];
+    } else if (arg.startsWith('--tile-size=')) {
+      args.tileSizeMeters = parseTileSizeArg(arg.slice('--tile-size='.length));
+    } else if (arg === '--tile-size' && argv[i + 1]) {
+      args.tileSizeMeters = parseTileSizeArg(argv[++i]);
     } else if (arg.startsWith('--batch-size=')) {
       args.batchSize = Number(arg.slice('--batch-size='.length));
     } else if (arg === '--batch-size' && argv[i + 1]) {
@@ -64,13 +82,14 @@ if (isEntrypoint) {
   try {
     const cli = parseArgs();
     const indexPath = cli.indexPath ?? resolveOverijsselIndexPath();
-    const outPath = cli.outPath ?? resolveDefaultTilePackPath();
+    const outPath = cli.outPath ?? resolveTilePackPathForTileSize(cli.tileSizeMeters);
 
     const { report, sqliteQueryTimings } = bakeHengeloTilesFromStore({
       indexPath,
       expectedSha256: OVERIJSSEL_PBF_EXPECTED_SHA256,
       outPath,
-      batchDimension: cli.batchSize ?? 4,
+      tileSizeMeters: cli.tileSizeMeters,
+      ...(cli.batchSize !== undefined ? { batchDimension: cli.batchSize } : {}),
       includeBvh: cli.includeBvh,
     });
 

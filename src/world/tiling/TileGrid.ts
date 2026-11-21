@@ -9,6 +9,7 @@ export const DEFAULT_TILE_SIZE_METERS = 512;
 export const DEFAULT_COLLAR_METERS = 64;
 export const HENGELO_CENTER_LONLAT: readonly [number, number] = [6.7935, 52.2625];
 export const HENGELO_GRID_DIMENSION = 8; // 8 x 8 = 64 tiles -> 4,096 m x 4,096 m
+export const HENGELO_STUDY_SPAN_METERS = HENGELO_GRID_DIMENSION * DEFAULT_TILE_SIZE_METERS; // 4,096 m
 
 export interface WorldBox2D {
   minX: number;
@@ -90,41 +91,33 @@ export function utmBoundsToGeoBounds(utmBounds: UtmBox2D): GeoBBox {
   return { minLon, minLat, maxLon, maxLat };
 }
 
-/**
- * Creates a deterministic, meter-aligned tile grid in ETRS89 / UTM Zone 32N (EPSG:25832).
- *
- * Tile index conventions:
- * - `tx = Math.floor(easting / tileSizeMeters)` (increases Eastward, +X)
- * - `ty = Math.floor(northing / tileSizeMeters)` (increases Northward, -Z)
- *
- * World frame origin is placed at the exact center of the study grid in UTM meters so
- * every tile coordinate in `studyLocalBounds` is an exact integer multiple of `tileSizeMeters`.
- */
-export function createAlignedStudyGrid(params: {
+function buildStudyGridFromUtmBounds(params: {
   name: string;
-  centerLonLat: readonly [number, number];
+  studyMinE: number;
+  studyMaxE: number;
+  studyMinN: number;
+  studyMaxN: number;
   cols: number;
   rows: number;
-  tileSizeMeters?: number;
-  collarMeters?: number;
+  tileSizeMeters: number;
+  collarMeters: number;
 }): StudyGridSpec {
-  const tileSizeMeters = params.tileSizeMeters ?? DEFAULT_TILE_SIZE_METERS;
-  const collarMeters = params.collarMeters ?? DEFAULT_COLLAR_METERS;
-  const [centerLon, centerLat] = params.centerLonLat;
-  const [centerE, centerN] = geoToUtm32N(centerLon, centerLat);
+  const {
+    name,
+    studyMinE,
+    studyMaxE,
+    studyMinN,
+    studyMaxN,
+    cols,
+    rows,
+    tileSizeMeters,
+    collarMeters,
+  } = params;
 
-  const halfSpanX = (params.cols * tileSizeMeters) / 2;
-  const halfSpanY = (params.rows * tileSizeMeters) / 2;
-
-  const minTx = Math.round((centerE - halfSpanX) / tileSizeMeters);
-  const maxTx = minTx + params.cols - 1;
-  const minTy = Math.round((centerN - halfSpanY) / tileSizeMeters);
-  const maxTy = minTy + params.rows - 1;
-
-  const studyMinE = minTx * tileSizeMeters;
-  const studyMaxE = (maxTx + 1) * tileSizeMeters;
-  const studyMinN = minTy * tileSizeMeters;
-  const studyMaxN = (maxTy + 1) * tileSizeMeters;
+  const minTx = Math.floor(studyMinE / tileSizeMeters);
+  const maxTx = minTx + cols - 1;
+  const minTy = Math.floor(studyMinN / tileSizeMeters);
+  const maxTy = minTy + rows - 1;
 
   const originE = (studyMinE + studyMaxE) / 2;
   const originN = (studyMinN + studyMaxN) / 2;
@@ -151,17 +144,17 @@ export function createAlignedStudyGrid(params: {
 
   const tiles: TileDescriptor[] = [];
   // Order rows North-to-South (+Z ascending) and cols West-to-East (+X ascending)
-  for (let gridRow = 0; gridRow < params.rows; gridRow++) {
+  for (let gridRow = 0; gridRow < rows; gridRow++) {
     const ty = maxTy - gridRow;
-    const minN = ty * tileSizeMeters;
-    const maxN = (ty + 1) * tileSizeMeters;
-    const isSouthBoundaryTile = gridRow === params.rows - 1;
+    const maxN = studyMaxN - gridRow * tileSizeMeters;
+    const minN = maxN - tileSizeMeters;
+    const isSouthBoundaryTile = gridRow === rows - 1;
 
-    for (let gridCol = 0; gridCol < params.cols; gridCol++) {
+    for (let gridCol = 0; gridCol < cols; gridCol++) {
       const tx = minTx + gridCol;
-      const minE = tx * tileSizeMeters;
-      const maxE = (tx + 1) * tileSizeMeters;
-      const isEastBoundaryTile = gridCol === params.cols - 1;
+      const minE = studyMinE + gridCol * tileSizeMeters;
+      const maxE = minE + tileSizeMeters;
+      const isEastBoundaryTile = gridCol === cols - 1;
 
       const [minX, maxZ] = projection.utmToLocal(minE, minN);
       const [maxX, minZ] = projection.utmToLocal(maxE, maxN);
@@ -220,7 +213,7 @@ export function createAlignedStudyGrid(params: {
   });
 
   return {
-    name: params.name,
+    name,
     crs: EPSG_25832_CODE,
     tileSizeMeters,
     collarMeters,
@@ -228,8 +221,8 @@ export function createAlignedStudyGrid(params: {
     maxTx,
     minTy,
     maxTy,
-    cols: params.cols,
-    rows: params.rows,
+    cols,
+    rows,
     projection,
     studyUtmBounds,
     studyLocalBounds,
@@ -240,19 +233,106 @@ export function createAlignedStudyGrid(params: {
 }
 
 /**
- * Canonical M1a Hengelo study grid:
- * 8 x 8 tiles of 512 m = 4,096 m x 4,096 m aligned to EPSG:25832 around [6.7935, 52.2625].
- * Note: Distinct from legacy TKT-026 S5 4,000 m tangent-equirectangular benchmark footprint.
+ * Creates a deterministic, meter-aligned tile grid in ETRS89 / UTM Zone 32N (EPSG:25832).
+ *
+ * Tile index conventions:
+ * - `tx = Math.floor(easting / tileSizeMeters)` (increases Eastward, +X)
+ * - `ty = Math.floor(northing / tileSizeMeters)` (increases Northward, -Z)
+ *
+ * World frame origin is placed at the exact center of the study grid in UTM meters so
+ * every tile coordinate in `studyLocalBounds` is an exact integer multiple of `tileSizeMeters`.
+ */
+export function createAlignedStudyGrid(params: {
+  name: string;
+  centerLonLat: readonly [number, number];
+  cols: number;
+  rows: number;
+  tileSizeMeters?: number;
+  collarMeters?: number;
+}): StudyGridSpec {
+  const tileSizeMeters = params.tileSizeMeters ?? DEFAULT_TILE_SIZE_METERS;
+  const collarMeters = params.collarMeters ?? DEFAULT_COLLAR_METERS;
+  const [centerLon, centerLat] = params.centerLonLat;
+  const [centerE, centerN] = geoToUtm32N(centerLon, centerLat);
+
+  const halfSpanX = (params.cols * tileSizeMeters) / 2;
+  const halfSpanY = (params.rows * tileSizeMeters) / 2;
+
+  const minTx = Math.round((centerE - halfSpanX) / tileSizeMeters);
+  const maxTx = minTx + params.cols - 1;
+  const minTy = Math.round((centerN - halfSpanY) / tileSizeMeters);
+  const maxTy = minTy + params.rows - 1;
+
+  const studyMinE = minTx * tileSizeMeters;
+  const studyMaxE = (maxTx + 1) * tileSizeMeters;
+  const studyMinN = minTy * tileSizeMeters;
+  const studyMaxN = (maxTy + 1) * tileSizeMeters;
+
+  return buildStudyGridFromUtmBounds({
+    name: params.name,
+    studyMinE,
+    studyMaxE,
+    studyMinN,
+    studyMaxN,
+    cols: params.cols,
+    rows: params.rows,
+    tileSizeMeters,
+    collarMeters,
+  });
+}
+
+/**
+ * Canonical M1a Hengelo study grid anchored to the exact 4,096 m × 4,096 m EPSG:25832
+ * footprint (`8 × 8` tiles at 512 m, or `4 × 4` tiles at 1,024 m for the TKT-028 tile-size
+ * experiment) around [6.7935, 52.2625].
+ *
+ * Preserves identical geographic/UTM bounds, local origin, and 512 m-aligned internal seams
+ * across supported divisors of 4,096 m.
  */
 export function createHengeloStudyGrid(
   tileSizeMeters = DEFAULT_TILE_SIZE_METERS,
   collarMeters = DEFAULT_COLLAR_METERS
 ): StudyGridSpec {
-  return createAlignedStudyGrid({
-    name: 'hengelo-8x8-m1a',
-    centerLonLat: HENGELO_CENTER_LONLAT,
-    cols: HENGELO_GRID_DIMENSION,
-    rows: HENGELO_GRID_DIMENSION,
+  if (
+    !Number.isFinite(tileSizeMeters) ||
+    !Number.isInteger(tileSizeMeters) ||
+    tileSizeMeters <= 0 ||
+    HENGELO_STUDY_SPAN_METERS % tileSizeMeters !== 0
+  ) {
+    throw new Error(
+      `Unsupported Hengelo study tileSizeMeters=${tileSizeMeters}. Must be a positive integer divisor of ${HENGELO_STUDY_SPAN_METERS} m (e.g. 512 or 1024).`
+    );
+  }
+
+  const cols = HENGELO_STUDY_SPAN_METERS / tileSizeMeters;
+  const rows = HENGELO_STUDY_SPAN_METERS / tileSizeMeters;
+
+  const [centerE, centerN] = geoToUtm32N(
+    HENGELO_CENTER_LONLAT[0],
+    HENGELO_CENTER_LONLAT[1]
+  );
+  const halfSpan = HENGELO_STUDY_SPAN_METERS / 2;
+  const canonicalMinTx512 = Math.round((centerE - halfSpan) / DEFAULT_TILE_SIZE_METERS);
+  const canonicalMinTy512 = Math.round((centerN - halfSpan) / DEFAULT_TILE_SIZE_METERS);
+
+  const studyMinE = canonicalMinTx512 * DEFAULT_TILE_SIZE_METERS;
+  const studyMaxE = studyMinE + HENGELO_STUDY_SPAN_METERS;
+  const studyMinN = canonicalMinTy512 * DEFAULT_TILE_SIZE_METERS;
+  const studyMaxN = studyMinN + HENGELO_STUDY_SPAN_METERS;
+
+  const name =
+    tileSizeMeters === DEFAULT_TILE_SIZE_METERS
+      ? 'hengelo-8x8-m1a'
+      : `hengelo-${cols}x${rows}-m1a-${tileSizeMeters}m`;
+
+  return buildStudyGridFromUtmBounds({
+    name,
+    studyMinE,
+    studyMaxE,
+    studyMinN,
+    studyMaxN,
+    cols,
+    rows,
     tileSizeMeters,
     collarMeters,
   });

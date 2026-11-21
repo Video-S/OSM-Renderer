@@ -12,6 +12,8 @@ import {
 } from './tiling/TileStreamManager';
 import { parseTileStreamingCliArgs } from '../../benchmarks/tileStreamingRunner';
 import { parseRegionalFrameCostCli } from '../../benchmarks/regionalFrameCostRunner';
+import { createAlignedStudyGrid } from './tiling/TileGrid';
+import { TileStreamManager, type TilePackManifestPayload } from './tiling/TileStreamManager';
 
 const viewport: TileViewportGroundBounds = {
   minX: -80, maxX: 80, minZ: -60, maxZ: 60,
@@ -126,4 +128,98 @@ test('TKT-031: regional benchmark validates CLI flags without opening or modifyi
   assert.throws(() => parseRegionalFrameCostCli(['--index=']), /Empty/);
   assert.throws(() => parseRegionalFrameCostCli(['--url=file:\/\/\/tmp\/x']), /HTTP/);
   assert.throws(() => parseRegionalFrameCostCli(['--unknown=1']), /Unknown/);
+});
+
+
+test('TKT-031: stationary camera skips selection, but async HTTP failure triggers retry', async () => {
+  const grid = createAlignedStudyGrid({
+    name: 'TKT-031 gate retry',
+    centerLonLat: [6.7935, 52.2625],
+    cols: 1,
+    rows: 1,
+    tileSizeMeters: 512,
+    collarMeters: 32,
+  });
+  const tile = grid.tiles[0];
+  const manifest: TilePackManifestPayload = {
+    metadata: {
+      snapshotId: 'tkt031-fake',
+      sourceSha256: 'f'.repeat(64),
+      projectionId: 'EPSG:25832',
+      bakeSchemaVersion: '1.1.0',
+      lodPolicyHash: 'test',
+      compression: 'deflate',
+      tileSizeMeters: 512,
+      collarMeters: 32,
+      studyOriginEasting: grid.projection.originEasting,
+      studyOriginNorthing: grid.projection.originNorthing,
+      gridCols: 1,
+      gridRows: 1,
+      minTx: grid.minTx,
+      maxTx: grid.maxTx,
+      minTy: grid.minTy,
+      maxTy: grid.maxTy,
+      bakeStatus: 'complete',
+      createdAtIso: '2026-11-21T00:00:00.000Z',
+      completedAtIso: '2026-11-21T00:00:00.000Z',
+    },
+    tiles: [{
+      lod: 0,
+      tx: tile.tx,
+      ty: tile.ty,
+      minEasting: tile.utmBounds.minEasting,
+      maxEasting: tile.utmBounds.maxEasting,
+      minNorthing: tile.utmBounds.minNorthing,
+      maxNorthing: tile.utmBounds.maxNorthing,
+      tileCenterX: (tile.localBounds.minX + tile.localBounds.maxX) / 2,
+      tileCenterZ: (tile.localBounds.minZ + tile.localBounds.maxZ) / 2,
+      overhangMinX: -256,
+      overhangMaxX: 256,
+      overhangMinY: 0,
+      overhangMaxY: 10,
+      overhangMinZ: -256,
+      overhangMaxZ: 256,
+      triCount: 0, vertexCount: 0, featureCount: 0,
+      isEmpty: true, hasBvh: false, rawBytes: 0, compressedBytes: 0,
+      contentHash: 'test',
+    }],
+  };
+
+  let attempts = 0;
+  const manager = new TileStreamManager({
+    experimentSkipUnchangedViewport: true,
+    experimentSkipUnchangedZoom: true,
+    initialCameraZoom: 1.8,
+    maxConcurrentFetches: 1,
+    fetchFn: async () => {
+      attempts++;
+      return new Response('synthetic HTTP error', { status: 503 });
+    },
+  });
+  try {
+    await manager.initialize(manifest);
+    const cam = new THREE.OrthographicCamera(-350, 350, 350, -350, 1, 5000);
+    cam.position.set(0, 700, 700);
+    cam.lookAt(0, 0, 0);
+    cam.zoom = 1.8;
+    cam.updateProjectionMatrix();
+
+    manager.updateFromCamera(cam);
+    assert.equal(manager.getDiagnostics().viewportSelectionPasses, 1);
+    manager.updateFromCamera(cam);
+    assert.equal(manager.getDiagnostics().viewportSelectionSkips, 1);
+    assert.ok(manager.getDiagnostics().zoomPropagationSkips >= 2);
+    // The async 503 moves the tile to 'error' after the first frame.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    assert.equal(manager.getTileState(manager.getDiagnostics().visibleTileKeys[0]), 'error');
+    manager.updateFromCamera(cam);
+    assert.equal(manager.getDiagnostics().viewportSelectionPasses, 2);
+    assert.equal(attempts, 2);
+    // Camera changes still trigger immediate viewport recomputation.
+    cam.position.x += 10;
+    manager.updateFromCamera(cam);
+    assert.equal(manager.getDiagnostics().viewportSelectionPasses, 3);
+  } finally {
+    manager.dispose();
+  }
 });

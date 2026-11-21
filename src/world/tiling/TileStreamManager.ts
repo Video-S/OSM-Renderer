@@ -120,6 +120,11 @@ export interface TileStreamDiagnosticsSnapshot {
   loadedTileKeys: string[];
   visibleTileKeys: string[];
   loadingTileKeys: string[];
+  /** TKT-031 opt-in experiment: viewport selection work since last counter reset. */
+  viewportSelectionPasses: number;
+  viewportSelectionSkips: number;
+  /** TKT-031 opt-in experiment: unchanged zoom propagation skips. */
+  zoomPropagationSkips: number;
 }
 
 export interface TilePackManifestPayload {
@@ -148,6 +153,10 @@ export interface TileStreamManagerOptions {
   decodeClient?: TileDecodeClient;
   /** Optional custom `fetch` implementation for tests. */
   fetchFn?: typeof fetch;
+  /** TKT-031: A/B only. Avoid identical viewport-selection work; never skip tick(). */
+  experimentSkipUnchangedViewport?: boolean;
+  /** TKT-031: A/B only. Avoid propagating identical zoom values to loaded tiles. */
+  experimentSkipUnchangedZoom?: boolean;
   /** Optional callback fired whenever diagnostics or loaded tiles change. */
   onDiagnosticsChange?: (diagnostics: TileStreamDiagnosticsSnapshot) => void;
 }
@@ -354,6 +363,22 @@ export function computeViewportGroundBoundsForCamera(
   };
 }
 
+/**
+ * Strict equality avoids accepting stale tile membership near a cell boundary.
+ * We compare the derived ground-plane footprint, not just camera position/zoom:
+ * rotating, resizing or changing target alters one or more of these values.
+ */
+export function equalTileViewportBounds(
+  a: TileViewportGroundBounds | null,
+  b: TileViewportGroundBounds
+): boolean {
+  return a !== null &&
+    a.minX === b.minX && a.maxX === b.maxX &&
+    a.minZ === b.minZ && a.maxZ === b.maxZ &&
+    a.focusX === b.focusX && a.focusZ === b.focusZ &&
+    a.cameraZoom === b.cameraZoom;
+}
+
 function aabbIntersects2D(
   aMinX: number,
   aMaxX: number,
@@ -382,6 +407,8 @@ export class TileStreamManager {
   private readonly retainMarginTiles: number;
   private readonly maxConcurrentFetches: number;
   private readonly maxCommitsPerFrame: number;
+  private readonly experimentSkipUnchangedViewport: boolean;
+  private readonly experimentSkipUnchangedZoom: boolean;
   private readonly materialRegistry: ThemeMaterialRegistry;
   private readonly ownsMaterialRegistry: boolean;
   private readonly decodeClient: TileDecodeClient;
@@ -418,6 +445,9 @@ export class TileStreamManager {
   private peakLoadedTiles = 0;
   private peakLoadingTiles = 0;
   private compositeSceneRevision = 0;
+  private viewportSelectionPasses = 0;
+  private viewportSelectionSkips = 0;
+  private zoomPropagationSkips = 0;
   private lastManifestLoadMs = 0;
   private totalFetchMs = 0;
   private fetchSamples = 0;
@@ -444,6 +474,8 @@ export class TileStreamManager {
     );
     this.maxConcurrentFetches = Math.max(1, options.maxConcurrentFetches ?? 6);
     this.maxCommitsPerFrame = Math.max(1, options.maxCommitsPerFrame ?? 4);
+    this.experimentSkipUnchangedViewport = options.experimentSkipUnchangedViewport === true;
+    this.experimentSkipUnchangedZoom = options.experimentSkipUnchangedZoom === true;
     this.currentTheme = options.initialTheme ?? MAP_THEMES.tactical;
     this.currentCameraZoom = options.initialCameraZoom ?? 1.0;
 
@@ -600,6 +632,9 @@ export class TileStreamManager {
     this.lastManifestLoadMs = performance.now() - t0;
     this.metadata = payload.metadata;
     this.tilesByKey.clear();
+    this.currentViewport = null;
+    this.previousFocus = null;
+    this.panLeadVector = { x: 0, z: 0 };
 
     // The original 4km study ground plane is insufficient for larger baked regions.
     // Keep the same scene/mesh identity while resizing only its geometry.
@@ -735,7 +770,13 @@ export class TileStreamManager {
     if (bounds.cameraZoom !== undefined) {
       this.updateCameraZoom(bounds.cameraZoom);
     }
-    this.updateViewport(bounds);
+    if (this.experimentSkipUnchangedViewport &&
+        equalTileViewportBounds(this.currentViewport, bounds)) {
+      this.viewportSelectionSkips++;
+    } else {
+      this.updateViewport(bounds);
+    }
+    // Keep draining completed worker decodes even when the camera is stationary.
     this.tick();
   }
 
@@ -747,6 +788,7 @@ export class TileStreamManager {
   updateViewport(viewport: TileViewportGroundBounds): void {
     if (this.isDisposed || !this.metadata) return;
     this.currentViewport = viewport;
+    this.viewportSelectionPasses++;
 
     if (this.previousFocus) {
       const dx = viewport.focusX - this.previousFocus.x;
@@ -973,6 +1015,10 @@ export class TileStreamManager {
 
   updateCameraZoom(zoom: number): void {
     if (this.isDisposed) return;
+    if (this.experimentSkipUnchangedZoom && zoom === this.currentCameraZoom) {
+      this.zoomPropagationSkips++;
+      return;
+    }
     this.currentCameraZoom = zoom;
     this.materialRegistry.setCameraZoom(zoom);
     for (const record of this.tilesByKey.values()) {
@@ -1128,6 +1174,9 @@ export class TileStreamManager {
       loadedTileKeys,
       visibleTileKeys,
       loadingTileKeys,
+      viewportSelectionPasses: this.viewportSelectionPasses,
+      viewportSelectionSkips: this.viewportSelectionSkips,
+      zoomPropagationSkips: this.zoomPropagationSkips,
     };
   }
 
@@ -1152,6 +1201,9 @@ export class TileStreamManager {
     this.cancelledRequestsTotal = 0;
     this.duplicateRequestsSkippedTotal = 0;
     this.completedLoadsTotal = 0;
+    this.viewportSelectionPasses = 0;
+    this.viewportSelectionSkips = 0;
+    this.zoomPropagationSkips = 0;
     this.peakLoadedTiles = loadedNow;
     this.peakLoadingTiles = loadingNow;
     this.totalFetchMs = 0;

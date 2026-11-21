@@ -87,6 +87,10 @@ import {
   type M1aTileBoundaryOverlayResult,
   type M1aVisualComparisonMode,
 } from '../world/tiling/M1aVisualHarness';
+import {
+  TileStreamManager,
+  type TileStreamDiagnosticsSnapshot,
+} from '../world/tiling/TileStreamManager';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
 
@@ -608,6 +612,8 @@ export default function App() {
         maxX: 2048,
         minZ: -2048,
         maxZ: 2048,
+        widthMeters: 4096,
+        depthMeters: 4096,
       };
 
       mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {

@@ -228,6 +228,7 @@ async function startTestTileServer(
     baseUrl,
     close: async () => {
       controller.close();
+      server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
@@ -310,7 +311,7 @@ test('Express tilePackHttpHandler serves manifest and OSMTILE1 binary payloads w
       const arrayBuffer = await tileRes.arrayBuffer();
       assert.equal(arrayBuffer.byteLength, nonEmptyEntry.rawBytes);
       const decoded = decodeTileBinary(new Uint8Array(arrayBuffer), tileKey);
-      assert.equal(decoded.tileKey, tileKey);
+      assert.equal(formatTileId(decoded.tx, decoded.ty), tileKey);
       assert.ok(decoded.meshes.length > 0);
       const transferables = collectDecodedTileTransferables(decoded);
       assert.ok(transferables.length > 0);
@@ -384,7 +385,7 @@ test('Express tilePackHttpHandler serves manifest and OSMTILE1 binary payloads w
     // 8. Corrupted tile payload hash -> 503
     const db = new DatabaseSync(packPath);
     const firstRow = db
-      .prepare('SELECT lod, tx, ty FROM tiles WHERE is_empty = 0 LIMIT 1')
+      .prepare('SELECT lod, tx, ty FROM tile_manifest WHERE is_empty = 0 LIMIT 1')
       .get() as { lod: number; tx: number; ty: number };
     db.prepare(
       'UPDATE tile_manifest SET content_hash = ? WHERE lod = ? AND tx = ? AND ty = ?'
@@ -450,7 +451,7 @@ test('TileStreamManager streams viewport tiles, preserves BVH raycasting, themes
       allowCustomSnapshot: true,
     });
 
-    const decodeClient = createTileDecodeClient({ forceInline: true });
+    const decodeClient = createTileDecodeClient({ forceInlineDecode: true });
     const manager = new TileStreamManager({
       apiBaseUrl: srv.baseUrl,
       preloadMarginTiles: 1,
@@ -561,9 +562,14 @@ test('TileStreamManager streams viewport tiles, preserves BVH raycasting, themes
         'Expected 3D rails visible at zoom 8.0'
       );
       assert.equal(
-        countVisibleByName(manager.scene.railwaysGroup, 'Railways_Track'),
+        countVisibleByName(manager.scene.railwaysGroup, 'Railway_Sleepers'),
         0,
-        'Expected UV track ribbons hidden at zoom 8.0'
+        'Expected UV sleeper ribbons hidden at zoom 8.0'
+      );
+      assert.equal(
+        countVisibleByName(manager.scene.railwaysGroup, 'Railway_Rails'),
+        0,
+        'Expected UV rail ribbons hidden at zoom 8.0'
       );
 
       manager.updateCameraZoom(1.5);
@@ -573,8 +579,12 @@ test('TileStreamManager streams viewport tiles, preserves BVH raycasting, themes
         'Expected 3D sleepers hidden at zoom 1.5'
       );
       assert.ok(
-        countVisibleByName(manager.scene.railwaysGroup, 'Railways_Track') > 0,
-        'Expected UV track ribbons visible at zoom 1.5'
+        countVisibleByName(manager.scene.railwaysGroup, 'Railway_Sleepers') > 0,
+        'Expected UV sleeper ribbons visible at zoom 1.5'
+      );
+      assert.ok(
+        countVisibleByName(manager.scene.railwaysGroup, 'Railway_Rails') > 0,
+        'Expected UV rail ribbons visible at zoom 1.5'
       );
 
       // 4. Verify theme switching across all 4 themes & wireframe mode without recreating materials
@@ -588,14 +598,20 @@ test('TileStreamManager streams viewport tiles, preserves BVH raycasting, themes
       }
       manager.setWireframe(true);
       assert.equal(
-        (manager.sharedMaterialRegistry.getMaterial('buildings') as THREE.MeshStandardMaterial)
-          .wireframe,
+        (
+          manager.sharedMaterialRegistry.getMaterial(
+            'building:roof:default'
+          ) as THREE.MeshStandardMaterial
+        ).wireframe,
         true
       );
       manager.setWireframe(false);
       assert.equal(
-        (manager.sharedMaterialRegistry.getMaterial('buildings') as THREE.MeshStandardMaterial)
-          .wireframe,
+        (
+          manager.sharedMaterialRegistry.getMaterial(
+            'building:roof:default'
+          ) as THREE.MeshStandardMaterial
+        ).wireframe,
         false
       );
 

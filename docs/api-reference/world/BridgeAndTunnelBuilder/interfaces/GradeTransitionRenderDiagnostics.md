@@ -98,7 +98,7 @@ Defined in: world/BridgeAndTunnelBuilder.ts:84
 
 ### mode
 
-> **mode**: `"legacy"` \| `"graph"`
+> **mode**: `"graph"` \| `"legacy"`
 
 Defined in: world/BridgeAndTunnelBuilder.ts:78
 

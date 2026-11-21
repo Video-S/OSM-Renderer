@@ -1,8 +1,8 @@
+import { decodeTileBinary } from './TileBinaryCodec';
 import {
-  decodeTileBinary,
+  OSMTILE1_MAGIC,
   type DecodedTilePayload,
-} from './TileBinaryCodec';
-import { OSMTILE1_MAGIC } from './TilePackContract';
+} from './TilePackContract';
 
 export interface TileDecodeWorkerRequest {
   requestId: number;

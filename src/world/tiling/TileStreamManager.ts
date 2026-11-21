@@ -901,7 +901,7 @@ export class TileStreamManager {
           loadedDrawCallsEstimate +=
             record.reconstructed.scene.stats.totalDrawCalls;
           activeTileGeometries +=
-            record.reconstructed.scene.resources.getStats().geometries;
+            record.reconstructed.scene.resources.ownedGeometriesCount;
         }
       } else if (record.state === 'queued') {
         queuedTiles += 1;
@@ -1224,15 +1224,24 @@ export class TileStreamManager {
     }
   }
 
-  private isCurrentlyIdle(): boolean {
-    if (this.activeFetchCount > 0) return false;
+  private hasPendingAsyncWork(): boolean {
+    if (this.activeFetchCount > 0) return true;
     for (const record of this.tilesByKey.values()) {
       if (
-        record.state === 'queued' ||
+        (record.state === 'queued' && record.isInFetchSet) ||
         record.state === 'fetching' ||
-        record.state === 'decoding' ||
-        (record.state === 'ready_to_commit' && record.isInKeepSet)
+        record.state === 'decoding'
       ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isCurrentlyIdle(): boolean {
+    if (this.hasPendingAsyncWork()) return false;
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'ready_to_commit' && record.isInKeepSet) {
         return false;
       }
     }
@@ -1241,7 +1250,7 @@ export class TileStreamManager {
 
   private checkIdleWaiters(): void {
     if (this.idleWaiters.length === 0) return;
-    if (this.isDisposed || this.isCurrentlyIdle()) {
+    if (this.isDisposed || !this.hasPendingAsyncWork()) {
       const waiters = this.idleWaiters.splice(0, this.idleWaiters.length);
       for (const resolve of waiters) {
         resolve();

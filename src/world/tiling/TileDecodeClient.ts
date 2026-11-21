@@ -1,8 +1,7 @@
-import {
-  decodeTileBinary,
-  type DecodedTilePayload,
-} from './TileBinaryCodec';
+import { decodeTileBinary } from './TileBinaryCodec';
+import type { DecodedTilePayload } from './TilePackContract';
 import type {
+  TileDecodeWorkerErrorResponse,
   TileDecodeWorkerRequest,
   TileDecodeWorkerResponse,
 } from './TileDecodeWorker';
@@ -139,7 +138,8 @@ export function createTileDecodeClient(
               usedWebWorker: true,
             });
           } else {
-            job.reject(new Error(response.error));
+            const errResp = response as TileDecodeWorkerErrorResponse;
+            job.reject(new Error(errResp.error));
           }
 
           pumpQueue();

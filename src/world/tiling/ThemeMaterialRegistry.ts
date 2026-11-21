@@ -26,6 +26,7 @@ export class ThemeMaterialRegistry {
   private railwayShaderControls: ProceduralRailwayMaterialControl[] = [];
   private activeTheme: MapStyleTheme;
   private currentCameraZoom: number;
+  private currentWireframe = false;
   private isDisposed = false;
 
   constructor(
@@ -70,6 +71,7 @@ export class ThemeMaterialRegistry {
       return existing.material;
     }
     const created = this.createEntryForSlotKey(slotKey);
+    created.material.wireframe = this.currentWireframe;
     this.entries.set(slotKey, created);
     return created.material;
   }
@@ -105,6 +107,7 @@ export class ThemeMaterialRegistry {
 
   setWireframe(enabled: boolean): void {
     if (this.isDisposed) return;
+    this.currentWireframe = enabled;
     for (const entry of this.entries.values()) {
       entry.material.wireframe = enabled;
     }

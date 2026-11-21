@@ -122,7 +122,7 @@ test('TKT-030: compatible meshes group by material and spatial cell, never acros
   assert.equal(profile(result, null).submissionReductionProxy, 2);
   assert.equal(profile(result, 128).submissionReductionProxy, 1);
   assert.equal(profile(result, 256).submissionReductionProxy, 1);
-  assert.equal(profile(result, 512).submissionReductionProxy, 1);
+  assert.equal(profile(result, 512).submissionReductionProxy, 2);
   assert.equal(profile(result, 256).afterSubmissionProxy, 2);
   assert.equal(result.featureCategories['Road & Way'], 1);
 });

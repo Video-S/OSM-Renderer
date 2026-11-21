@@ -12,6 +12,7 @@ import {
 import { OverijsselOsmStore } from './src/server/osm/OverijsselOsmStore';
 import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
+import { createTilePackHttpHandler } from './src/server/tiles/tilePackHttpHandler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +74,7 @@ const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
 const osmDataController = createOsmDataHandler({
   ensureOverijsselReady: isOverijsselAutoBootstrapDisabled() ? undefined : ensureOverijsselReady,
 });
+const tilePackController = createTilePackHttpHandler();
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
 app.get('/api/geocode', async (req, res) => {
@@ -131,6 +133,14 @@ app.get('/api/geocode', async (req, res) => {
 // 2. Fetch and convert real OpenStreetMap data around (lat, lon) to GeoJSON
 app.get('/api/osm-data', osmDataController.handler);
 
+// 3. M2-A Offline Baked Tile Pack API (OSMTILE1)
+app.get('/api/tiles/manifest', tilePackController.manifestHandler);
+app.get('/api/tiles/:lod/:tx/:ty', tilePackController.tilePayloadHandler);
+app.get(
+  '/api/tiles/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+  tilePackController.tilePayloadHandler
+);
+
 // Vite middleware in development or static hosting in production
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -175,6 +185,7 @@ async function startServer() {
 
   const shutdown = () => {
     osmDataController.close();
+    tilePackController.close();
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);

@@ -254,6 +254,10 @@ export default function App() {
       setIsM1aHarnessActive(false);
       disposeM1aHarnessScenes();
     }
+    if (activeLocationIdRef.current !== 'hengelo_m2a_tiles') {
+      setIsM2aStreamingActive(false);
+      disposeM2aStreamManager();
+    }
     setMapData(data);
   };
 
@@ -281,6 +285,14 @@ export default function App() {
   const m1aReferenceSceneRef = useRef<BuiltSceneGeometry | null>(null);
   const m1aBoundaryOverlayRef = useRef<M1aTileBoundaryOverlayResult | null>(null);
 
+  // TKT-028 M2-A Runtime Baked Tile Streaming State
+  const [isM2aStreamingActive, setIsM2aStreamingActive] = useState<boolean>(false);
+  const [showM2aTileBoundaries, setShowM2aTileBoundaries] = useState<boolean>(true);
+  const [m2aStreamDiagnostics, setM2aStreamDiagnostics] =
+    useState<TileStreamDiagnosticsSnapshot | null>(null);
+  const tileStreamManagerRef = useRef<TileStreamManager | null>(null);
+  const lastM2aDiagUiTimeRef = useRef<number>(0);
+
   const disposeM1aHarnessScenes = () => {
     if (m1aTiledSceneRef.current) {
       if (activeSceneRef.current === m1aTiledSceneRef.current) {
@@ -302,6 +314,17 @@ export default function App() {
     }
     m1aIngestedRef.current = null;
     setM1aHarnessMetrics(null);
+  };
+
+  const disposeM2aStreamManager = () => {
+    if (tileStreamManagerRef.current) {
+      if (activeSceneRef.current === tileStreamManagerRef.current.scene) {
+        activeSceneRef.current = null;
+      }
+      tileStreamManagerRef.current.dispose();
+      tileStreamManagerRef.current = null;
+    }
+    setM2aStreamDiagnostics(null);
   };
 
   const switchM1aVisualMode = (nextMode: M1aVisualComparisonMode) => {
@@ -354,7 +377,10 @@ export default function App() {
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
+    activeLocationIdRef.current = 'hengelo_m1a';
     setActiveLocationId('hengelo_m1a');
+    setIsM2aStreamingActive(false);
+    disposeM2aStreamManager();
     setStatusMessage('Fetching canonical Hengelo M1a 4×4 km study GeoJSON from local Overijssel SQLite store...');
 
     try {
@@ -493,6 +519,161 @@ export default function App() {
       const failed = mapLoadTrackerRef.current.markLoadFailed(
         requestId,
         err?.message || 'Failed to load M1a Visual Acceptance Harness'
+      );
+      if (failed) setLastMapLoadDiagnostics(failed);
+    }
+  };
+
+  const loadHengeloM2aTileStreaming = async (
+    overrideZoom?: number,
+    overrideAzimuthDeg?: number,
+    isInitialStartupLoad: boolean = false
+  ) => {
+    const requestId = mapLoadTrackerRef.current.startLoad({
+      locationId: 'hengelo_m2a_tiles',
+      locationName: 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
+      radiusMeters: 2048,
+      sourceType: 'fixture',
+      isInitialStartupLoad,
+      rendererConfig: {
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: 'production',
+        themeId: selectedThemeIdRef.current,
+      },
+    });
+
+    setLoading(true);
+    setError(null);
+    setHoveredFeature(null);
+    setSelectedFeature(null);
+    activeLocationIdRef.current = 'hengelo_m2a_tiles';
+    setActiveLocationId('hengelo_m2a_tiles');
+    setIsM1aHarnessActive(false);
+    disposeM1aHarnessScenes();
+    disposeM2aStreamManager();
+    if (activeSceneRef.current) {
+      activeSceneRef.current.dispose();
+      activeSceneRef.current = null;
+    }
+
+    setStatusMessage('Initializing M2-A TileStreamManager from baked SQLite tile pack (/api/tiles/manifest)...');
+
+    try {
+      const initialZoom = overrideZoom ?? 1.8;
+      const activeTheme = MAP_THEMES[selectedThemeIdRef.current] || MAP_THEMES.tactical;
+
+      const manager = new TileStreamManager({
+        initialTheme: activeTheme,
+        initialCameraZoom: initialZoom,
+        onDiagnosticsChange: (diag) => {
+          const now = performance.now();
+          if (
+            diag.loadingTiles === 0 ||
+            now - lastM2aDiagUiTimeRef.current >= 80
+          ) {
+            lastM2aDiagUiTimeRef.current = now;
+            setM2aStreamDiagnostics(diag);
+          }
+        },
+      });
+      manager.setWireframe(wireframe);
+      tileStreamManagerRef.current = manager;
+
+      const tInit0 = performance.now();
+      const packMeta = await manager.initialize();
+      const initElapsedMs = performance.now() - tInit0;
+
+      // Seed initial viewport around center [0, 0] before first WebGL frame
+      const halfSpan = Math.max(256, 700 / Math.max(initialZoom, 0.15));
+      manager.updateViewport({
+        minX: -halfSpan,
+        maxX: halfSpan,
+        minZ: -halfSpan,
+        maxZ: halfSpan,
+        focusX: 0,
+        focusZ: 0,
+        cameraZoom: initialZoom,
+      });
+
+      const totalPackTiles = packMeta.gridCols * packMeta.gridRows;
+      const emptyEnvelopeData = localProvider.parseGeoJson(
+        { type: 'FeatureCollection', features: [] },
+        `Hengelo M2-A Baked Tile Pack (${packMeta.snapshotId} · ${totalPackTiles} Tiles)`,
+        [6.7935, 52.2625],
+        2048
+      );
+      emptyEnvelopeData.bounds = {
+        minX: -2048,
+        maxX: 2048,
+        minZ: -2048,
+        maxZ: 2048,
+      };
+
+      mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
+        responseTransferMs: initElapsedMs,
+        geoJsonProcessingMs: 0,
+        featureCount: null,
+      });
+
+      const targetScene = manager.scene;
+      const revision = ++transitionRevisionRef.current;
+      const sceneMeta: SceneRevisionConfigMeta = {
+        revision,
+        datasetId: 'hengelo_m2a_tiles',
+        roadsMode: infrastructureRenderOptionsRef.current.roads,
+        railwaysMode: infrastructureRenderOptionsRef.current.railways,
+        railwayPrototypeMode: 'production',
+        themeId: selectedThemeIdRef.current,
+        hasFeatures: true,
+        webglFramesRendered: 0,
+      };
+      targetScene.groundMesh.userData.__sceneMeta = sceneMeta;
+
+      const initMsRounded = Number(initElapsedMs.toFixed(2));
+      latestCpuBuildTimeMsRef.current = initMsRounded;
+      setCpuBuildTimeMs(initMsRounded);
+
+      setIsM2aStreamingActive(true);
+      setCurrentRawGeoJson(null);
+      commitMapDataForRequest(requestId, emptyEnvelopeData);
+      mapLoadTrackerRef.current.recordSceneGeometryBuild(requestId, {
+        effectStartedAtMs: tInit0,
+        buildDurationMs: initMsRounded,
+        sceneRevision: revision,
+        stageTimingsMs: null,
+        rendererConfig: {
+          roadsMode: infrastructureRenderOptionsRef.current.roads,
+          railwaysMode: infrastructureRenderOptionsRef.current.railways,
+          railwayPrototypeMode: 'production',
+          themeId: selectedThemeIdRef.current,
+        },
+        triangles: targetScene.stats.totalTriangles,
+        drawCalls: targetScene.stats.totalDrawCalls,
+      });
+
+      activeSceneRef.current = targetScene;
+      setBuiltGeometry(targetScene);
+      setM2aStreamDiagnostics(manager.getDiagnostics());
+      setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+
+      setExplicitPose((prev) => ({
+        target: [0, 0, 0],
+        zoom: initialZoom,
+        azimuthRad: ((overrideAzimuthDeg ?? 45) * Math.PI) / 180,
+        signal: prev.signal + 1,
+      }));
+    } catch (err: any) {
+      console.error('Failed to initialize M2-A Runtime Tile Streaming:', err);
+      disposeM2aStreamManager();
+      setIsM2aStreamingActive(false);
+      setError(`M2-A Tile Streaming Error: ${err?.message || String(err)}`);
+      setLoading(false);
+      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
+      const failed = mapLoadTrackerRef.current.markLoadFailed(
+        requestId,
+        err?.message || 'Failed to initialize M2-A Runtime Tile Streaming'
       );
       if (failed) setLastMapLoadDiagnostics(failed);
     }
@@ -3100,12 +3281,20 @@ export default function App() {
                       <span className="text-slate-400 block text-[10px]">6. CPU Buffer Memory</span>
                       <span className="text-xs font-bold font-mono tabular-nums text-purple-300">
                         {(
-                          (builtGeometry?.resources.getCpuBufferMemoryStats().totalBytes ?? 0) /
+                          ((isM2aStreamingActive && m2aStreamDiagnostics
+                            ? m2aStreamDiagnostics.tileCpuGeometryBytes +
+                              m2aStreamDiagnostics.tileBvhBytes
+                            : 0) +
+                            (builtGeometry?.resources.getCpuBufferMemoryStats().totalBytes ?? 0)) /
                           (1024 * 1024)
                         ).toFixed(2)}{' '}
                         MB
                       </span>
-                      <span className="text-[9px] text-slate-500 block">TypedArray + Instances</span>
+                      <span className="text-[9px] text-slate-500 block">
+                        {isM2aStreamingActive && m2aStreamDiagnostics
+                          ? `${m2aStreamDiagnostics.loadedTiles}/${m2aStreamDiagnostics.totalGridTiles} tiles · ${m2aStreamDiagnostics.activeTileBvhs} BVHs`
+                          : 'TypedArray + Instances'}
+                      </span>
                     </div>
 
                     {/* Metric 7: Estimated GPU Driver Memory / Geoms */}
@@ -3310,6 +3499,7 @@ export default function App() {
         onLoadPrinsFork={() => loadPrinsHendrikkadeForkFixture()}
         onLoadHengelo={() => loadLiveHengeloPreset()}
         onLoadHengeloM1a={() => loadHengeloM1aVisualHarness('tiled')}
+        onLoadHengeloM2aTiles={() => loadHengeloM2aTileStreaming()}
         onLoadAmsterdam={() => loadLiveAmsterdamPreset()}
         onImportReproductionPackage={handleImportReproductionPackage}
         roadRenderStats={builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null}

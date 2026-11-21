@@ -75,6 +75,7 @@ export interface DevToolsPanelProps {
   onLoadPrinsFork: () => void;
   onLoadHengelo: () => void;
   onLoadHengeloM1a?: () => void;
+  onLoadHengeloM2aTiles?: () => void;
   onLoadAmsterdam: () => void;
   // Active context for reproduction
   mapData: ProcessedMapData | null;
@@ -120,6 +121,7 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   onLoadPrinsFork,
   onLoadHengelo,
   onLoadHengeloM1a,
+  onLoadHengeloM2aTiles,
   onLoadAmsterdam,
   mapData,
   currentRawGeoJson,

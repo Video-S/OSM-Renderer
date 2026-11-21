@@ -52,6 +52,7 @@ export interface MapSceneProps {
   showGraphOverlay?: boolean;
   tileBoundaryOverlayGroup?: THREE.Group | null;
   showTileBoundaryOverlay?: boolean;
+  onViewportFrameUpdate?: (camera: THREE.OrthographicCamera) => void;
 }
 
 function computePercentile(sorted: number[], p: number): number {
@@ -120,6 +121,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
   showGraphOverlay = false,
   tileBoundaryOverlayGroup = null,
   showTileBoundaryOverlay = false,
+  onViewportFrameUpdate,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
   const lastHoverTimeRef = useRef<number>(0);

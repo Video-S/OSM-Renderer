@@ -165,6 +165,49 @@ The **55 one-sided attribution** and **66 absent-both** event counts did not cha
 
 **Next data required:** owner-generated `benchmarks/results/tkt032-seam-audit-v2.json` (Markdown optional) to inspect all **163** polygon expected-vs-emitted coverage pairs, **14** other surface witnesses, **55** attribution cases, and **66** absent-both cases. Prioritize road/rail/negative-layer semantics and source-backed ownership. Deduplicate by source ID, crossing location and feature category. Do not use aggregate warning counts as a go/no-go criterion or modify baker data without a failing narrowed reproduction. Human visual acceptance and railway sleeper/graph continuity are still pending; TKT-029 **not signed off**.
 
+## Owner v2 JSON — source-backed residual analysis (2026-11-22)
+
+**Inputs reviewed:** complete owner-uploaded `tkt032-seam-audit-v2.json` (schema v2, 4.285 MB) and Markdown. This supersedes inferences from the console alone; no canonical SQLite packs or original source index were available to this analysis. All figures below are derived from the supplied JSON. The current auditor is **source-to-emitted-feature triage**, not proof of tile/shard continuity.
+
+### Exact distribution and impact
+
+- **4,404 source crossing events:** 1,241 road, 24 rail, 285 water, 2,854 landuse. 4,106 have no `review`; 298 have a review reason. The 298 review events may contain repeat intersections of the same source way.
+- **35 one-sided road attribution events represent 34 different source way IDs** (one way crosses two nearby shard boundaries). Another **20 one-sided attribution events are landuse**. A feature ID being present in a tile indicates emitted geometry exists *somewhere in the tile*, not at the border.
+- **14 source-attributed road surface coverage asymmetries represent 13 different roads**. All 14 have matching source feature identities emitted on both sides and an actual decoded triangle sample covering the point on **exactly one** side. The covered triangles were at `+0.05 m`; the other side's sample was uncovered. These are the strongest directly measured road-surface leads, but could still be due to winding centerlines, offsets, clipping, alternate ownership, and/or sample placement.
+- **One road source ID absent from both sides:** `way/6661112`, at global UTM **(357376, 5791095.095)**, `vertical-r1-c2-3`, between `0:348:5655` and `0:349:5655`. This does not yet establish whether *other* road triangles cover its source crossing.
+- **24 railway crossing events, 24 matching emitted source IDs both sides**; all have nonzero recorded nearby sleeper-box counts, but no sleeper position/spacing/phase, hidden/tunnel portal or switch continuity comparison has been performed.
+- **Zero layer/bridge/tunnel metadata disagreements; zero >0.75 m sampled surface height-step candidates**. This is a useful negative result but does not verify all bridge/tunnel geometry or underground rendering.
+- **66 absent-both events** consist of 40 water relations, 12 water ways, 13 landuse ways and one road. 14 events explicitly have `sourceLayer=-1`; eight have `sourceTunnel=culvert` (not necessarily disjoint). This supports checking intentional underground-hiding and way/relation identity before any proposed bake fix.
+
+### Polygon ownership diagnosis
+
+**163 `source-polygon-coverage-mismatch` events represent 125 distinct IDs**. At both 25 cm inset probes their observed source-attributed statuses are:
+
+| Source expected vs. emitted | Events |
+|---|---:|
+| Source expects one side, emitted source ID covers **neither** side | **148** |
+| Source expects one side, emitted source ID covers **both** sides | **9** |
+| One sample `unattributed` and the other uncovered | **4** |
+| Inverted one-side coverage | **2** |
+
+For **68 of these 163 events**, at least one *other* source-attributed feature at the **same seam interface and within 0.25 m** of the crossing has a sampled emitted surface covering the side which the first polygon's source expects: **47 water**, **21 landuse**. This is evidence for semantic ownership / overlapping source features in a significant subset, **not** proof that the actual rendered world is gap-free (mesh layer, render visibility, elevation and override policy still matter). The first v1 near-total warning volume was misleading; v2 is more selective, but still compares raw source polygon identity to intentionally resolved semantic ownership.
+
+### Targeted road investigations — do not rebake yet
+
+Choose a deliberately varied set, not a random 55-way visual tour:
+
+| Priority and hypothesis | Source and UTM coordinate | Where to reproduce |
+|---|---|---|
+| **P1: missing road ID both tiles** — verify original `highway` tag/support, locate all `roads` mesh triangles and their owners | `way/6661112`; **357376 / 5791095.095** | `vertical-r1-c2-3`; `0:348:5655` vs `0:349:5655` |
+| **P1: measured two-sided road sample mismatch, repeated for same ID** — determine true road coverage/width vs 25 cm point | `way/971925458`; **353280 / 5792169.591** and **353280 / 5792209.889** | `vertical-r1-c1-2`; `0:344:5656` vs `0:345:5656` |
+| **P1: crossed two shard interfaces near four-way corner** — possible special corner, topology, or provenance | `way/6655700`; **353280 / 5786626.158** and **353278.783 / 5786624** | `vertical-r2-c1-2` and `horizontal-r2-3-c1` |
+| **P2: one-sided source ID not near any other recorded source crossing (~66m)** — assess whether cross-shard graph/way provenance changed | `way/51932698`; **357376 / 5798521.137** | `vertical-r0-c2-3`; `0:348:5662` vs `0:349:5662` |
+| **P2: another road crosses within 0.51m** — test alternate attribution / parallel road | `way/285573560`; **353238.613 / 5790720** | `horizontal-r1-2-c1`; `0:344:5655` vs `0:344:5654` |
+
+**Recommended next scoped diagnostic**: On only these adjacent tile pairs, interrogate the original source tags and decoded `roads` layer **regardless of feature ID**, sampling small spatial offsets on each side of the seam; report actual road-triangle coverage, emitted owners/face ranges, elevations and expected OSM centerline trajectory. This is the key missing evidence distinguishing a discontinuity from alternative attribution. Include within-shard controls. No general-purpose rendering changes or another 256-tile bake without a proven reproduction.
+
+Only after road diagnosis should we interpret raw source polygon mismatches via the renderer's semantic ownership/picking behavior and address railway ribbon vs 3D sleeper-phase / junction parity. Human visual QA belongs to the owner, not LLM automation. TKT-029 remains open.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

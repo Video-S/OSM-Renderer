@@ -605,6 +605,7 @@ export class TileStreamManager {
     // Keep the same scene/mesh identity while resizing only its geometry.
     const regionWidth = payload.metadata.gridCols * payload.metadata.tileSizeMeters;
     const regionDepth = payload.metadata.gridRows * payload.metadata.tileSizeMeters;
+    this.groundMesh.userData.__regionalStreamingWidthMeters = regionWidth;
     if (regionWidth > 0 && regionDepth > 0) {
       const oldGeometry = this.groundMesh.geometry;
       const groundGeometry = this.regionalResources.registerGeometry(

@@ -124,6 +124,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onViewportFrameUpdate,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
+  const sunLightRef = useRef<THREE.DirectionalLight>(null);
+  const sunDirectionRef = useRef(new THREE.Vector3());
   const lastHoverTimeRef = useRef<number>(0);
   const lastHoverRaycastMsRef = useRef<number>(0);
   const lastRaycastIntersectMsRef = useRef<number>(0);

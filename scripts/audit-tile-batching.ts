@@ -127,6 +127,12 @@ export function auditBatchingOpportunity(
   const tiles: BatchAuditTile[] = [];
   let packsRead = 0;
   const observedTileKeys = new Set<string>();
+  const expectedRegionalTiles = opts.regionIndexPath
+    ? createRegionalMosaicPlan(
+        (JSON.parse(fs.readFileSync(opts.regionIndexPath, 'utf8')) as RegionalMosaicIndex).config
+      ).grid.tiles.length
+    : null;
+  let expectedSinglePackTiles: number | null = null;
   let expectedMetadata: {
     snapshotId: string;
     sourceSha256: string;
@@ -139,6 +145,9 @@ export function auditBatchingOpportunity(
     const store = new TilePackSqliteStore(packPath);
     try {
       const meta = store.getMetadata();
+      if (!opts.regionIndexPath) {
+        expectedSinglePackTiles = meta.gridCols * meta.gridRows;
+      }
       if (!expectedMetadata) {
         expectedMetadata = {
           snapshotId: meta.snapshotId,
@@ -178,11 +187,12 @@ export function auditBatchingOpportunity(
     throw new Error('No decoded LOD0 tiles found');
   }
 
-  const totalGridTiles = opts.regionIndexPath
-    ? packPaths.length * 16 // replaced by complete-grid validation above for default 4x4 shards
-    : null;
-  const isPartialSample = opts.maxTiles !== null &&
-    (totalGridTiles === null || tiles.length === opts.maxTiles);
+  const expectedTotalTiles = expectedRegionalTiles ?? expectedSinglePackTiles;
+  if (!expectedTotalTiles || tiles.length > expectedTotalTiles ||
+      (opts.maxTiles === null && tiles.length !== expectedTotalTiles)) {
+    throw new Error('Audited tile count does not match expected input coverage');
+  }
+  const isPartialSample = tiles.length < expectedTotalTiles;
   const report: BatchAuditReport = {
     schemaVersion: 1,
     auditId: 'TKT-030',
@@ -226,7 +236,7 @@ function topEntries(counts: Record<string, number>, maxCount: number):
 export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
   const s = report.summary;
   const lines: string[] = [
-    '# TKT-030 — OSMTI​LE1 Batch Opportunity Audit',
+    '# TKT-030 — OSMTILE1 Batch Opportunity Audit',
     '',
     '- Scope: ' + report.mode + ' / ' + report.input,
     '- Snapshot: ' + report.snapshotId + ' / policy: ' + report.lodPolicyHash,

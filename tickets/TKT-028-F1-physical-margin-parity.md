@@ -87,6 +87,14 @@ The existing browser benchmark's `cleanResourceStabilizationVerified` is **false
 
 **Recommendation:** 1,024 m LOD0 is the preferred **candidate**, contingent on human visual inspection of real pan/zoom streaming and willingness to accept the measured close-up geometry-memory cost. No M3 LOD or new batching is justified by these results alone.
 
+## Owner Visual Feedback — 2026-11-21
+
+The project owner tested the 1,024 m matched-margin implementation interactively and reported **"a great improvement"** and **"buttery smooth 144fps"**. Tiles are still **visibly loading into view**, although the owner described their appearance as **"still really fast"**.
+
+Interpretation: interactive responsiveness is positively accepted; **visible tile pop-in is a confirmed remaining polish issue**, not a claim of zero visual loading disruptions. This is an owner-reported observation rather than the hardware benchmark's measured median FPS. Do not claim that inspection, all themes, seam transitions, or long-distance traversal have received comprehensive visual sign-off unless separately confirmed.
+
+Next action: keep 1,024 m as the preferred LOD0 candidate and investigate conservative, camera-direction-aware prefetch improvements without increasing far-view draw calls or changing geometry. Preserve the existing 512 m production default until the promotion decision.
+
 ## Visual QA on the Matched Policy
 
 The normal URL `?m2a=1&tileSize=1024` still uses **legacy** 1/2-tile preload/retention and does **not** replicate the matched benchmark. An opt-in visual parameter now uses the **exact 512 m/1,024 m physical policy**, for either tile width:

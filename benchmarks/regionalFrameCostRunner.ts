@@ -342,6 +342,10 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
           }) => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             h.setCameraPose([0, 0, 0], args.zoom, 45);
+            // Commit the camera pose to the R3F frame before waiting for the
+            // tile selection/decode queues. Otherwise the old pose can be idle.
+            await new Promise<void>((r) => requestAnimationFrame(() => r()));
+            await new Promise<void>((r) => requestAnimationFrame(() => r()));
             await h.waitForM2aIdle();
             h.resetM2aPerfCounters();
             const frames: BenchmarkFrameTelemetry[] = [];
@@ -393,6 +397,8 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
         const teleport = await page.evaluate(async (args: { measured: number; warmup: number }) => {
           const h = (window as any).__BENCHMARK_HARNESS__;
           h.setCameraPose([-5500, 0, -3500], 2.2, 45);
+          await new Promise<void>((r) => requestAnimationFrame(() => r()));
+          await new Promise<void>((r) => requestAnimationFrame(() => r()));
           await h.waitForM2aIdle();
           h.resetM2aPerfCounters();
           const samples: BenchmarkFrameTelemetry[] = [];

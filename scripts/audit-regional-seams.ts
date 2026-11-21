@@ -310,8 +310,9 @@ export function auditRegionalSeams(opts: RegionalSeamAuditOptions): RegionalSeam
   const store = new OverijsselOsmStore(opts.sourceIndexPath, {
     expectedSha256: OVERIJSSEL_PBF_EXPECTED_SHA256,
   });
-  if (store.snapshotMetadata.snapshotId !== index.snapshotId ||
-      store.snapshotMetadata.sourceSha256.toLowerCase() !== index.sourceSha256.toLowerCase()) {
+  const sourceMetadata = store.getSnapshotMetadata();
+  if (sourceMetadata.snapshotId !== index.snapshotId ||
+      sourceMetadata.sourceSha256.toLowerCase() !== index.sourceSha256.toLowerCase()) {
     store.close();
     throw new Error('Canonical OSM index snapshot/source SHA differs from mosaic');
   }

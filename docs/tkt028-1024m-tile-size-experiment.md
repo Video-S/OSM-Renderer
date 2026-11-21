@@ -159,3 +159,15 @@ The old section 5 recommendation is preserved as historical experiment context. 
 Follow-up: [`tickets/TKT-028-F1-physical-margin-parity.md`](../tickets/TKT-028-F1-physical-margin-parity.md) adds a benchmark-only, opt-in `--match-physical-margins` switch. It holds **512 m preload / 1,024 m retention** fixed for both tile widths (1024 m uses fractional `0.5 / 1` tile margins). The previous baseline and 512 m production configuration remain unchanged.
 
 Next step: complete the matched-margin canonical Windows run and confirm actual 1,024 m eviction/reload and stable resources before selecting a production tile width.
+
+---
+
+## 8. Matched-Margin Windows GPU Verification (2026-11-21)
+
+**TKT-028-F1** follow-up is now implemented and canonical hardware-tested. Physical preload/retain distances were fixed to **512 m / 1,024 m** for both tile widths; the production defaults remain unchanged. The project owner verified **5/5** 1,024 m tests, **0 TypeScript errors**, and a successful Vite build.
+
+The new paired RTX 4060 Ti comparison shows **2,900 → 1,224** far-overview draw calls (-57.8%) and **19.60 → 16.38 ms** aggregate median frame interval (two runs each). During NW↔SE repeated navigation, 1,024 m tiles now **evicted 38 tiles per run** and retained **7** tiles instead of holding all 16 resident. Repeated-pan draw calls fell from **349 to 225**, but 1,024 m had higher settled SE tile-owned geometry memory (**76.50 MiB** versus **48.30 MiB**, +58%) and slower per-tile decoding.
+
+The strict baseline memory check flagged 512 m because the first NW visit had 20 loaded tiles but all subsequent NW visits held exactly 19; the underlying geometry/BVH resources were stable thereafter. No progressive resource growth was observed. Do not reinterpret JavaScript heap fluctuations as proof of a leak.
+
+Run-to-run frame-time variation is meaningful: large tiles are not guaranteed to beat small tiles on every individual frame, and one of the two 1,024 m repeated-pan runs had five intervals over 33.3 ms. **1,024 m is the preferred *candidate*, not a promoted default** until owner-led visual QA confirms no visible loading gaps or unacceptable stutter. See [TKT-028-F1](../tickets/TKT-028-F1-physical-margin-parity.md) for detailed metrics and acceptance gates.

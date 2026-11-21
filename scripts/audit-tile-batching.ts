@@ -247,7 +247,10 @@ export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
     '- Static + instanced submission proxy: ' + s.submissionProxy +
       '; serialized-visible proxy: ' + s.serializedVisibleSubmissionProxy,
     '- Triangle records: ' + Math.round(s.triangles).toLocaleString('en-US'),
-    '- Tile-local OSM feature-info records: ' + s.featureInfoRecords,
+    '- Tile-local OSM feature-info records: ' + s.featureInfoRecords +
+      ' (bridge ' + s.semanticFeatureFlags.bridges +
+      ', tunnel ' + s.semanticFeatureFlags.tunnels +
+      ', nonzero layer ' + s.semanticFeatureFlags.nonzeroLayers + '),
     '',
     '## Draw submission proxy by layer',
     '',
@@ -264,14 +267,16 @@ export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
       layer.candidateRequiringSemanticReview + ' |');
   }
   lines.push('', '## Tile-local batching scenarios', '',
-    '| Spatial restriction | Candidates fitting cells | Grouped meshes | Merge groups | Submission proxy after | Potential reduction |',
-    '|---|---:|---:|---:|---:|---:|');
+    '| Spatial restriction | Candidates fitting cells | Grouped meshes | Merge groups | Proxy after (all states) | Potential reduction | Serialized-visible reduction |',
+    '|---|---:|---:|---:|---:|---:|---:|');
   for (const p of s.profiles) {
     lines.push('| ' + p.label + ' | ' + p.candidateMeshesWithinCells + ' | ' +
       p.mergedMeshRecords + ' | ' + p.mergeGroups + ' | ' +
       p.afterSubmissionProxy + ' | ' +
       p.submissionReductionProxy + ' (' +
-      pct(p.submissionReductionProxy, s.submissionProxy) + ') |');
+      pct(p.submissionReductionProxy, s.submissionProxy) + ') | ' +
+      p.serializedVisibleReductionProxy + ' (' +
+      pct(p.serializedVisibleReductionProxy, s.serializedVisibleSubmissionProxy) + ') |');
   }
   const reference = s.profiles.find((p) => p.cellMeters === 256)
     ?? s.profiles[0];
@@ -293,6 +298,12 @@ export function formatBatchAuditMarkdown(report: BatchAuditReport): string {
     '|---|---:|');
   for (const [key, count] of topEntries(s.featureCategories, 15)) {
     lines.push('| ' + key + ' | ' + count + ' |');
+  }
+  lines.push('', '## Most frequent OSM primary tags', '',
+    '| Tag | Tile-local records |',
+    '|---|---:|');
+  for (const [key, count] of topEntries(s.featurePrimaryTags, 15)) {
+    lines.push('| ' + key.replaceAll('|', '\|') + ' | ' + count + ' |');
   }
   lines.push('', '## Important limitations', '');
   for (const note of report.interpretation) lines.push('- ' + note);

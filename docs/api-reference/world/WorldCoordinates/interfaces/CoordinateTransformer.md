@@ -67,3 +67,39 @@ Defined in: world/WorldCoordinates.ts:14
 #### Returns
 
 \[`number`, `number`\]
+
+***
+
+### transformLine()?
+
+> `optional` **transformLine**(`coordinates`): \[`number`, `number`\][]
+
+Defined in: world/WorldCoordinates.ts:17
+
+#### Parameters
+
+##### coordinates
+
+\[`number`, `number`\][]
+
+#### Returns
+
+\[`number`, `number`\][]
+
+***
+
+### transformRing()?
+
+> `optional` **transformRing**(`coordinates`): \[`number`, `number`\][]
+
+Defined in: world/WorldCoordinates.ts:16
+
+#### Parameters
+
+##### coordinates
+
+\[`number`, `number`\][]
+
+#### Returns
+
+\[`number`, `number`\][]

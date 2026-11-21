@@ -18,7 +18,9 @@
     "bench:scaling": "tsx benchmarks/scalingRunner.ts",
     "osm:fetch-overijssel": "tsx scripts/fetch-overijssel-pbf.ts",
     "osm:build-overijssel-index": "tsx scripts/build-overijssel-index.ts",
-    "osm:setup-overijssel": "tsx scripts/setup-overijssel.ts"
+    "osm:setup-overijssel": "tsx scripts/setup-overijssel.ts",
+    "osm:bake-hengelo-tiles": "tsx scripts/bake-hengelo-tiles.ts",
+    "osm:verify-hengelo-tiles": "tsx scripts/verify-hengelo-tiles.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -42,6 +42,7 @@
 
 ## Functions
 
+- [applyTunnelPortalGroundCutoutsToPlanarLayers](functions/applyTunnelPortalGroundCutoutsToPlanarLayers.md)
 - [buildIndependentAnalyticalRoadCorridor](functions/buildIndependentAnalyticalRoadCorridor.md)
 - [buildRoadRibbonOutlineRing](functions/buildRoadRibbonOutlineRing.md)
 - [cleanPolylineForClipping](functions/cleanPolylineForClipping.md)

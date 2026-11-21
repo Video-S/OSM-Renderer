@@ -8,7 +8,7 @@
 
 > **projectToLocalMeters**(`lon`, `lat`, `originLon`, `originLat`): \[`number`, `number`\]
 
-Defined in: world/WorldCoordinates.ts:25
+Defined in: world/WorldCoordinates.ts:27
 
 Projects (lon, lat) in degrees into local Cartesian (x, z) coordinates in meters
 relative to an origin (originLon, originLat).

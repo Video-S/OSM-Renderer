@@ -8,7 +8,7 @@
 
 > **haversineDistanceMeters**(`lon1`, `lat1`, `lon2`, `lat2`): `number`
 
-Defined in: world/WorldCoordinates.ts:63
+Defined in: world/WorldCoordinates.ts:65
 
 Haversine formula for calculating ground distance between two (lon, lat) coordinates in meters.
 

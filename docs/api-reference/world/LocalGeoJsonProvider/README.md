@@ -14,6 +14,7 @@
 
 - [ClipBoxOptions](interfaces/ClipBoxOptions.md)
 - [ClippedPolygonResult](interfaces/ClippedPolygonResult.md)
+- [GeoJsonParseOptions](interfaces/GeoJsonParseOptions.md)
 - [LocalGeoJsonProviderOptions](interfaces/LocalGeoJsonProviderOptions.md)
 
 ## Functions

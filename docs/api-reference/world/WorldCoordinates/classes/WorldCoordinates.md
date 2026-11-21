@@ -6,7 +6,7 @@
 
 # Class: WorldCoordinates
 
-Defined in: world/WorldCoordinates.ts:86
+Defined in: world/WorldCoordinates.ts:88
 
 WorldCoordinates helper class to store origin and convert batch coordinates efficiently.
 
@@ -20,7 +20,7 @@ WorldCoordinates helper class to store origin and convert batch coordinates effi
 
 > **new WorldCoordinates**(`originLon`, `originLat`): `WorldCoordinates`
 
-Defined in: world/WorldCoordinates.ts:93
+Defined in: world/WorldCoordinates.ts:95
 
 #### Parameters
 
@@ -42,7 +42,7 @@ Defined in: world/WorldCoordinates.ts:93
 
 > `readonly` **originLat**: `number`
 
-Defined in: world/WorldCoordinates.ts:88
+Defined in: world/WorldCoordinates.ts:90
 
 #### Implementation of
 
@@ -54,7 +54,7 @@ Defined in: world/WorldCoordinates.ts:88
 
 > `readonly` **originLon**: `number`
 
-Defined in: world/WorldCoordinates.ts:87
+Defined in: world/WorldCoordinates.ts:89
 
 #### Implementation of
 
@@ -66,7 +66,7 @@ Defined in: world/WorldCoordinates.ts:87
 
 > **toGeo**(`x`, `z`): \[`number`, `number`\]
 
-Defined in: world/WorldCoordinates.ts:105
+Defined in: world/WorldCoordinates.ts:107
 
 #### Parameters
 
@@ -92,7 +92,7 @@ Defined in: world/WorldCoordinates.ts:105
 
 > **toLocal**(`lon`, `lat`): \[`number`, `number`\]
 
-Defined in: world/WorldCoordinates.ts:99
+Defined in: world/WorldCoordinates.ts:101
 
 #### Parameters
 
@@ -118,7 +118,7 @@ Defined in: world/WorldCoordinates.ts:99
 
 > **transformLine**(`coordinates`): \[`number`, `number`\][]
 
-Defined in: world/WorldCoordinates.ts:121
+Defined in: world/WorldCoordinates.ts:123
 
 Transforms an array of [lon, lat] polyline vertices into [x, z] meters.
 
@@ -132,13 +132,17 @@ Transforms an array of [lon, lat] polyline vertices into [x, z] meters.
 
 \[`number`, `number`\][]
 
+#### Implementation of
+
+[`CoordinateTransformer`](../interfaces/CoordinateTransformer.md).[`transformLine`](../interfaces/CoordinateTransformer.md#transformline)
+
 ***
 
 ### transformRing()
 
 > **transformRing**(`coordinates`): \[`number`, `number`\][]
 
-Defined in: world/WorldCoordinates.ts:114
+Defined in: world/WorldCoordinates.ts:116
 
 Transforms an array of [lon, lat] coordinates into [x, z] meters.
 
@@ -151,3 +155,7 @@ Transforms an array of [lon, lat] coordinates into [x, z] meters.
 #### Returns
 
 \[`number`, `number`\][]
+
+#### Implementation of
+
+[`CoordinateTransformer`](../interfaces/CoordinateTransformer.md).[`transformRing`](../interfaces/CoordinateTransformer.md#transformring)

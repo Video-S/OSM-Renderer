@@ -6,7 +6,7 @@
 
 # Class: LocalGeoJsonProvider
 
-Defined in: world/LocalGeoJsonProvider.ts:899
+Defined in: world/LocalGeoJsonProvider.ts:904
 
 Common provider interface for geographic features.
 In this version, LocalGeoJsonProvider provides the data.
@@ -22,7 +22,7 @@ Future implementations could fetch vector tiles (MVT/PMTiles) or Overpass API qu
 
 > **new LocalGeoJsonProvider**(`options?`): `LocalGeoJsonProvider`
 
-Defined in: world/LocalGeoJsonProvider.ts:908
+Defined in: world/LocalGeoJsonProvider.ts:913
 
 #### Parameters
 
@@ -40,7 +40,7 @@ Defined in: world/LocalGeoJsonProvider.ts:908
 
 > `readonly` **id**: `"local-geojson"` = `'local-geojson'`
 
-Defined in: world/LocalGeoJsonProvider.ts:900
+Defined in: world/LocalGeoJsonProvider.ts:905
 
 #### Implementation of
 
@@ -52,7 +52,7 @@ Defined in: world/LocalGeoJsonProvider.ts:900
 
 > `readonly` **name**: `"Local GeoJSON Provider"` = `'Local GeoJSON Provider'`
 
-Defined in: world/LocalGeoJsonProvider.ts:901
+Defined in: world/LocalGeoJsonProvider.ts:906
 
 #### Implementation of
 
@@ -64,7 +64,7 @@ Defined in: world/LocalGeoJsonProvider.ts:901
 
 > **getLastParseSubTimings**(): `GeoJsonParseSubTimingsMs`
 
-Defined in: world/LocalGeoJsonProvider.ts:914
+Defined in: world/LocalGeoJsonProvider.ts:919
 
 #### Returns
 
@@ -76,7 +76,7 @@ Defined in: world/LocalGeoJsonProvider.ts:914
 
 > **loadRegion**(`query?`): `Promise`\<[`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)\>
 
-Defined in: world/LocalGeoJsonProvider.ts:918
+Defined in: world/LocalGeoJsonProvider.ts:923
 
 #### Parameters
 
@@ -96,9 +96,9 @@ Defined in: world/LocalGeoJsonProvider.ts:918
 
 ### parseGeoJson()
 
-> **parseGeoJson**(`geojson`, `explicitRegionName?`, `explicitCenter?`, `clipRadiusMeters?`): [`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)
+> **parseGeoJson**(`geojson`, `explicitRegionName?`, `explicitCenter?`, `clipRadiusMeters?`, `parseOptions?`): [`ProcessedMapData`](../../../types/MapFeature/interfaces/ProcessedMapData.md)
 
-Defined in: world/LocalGeoJsonProvider.ts:941
+Defined in: world/LocalGeoJsonProvider.ts:946
 
 Parses a GeoJSON object into ProcessedMapData with strict, unambiguous diagnostic accounting.
 
@@ -119,6 +119,10 @@ Parses a GeoJSON object into ProcessedMapData with strict, unambiguous diagnosti
 ##### clipRadiusMeters?
 
 `number`
+
+##### parseOptions?
+
+[`GeoJsonParseOptions`](../interfaces/GeoJsonParseOptions.md)
 
 #### Returns
 

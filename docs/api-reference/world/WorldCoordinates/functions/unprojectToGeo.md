@@ -8,7 +8,7 @@
 
 > **unprojectToGeo**(`x`, `z`, `originLon`, `originLat`): \[`number`, `number`\]
 
-Defined in: world/WorldCoordinates.ts:44
+Defined in: world/WorldCoordinates.ts:46
 
 Inverse projection: converts local (x, z) meters back to (lon, lat) degrees.
 

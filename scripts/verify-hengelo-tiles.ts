@@ -94,7 +94,7 @@ if (isEntrypoint) {
       `=== TKT-028 M1b Offline Tile Pack Verification ===`,
       `Pack    : ${report.packPath} (${fmtMB(report.dbSizeBytes)})`,
       `Meta    : snapshot=${report.metadata.snapshotId}, schema=${report.metadata.bakeSchemaVersion}, proj=${report.metadata.projectionId}, status=${report.metadata.bakeStatus}`,
-      `Grid    : ${report.metadata.gridCols}x${report.metadata.gridRows} (${report.seamReport.tileCount} tiles) @ ${report.metadata.tileSizeMeters}m, collar=${report.metadata.collarMeters}m`,
+      `Grid    : ${report.metadata.gridCols}x${report.metadata.gridRows} (${report.metadata.gridCols * report.metadata.gridRows} tiles) @ ${report.metadata.tileSizeMeters}m, collar=${report.metadata.collarMeters}m`,
       `Decode  : ${report.decodeStats.tilesDecoded} tiles | raw=${fmtMB(report.decodeStats.totalRawBytes)}, compressed=${fmtMB(report.decodeStats.totalCompressedBytes)} | decode=${report.timingsMs.decodeAllTilesMs}ms (${report.decodeStats.avgDecodeMsPerTile}ms/tile) | recon=${report.timingsMs.reconstructAllTilesMs}ms (${report.decodeStats.avgReconstructMsPerTile}ms/tile)`,
       `Seam OK : ${report.seamReport.isValid} (defects=${report.seamReport.defects.length}, seams=${report.seamReport.internalSeamsChecked}, bldgs=${report.seamReport.buildingParity.tiledUniqueCount}/${report.seamReport.buildingParity.refCount}, sleepers=${report.seamReport.railwayParity.tiledSleeperCount}/${report.seamReport.railwayParity.refSleeperCount})`,
       `Themes  : ${themeSummary} (sharedMaterials=${report.attributeAndInstanceChecks.sharedMaterialCount})`,

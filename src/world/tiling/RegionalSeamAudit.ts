@@ -34,6 +34,12 @@ export interface SourceSeamCrossing {
   northing: number;
   mode: 'segment' | 'polygon-interior';
   pairIndex: number;
+  /**
+   * Expected membership of each 25cm seam-inset probe according to the source
+   * polygon's outer rings/holes, in adjoining tile A/B order.
+   * Undefined for a source line or other nonpolygon geometry.
+   */
+  expectedPolygonCoverage?: [boolean, boolean];
 }
 export interface TileFeatureEvidence {
   featureIds: Set<string>;
@@ -204,7 +210,24 @@ export function extractSourceCrossings(
       const key = sourceId + ':' + Math.round(e * 100) + ':' + Math.round(n * 100);
       if (keys.has(key)) return;
       keys.add(key);
-      out.push({ sourceId, category, tags, easting: e, northing: n, mode, pairIndex });
+      const expectedPolygonCoverage: [boolean, boolean] | undefined = polygons.length
+        ? (() => {
+            // A is west or north, B is east or south. Use precisely the
+            // same inset as the decoded surface probe in the CLI.
+            const aE = e + (side.axis === 'easting' ? -0.25 : 0);
+            const bE = e + (side.axis === 'easting' ? 0.25 : 0);
+            const aN = n + (side.axis === 'northing' ? 0.25 : 0);
+            const bN = n + (side.axis === 'northing' ? -0.25 : 0);
+            return [
+              polygons.some((rings) => polygonContainsPoint(rings, aE, aN)),
+              polygons.some((rings) => polygonContainsPoint(rings, bE, bN)),
+            ];
+          })()
+        : undefined;
+      out.push({
+        sourceId, category, tags, easting: e, northing: n,
+        mode, pairIndex, expectedPolygonCoverage,
+      });
     };
     for (const line of lines) {
       for (let i = 1; i < line.length; i++) {

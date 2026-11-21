@@ -217,6 +217,17 @@ export function extractSourceCrossings(
         if (t <= 0 || t >= 1) continue;
         push(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), 'segment');
       }
+      // An explicit OSM vertex exactly on the shard border can separate
+      // two otherwise crossing segments. Keep crossings but reject tangencies.
+      for (let i = 1; i + 1 < line.length; i++) {
+        const prev = side.axis === 'easting' ? line[i - 1][0] : line[i - 1][1];
+        const curr = side.axis === 'easting' ? line[i][0] : line[i][1];
+        const next = side.axis === 'easting' ? line[i + 1][0] : line[i + 1][1];
+        if (Math.abs(curr - side.at) <= 0.01 &&
+            (prev - side.at) * (next - side.at) < -0.0001) {
+          push(line[i][0], line[i][1], 'segment');
+        }
+      }
     }
     if (polygons.length && category !== 'rail' && category !== 'road') {
       const mid = (side.from + side.to) / 2, offset = 1;

@@ -601,6 +601,20 @@ export class TileStreamManager {
     this.metadata = payload.metadata;
     this.tilesByKey.clear();
 
+    // The original 4km study ground plane is insufficient for larger baked regions.
+    // Keep the same scene/mesh identity while resizing only its geometry.
+    const regionWidth = payload.metadata.gridCols * payload.metadata.tileSizeMeters;
+    const regionDepth = payload.metadata.gridRows * payload.metadata.tileSizeMeters;
+    if (regionWidth > 0 && regionDepth > 0) {
+      const oldGeometry = this.groundMesh.geometry;
+      const groundGeometry = this.regionalResources.registerGeometry(
+        new THREE.PlaneGeometry(regionWidth + 1024, regionDepth + 1024, 1, 1)
+      );
+      groundGeometry.rotateX(-Math.PI / 2);
+      this.groundMesh.geometry = groundGeometry;
+      oldGeometry.dispose();
+    }
+
     const originEasting = payload.metadata.studyOriginEasting;
     const originNorthing = payload.metadata.studyOriginNorthing;
 
@@ -1269,9 +1283,26 @@ export class TileStreamManager {
         this.decodeSamples += 1;
         pushBoundedSample(this.decodeMsRing, decodeResult.decodeDurationMs);
 
-        record.decodedPayload = decodeResult.decoded;
+        // A regional mosaic reuses immutable shard-local OSMTILE1 payloads.
+        // Geometry inside each payload is tile-local; only the decoded center must
+        // be relocated to the regional origin supplied by the composed manifest.
+        // Identical for legacy packs, where these centers already agree.
+        if (
+          decodeResult.decoded.lod !== lod ||
+          decodeResult.decoded.tx !== tx ||
+          decodeResult.decoded.ty !== ty ||
+          decodeResult.decoded.tileSizeMeters !== this.metadata?.tileSizeMeters
+        ) {
+          throw new Error(`Decoded tile identity/size mismatch: ${tileKey}`);
+        }
+        const positionedPayload = {
+          ...decodeResult.decoded,
+          tileCenterX: record.manifest.tileCenterX,
+          tileCenterZ: record.manifest.tileCenterZ,
+        };
+        record.decodedPayload = positionedPayload;
         record.decodedFootprint = computeDecodedTileMemoryFootprint(
-          decodeResult.decoded
+          positionedPayload
         );
         record.abortController = null;
         record.state = 'ready_to_commit';

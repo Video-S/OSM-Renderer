@@ -98,6 +98,18 @@ npx tsx scripts/audit-regional-seams.ts --boundary=vertical-r0-c0-1 --out=benchm
 
 Do not mark TKT-029 continuity approved on the basis of this preliminary audit alone. Keep full-Overijssel baking deferred until the geometric/semantic findings are classified and the owner signs off.
 
+## Owner's first full regional audit — preliminary result (2026-11-22)
+
+Owner ran `npm run osm:audit-regional-seams` successfully against the canonical pilot. Every shard verified: **16 packs, 256 non-empty tiles, 235.68 MiB compressed**. The console confirms **24/24 shard interfaces, 9/9 four-way junctions, and four same-shard controls** processed. It reports **55 asymmetric feature attribution candidates** across the checked interfaces/controls; without the generated JSON, their feature/category/location distribution is still unknown.
+
+**Crucial calibration finding:** 24 cross-shard sides contained 4,240 reported OSM crossing events with 2,764 generic "metadata candidates" (65.2%), while four *within-shard control seams* contained 164 crossing events with 120 candidates (73.2%). These figures count crossing events and heterogeneous `review != 'none'` reasons, **not unique defective OSM features**, and not necessarily actual metadata disagreements. The current script logs "metadata candidates" for source-missing-output, asymmetry, surface coverage/height warnings **and** real metadata differences. A higher flagged fraction in same-shard controls means the raw count is **not evidence of shard-specific geometry defects**.
+
+**Next investigation (no baker changes yet):**
+1. Obtain and classify the existing owner-generated `benchmarks/results/tkt032-seam-audit.json` and `.md`. Count each distinct review reason by interface vs same-shard controls; split out `neither` from `only-a/only-b`, geometry probe results and actual `layer/bridge/tunnel` disagreements. Deduplicate source features crossing a seam multiple times and distinguish unsupported features from absent supported ones.
+2. Examine representative candidates with the original OSM geometry and emitted face ranges in both adjacent packs; establish whether candidate inflation comes from attribution/normalization, intentionally unsupported categories, tile clipping, or actual shard graph errors.
+3. Tighten the audit's **specificity and presentation** using controls and regression fixtures before treating anything as a high-severity defect. Keep full geometry and sleeper-phase parity open.
+4. Owner human visual checks remain separate. TKT-029 continuity **not approved**.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

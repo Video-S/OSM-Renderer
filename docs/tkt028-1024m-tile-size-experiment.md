@@ -1,6 +1,6 @@
 # TKT-028: 1,024 m Tile Size Experiment — Design, Verification, Benchmark Comparison & Recommendation
 
-> **Experiment Status (`2026-11-21`)**: **Reversible Experiment Implemented & Sandbox-Verified** (`512 m` remains the sole production default across runtime streaming, baking, CLI tools, and `data/osm/overijssel-tiles-261114-8ae28196.sqlite`). Canonical `4 × 4` (`1,024 m`) Hengelo hardware GPU comparison on RTX 4060 Ti is ready for local Windows execution using the exact PowerShell workflow below.
+> **Experiment Status (`2026-11-21`, updated)**: **Canonical RTX 4060 Ti hardware comparison complete; physical-margin follow-up in progress (`TKT-028-F1`)** (`512 m` remains the sole production default across runtime streaming, baking, CLI tools, and `data/osm/overijssel-tiles-261114-8ae28196.sqlite`). Canonical `4 × 4` (`1,024 m`) Hengelo hardware GPU comparison on RTX 4060 Ti is ready for local Windows execution using the exact PowerShell workflow below.
 
 ---
 
@@ -137,3 +137,25 @@ Start the dev server (`npm run dev`), then compare side-by-side:
 - Default `512 m` (`8 × 8`) M2-A Streaming: `http://localhost:3000/?m2a=1`
 - Experimental `1,024 m` (`4 × 4`) M2-A Streaming: `http://localhost:3000/?m2a=1&tileSize=1024`
 - Experimental `1,024 m` (`4 × 4`) M1a Harness: `http://localhost:3000/?m1a=1&tileSize=1024`
+
+---
+
+## 7. Canonical Hardware Results & Physical-Margin Follow-up (2026-11-21)
+
+The project owner ran the requested 2-pair `--require-hardware` benchmark on an RTX 4060 Ti against the **real** Hengelo tile packs (8×8 @ 512 m, 4×4 @ 1,024 m). The 1,024 m pack passed offline verification with **0 defects across 24 seams**, **58/58 BVH raycasts**, **4/4 themes**, and deterministic baking.
+
+| Scenario | 512 m calls | 1,024 m calls | 512 m median frame | 1,024 m median frame |
+|---|---:|---:|---:|---:|
+| closeup_station | 848 | 523 | 16.43 ms | 16.52 ms |
+| medium_navigation | 1,104 | 727 | 16.45 ms | 16.60 ms |
+| far_overview | **2,900** | **1,224** (-57.8%) | **23.05 ms** | **15.75 ms** (-31.7%) |
+| continuous_pan | 661 | 642 | 17.15 ms | 16.70 ms |
+| repeated_pan_eviction | 349 | 512 | 16.60 ms | 16.75 ms |
+
+**Interpretation:** The real GPU confirms a substantial overview rendering benefit, but the original comparison used identical *tile counts* for preload/retention. As a result, 1,024 m tiles had a **2,048 m retention margin**, kept **all 16 tiles resident**, and recorded **zero evictions**, compared to **186** evictions for 512 m. This biases close/medium memory use and repeated-pan costs.
+
+The old section 5 recommendation is preserved as historical experiment context. **Do not treat its proposed M3 multi-LOD solution as approved or the production tile-size decision as final.**
+
+Follow-up: [`tickets/TKT-028-F1-physical-margin-parity.md`](../tickets/TKT-028-F1-physical-margin-parity.md) adds a benchmark-only, opt-in `--match-physical-margins` switch. It holds **512 m preload / 1,024 m retention** fixed for both tile widths (1024 m uses fractional `0.5 / 1` tile margins). The previous baseline and 512 m production configuration remain unchanged.
+
+Next step: complete the matched-margin canonical Windows run and confirm actual 1,024 m eviction/reload and stable resources before selecting a production tile width.

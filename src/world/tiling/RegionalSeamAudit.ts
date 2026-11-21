@@ -365,6 +365,32 @@ export function probeSourceSurfaceAtUtm(
   easting: number,
   northing: number
 ): SurfaceProbeResult {
+  return probeTileSurfaceAtUtm(tile, centerEasting, centerNorthing, sourceId, easting, northing);
+}
+
+/**
+ * Source-independent physical road-surface witness. Useful when an OSM way's
+ * identity is missing or merged: an anonymous neighboring road still counts
+ * as geometry, but does NOT prove the same way or topological connectivity.
+ */
+export function probeAnyRoadSurfaceAtUtm(
+  tile: DecodedTilePayload,
+  centerEasting: number,
+  centerNorthing: number,
+  easting: number,
+  northing: number
+): SurfaceProbeResult {
+  return probeTileSurfaceAtUtm(tile, centerEasting, centerNorthing, null, easting, northing);
+}
+
+function probeTileSurfaceAtUtm(
+  tile: DecodedTilePayload,
+  centerEasting: number,
+  centerNorthing: number,
+  sourceId: string | null,
+  easting: number,
+  northing: number
+): SurfaceProbeResult {
   const localX = easting - centerEasting;
   const localZ = centerNorthing - northing;
   const heights: number[] = [];
@@ -372,16 +398,19 @@ export function probeSourceSurfaceAtUtm(
   let testedTriangles = 0;
   const featureMatches = (idx: number): boolean => {
     if (idx < 0 || idx >= tile.featureInfos.length) return false;
+    if (sourceId === null) return false;
     const info = tile.featureInfos[idx];
     return info.sourceFeatureId === sourceId ||
       info.sourceFeatureIds?.includes(sourceId) === true;
   };
   for (const mesh of tile.meshes) {
     const positions = mesh.positions;
-    if (positions.length < 9 || mesh.layer === 'ground') continue;
+    if (positions.length < 9 || mesh.layer === 'ground' ||
+        (sourceId === null && mesh.layer !== 'roads')) continue;
     const direct = featureMatches(mesh.singleFeatureIdx);
-    const ranges = direct
-      ? [{ startFace: 0, endFace: Math.floor((mesh.indices?.length ?? positions.length / 3) / 3) }]
+    const faceCount = Math.floor((mesh.indices?.length ?? positions.length / 3) / 3);
+    const ranges = sourceId === null || direct
+      ? [{ startFace: 0, endFace: faceCount }]
       : mesh.faceRanges.filter((r) => featureMatches(r.infoIdx));
     if (!ranges.length) continue;
     matchedMeshes++;

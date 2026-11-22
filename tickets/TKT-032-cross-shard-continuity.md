@@ -290,6 +290,19 @@ Owner ran `tkt032-seam-audit-v3.json` on **unchanged, verified 16-shard/256-tile
 
 A demonstrated multi-location defect warrants investigation; repeating a fourth whole-region metadata-only audit without a new causal hypothesis does not. **Human visual evidence overrides our earlier tentative reassurance from apparently noisy audit statistics.**
 
+## Historical evidence — missing roads predates tiling (owner clarification, 2026-11-22)
+
+The owner additionally reports having **seen roads disappear in the renderer before tiling existed**. This is distinct from the new, location-specific confirmation in the regional viewer: it does **not** yet prove that each missing road in the pilot was missing in the old non-tiled build, but it **invalidates shard-boundary-specific failure as the leading assumption**. Treat missing-road rendering as a potential **shared road pipeline defect**, with cross-shard continuity separately gated.
+
+**Revise diagnosis order:**
+
+1. Reproduce at least one verified missing way in a **non-tiled / non-shard render path** with the same source data and road policy, or via a bounded direct invocation of the common graph-road generation. Compare source ingested road -> normalized descriptors -> generated at-grade/grade-separated plan -> emitted triangle coverage. Do not immediately start a complex A/B shard re-bake.
+2. Examine **shared** `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, especially `isEligibleSurfaceEdge`, graph dedup/chaining, `bufferSurfaceFirstRoadCenterline`, polygon Boolean difference against `placedRoadFootprints`, full-subtraction records and the rejection paths (`roundedBufferFailureCount`, `rejectedOrDegenerateCount`, `surfaceClipFailureCount`, `emptyShapeCount`, `invalidTriangleGeometryCount`). Those paths are **credible suspects from code inspection, not established causes**. Preserve valid semantic ownership: a fully subtracted original way may intentionally be represented by an overlapping surviving road.
+3. Only if the same source feature renders correctly on the non-tiled path but disappears when packed across a boundary should the investigation prioritize per-shard preprocessing, clipping or streaming. If it fails in both modes, focus on the shared graph/ownership/triangulation pipeline and add a minimal failing regression there.
+4. Fix the first proven root cause, check the original visually missing locations (including non-seam control features), and then rerun the existing seam gate. Avoid asserting that the 34 audit warnings all share one cause.
+
+**Project-level implication:** a generic missing-road bug can be a blocker for the first map-renderer product even if all independently baked shard interfaces align perfectly. The TKT-029 region acceptance remains blocked, but **TKT-032 alone should not grow into an open-ended reimplementation of the whole road renderer**. Record any shared-renderer fix and its regression as a separate narrowly scoped follow-up if necessary.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

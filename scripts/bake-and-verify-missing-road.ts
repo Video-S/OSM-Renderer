@@ -133,8 +133,11 @@ export function verifyDisposableRoadBake(opts: DisposableRoadBakeOptions) {
     Math.round(target.easting / tileSizeMeters)) < 1e-8;
   const onHorizontalEdge = Math.abs(target.northing / tileSizeMeters -
     Math.round(target.northing / tileSizeMeters)) < 1e-8;
+  // A point on a seam belongs to a single half-open tile even if the road
+  // crosses both. Use the two 25cm interior probes for authoritative coverage.
+  // The on-seam center is retained as informational evidence only.
   const requiredLabels = [
-    'center',
+    ...(!onVerticalEdge && !onHorizontalEdge ? ['center'] : []),
     ...(onVerticalEdge ? ['west-25cm', 'east-25cm'] : []),
     ...(onHorizontalEdge ? ['north-25cm', 'south-25cm'] : []),
   ];

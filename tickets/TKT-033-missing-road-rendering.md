@@ -193,6 +193,26 @@ Owner reran `npm run osm:diagnose-missing-road` after pulling `float32-sliver-pr
 
 **Remaining gate:** this diagnostic produces a shared unclipped road plan, not a new baked tile or a viewer frame. The accepted 16-shard / 256-tile Twente mosaic is **still unchanged** and will still display its original missing roads. Next verify a **disposable, bounded tile bake** for the same source (plus a few known missing-road cases) and obtain **owner-only human visual acceptance** before changing canonical packs. TKT-033 stays in progress until this is done.
 
+## Disposable encoded-tile gate prepared (2026-11-22)
+
+The owner-confirmed pre-bake repair is no longer blocked on OSM triage. To distinguish an intact in-memory road plan from what is **actually baked into SQLite tiles**, added `scripts/bake-and-verify-missing-road.ts` and `npm run osm:bake-verify-missing-road` on draft PR #9.
+
+- Builds a **separate 2×2 1,024m tile grid** centered/aligned exactly like the successfully repaired Boerrichterkamp diagnostic, using the immutable canonical source SHA and the **same 768m query margin**. It runs the actual offline TilePackSqliteWriter, binary codec and decode path, not a synthetic `GeometryBuilder` approximation.
+- Output is strictly confined to `benchmarks/results/tkt033-disposable/` (e.g. `way-6661112-2x2.sqlite` and `way-6661112-2x2-report.json`). Existing files cause an error; **no `--force` override**, and production `data/osm` pack directories are forbidden as outputs.
+- For each sample point, decodes the appropriate LOD0 tile by canonical `tx/ty`, filters to **visible, non-underground, `roads`-layer meshes**, and checks **source-attributed physical triangle coverage** plus any-road physical coverage.
+- At E 357376, Boerrichterkamp lies exactly on a 1024m east-west tile border; requires **both ±25cm inset samples** on opposite sides to be covered. The exactly-on-border point is printed for information but excluded from the pass gate due to half-open ownership semantics.
+- Writes a structured report with source SHA, tile counts, sampled physical coverage, and explicit limitations. No owner visual QA claimed until the test pack is reviewed in an actual renderer.
+- Lightweight CI tests verify guardrails (cannot output into canonical `data/osm` paths, cannot overwrite files), supplied source-coordinate selection, and exclusion of invisible/underground/non-road meshes.
+
+**Next owner command on the TKT-033 branch:**
+
+```powershell
+git pull --ff-only
+npm run osm:bake-verify-missing-road
+```
+
+Upload only `benchmarks/results/tkt033-disposable/way-6661112-2x2-report.json`, **not the SQLite pack**. If `verified-sample-coverage`, the source-backed road survives tile bake, codec and decode on both sides of this test boundary. The existing 256-tile map remains unchanged. If it fails, use that targeted report to fix a specific packed-tile issue before any canonical repack.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

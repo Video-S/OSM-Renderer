@@ -329,6 +329,19 @@ The original TKT-032 + batch probe kept E=352312.35 fixed while moving ±0.25m i
 
 Of the original **11** neither-side road samples, **9 events** (`way/6661112` plus eight more) have new **source-attributed physical coverage** in disposable 2×2 packs; **one** is physically covered by a different road owner, and **one** is the proven axis-sampling false positive. This is strong evidence of improvement but **not** proof of correctness at every original 4×4 shard crossing, nor visual acceptance of the full regional map. The canonical **256-tile Twente mosaic is unchanged**.
 
+### Remaining overlapping cycleway: read-only physical owner diagnosis
+
+The only original neither-side sample not yet clearly attributable to its own intended source is `way/38892898` (cycleway) at UTM E=352329.339 / N=5794816. The physically visible road on both sampled sides might belong to nearby residential `way/546666718`; direct source attribution and placement semantics remain unproven.
+
+Added `scripts/inspect-cycleway-ownership.ts` / `npm run osm:inspect-cycleway-ownership`, reading **only** the already generated `west-north-pair-2x2.sqlite` and immutable source index. It fetches both OSM centerlines/tags, distinguishes real seam contacts, samples **along each road's tangent** where possible, and resolves actual road triangle owners using each decoded mesh's `singleFeatureIdx` or `faceRanges` rather than assuming any nearby road is the cycleway. It prints original axis-probe owners and writes a small report; no baking or pack changes. Deterministic test exercises physical owner attribution on an explicit indexed feature range and prevents arbitrary pack/output paths.
+
+**Next command:**
+```powershell
+git pull --ff-only
+npm run osm:inspect-cycleway-ownership
+```
+Upload `benchmarks/results/tkt033-remaining/first-pass/way-38892898-ownership-v1.json` only. This will tell us whether the cycleway is physically rendered (possibly offset), legitimately masked by the residential road, or incorrectly suppressed. A separate cycleway surface may be semantically important even when there is no open ground hole; do not automatically count a residential carriageway as correct cycleway representation.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

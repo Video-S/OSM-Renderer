@@ -280,6 +280,12 @@ Upload the **single** resulting `benchmarks/results/tkt033-remaining/first-pass/
 
 **No acceptance claimed** for these ten locations until the owner's actual report is reviewed. TKT-033 / PR #9 remain in progress; parent TKT-032 seam continuity is a separate gate.
 
+### Batch checker CI validation
+
+The grouped ten-event batch checker has passed **TypeScript/lint and production build**, **`RemainingMissingRoads.test.ts`**, and the unchanged disposable-bake safety tests in GitHub Actions run `45040202124`. The E2+ Boerrichterkamp precision/phantom-ownership regressions also pass. The combined suite still reports **exactly the four previously known `JunctionAndTopology.test.ts` failures**, reproduced on the parent branch; the total test matrix is **not** fully green.
+
+The batch command itself cannot run in GitHub CI because the canonical source index and previously baked 2×2 control pack reside on the owner's machine. No claim of restored geometry for the ten outstanding crossings has been made yet.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

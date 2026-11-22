@@ -2,7 +2,7 @@
 id: TKT-032
 title: Cross-Shard Geometry and Topology Continuity Validation
 type: correctness-validation
-status: implementation_in_progress
+status: blocked
 priority: high
 created: 2026-11-22
 updated: 2026-11-22
@@ -273,6 +273,22 @@ Owner ran `tkt032-seam-audit-v3.json` on **unchanged, verified 16-shard/256-tile
 **Prioritized next action:** Inspect **bounded source/polyline-to-tile geometry** for `way/6666519`, `way/6661112`, residential + cycleway pair `way/546666718`/`way/38892898`, and repeated `way/221267376` before any bake change. Compare *nearest* road triangle distance and local road ribbon coverage over a small spatial corridor on both sides, not only 25 cm point samples at raw OSM centerline. Check possible graph edge replacement/lineage, turn/junction displacement, mesh ownership, edge-of-tile clipping and layer/visibility policy. Retain same-shard controls and include negative-layer and rail phase separately. Owner human map review is final QA, not LLM visual testing.
 
 **Stop condition:** Do not add endless global aggregate audit runs or call this a broad baking flaw without a source-backed, spatially bounded reproduction. If a real geometry discontinuity is proven, add one regression and fix it at the appropriate graph/clipping/meshing stage, then rebake only a *disposable* small comparison area first. The canonical pack is unchanged and TKT-029 signoff still open.
+
+## Owner human visual QA — CONFIRMED FAILURE (2026-11-22)
+
+**New empirical finding:** after the v3 audit and the supplied 11-pin physical-road candidate map, the owner manually visited **each shown location** in the actual running `?m2a=1&region=twente-pilot` viewer. Owner reports that the expected roads **do not render at those locations**. Treat this as a **confirmed human-visible correctness failure**, not merely noisy source-ID or point-sample statistics. The owner's observation is about the displayed world; whether the root cause is absent baked road triangles, mesh visibility, camera/tile streaming, or graph misgeneration is still **unknown**. The owner has not separately declared all 34 GeoJSON candidate events visually tested; do not infer that.
+
+**Decision:** TKT-029 regional continuity **BLOCKED / human visual acceptance failed**. No province-wide or all-Overijssel bake; do not mark TKT-032 signed off. The canonical 16-shard/256-tile dataset must remain untouched for diagnosis. Existing mosaic verification only checks pack integrity, not visual correctness.
+
+### Root-cause isolation — required before more global audit calibration
+
+1. Choose **two or three visually confirmed, representative cases** from the map: `way/6666519` (primary), `way/6661112` (absent ID and road geometry at sampled point), and `way/221267376` (two repeated misses). Capture exact UTM point, expected OSM way geometry/tags, actual tile IDs and shard IDs from the existing v3 JSON. Add road+cycleway pair `way/546666718` / `way/38892898` to catch semantic ownership bugs.
+2. **Existence check:** load the two adjacent decoded SQLite tiles; establish whether any road-class geometry intersects a source-centered, bounded **corridor**, not just the exact ±0.25 m samples. Also check drawn mesh flags, theme/material visibility, tile presence, and feature attribution. Classify: **not ingested**, **ingested but not in graph plan**, **graph planned but clipped/omitted in pack**, **packed but not displayed**, or **displayed but incorrectly positioned/hidden**. Do not claim which stage fails from v3 point probes alone.
+3. **Shard-specific A/B experiment:** synthesize a small disposable study window over the confirmed crossing such that the problem road is (a) at a shard seam and (b) comfortably inside one independently baked shard / shared graph context, using the **same immutable source snapshot** and fixed processing options. This discriminates cross-shard preprocessing from generic road-geometry failures. Keep memory bounded; never overwrite the accepted pack.
+4. Isolate a deterministic failing reproduction in a test, then fix the responsible stage **only** (OSM ingestion, graph deduplication, at-grade/grade-separated planning, tile clip, codec/rebasing, or viewer streaming/materials). Preserve negative-layer concealment, existing E2+/R+ road/rail semantics, picking IDs and same-shard controls. Rerun scoped bake + audit + relevant tests before wider rollout.
+5. **Owner rechecks the exact original locations visually**, and at least one unmodified control case, before this gate can pass. Do not substitute automated screenshot/LLM visual assertions.
+
+A demonstrated multi-location defect warrants investigation; repeating a fourth whole-region metadata-only audit without a new causal hypothesis does not. **Human visual evidence overrides our earlier tentative reassurance from apparently noisy audit statistics.**
 
 ## Completion checklist
 

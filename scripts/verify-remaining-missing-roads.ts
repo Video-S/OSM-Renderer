@@ -157,7 +157,7 @@ export type RemainingRoadCheckStatus =
   | 'source-covered-both'
   | 'source-one-sided'
   | 'other-road-covered-both'
-  | 'physical-sample-gap';
+  | 'axis-inset-uncovered';
 
 export function classifyRemainingRoadCoverage(
   first: { source: Pick<SurfaceProbeResult, 'status'>; anyRoad: Pick<SurfaceProbeResult, 'status'> },
@@ -169,7 +169,10 @@ export function classifyRemainingRoadCoverage(
   if (first.anyRoad.status === 'covered' && second.anyRoad.status === 'covered') {
     return 'other-road-covered-both';
   }
-  return 'physical-sample-gap';
+  // Absence at fixed-axis probes is NOT proof of a road gap: diagonal
+  // narrow ways (e.g. canonical 0.2m Hilgenhuesweg) can be entirely covered
+  // along their true centerline yet fail both 25cm axis-inset samples.
+  return 'axis-inset-uncovered';
 }
 
 interface SampleEvidence {
@@ -349,7 +352,7 @@ export function verifyRemainingMissingRoads(options: RemainingCheckOptions) {
     sourceCoveredBoth: actual.filter(w => w.classification === 'source-covered-both').length,
     sourceOneSided: actual.filter(w => w.classification === 'source-one-sided').length,
     otherRoadCoveredBoth: actual.filter(w => w.classification === 'other-road-covered-both').length,
-    physicalSampleGap: actual.filter(w => w.classification === 'physical-sample-gap').length,
+    axisInsetUncovered: actual.filter(w => w.classification === 'axis-inset-uncovered').length,
     groupErrors: results.filter(g => g.error !== undefined).length,
     newTilePacks: results.filter(g => g.origin === 'new-disposable-bake' && !g.error).length,
     reusedTilePacks: results.filter(g => g.origin === 'reused-verified-pack' && !g.error).length,
@@ -365,7 +368,7 @@ export function verifyRemainingMissingRoads(options: RemainingCheckOptions) {
       'Coverage is sampled 25cm on either side of source OSM crossing, not a full-road connectivity proof.',
       'A source may be merged or intentionally occluded by a real higher-priority road. Other-road coverage is reported separately.',
       '2x2 grouped packs have different graph context from the original 4x4 regional shard bake.',
-      'A failed sample may reflect centerline offsets; it is evidence for targeted diagnosis, not automatic proof of a visible gap.',
+      'Axis-only inset uncovered samples are NOT physical seam gaps. For diagonal narrow roads, re-probe along the exact OSM centerline tangent before assigning a defect.',
       'Original canonical regional 256-tile mosaic is unchanged; no LLM visual acceptance was performed.',
     ],
   };

@@ -17,6 +17,23 @@ import {
 } from './tilePackHttpHandler';
 
 /**
+ * The TKT-033 candidate is the owner-accepted Twente pilot for visual regression
+ * checks. The original mosaic is preserved and remains selectable explicitly.
+ */
+export const DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH =
+  'data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json';
+
+/** Resolve the active regional index, retaining the explicit environment override. */
+export function resolveRegionalMosaicIndexPath(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  return path.resolve(
+    env.OVERIJSSEL_REGIONAL_MOSAIC_PATH?.trim() ||
+      DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH
+  );
+}
+
+/**
  * Exposes one contiguous tile manifest over independently baked regional packs.
  * The original source-pack payloads remain immutable. Its tile-center offset in
  * the binary header is shard-local; the merged manifest supplies regional center

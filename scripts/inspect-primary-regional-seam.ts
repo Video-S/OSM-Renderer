@@ -18,8 +18,8 @@ import { visibleRoadOnlyTile } from './bake-and-verify-missing-road';
 import { roadOwnersAtUtm } from './inspect-cycleway-ownership';
 import { planPrimaryRoadCorridor, type UTM } from './primary-regional-seam-corridor';
 
-const WAY_ID = 'way/6666519';
-const WITNESS = { easting: 351822.700, northing: 5790720.000 };
+const DEFAULT_WAY_ID = 'way/6666519';
+const DEFAULT_WITNESS = { easting: 351822.700, northing: 5790720.000 };
 const NORTH_SHARD = 'r01-c01';
 const SOUTH_SHARD = 'r02-c01';
 const TILE_SIZE = 1024;
@@ -34,23 +34,47 @@ export function parsePrimaryRegionalSeamArgs(argv: readonly string[] = process.a
   root = process.cwd()) {
   let indexPath = path.resolve(root, DEFAULT_MOSAIC);
   let reportId = 'v1';
+  let sourceId = DEFAULT_WAY_ID;
+  let easting = DEFAULT_WITNESS.easting;
+  let providedSourceId = false;
+  let providedEasting = false;
   for (const arg of argv) {
     if (arg.startsWith('--index=')) {
       indexPath = path.resolve(root, arg.slice('--index='.length));
     } else if (arg.startsWith('--report-id=')) {
       reportId = arg.slice('--report-id='.length);
+    } else if (arg.startsWith('--source-id=')) {
+      sourceId = arg.slice('--source-id='.length);
+      providedSourceId = true;
+    } else if (arg.startsWith('--easting=')) {
+      easting = Number(arg.slice('--easting='.length));
+      providedEasting = true;
     } else {
-      throw Error('Unknown option ' + arg + '; supported: --index=PATH --report-id=NAME');
+      throw Error('Unknown option ' + arg +
+        '; supported: --index=PATH --report-id=NAME --source-id=way/ID --easting=UTM');
     }
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/.test(reportId)) {
     throw Error('Invalid report id');
   }
+  if (providedSourceId !== providedEasting) {
+    throw Error('Specify --source-id and --easting together to avoid testing the wrong road');
+  }
+  if (!/^way\/[1-9][0-9]{0,15}$/.test(sourceId)) {
+    throw Error('Invalid source way ID');
+  }
+  if (!Number.isFinite(easting) || easting < 100000 || easting > 900000) {
+    throw Error('Invalid UTM easting');
+  }
+  const filename = sourceId === DEFAULT_WAY_ID
+    ? 'tkt033-primary-candidate-corridor-' + reportId + '.json'
+    : 'tkt033-paired-candidate-corridor-' +
+      sourceId.replace('/', '-') + '-' + reportId + '.json';
   return {
-    indexPath,
+    indexPath, sourceId,
+    witness: { easting, northing: DEFAULT_WITNESS.northing },
     sourceIndexPath: resolveOverijsselIndexPath(root),
-    reportPath: path.resolve(root,
-      'benchmarks/results/tkt033-primary-candidate-corridor-' + reportId + '.json'),
+    reportPath: path.resolve(root, 'benchmarks/results/' + filename),
   };
 }
 
@@ -58,6 +82,8 @@ export function inspectPrimaryRegionalSeam(
   opts: ReturnType<typeof parsePrimaryRegionalSeamArgs>
 ) {
   if (fs.existsSync(opts.reportPath)) throw Error('Report exists; use another --report-id');
+  const WAY_ID = opts.sourceId;
+  const WITNESS = opts.witness;
   if (!fs.existsSync(opts.indexPath)) throw Error('Candidate mosaic index missing: ' + opts.indexPath);
   const index = JSON.parse(fs.readFileSync(opts.indexPath, 'utf8')) as {
     schemaVersion: number;
@@ -165,7 +191,7 @@ export function inspectPrimaryRegionalSeam(
     const issues = samples.filter(s => s.source.status !== 'covered');
     const report = {
       ticket: 'TKT-033',
-      purpose: 'Read-only primary way/6666519 true-OSM-centerline coverage in two original 4x4 candidate shards',
+      purpose: 'Read-only selected OSM road centerline coverage in adjacent original 4x4 candidate shards',
       snapshotId: query.snapshotMetadata.snapshotId,
       sourceSha256: query.snapshotMetadata.sourceSha256,
       mosaicIndex: opts.indexPath,

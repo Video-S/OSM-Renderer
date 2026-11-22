@@ -1,5 +1,7 @@
 # Goalpost 2 — Infrastructure Rendering & Robustness: Approved Technical Proposal & Implementation Plan
 
+> **Historical plan note (2026-11-22):** This document preserves the 2026-10-31 planned sequence, requirements and benchmark assumptions. It is **not** a live checklist of what remains authorized or unimplemented. E2+/R+ are now the sole production infrastructure renderers (TKT-026 closed); offline regional 1,024 m tiled streaming and an accepted 16 km pilot exist (ADRs 0011–0013). See [current status](./STATUS.md) and [current architecture](./architecture.md). Broader Twente, LOD1–LOD3 and gameplay have separate acceptance gates.
+
 > **Status**: Approved — Milestone 2.1 (`TKT-002`) Authorized for Execution  
 > **Date**: 2026-10-31  
 > **Scope**: Goalpost 2 — Infrastructure Rendering & Robustness  

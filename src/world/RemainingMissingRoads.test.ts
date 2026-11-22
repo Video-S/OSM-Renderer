@@ -69,7 +69,7 @@ test('TKT-033: classification separates true source geometry from other-road own
   assert.equal(classifyRemainingRoadCoverage(
     src('unattributed', 'covered'), src('uncovered', 'covered')), 'other-road-covered-both');
   assert.equal(classifyRemainingRoadCoverage(
-    src('uncovered', 'uncovered'), src('uncovered', 'covered')), 'physical-sample-gap');
+    src('uncovered', 'uncovered'), src('uncovered', 'covered')), 'axis-inset-uncovered');
 });
 
 test('TKT-033: output run IDs cannot escape disposable benchmark directory', () => {

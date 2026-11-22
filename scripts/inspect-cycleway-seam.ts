@@ -105,6 +105,49 @@ export function inspectPolylineAtHorizontalSeam(
   return contacts.sort((a, b) => a.distanceToAuditPointMeters - b.distanceToAuditPointMeters);
 }
 
+/**
+ * Construct probes on the *OSM segment tangent* instead of holding the
+ * non-seam coordinate fixed. The latter mislabels diagonal narrow paths:
+ * 25cm in the seam-normal direction need not stay inside a 20cm-wide path.
+ *
+ * Returns null for tangencies, on-seam segments or crossings too close to
+ * an endpoint to support both full-length probes; callers must inspect
+ * another segment or mark the witness inconclusive, not a physical gap.
+ */
+export function tangentAlignedRoadSeamProbes(
+  a: EN,
+  b: EN,
+  axis: 'easting' | 'northing',
+  seamCoordinate: number,
+  insetMeters = 0.25
+): {
+  crossing: EN;
+  negativeSide: EN;
+  positiveSide: EN;
+  distanceAlongSegmentMeters: number;
+} | null {
+  if (!Number.isFinite(insetMeters) || insetMeters <= 0) return null;
+  const axisIndex = axis === 'easting' ? 0 : 1;
+  const axisDelta = b[axisIndex] - a[axisIndex];
+  if (Math.abs(axisDelta) <= 1e-8) return null;
+  const t = (seamCoordinate - a[axisIndex]) / axisDelta;
+  if (!(t > 0 && t < 1)) return null;
+  const de = b[0] - a[0], dn = b[1] - a[1];
+  const len = Math.hypot(de, dn);
+  if (!Number.isFinite(len) || len <= 0 || t * len < insetMeters ||
+      (1 - t) * len < insetMeters) return null;
+  const crossing: EN = [a[0] + t * de, a[1] + t * dn];
+  const offset: EN = [insetMeters * de / len, insetMeters * dn / len];
+  const before: EN = [crossing[0] - offset[0], crossing[1] - offset[1]];
+  const after: EN = [crossing[0] + offset[0], crossing[1] + offset[1]];
+  return {
+    crossing,
+    negativeSide: axisDelta > 0 ? before : after,
+    positiveSide: axisDelta > 0 ? after : before,
+    distanceAlongSegmentMeters: insetMeters,
+  };
+}
+
 function getSourceLines(feature: any): EN[][] {
   const g = feature?.geometry;
   const lines: any[] = g?.type === 'LineString'

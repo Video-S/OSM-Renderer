@@ -180,7 +180,7 @@ test('TileStreamManager derives active mosaic identity strictly from the loaded 
 
 test('Dataset switching and failed manifest requests clear stale active mosaic identity', async () => {
   const originalFetch = globalThis.fetch;
-  let phase: 'baseline' | 'candidate' | 'fail_http' | 'fail_unavailable' = 'baseline';
+  let phase: 'baseline' | 'candidate' | 'fail_http' | 'fail_unavailable' | 'fail_build' = 'baseline';
 
   try {
     globalThis.fetch = (async () => {
@@ -205,6 +205,17 @@ test('Dataset switching and failed manifest requests clear stale active mosaic i
               bakeSchemaVersion: '1.1.0',
             })
           ),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (phase === 'fail_build') {
+        // HTTP manifest is valid, but one malformed tile crashes after other
+        // tile records have already been inserted into the manager's map.
+        const payload = makeManifestPayload({
+          packPath: '/var/data/twente-pilot-1024m-tkt033-candidate/mosaic.json',
+        });
+        return new Response(
+          JSON.stringify({ ...payload, tiles: [...payload.tiles, null] }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
@@ -264,21 +275,37 @@ test('Dataset switching and failed manifest requests clear stale active mosaic i
     assert.equal(manager.activeMosaicName, 'twente-pilot-1024m-tkt033-candidate');
     assert.equal(manager.getDiagnostics().snapshotId, 'overijssel-261114-8ae28196');
 
-    // 5. Re-initialize when manifest responds available: false
+    // 5. A successful HTTP response can still fail during tile/overlay setup.
+    // Neither the candidate identity nor partially populated tile records may survive.
+    phase = 'fail_build';
+    await assert.rejects(() => manager.initialize(), /minEasting|Cannot read properties/i);
+    const buildFailureDiag = manager.getDiagnostics();
+    assert.equal(buildFailureDiag.manifestStatus, 'error');
+    assert.equal(buildFailureDiag.activeMosaicName, null);
+    assert.equal(buildFailureDiag.packPath, null);
+    assert.equal(buildFailureDiag.snapshotId, 'uninitialized');
+    assert.equal(buildFailureDiag.totalGridTiles, 0);
+    assert.ok(buildFailureDiag.manifestError);
+
+    // 6. Reinitialize successfully after setup failure, then test unavailable manifest.
+    phase = 'candidate';
+    await manager.initialize();
+    assert.equal(manager.activeMosaicName, 'twente-pilot-1024m-tkt033-candidate');
+
     phase = 'fail_unavailable';
     await assert.rejects(() => manager.initialize(), /not found on disk|unavailable/i);
     assert.equal(manager.activeMosaicName, null);
     assert.equal(manager.packPath, null);
     assert.equal(manager.currentManifestStatus, 'error');
 
-    // 6. Explicit error & inactive identity helpers never retain stale mosaic names
+    // 7. Explicit error & inactive identity helpers never retain stale mosaic names
     const explicitErr = createErrorMosaicIdentity(true, 'Network error');
     assert.equal(explicitErr.status, 'error');
     assert.equal(explicitErr.mosaicName, null);
     assert.equal(INACTIVE_MOSAIC_IDENTITY.status, 'inactive');
     assert.equal(INACTIVE_MOSAIC_IDENTITY.mosaicName, null);
 
-    // 7. Dispose clears loaded state completely
+    // 8. Dispose clears loaded state completely
     phase = 'candidate';
     await manager.initialize();
     assert.equal(manager.activeMosaicName, 'twente-pilot-1024m-tkt033-candidate');

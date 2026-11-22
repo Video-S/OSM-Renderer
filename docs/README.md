@@ -43,6 +43,9 @@ This documentation is organized into two distinct categories:
 - **[Project History: Road Surface & Junction Rendering (project-history.md)](./project-history.md)**  
   Chronological evolution from Goalpost 1 boundary-derived junctions (`ADR-0002`) and Stage E2 (`TKT-008`) to the E2+ surface-first road renderer (`ADR-0010`).
 
+- **[Regional Renderer History (regional-renderer-history.md)](./regional-renderer-history.md)**  
+  Chronology from the first local 3D map through offline streaming, the accepted 16 km candidate, TKT-033 diagnostics and staged full-Twente expansion; separates owner measurements from incomplete full-region validation.
+
 - **[Road Rendering Validation & Migration Roadmap (road-rendering-roadmap.md)](./road-rendering-roadmap.md)**  
   Validation architecture, discovered geometry edge cases, and production promotion record for E2+ (`roads: 'graph-surface'`) and R+ (`railways: 'graph-R+'`) under `TKT-026`.
 

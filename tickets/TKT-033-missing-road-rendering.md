@@ -342,6 +342,56 @@ npm run osm:inspect-cycleway-ownership
 ```
 Upload `benchmarks/results/tkt033-remaining/first-pass/way-38892898-ownership-v1.json` only. This will tell us whether the cycleway is physically rendered (possibly offset), legitimately masked by the residential road, or incorrectly suppressed. A separate cycleway surface may be semantically important even when there is no open ground hole; do not automatically count a residential carriageway as correct cycleway representation.
 
+## Last original crossing: shared-node junction corridor (2026-11-22)
+
+Owner's `way-38892898-ownership-v1.json` establishes that the originally
+unattributed cycleway witness at E=352329.339, N=5794816 is **not physically empty**:
+- Cycleway `way/38892898` and residential `way/546666718` share OSM node `462001787` at E=352327.5513159529, N=5794814.283447532.
+- At the *actual cycleway tangent* roughly 0.25 m north of the crossing, `Roads_cycleway` from `way/38892898` owns the decoded triangle at +0.05 m.
+- Roughly 0.25 m south along that tangent, `Roads_residential` from `way/546666718` owns the road triangle at +0.05 m.
+- The original fixed-easting ±25 cm probes both hit residential, but are **not** valid evidence that the cycleway itself is absent.
+
+The source builder gives at-grade residential surfaces priority over
+cycleways and subtracts overlapping lower-priority polygons. This is a
+plausible ownership transition at an intersection; a single pair of
+tangent probes does **not** prove the entire junction is free of holes.
+
+**Implemented final bounded check:** `npm run osm:inspect-cycleway-ownership -- --report-id=v2`
+now also samples the **real OSM cycleway centerline from the shared node**,
+at 10 cm intervals, through at least 5 m *past* the audited tile seam.
+It reads only the existing immutable source index and previously baked
+`west-north-pair-2x2.sqlite`. The report includes per-point decoded-tile
+physical coverage, source IDs from triangle lineage, a bracketed
+residential-to-cycleway transition, and explicit negative classifications
+for missing, unrelated, or unattributed physical surfaces. The gate requires
+one transition near the seam and no sampled gaps, including samples from
+both adjacent tiles. It refuses to infer a transition from incomplete
+OSM node IDs, ambiguous shared junctions, or incorrect source geometry.
+
+A result `consistent-sampled-ownership` supports a **local sampled
+junction-occlusion classification**, *not* complete continuous geometry
+between 10 cm samples, off-centerline pavement semantics, visual acceptance,
+or regional connectivity. Any `inconclusive` result requires inspecting
+the recorded points before changing rendering. Deterministic regressions
+use the **exact canonical first-segment UTM positions and shared OSM node**
+from the owner report with synthetic decoded-owner outcomes, including gap,
+alien-owner, reversion, and ambiguous-lineage negative controls.
+The regression cannot replace a real canonical source/SQLite execution.
+
+**Owner gate (no rebake):**
+
+```powershell
+git pull --ff-only
+npm run osm:inspect-cycleway-ownership -- --report-id=v2
+```
+
+Upload `benchmarks/results/tkt033-remaining/first-pass/way-38892898-ownership-v2.json`.
+If the corridor is consistent, record the original cycleway crossing
+as legitimate *sampled* priority ownership. Do not mark all of TKT-033
+finished, merge PR #9, or authorize the untouched canonical 256-tile
+Twente rebake on that basis alone. The broader regional and
+visual gates remain separate.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

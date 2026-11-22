@@ -273,6 +273,28 @@ To eliminate error-prone manual URL parameter editing and page reloads, a centra
      - **Loading & Unavailable States**: Switching datasets or failing a manifest request clears stale identity immediately (`Loading manifest...` / `Unavailable`) so a previously loaded mosaic is never reported as active.
    - Automated regression coverage resides in `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`.
 
+   - **Default served dataset (2026-11-22):** The regional server now selects
+     `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json` by default.
+     The earlier `twente-pilot-1024m/mosaic.json` remains preserved, but is no
+     longer selected implicitly. The candidate mosaic is a **local baked artifact**;
+     if it is absent, the regional manifest returns a clear error rather than
+     silently switching to the old bake.
+   - To explicitly inspect the original mosaic, start the server with
+     `OVERIJSSEL_REGIONAL_MOSAIC_PATH` pointing at the old `mosaic.json`.
+     Any explicit override **takes precedence over the new default**. Restart
+     the server after changing this environment variable because the regional
+     handler caches the index. Verify the live selection using:
+
+     ```powershell
+     (Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath
+     ```
+
+   - Manifest identity is only marked `loaded` after all tile records and
+     boundary-overlay initialization succeed. Failures after the HTTP manifest
+     fetch clear partial tile state and show `error`, not the previously loaded
+     mosaic.
+
+
 ## 6. How to Report Verification Results
 
 When completing any implementation or bug-fix task, always report:

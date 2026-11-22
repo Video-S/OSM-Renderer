@@ -47,6 +47,47 @@ Do **not** assume an individual shard boundary is responsible. Do **not** classi
 4. Construct a **small deterministic failing fixture** from a proven case and add a regression test. Fix only the demonstrated failure stage, preserving existing road/cycleway ownership, picking identity, rails, bridge/tunnel grade separation and negative-layer invisibility.
 5. Rebuild into a **disposable bounded test area** and ask the owner to visually verify the original missing locations and at least one control. No automatic LLM visual testing. Replacing the canonical 256-tile dataset or a province-wide rebake requires a separate decision.
 
+## Investigation and first correctness fix (2026-11-22)
+
+Owner reopened this ticket. Work is isolated on branch `tkt-033-shared-road-geometry-correctness`, stacked on the TKT-032 branch in **draft PR #9**. We have **not** modified the canonical Twente SQLite data.
+
+### Demonstrable shared-builder defect
+
+In `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, the E2+ surface owner `registerRoadFootprint()` was called **as soon as Boolean subtraction returned a nonempty polygon**, *before* `createShapesFromMultiPolygon()`, `THREE.ShapeGeometry`, upward-winding/degenerate triangle validation or tile clipping could reject the geometry.
+
+If a high-priority road failed after the premature registration, its unrendered footprint continued to subtract lower-priority roads. This is an actual phantom-occluder logic defect independent of regional tiling; it can erase a road without creating a visible replacement. The correction commits footprint ownership **only after a validated geometry is registered and emitted**. Retain legitimate priority subtraction when the first road actually renders.
+
+Regression: the existing E2+ synthetic test suite now has a **controlled late-triangulation-rejection** test: reject a primary road and assert that a lower-priority overlapping residential road remains rendered, while the normal no-rejection case still correctly subtracts that residential road. The optional test-only rejection hook is never populated by production code.
+
+**Limit:** the synthetic regression establishes the lifecycle defect and the validity of its fix; it does not establish that this lifecycle defect caused any particular canonical `way/...` failure.
+
+### Targeted canonical-source diagnosis (no bake)
+
+Added `scripts/diagnose-missing-roads.ts` and `npm run osm:diagnose-missing-road`. This creates a disposable **2×2 1,024 m study from the canonical immutable source index**, with configurable query context and no tile clipping, pack encoding, or viewer streaming. It reports, for a specific OSM way and UTM point:
+
+- Source GeoJSON existence/tags and `ProcessedMapData` parsed road count.
+- Road `topologySource` parts and graph descriptor identity/class/layer/grade eligibility.
+- Whether the non-tiled global road plan emitted the source, marked it fully subtracted, and its aggregate rejection diagnostics.
+- **Distance from the exact missing point to the nearest *source-attributed* emitted triangle and to *any* emitted road triangle**, plus nearest neighboring geometry owners and classes.
+
+Run one discriminating case from the project root with the canonical `overijssel-261114-8ae28196.sqlite` index already installed:
+
+```powershell
+git fetch origin
+git switch --track origin/tkt-033-shared-road-geometry-correctness
+npm run osm:diagnose-missing-road
+```
+
+Default test case: `way/6661112` at EPSG:25832 E 357376 / N 5791095.095. Output `benchmarks/results/tkt033-shared-road-diagnosis.json`. To target the primary road instead:
+
+```powershell
+npx tsx scripts/diagnose-missing-roads.ts --feature=way/6666519 --out=benchmarks/results/tkt033-primary-diagnosis.json
+```
+
+**Interpretation:** this is a *shared* graph rendering experiment, not a canonical shard reproduction. A missing source/descriptor/triangle at this stage implicates the shared pipeline, whereas success here and failure in the accepted pack narrows the problem to context/tiling/codec/viewer. The independent 2×2 query has different surrounding context from the original 4×4 shard, so results need follow-up before claiming an exact root cause.
+
+Once the source-backed output exists, determine whether the phantom-occluder fix actually affects those OSM ways; address any distinct defect separately. Do not overwrite or rebake the accepted region until an isolated regression and owner review justify it.
+
 ## Acceptance criteria (when work resumes)
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

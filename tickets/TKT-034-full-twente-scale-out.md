@@ -14,7 +14,7 @@ updated: 2026-11-22
 
 Expand the owner-accepted 16 km Twente pilot (`data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`, 16 shards / 256 tiles) into a complete Twente regional dataset (`data/osm/twente-full-1024m/`, 120 shards / 1,920 tiles) by reusing the existing offline, resumable, shard-based baker and fixing concrete scale blockers discovered at 120-shard scale.
 
-This ticket remains **`in_progress`** pending the project owner's local staged experimental bake (1–2 shards), full resumable bake, complete shard/tile integrity verification, targeted seam checks, and human visual inspection on the local Overijssel OSM SQLite dataset.
+This ticket remains **`in_progress`** pending the **full resumable bake**, complete shard/tile integrity verification, targeted seam checks, and human visual inspection. The owner has already completed and verified a 2-shard experimental bake (2026-11-22) on the local Overijssel OSM SQLite dataset.
 
 ---
 
@@ -101,13 +101,13 @@ npx tsx scripts/bake-regional-pilot.ts --preset=twente-full --dry-run --report-o
 ### Stage 1 — Bounded 2-Shard Experimental Bake (Hengelo `r05-c07` + adjacent Almelo/rural `r02-c04` or Enschede seam pair `r05-c07,r05-c08`)
 ```powershell
 $env:NODE_OPTIONS = "--expose-gc --max-old-space-size=6144"
-npx tsx scripts/bake-regional-pilot.ts --preset=twente-full --shards=r05-c07,r05-c08
+npx tsx scripts/bake-regional-pilot.ts --preset=twente-full '--shards=r05-c07,r05-c08'
 ```
 *(Does NOT publish `mosaic.json`. Inspect actual per-shard seconds, triangles, MiB on disk, and RSS/heap output before continuing.)*
 
 ### Stage 2 — Integrity Verification of Experimental Output
 ```powershell
-npx tsx scripts/verify-regional-mosaic.ts --shards-dir=data/osm/twente-full-1024m --preset=twente-full --shards=r05-c07,r05-c08
+npx tsx scripts/verify-regional-mosaic.ts --shards-dir=data/osm/twente-full-1024m --preset=twente-full '--shards=r05-c07,r05-c08'
 ```
 
 ### Stage 3 — Resumable Full Twente Bake (owner-authorized only after Stage 1–2 checks pass)
@@ -153,6 +153,26 @@ Open:
 ---
 
 ## 6. Verification Record
+
+### Owner's local Windows evidence — 2026-11-22 (experimental Stage 1–2 accepted)
+
+The first PowerShell invocation **without quoting** `--shards=r05-c07,r05-c08` was split by PowerShell into one invalid combined shard ID and failed **before baking**. Use the **quoted** forms in the commands above.
+
+The owner reran the quoted command and reported:
+
+| Shard | Bake time | Triangles | SQLite size | RSS at completion |
+| --- | ---: | ---: | ---: | ---: |
+| `r05-c07` | 70.6 s | 1,250,184 | 28.38 MiB | 1,406.22 MiB |
+| `r05-c08` | 22.0 s | 1,257,474 | 6.12 MiB | 1,320.48 MiB |
+| **Subtotal** | **92.7 s** | **2,507,658** | **34.50 MiB** | **Peak RSS 1,422.11 MiB** |
+
+`verify-regional-mosaic.ts --shards-dir=... --preset=twente-full '--shards=r05-c07,r05-c08'` reported **PARTIAL / EXPERIMENTAL OK**, **2/120 shards**, **32/32 tiles** (32 non-empty), **34.37 MiB compressed** and **34.50 MiB** SQLite on disk.
+
+**Gate conclusion:** Stage 1–2 experimental integrity checks passed, and the owner authorized/proceeded with Stage 3. These numbers are not a full-region size/time forecast. **No final 120-shard completion, full verifier, seam audit or owner visual acceptance is recorded yet.** Ticket remains `in_progress`.
+
+### Original implementation environment checks
+
+
 
 - **Sandbox environment note:** `data/osm/` contains no Overijssel OSM SQLite index or baked mosaics in this container; automated verification used synthetic SQLite packs (including a full 120-shard / 1,920-tile mosaic) and the read-only dry-run CLI. No full Twente bake was executed and no human visual inspection was claimed.
 - Automated checks recorded at implementation closeout (see final turn summary for exact exit codes and outputs).

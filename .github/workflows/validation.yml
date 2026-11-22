@@ -34,6 +34,7 @@ jobs:
           - files: "src/world/GeometryBuilder.test.ts src/world/ElevationAndZIndex.test.ts src/world/GradeTransitionRendering.test.ts"
           - files: "src/world/SurfaceFirstRoadRendering.test.ts src/world/JunctionAndTopology.test.ts"
           - files: "src/world/MissingRoadDiagnosis.test.ts"
+          - files: "src/world/DisposableRoadBake.test.ts"
           - files: "src/world/PerformanceBaseline.test.ts src/world/WorldCoordinates.test.ts src/world/FeatureCoverage.test.ts"
           - files: "src/world/AdjacentServiceJunctions.test.ts src/world/BuswayRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts"
           - files: "src/world/PathJunctionCornerSmoothing.test.ts src/world/DevToolsAndReproduction.test.ts"

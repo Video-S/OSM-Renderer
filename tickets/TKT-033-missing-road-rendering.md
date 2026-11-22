@@ -697,6 +697,62 @@ centerline and adjacent tiles. This auditor remains fixed-axis,
 sample-based triage, not road-width or continuous topology proof.
 Leave original and candidate packs untouched. No LLM visual testing.
 
+## Unfiltered paired-carriageway audit: R2 candidate source identified (2026-11-22)
+
+Owner uploaded `tkt033-primary-paired-carriageways-v1.json`, a pinned
+canonical-snapshot audit of `horizontal-r1-2-c1`. It enumerated 206
+crossings across the full interface (all feature types), including
+**three distinct nearby linear road sources** in the same
+`343:5655` / `343:5654` tile pair:
+
+| OSM source | easting at N 5790720 | `highway` | ±25cm decoded source surface |
+| --- | ---: | --- | --- |
+| `way/140066819` | 351809.454 | primary | covered / covered |
+| `way/140066831` | 351816.241 | busway | covered / covered |
+| `way/6666519` | 351822.700 | primary | covered / covered |
+
+Both sides of each sample have height +0.05m and classification
+`both`, with no bridge, tunnel, or layer mismatch. The report also
+contains nearby cycleway, residential and service crossings, none
+of which can be silently identified as the missing lane based solely
+on positional adjacency.
+
+**Priority suspect:** `way/140066819` is a **different primary
+OSM way, only 13.246m from the former primary-road witness**. It is
+the strongest identified R2 hypothesis from the screenshot, with
+the intervening busway `way/140066831` another relevant
+control. However **R1/R2 visual-to-OSM identity is not proved** just
+by a parallel source-line crossing. The seam auditor's ±25cm
+source-covered samples rule out total absence at those particular
+points, **not** a longitudinal cutoff, loss of road width, material
+occlusion or runtime tile visibility.
+
+Extended the existing read-only
+`scripts/inspect-primary-regional-seam.ts` to accept **paired explicit
+`--source-id` + `--easting`** and emit distinct, non-overwriting
+files. It follows each selected source way across the actual 4×4 shard
+packs and also samples perpendicular cross sections ±4m at 16
+along-road positions up to 64m on both sides. It does not rebake,
+mutate existing tiles, or infer visual acceptance.
+
+**Owner's next commands:**
+
+```powershell
+git pull --ff-only
+npx tsx scripts/inspect-primary-regional-seam.ts "--source-id=way/140066819" "--easting=351809.454"
+npx tsx scripts/inspect-primary-regional-seam.ts "--source-id=way/140066831" "--easting=351816.241"
+```
+
+Upload
+`benchmarks/results/tkt033-paired-candidate-corridor-way-140066819-v1.json`
+and
+`benchmarks/results/tkt033-paired-candidate-corridor-way-140066831-v1.json`.
+Treat an `inconclusive` source plan as a request for narrower geometric
+identification, not a rendering failure. If both are solid through the
+suspect stretch at physical width, move to actual viewer mesh visibility,
+loading/streaming, material and overlapping occluders; do not rebake
+the canonical regional data. No LLM visual QA.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

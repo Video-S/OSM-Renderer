@@ -303,6 +303,10 @@ The owner additionally reports having **seen roads disappear in the renderer bef
 
 **Project-level implication:** a generic missing-road bug can be a blocker for the first map-renderer product even if all independently baked shard interfaces align perfectly. The TKT-029 region acceptance remains blocked, but **TKT-032 alone should not grow into an open-ended reimplementation of the whole road renderer**. Record any shared-renderer fix and its regression as a separate narrowly scoped follow-up if necessary.
 
+## Follow-up disposition (2026-11-22)
+
+**Owner requested deferral of the general missing-road investigation.** Tracked separately as **[TKT-033 — Missing Road Geometry in Shared Road Renderer](TKT-033-missing-road-rendering.md)** (`status: deferred`). No additional root-cause work or baker edits are planned now. The regional fidelity gate remains unapproved because owner-observed missing roads have not been resolved; this is a recorded known issue, not a silent sign-off. Resume TKT-033 only when reprioritized.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

@@ -29,6 +29,79 @@ export const TWENTE_PILOT_CONFIG: RegionalMosaicConfig = {
   contextMarginMeters: 1024,
 };
 
+/**
+ * Full Twente regional mosaic configuration (TKT-034).
+ *
+ * 48 × 40 tiles of 1,024 m (49.152 × 40.960 km, 1,920 tiles) partitioned into
+ * 120 independent 4 × 4 shards (12 × 10 shard grid).
+ *
+ * Grid alignment:
+ * - Tile range: tx = 313..360 (minTx % 4 === 1), ty = 5639..5678 (minTy % 4 === 3)
+ * - UTM EPSG:25832 bounds: E 320,512..369,664 m, N 5,774,336..5,815,296 m
+ * - Center UTM: E 345,088 m, N 5,794,816 m (~6.729032°E, 52.281848°N)
+ * - Aligns 1:1 with the 16 TKT-029/TKT-033 pilot shards at r04-c06..r07-c09.
+ *
+ * NOTE: Rectangular UTM extent extends past the Overijssel OSM extract polygon
+ * into Gelderland (SW) and Germany (E/SE/NE); tiles outside OVERIJSSEL_BOUNDARY_RING
+ * will legitimately be empty or sparse from the Overijssel-only snapshot.
+ */
+export const TWENTE_FULL_CONFIG: RegionalMosaicConfig = {
+  name: 'twente-full-1024m',
+  centerLonLat: [6.729032, 52.281848],
+  cols: 48,
+  rows: 40,
+  tileSizeMeters: 1024,
+  shardDimension: 4,
+  collarMeters: 64,
+  contextMarginMeters: 1024,
+};
+
+export type RegionalMosaicPresetId = 'twente-pilot' | 'twente-full';
+
+export const REGIONAL_MOSAIC_PRESETS: Readonly<
+  Record<
+    RegionalMosaicPresetId,
+    {
+      id: RegionalMosaicPresetId;
+      defaultOutDir: string;
+      config: RegionalMosaicConfig;
+    }
+  >
+> = Object.freeze({
+  'twente-pilot': {
+    id: 'twente-pilot',
+    defaultOutDir: 'data/osm/twente-pilot-1024m',
+    config: TWENTE_PILOT_CONFIG,
+  },
+  'twente-full': {
+    id: 'twente-full',
+    defaultOutDir: 'data/osm/twente-full-1024m',
+    config: TWENTE_FULL_CONFIG,
+  },
+});
+
+export function getRegionalMosaicPreset(
+  presetId: string
+): {
+  id: RegionalMosaicPresetId;
+  defaultOutDir: string;
+  config: RegionalMosaicConfig;
+} {
+  if (presetId === 'twente-pilot' || presetId === 'twente-full') {
+    const preset = REGIONAL_MOSAIC_PRESETS[presetId];
+    return {
+      ...preset,
+      config: {
+        ...preset.config,
+        centerLonLat: [...preset.config.centerLonLat],
+      },
+    };
+  }
+  throw new Error(
+    `Unknown regional mosaic preset "${presetId}" (supported: twente-pilot, twente-full)`
+  );
+}
+
 export interface RegionalMosaicShard {
   id: string;
   row: number;

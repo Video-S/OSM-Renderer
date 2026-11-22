@@ -294,6 +294,13 @@ To eliminate error-prone manual URL parameter editing and page reloads, a centra
      fetch clear partial tile state and show `error`, not the previously loaded
      mosaic.
 
+   - **Full Twente Scale-Out (`TKT-034`, `48 × 40` / `120` shards / `1,920` tiles):**
+     - Preset `twente-full` (`TWENTE_FULL_CONFIG` in `src/world/tiling/RegionalMosaicPlan.ts`) targets `data/osm/twente-full-1024m/` without modifying `twente-pilot-1024m` or `twente-pilot-1024m-tkt033-candidate`.
+     - `RegionalMosaicHttpHandler` scans shards sequentially during manifest loading (closing each handle immediately) and serves tile payloads through a bounded LRU pool (`DEFAULT_MAX_OPEN_SHARD_HANDLES = 16`) so 120-shard mosaics do not exhaust file descriptors.
+     - Staged offline validation is supported via `scripts/bake-regional-pilot.ts --preset=twente-full --dry-run`, targeted experimental shards (`--shards=r05-c07,r05-c08`), corrupt/incomplete shard recovery (`--recover-corrupt`), and partial integrity verification (`scripts/verify-regional-mosaic.ts --shards-dir=data/osm/twente-full-1024m --preset=twente-full`).
+     - `?m2a=1&region=twente-full` (and `region=twente`) route to `/api/tiles-region` alongside `region=twente-pilot`, while preserving `OVERIJSSEL_REGIONAL_MOSAIC_PATH` selection and the `0.15` conservative regional zoom-out cap.
+     - See [`tickets/TKT-034-full-twente-scale-out.md`](../tickets/TKT-034-full-twente-scale-out.md) and `src/world/TilingFullTwenteScale.test.ts`.
+
 
 ## 6. How to Report Verification Results
 

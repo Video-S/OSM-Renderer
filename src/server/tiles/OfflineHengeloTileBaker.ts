@@ -146,6 +146,8 @@ export interface BakeHengeloFromStoreOptions {
   grid?: StudyGridSpec;
   /** Additional OSM query context around shard bounds, in meters. */
   queryContextMarginMeters?: number;
+  /** Optional caller-owned OverijsselOsmStore reused across multiple shards. */
+  store?: OverijsselOsmStore;
 }
 
 export function disposeIngestedStudyRegionPlans(ingested: IngestedStudyRegion): void {
@@ -544,7 +546,8 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
         minNorthing: b.minNorthing - queryContextMarginMeters,
         maxNorthing: b.maxNorthing + queryContextMarginMeters,
       });
-  const store = new OverijsselOsmStore(indexPath, { expectedSha256 });
+  const ownsStore = !options.store;
+  const store = options.store ?? new OverijsselOsmStore(indexPath, { expectedSha256 });
   let ingested: IngestedStudyRegion | null = null;
 
   try {
@@ -580,6 +583,8 @@ export function bakeHengeloTilesFromStore(options: BakeHengeloFromStoreOptions =
     if (ingested) {
       disposeIngestedStudyRegionPlans(ingested);
     }
-    store.close();
+    if (ownsStore) {
+      store.close();
+    }
   }
 }

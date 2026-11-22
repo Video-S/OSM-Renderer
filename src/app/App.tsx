@@ -680,7 +680,7 @@ export default function App() {
     const requestId = mapLoadTrackerRef.current.startLoad({
       locationId: 'hengelo_m2a_tiles',
       locationName: isRegionalPilot
-        ? 'Twente Regional Pilot (16×16 km · Bounded Shard Mosaic · OSMTILE1)'
+        ? 'Twente Regional Mosaic (Bounded Shard Streaming · OSMTILE1)'
         : isExperimental1024
           ? 'Hengelo M2-A Baked Tile Streaming (4×4 · 1,024 m Experiment · OSMTILE1)'
           : 'Hengelo M2-A Baked Tile Streaming (8×8 · 512 m · OSMTILE1)',
@@ -823,9 +823,12 @@ export default function App() {
           ? utm32NToGeo(packMeta.studyOriginEasting, packMeta.studyOriginNorthing)
           : [6.7935, 52.2625];
 
+      const activeRegionalLabel = isRegionalPilot
+        ? loadedDiagnostics.activeMosaicName || 'Twente Regional Mosaic'
+        : 'Hengelo';
       const emptyEnvelopeData = localProvider.parseGeoJson(
         { type: 'FeatureCollection', features: [] },
-        `${isRegionalPilot ? 'Twente Regional Pilot' : 'Hengelo'} M2-A Baked Tile Pack (${packMeta.snapshotId} · ${totalPackTiles} Tiles)`,
+        `${activeRegionalLabel} M2-A Baked Tile Pack (${packMeta.snapshotId} · ${packMeta.gridCols}×${packMeta.gridRows} / ${totalPackTiles} Tiles)`,
         centerLonLat,
         Math.max(halfWidthM, halfDepthM)
       );
@@ -1409,6 +1412,11 @@ export default function App() {
 
     const isBenchmarkMode =
       params.get('benchmark') === '1' || params.get('benchmark') === 'true' || fixtureParam === 'benchmark';
+    const regionParam = params.get('region');
+    const isRegionalPilotUrl =
+      regionParam === 'twente-pilot' ||
+      regionParam === 'twente-full' ||
+      regionParam === 'twente';
     const isM2aStreamingParam =
       params.get('m2a') === '1' ||
       params.get('m2a') === 'true' ||
@@ -1418,7 +1426,7 @@ export default function App() {
       params.get('tiles') === '1' ||
       fixtureParam === 'hengelo-tiles' ||
       fixtureParam === 'm2a' ||
-      params.get('region') === 'twente-pilot';
+      isRegionalPilotUrl;
     const isM1aHarnessParam =
       params.get('m1a') === '1' ||
       params.get('m1a') === 'true' ||
@@ -1432,7 +1440,6 @@ export default function App() {
       : undefined;
     const is1024ExperimentUrl =
       parsedTileSizeParam === 1024 || params.get('pack') === '1024m';
-    const isRegionalPilotUrl = params.get('region') === 'twente-pilot';
     // Developer-only visual parity mode: same physical preload/retain distances as
     // TKT-028-F1 hardware benchmarks, without altering normal streamer defaults.
     const matchedMarginsParam = params.get('matchPhysicalMargins');

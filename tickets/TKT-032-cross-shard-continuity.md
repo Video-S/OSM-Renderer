@@ -239,6 +239,41 @@ npx tsx scripts/audit-regional-seams.ts --out=benchmarks/results/tkt032-seam-aud
 
 Review v3 physical-road summaries **before** proposing any baker fix. Prioritize actual road-layer gaps, especially `way/6661112` and the ~14 original asymmetry cases, then refine geometry comparison using OSM line topology / bounded reference at any remaining suspects. Road connections, sleeper-phase and owner visual review remain open; this is **not** a TKT-029 pass.
 
+## Owner v3 physical road triage (2026-11-22)
+
+Owner ran `tkt032-seam-audit-v3.json` on **unchanged, verified 16-shard/256-tile canonical mosaic**, full 24/24 cross-shard interfaces, 9/9 junctions, 4 controls; schema v3; snapshot/source SHA unchanged. JSON was independently analyzed, not just console output.
+
+**87 suspicious road-crossing probes** (all on shard interfaces; no same-shard control triggered): **53 physical `both`**, **23 physical `only-a`/`only-b`**, **11 physical `neither`** (10 unique source ways). The broader original v2 review categories are unchanged: 55 one-sided feature metadata, 66 absent both IDs, 14 same-source asymmetric surface, 163 polygon coverage warnings, zero semantic metadata mismatches/height steps.
+
+| v2 suspicious group | v3 any-road both | v3 any-road one-sided | v3 any-road neither |
+|---|---:|---:|---:|
+| 35 one-sided road source-ID events | 15 | 16 | 4 |
+| 14 road source-specific coverage-asymmetric events | 8 | 6 | 0 |
+| 37 road source-specific uncovered-on-both (unreported by v2) | 30 | 1 | 6 |
+| 1 road missing source ID on both sides (`way/6661112`) | 0 | 0 | 1 |
+| **Total** | **53** | **23** | **11** |
+
+**Interpretation:** A different road's triangles may cover an otherwise missing source identity, so 53 `both` are *not* graph or source-ID continuity proofs. Conversely, exact 25 cm point probes can fail because the graph-generated ribbon is offset from OSM geometry or because of legitimate semantic processing. **23 one-sided + 11 neither = 34 prioritized physical gap *candidates*, not certified broken roads.** These 34 contain 33 distinct ways? Independently check before quoting a distinct-way count. None of the 11 `neither` cases have explicit `layer`, `bridge`, or `tunnel` source tags in report.
+
+### High-priority both-uncovered road witnesses
+
+| Source | Highway | UTM E/N (EPSG:25832) | Original feature-ID status | Notes |
+|---|---|---|---|---|
+| `way/6666519` | primary | 351822.700 / 5790720 | both | 6 and 33 triangle AABB candidates tested but neither 25 cm sample inside a face; start here |
+| `way/6661112` | residential | 357376 / 5791095.095 | neither | No feature attribution *or* road-layer surface on either side |
+| `way/546666718` | residential | 352326.079 / 5794816 | both | Near accompanying cycleway case (~3.3m apart) |
+| `way/38892898` | cycleway | 352329.339 / 5794816 | both | Same seam tile pair as preceding residential way |
+| `way/221267376` | service | 357376 / 5790237.696 and 5790254.857 | both | Two distinct crossing witnesses for same way ~17m apart |
+| `way/51932698` | residential | 357376 / 5798521.137 | only-b | Source ID one-sided and no physical road in either tile |
+| `way/6655700` | residential | 353280 / 5786626.158 | only-b | Near four-way corner; another horizontal crossing ~2.6m away is physical only-b, so probe positioning matters |
+| `way/874072936` | service | 357376 / 5791414.966 | only-b | No physical road on either sample |
+| `way/137733136` | cycleway | 357722.202 / 5790720 | only-a | No physical road on either sample |
+| `way/14119316` | cycleway | 352312.350 / 5786624 | both | Matched road triangles had AABBs at both probes (5 and 11 tested), but neither point was covered |
+
+**Prioritized next action:** Inspect **bounded source/polyline-to-tile geometry** for `way/6666519`, `way/6661112`, residential + cycleway pair `way/546666718`/`way/38892898`, and repeated `way/221267376` before any bake change. Compare *nearest* road triangle distance and local road ribbon coverage over a small spatial corridor on both sides, not only 25 cm point samples at raw OSM centerline. Check possible graph edge replacement/lineage, turn/junction displacement, mesh ownership, edge-of-tile clipping and layer/visibility policy. Retain same-shard controls and include negative-layer and rail phase separately. Owner human map review is final QA, not LLM visual testing.
+
+**Stop condition:** Do not add endless global aggregate audit runs or call this a broad baking flaw without a source-backed, spatially bounded reproduction. If a real geometry discontinuity is proven, add one regression and fix it at the appropriate graph/clipping/meshing stage, then rebake only a *disposable* small comparison area first. The canonical pack is unchanged and TKT-029 signoff still open.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

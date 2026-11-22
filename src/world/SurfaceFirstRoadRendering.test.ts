@@ -24,7 +24,7 @@ import {
   SurfaceFirstBufferInstrumentation,
 } from './infrastructure/roads/SurfaceFirstRoadFootprints';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
-import { buildGraphAtGradeRoadGeometries } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import { buildGraphAtGradeRoadGeometries, validateAndPruneHorizontalGeometry } from './infrastructure/roads/GraphRoadGeometryBuilder';
 import { SceneResourceManager } from './SceneResourceManager';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { ProcessedMapData, RoadClass, RoadFeature } from '../types/MapFeature';
@@ -465,6 +465,64 @@ function buildSurfaceFirstScene(data: ProcessedMapData, roadWidthMultiplier = 1.
   });
   return builder.buildScene(data, MAP_THEMES.tactical);
 }
+
+describe('TKT-033: precision-limited earcut sliver regression from Boerrichterkamp', () => {
+  const validFace = [
+    0, 0.05, 0,
+    0, 0.05, 10,
+    10, 0.05, 0,
+  ];
+  const sourceFace19 = [
+    // Actual failing Float32 vertices from canonical way/6661112,
+    // Boerrichterkamp, EPSG:25832 near E=357376 N=5791095.
+    // Area=6.967457e-6m², inverted normalY=-1, long edge=5.365m.
+    -17.274599075317383, 0.05000000074505806, -387.07470703125,
+    -17.290800094604492, 0.05000000074505806, -387.04339599609375,
+    -19.740299224853516, 0.05000000074505806, -382.3102111816406,
+  ];
+  function makeGeometry(faces: number[]): THREE.BufferGeometry {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(faces, 3));
+    return geometry;
+  }
+
+  it('prunes actual Float32-inverted 0.0026mm thin face without rejecting good road triangles', () => {
+    const geo = makeGeometry([...validFace, ...sourceFace19]);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), true);
+      assert.equal(geo.getIndex()?.count, 3,
+        'Only the numerically unresolved face must be pruned');
+      assert.deepEqual(Array.from(geo.getIndex()!.array), [0, 1, 2]);
+      const normals = geo.getAttribute('normal');
+      assert.deepEqual([normals.getX(0), normals.getY(0), normals.getZ(0)], [0, 1, 0]);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('still rejects a genuinely inverted, visible triangle even when another face is valid', () => {
+    const visibleInversion = [
+      0, 0.05, 0,
+      5, 0.05, 0,
+      0, 0.05, 5,
+    ]; // area 12.5m², normalY=-1
+    const geo = makeGeometry([...validFace, ...visibleInversion]);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('never accepts a road consisting solely of numerically negligible slivers', () => {
+    const geo = makeGeometry(sourceFace19);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+});
 
 describe('TKT-033: road ownership is committed only for emitted geometry', () => {
   it('a failed high-priority road must not silently subtract a lower-priority road', () => {

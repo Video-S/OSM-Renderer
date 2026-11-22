@@ -109,6 +109,27 @@ Owner executed the new `npm run osm:diagnose-missing-road` on their local immuta
 
 **Necessary next evidence:** inspect the newly generated full JSON (not yet supplied) for `inventory.graphEdges[].isAtGradeBuildable` / placement, `plan.renderedSourceId`, `plan.fullySubtractedSourceId`, rejected/buffer/clip counters, and nearest geometry owners; use that to select a specific stage for a bounded regression rather than guessing at width, clipping, layer or triangulation policy.
 
+## Canonical JSON inspected — root cause not yet established (2026-11-22)
+
+Owner uploaded the entire `tkt033-shared-road-diagnosis.json`. This is the actual immutable source snapshot `overijssel-261114-8ae28196` (SHA256 prefix `8ae28196`), not synthetic data:
+
+- OSM source: **`way/6661112` / Boerrichterkamp**, `highway=residential`, `maxspeed=30`, three vertices, three OSM node IDs.
+- Canonically parsed road: `way/6661112-0`, width **5.4 m**, `layer=0`, `isBridge=false`, `isTunnel=false`; one topology part.
+- One graph descriptor: `road_edge:way/6661112-0:seg_0:p_0`, 3 points, `isAtGradeBuildable=true`, `placement=surface_open`, `rendersOnSurface=true`, `hasConflict=false`.
+- Shared **pre-tile** at-grade plan: `renderedSourceId=false` and `fullySubtractedSourceId=false`, no source-attributed road surface within 40 m; nearest **other** road class is `path` `way/177903617`, **19.9513 m** away. The nearest distinct residential road is `way/6661117`, over **32 m** away. This is substantive, not merely a missing source-ID label on an otherwise nearby road ribbon.
+- Overall 2×2 analysis processed 4,650 subsegments and reported **65 `invalidTriangleGeometryCount`**, **7 fully subtracted**, **0 rounded-buffer failures**, **0 flat-ribbon fallbacks**, **0 `surfaceClipFailureCount`**, **0 empty shapes**. Aggregate 65 failures do **not** prove this particular source suffered a triangle failure; it is the leading explanation remaining after eligibility and total-subtraction checks.
+
+**Trace enhancement committed:** the optional, source-filtered `roadGeometryTrace` records for the selected way *each concrete builder decision* (`emitted`, `invalid-triangles`, `fully-subtracted`, exception, etc.). When validation rejects triangles it records the first failing face, area, geometric normal Y, and vertex positions (without mutating geometry). It passes through `ingestCanonicalStudyGeoJson` to the same pre-tile builder, is read-only, and does not collect events for unrelated thousands of ways. A regression verifies trace behavior under normal and artificially failed geometry.
+
+**Next run on the existing TKT-033 branch:**
+
+```powershell
+git pull --ff-only
+npm run osm:diagnose-missing-road
+```
+
+Upload the **overwritten** `benchmarks/results/tkt033-shared-road-diagnosis.json`. Its `roadGeometryTrace` contains the missing decisive per-way stage. If `invalid-triangles` is confirmed, repair the exact ring/winding/triangulation cause with an OSM-coordinate-derived regression, not a blanket polygon-clipping fallback; retain the strict upward winding and surface ownership tests. If an exception or other stage is found, fix that stage instead. **No canonical rebake or claimed visual fix yet.**
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

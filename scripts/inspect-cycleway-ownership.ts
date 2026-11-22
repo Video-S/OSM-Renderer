@@ -15,6 +15,10 @@ import { geoToUtm32N } from '../src/world/tiling/RegionalProjection';
 import {
   probeSourceSurfaceAtUtm, probeAnyRoadSurfaceAtUtm,
 } from '../src/world/tiling/RegionalSeamAudit';
+import {
+  analyzeJunctionCorridor,
+  planJunctionCenterlineCorridor,
+} from './cycleway-junction-continuity';
 import { pointToTriangleDistance } from './diagnose-missing-roads';
 import { visibleRoadOnlyTile } from './bake-and-verify-missing-road';
 import {
@@ -176,6 +180,45 @@ export function inspectCyclewaySurfaceOwnership(
         tangentSamples: samples, tangentAvailable: !!tangent,
       };
     });
+    // Follow the original cycleway from its shared OSM junction node, not a
+    // fixed-easting transect. This does not modify the encoded tiles.
+    const matchingFeature = (sourceId: string) =>
+      (query.geojson.features ?? []).filter((f: any) =>
+        String(f.id ?? f.properties?.['@id'] ?? f.properties?.id ?? '') === sourceId);
+    const sourceLineAndNodes = (sourceId: string): {
+      line: EN[]; nodeIds: string[];
+    } | null => {
+      const features = matchingFeature(sourceId);
+      if (features.length !== 1) return null;
+      const feature: any = features[0];
+      if (feature.geometry?.type !== 'LineString' ||
+          !Array.isArray(feature.geometry.coordinates)) return null;
+      const ids = feature.properties?.tags?._nodeIds ?? feature.properties?._nodeIds;
+      if (!Array.isArray(ids)) return null;
+      const coords = feature.geometry.coordinates as number[][];
+      if (coords.some(c => !Array.isArray(c) || c.length < 2 ||
+          !Number.isFinite(c[0]) || !Number.isFinite(c[1]))) return null;
+      return {
+        line: coords.map(c => geoToUtm32N(c[0], c[1]) as EN),
+        nodeIds: ids.map(String),
+      };
+    };
+    const cycle = sourceLineAndNodes(CYCLEWAY_ID);
+    const road = sourceLineAndNodes(RESIDENTIAL_ID);
+    const plan = cycle && road
+      ? planJunctionCenterlineCorridor({
+        cycleway: cycle.line,
+        residential: road.line,
+        cyclewayNodeIds: cycle.nodeIds,
+        residentialNodeIds: road.nodeIds,
+        seamEasting: e,
+        seamNorthing: n,
+      })
+      : { status: 'inconclusive' as const,
+          reason: 'Cannot identify unique OSM LineString and aligned node IDs for both ways' };
+    const centerlineContinuity = analyzeJunctionCorridor(
+      plan, p => sample('cycleway-centerline-' + p.distanceMeters + 'm', p.easting, p.northing));
+
     const result = {
       ticket: 'TKT-033',
       purpose: 'Read-only original cycleway vs residential priority ownership in decoded source-backed tiles',
@@ -187,8 +230,10 @@ export function inspectCyclewaySurfaceOwnership(
         sample('south-original-25cm', e, n - 0.25),
       ],
       sourceWays,
+      centerlineContinuity,
       limitations: [
         'Owning physical road triangles are recorded, but semantic visual distinction of the cycleway may require owner review.',
+        'The 0.1m-spaced centerline corridor is pointwise evidence, not a continuous geometric proof or a visual-semantic inspection.',
         'Source geometry sampled along its true centerline; a distinct offset/buffered cycleway could be rendered elsewhere.',
         'Uses existing disposable 2x2 pack; no bake, pack mutation, or LLM visual inspection.',
       ],
@@ -206,6 +251,12 @@ export function inspectCyclewaySurfaceOwnership(
           'residential='+sample.residential.status,
           'owners='+sample.owners.map(x=>x.sourceFeatureId+':'+x.mesh).join(','));
       }
+    }
+    console.log('[tkt033:ownership] junction corridor:', centerlineContinuity.status,
+      centerlineContinuity.reason);
+    if ('transition' in centerlineContinuity) {
+      console.log('[tkt033:ownership] sampled transition:', centerlineContinuity.transition);
+      console.log('[tkt033:ownership] sample classifications:', centerlineContinuity.counts);
     }
     console.log('[tkt033:ownership] report: ' + opts.jsonPath);
     console.log('[tkt033:ownership] canonical regional packs unchanged');

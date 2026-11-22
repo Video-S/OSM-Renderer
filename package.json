@@ -29,6 +29,7 @@
     "osm:bake-verify-missing-road": "tsx scripts/bake-and-verify-missing-road.ts",
     "osm:verify-remaining-missing-roads": "tsx scripts/verify-remaining-missing-roads.ts",
     "osm:inspect-cycleway-seam": "tsx scripts/inspect-cycleway-seam.ts",
+    "osm:inspect-cycleway-ownership": "tsx scripts/inspect-cycleway-ownership.ts",
     "osm:audit-tile-batching": "tsx scripts/audit-tile-batching.ts",
     "osm:verify-hengelo-tiles": "tsx scripts/verify-hengelo-tiles.ts"
   },

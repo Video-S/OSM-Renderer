@@ -522,6 +522,55 @@ the owner: new bake completion console summary and `verify-regional-mosaic`
 No regional rebake was executed by ChatGPT; the source index and pack
 exist only on the owner's machine.
 
+## Candidate bake: integrity PASS, western primary road visual FAIL (owner, 2026-11-22)
+
+The owner completed a fresh, all-16-shard candidate bake on branch
+`tkt-033-shared-road-geometry-correctness`, commit `9a8c43a`, at
+`data/osm/twente-pilot-1024m-tkt033-candidate/`, **without reusing**
+shards. The manifest/verifier reported 16/16 shard SQLite packs and
+256/256 complete, nonempty tiles, **236.09 MiB compressed**, with the
+pinned canonical source hash. The old mosaic was not overwritten.
+
+**Human visual outcome:** Several previously broken locations appear
+restored, but the owner supplied an actual candidate-viewer screenshot
+showing that the expected **western primary road**
+`way/6666519` remains visually discontinuous/missing at the originally
+audited seam. This is **FAIL for candidate visual acceptance**, even
+though payload integrity succeeded. The screenshot is human evidence of a
+remaining discontinuity; its exact failure stage is not yet established.
+
+Exact original source-backed witness: UTM EPSG:25832
+**E=351822.700, N=5790720.000**. This northing is exactly the
+horizontal **4×4 regional shard boundary**
+`horizontal-r1-2-c1`, between `r01-c01` (north) and
+`r02-c01` (south), decoded tiles `343:5655` and `343:5654`.
+The previously passing `west-middle-primary` disposable **2×2**
+pack is **not** evidence of correct behavior in either 4×4 regional
+shard. A boundary coincidence is a strong location clue, **not yet proof**
+of a shard-specific root cause; check clipped geometry, source attribution,
+grade/layer, source planning, and viewer/streaming as distinct stages.
+
+**Next owner action — read-only, no bake:**
+
+```powershell
+npx tsx scripts/audit-regional-seams.ts "--index=data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json" "--boundary=horizontal-r1-2-c1" "--feature=way/6666519" "--out=benchmarks/results/tkt033-primary-candidate-seam-v1.json" "--markdown-out=benchmarks/results/tkt033-primary-candidate-seam-v1.md"
+```
+
+Upload the JSON, not the shard SQLite packs. The existing TKT-032
+auditor verifies all shard payloads read-only, then filters the candidate
+source crossing and samples the decoded adjacent tiles. Its fixed-axis
+25 cm samples are **triage only**, not a continuous geometric proof:
+follow up with source-tangent alignment and actual triangle ownership
+before fixing any code. If the report contains no crossing candidates,
+that does **not** invalidate the visual evidence—next use an exact-UTM
+targeted probe independent of the seam candidate enumerator.
+
+**Decision:** Candidate is **NOT promoted/accepted**. Keep PR #9 draft,
+TKT-033/TKT-032/TKT-029 open, and keep both original and candidate
+mosaics untouched until the missing primary road has a causal
+reproduction and a narrow fix verified in a bounded 4×4 replacement
+candidate. Human-only visual sign-off remains mandatory.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

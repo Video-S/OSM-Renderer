@@ -8,6 +8,7 @@ import {
   type SceneLayerDrawWorkEstimate,
 } from '../world/tiling/RenderWorkAttribution';
 import { InspectableFeatureInfo, MapStyleTheme } from '../types/MapFeature';
+import { getThemeExposure, isNaturalTheme } from '../styles/mapThemes';
 import { LiveWebGLTelemetrySnapshot } from '../world/prototype/PerformanceBaselineHarness';
 import {
   type BenchmarkFrameTelemetry,
@@ -129,6 +130,12 @@ export const MapScene: React.FC<MapSceneProps> = ({
   onViewportFrameUpdate,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
+  const naturalLighting = isNaturalTheme(theme);
+
+  useEffect(() => {
+    // Apply exposure in place when switching themes; legacy theme exposure is unchanged.
+    gl.toneMappingExposure = getThemeExposure(theme);
+  }, [gl, theme.id]);
   const sunLightRef = useRef<THREE.DirectionalLight>(null);
   const sunDirectionRef = useRef(new THREE.Vector3());
   const lastHoverTimeRef = useRef<number>(0);
@@ -983,8 +990,8 @@ export const MapScene: React.FC<MapSceneProps> = ({
       <ambientLight intensity={theme.lightIntensity * 0.35} />
       <hemisphereLight
         args={[
-          theme.skyColor,
-          theme.groundColor,
+          naturalLighting ? '#e8ebe7' : theme.skyColor,
+          naturalLighting ? '#adb0a7' : theme.groundColor,
           theme.lightIntensity * 0.45,
         ]}
       />

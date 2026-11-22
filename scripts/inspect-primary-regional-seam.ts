@@ -16,7 +16,7 @@ import {
 } from '../src/world/tiling/RegionalSeamAudit';
 import { visibleRoadOnlyTile } from './bake-and-verify-missing-road';
 import { roadOwnersAtUtm } from './inspect-cycleway-ownership';
-import { planPrimaryRoadCorridor, type UTM } from './primary-regional-seam-corridor';
+import { planPrimaryRoadCorridor, roadPerpendicularSample, type UTM } from './primary-regional-seam-corridor';
 
 const DEFAULT_WAY_ID = 'way/6666519';
 const DEFAULT_WITNESS = { easting: 351822.700, northing: 5790720.000 };
@@ -177,6 +177,27 @@ export function inspectPrimaryRegionalSeam(
       };
     };
     const samples = plan.status === 'ready' ? plan.points.map(sample) : [];
+    // Cross-sections verify that a road exists with physical width, not
+    // just a zero-width or hidden-off-axis centerline artifact.
+    const crossSectionArcMeters = new Set([
+      -64, -32, -16, -8, -4, -2, -1, -0.5,
+      0.5, 1, 2, 4, 8, 16, 32, 64,
+    ]);
+    const lateralOffsets = [-4, -3, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 4] as const;
+    const crossSections = plan.status === 'ready'
+      ? plan.points.filter(p => crossSectionArcMeters.has(p.signedMeters)).map(p => ({
+          signedMeters: p.signedMeters,
+          offsets: lateralOffsets.flatMap(lateralMeters => {
+            const projected = roadPerpendicularSample(
+              lines, [p.easting, p.northing], lateralMeters);
+            if (!projected) return [];
+            return [{ lateralMeters, ...sample({
+              signedMeters: p.signedMeters,
+              easting: projected[0], northing: projected[1],
+            }) }];
+          }),
+        }))
+      : [];
     const sides = [NORTH_SHARD, SOUTH_SHARD].map(shardId => {
       const subset = samples.filter(s => s.shardId === shardId);
       return {
@@ -214,7 +235,9 @@ export function inspectPrimaryRegionalSeam(
         })),
       },
       samples,
+      crossSections,
       limitations: [
+        'Cross-section lateral offsets at 16 centerline positions up to 64m each side test actual road surface width, not only the centerline.',
         'Along-line point samples only; not a proof of continuous geometry between samples.',
         'Negative/positive signed offsets mean source OSM vertex-order, not necessarily north/south.',
         'A change in source feature ID along the roadway can be legitimate; off-centerline pavement is not tested.',
@@ -227,6 +250,9 @@ export function inspectPrimaryRegionalSeam(
     console.log('[tkt033:primary-corridor] ' + plan.status +
       ', source line features=' + features.length + ', sampled=' + samples.length);
     console.log('[tkt033:primary-corridor] north/south summary:', JSON.stringify(sides));
+    console.log('[tkt033:primary-corridor] width cross-sections=' + crossSections.length +
+      ', source-covered lateral points=' + crossSections.reduce((n, x) =>
+        n + x.offsets.filter(o => o.source.status === 'covered').length, 0));
     if (plan.status === 'inconclusive') {
       console.log('[tkt033:primary-corridor] reason: ' + plan.reason);
     } else if (issues.length) {

@@ -4,7 +4,12 @@ import { pathToFileURL } from 'node:url';
 import { bakeHengeloTilesFromStore } from '../src/server/tiles/OfflineHengeloTileBaker';
 import { TilePackSqliteStore } from '../src/server/tiles/TilePackSqliteStore';
 import { OVERIJSSEL_PBF_EXPECTED_SHA256 } from '../src/server/osm/overijsselConfig';
-import { CANONICAL_HENGELO_SNAPSHOT_ID } from '../src/world/tiling/TilePackContract';
+import {
+  CANONICAL_HENGELO_SNAPSHOT_ID,
+  TILE_MESH_FLAG_VISIBLE,
+  TILE_MESH_FLAG_HIDDEN_UNDERGROUND,
+  type DecodedTilePayload,
+} from '../src/world/tiling/TilePackContract';
 import { createAlignedStudyGrid } from '../src/world/tiling/TileGrid';
 import { utm32NToGeo } from '../src/world/tiling/RegionalProjection';
 import { probeAnyRoadSurfaceAtUtm, probeSourceSurfaceAtUtm } from '../src/world/tiling/RegionalSeamAudit';
@@ -63,6 +68,18 @@ export function parseDisposableRoadBakeArgs(
   return { target, packPath, jsonPath };
 }
 
+/** Report only physically emitted, visibly enabled road triangles. */
+export function visibleRoadOnlyTile(tile: DecodedTilePayload): DecodedTilePayload {
+  return {
+    ...tile,
+    meshes: tile.meshes.filter(m =>
+      m.layer === 'roads' &&
+      (m.flags & TILE_MESH_FLAG_VISIBLE) !== 0 &&
+      (m.flags & TILE_MESH_FLAG_HIDDEN_UNDERGROUND) === 0
+    ),
+  };
+}
+
 export interface DisposableRoadSample {
   label: string;
   easting: number;
@@ -112,8 +129,9 @@ export function verifyDisposableRoadBake(opts: DisposableRoadBakeOptions) {
     for (const p of points) {
       const tx = Math.floor(p.easting / tileSizeMeters);
       const ty = Math.floor(p.northing / tileSizeMeters);
-      const tile = pack.getTileDecoded(0, tx, ty);
-      if (!tile) throw Error('Disposable pack omitted tile ' + tx + ':' + ty + ' at ' + p.label);
+      const decoded = pack.getTileDecoded(0, tx, ty);
+      if (!decoded) throw Error('Disposable pack omitted tile ' + tx + ':' + ty + ' at ' + p.label);
+      const tile = visibleRoadOnlyTile(decoded);
       samples.push({
         ...p, tx, ty,
         source: probeSourceSurfaceAtUtm(

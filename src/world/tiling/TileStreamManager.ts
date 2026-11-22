@@ -727,84 +727,95 @@ export class TileStreamManager {
       throw new Error('TileStreamManager has been disposed.');
     }
 
-    this.lastManifestLoadMs = performance.now() - t0;
-    this.metadata = payload.metadata;
-    this.manifestPackPath =
-      typeof payload.packPath === 'string' && payload.packPath.trim().length > 0
-        ? payload.packPath.trim()
-        : null;
-    this.manifestStatus = 'loaded';
-    this.manifestError = null;
-    this.tilesByKey.clear();
-    this.currentViewport = null;
-    this.needsViewportRefresh = false;
-    this.previousFocus = null;
-    this.panLeadVector = { x: 0, z: 0 };
+    // A valid HTTP manifest is not enough: tile and overlay setup can still fail.
+    // Keep diagnostics in the loading state until the complete setup succeeds.
+    try {
+      this.lastManifestLoadMs = performance.now() - t0;
+      this.metadata = payload.metadata;
+      this.manifestPackPath =
+        typeof payload.packPath === 'string' && payload.packPath.trim().length > 0
+          ? payload.packPath.trim()
+          : null;
+      this.tilesByKey.clear();
+      this.currentViewport = null;
+      this.needsViewportRefresh = false;
+      this.previousFocus = null;
+      this.panLeadVector = { x: 0, z: 0 };
 
-    // The original 4km study ground plane is insufficient for larger baked regions.
-    // Keep the same scene/mesh identity while resizing only its geometry.
-    const regionWidth = payload.metadata.gridCols * payload.metadata.tileSizeMeters;
-    const regionDepth = payload.metadata.gridRows * payload.metadata.tileSizeMeters;
-    this.groundMesh.userData.__regionalStreamingWidthMeters = regionWidth;
-    if (regionWidth > 0 && regionDepth > 0) {
-      const oldGeometry = this.groundMesh.geometry;
-      const groundGeometry = this.regionalResources.registerGeometry(
-        new THREE.PlaneGeometry(regionWidth + 1024, regionDepth + 1024, 1, 1)
-      );
-      groundGeometry.rotateX(-Math.PI / 2);
-      this.groundMesh.geometry = groundGeometry;
-      oldGeometry.dispose();
+      // The original 4km study ground plane is insufficient for larger baked regions.
+      // Keep the same scene/mesh identity while resizing only its geometry.
+      const regionWidth = payload.metadata.gridCols * payload.metadata.tileSizeMeters;
+      const regionDepth = payload.metadata.gridRows * payload.metadata.tileSizeMeters;
+      this.groundMesh.userData.__regionalStreamingWidthMeters = regionWidth;
+      if (regionWidth > 0 && regionDepth > 0) {
+        const oldGeometry = this.groundMesh.geometry;
+        const groundGeometry = this.regionalResources.registerGeometry(
+          new THREE.PlaneGeometry(regionWidth + 1024, regionDepth + 1024, 1, 1)
+        );
+        groundGeometry.rotateX(-Math.PI / 2);
+        this.groundMesh.geometry = groundGeometry;
+        oldGeometry.dispose();
+      }
+
+      const originEasting = payload.metadata.studyOriginEasting;
+      const originNorthing = payload.metadata.studyOriginNorthing;
+
+      for (const entry of payload.tiles) {
+        const minX = entry.minEasting - originEasting;
+        const maxX = entry.maxEasting - originEasting;
+        const minZ = originNorthing - entry.maxNorthing;
+        const maxZ = originNorthing - entry.minNorthing;
+
+        const ovMinX = entry.tileCenterX + entry.overhangMinX;
+        const ovMaxX = entry.tileCenterX + entry.overhangMaxX;
+        const ovMinZ = entry.tileCenterZ + entry.overhangMinZ;
+        const ovMaxZ = entry.tileCenterZ + entry.overhangMaxZ;
+
+        const tileKey = formatTileId(entry.tx, entry.ty);
+        this.tilesByKey.set(tileKey, {
+          tileKey,
+          manifest: entry,
+          worldBounds: {
+            minX,
+            maxX,
+            minZ,
+            maxZ,
+            centerX: (minX + maxX) * 0.5,
+            centerZ: (minZ + maxZ) * 0.5,
+          },
+          overhangWorldBounds: {
+            minX: Math.min(minX, ovMinX),
+            maxX: Math.max(maxX, ovMaxX),
+            minZ: Math.min(minZ, ovMinZ),
+            maxZ: Math.max(maxZ, ovMaxZ),
+          },
+          state: 'unloaded',
+          isVisibleInViewport: false,
+          isInFetchSet: false,
+          isInKeepSet: false,
+          priorityScore: Number.POSITIVE_INFINITY,
+          abortController: null,
+          requestGeneration: 0,
+          decodedPayload: null,
+          decodedFootprint: null,
+          reconstructed: null,
+          lastError: null,
+        });
+      }
+
+      this.rebuildBoundaryOverlayFromManifest(payload.metadata);
+      // Only advertise an active mosaic once all tile records and overlays exist.
+      this.manifestStatus = 'loaded';
+      this.manifestError = null;
+      this.emitDiagnostics();
+      return payload.metadata;
+    } catch (err) {
+      this.resetLoadedManifestState();
+      this.manifestStatus = 'error';
+      this.manifestError = err instanceof Error ? err.message : String(err);
+      this.emitDiagnostics();
+      throw err;
     }
-
-    const originEasting = payload.metadata.studyOriginEasting;
-    const originNorthing = payload.metadata.studyOriginNorthing;
-
-    for (const entry of payload.tiles) {
-      const minX = entry.minEasting - originEasting;
-      const maxX = entry.maxEasting - originEasting;
-      const minZ = originNorthing - entry.maxNorthing;
-      const maxZ = originNorthing - entry.minNorthing;
-
-      const ovMinX = entry.tileCenterX + entry.overhangMinX;
-      const ovMaxX = entry.tileCenterX + entry.overhangMaxX;
-      const ovMinZ = entry.tileCenterZ + entry.overhangMinZ;
-      const ovMaxZ = entry.tileCenterZ + entry.overhangMaxZ;
-
-      const tileKey = formatTileId(entry.tx, entry.ty);
-      this.tilesByKey.set(tileKey, {
-        tileKey,
-        manifest: entry,
-        worldBounds: {
-          minX,
-          maxX,
-          minZ,
-          maxZ,
-          centerX: (minX + maxX) * 0.5,
-          centerZ: (minZ + maxZ) * 0.5,
-        },
-        overhangWorldBounds: {
-          minX: Math.min(minX, ovMinX),
-          maxX: Math.max(maxX, ovMaxX),
-          minZ: Math.min(minZ, ovMinZ),
-          maxZ: Math.max(maxZ, ovMaxZ),
-        },
-        state: 'unloaded',
-        isVisibleInViewport: false,
-        isInFetchSet: false,
-        isInKeepSet: false,
-        priorityScore: Number.POSITIVE_INFINITY,
-        abortController: null,
-        requestGeneration: 0,
-        decodedPayload: null,
-        decodedFootprint: null,
-        reconstructed: null,
-        lastError: null,
-      });
-    }
-
-    this.rebuildBoundaryOverlayFromManifest(payload.metadata);
-    this.emitDiagnostics();
-    return payload.metadata;
   }
 
   private rebuildBoundaryOverlayFromManifest(metadata: TilePackMetadata): void {

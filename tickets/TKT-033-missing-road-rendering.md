@@ -173,6 +173,26 @@ Owner uploaded another 7,142-byte `tkt033-shared-road-diagnosis.json` from the s
 
 **Next evidence needed:** re-run on the TKT-033 branch after `git pull --ff-only`, check that console explicitly prints `triangle validator: float32-sliver-pruning-v2`, and inspect/upload the regenerated JSON `roadGeometryTrace[].triangleAudit`. Do **not** rebake canonical packs or claim Boerrichterkamp now renders until `renderedSourceId=true` in a source-backed run and the owner visually verifies disposable baked output.
 
+## Owner canonical-source validation: **Boerrichterkamp FIXED before tiling** (2026-11-22)
+
+Owner reran `npm run osm:diagnose-missing-road` after pulling `float32-sliver-pruning-v2`, and uploaded the new complete JSON. **Same immutable source SHA** `8ae281964831675c89f45db6aaa3566168a224767d3313c7068ad255c5f221c0`, same bounded 2×2 region, same target `way/6661112` at UTM 357376 / 5791095.095.
+
+| Evidence | Before fix | After fix |
+|---|---:|---:|
+| Source-specific decision | `invalid-triangles` | **`emitted`** |
+| Source rendered ID | `false` | **`true`** |
+| Nearest source-attributed triangle | none within 40m | **0m (contains exact sample)** |
+| Source triangle count | rejected 21-face geometry | **20 emitted faces** |
+| Total E2+ rendered ribbons | 4,578 | **4,643 (+65)** |
+| Total E2+ invalid-triangle rejections | 65 | **0** |
+| Total E2+ emitted triangles | 112,704 | **114,087 (+1,383)** |
+| Fully subtracted source count | 7 | 7 |
+| Rounded buffer / surface clip failures | 0 / 0 | 0 / 0 |
+
+**Conclusion:** The precision-aware pruning correction has now **restored the exact source road geometry at the previously visually absent location in a source-backed, pre-tiling graph plan**. The increase of 65 emitted ribbons coupled with 65 fewer invalid-triangle rejections suggests this was a systemic omission path in the local study, but does not prove all 65 are distinct OSM roads or physically continuous across the rendered region.
+
+**Remaining gate:** this diagnostic produces a shared unclipped road plan, not a new baked tile or a viewer frame. The accepted 16-shard / 256-tile Twente mosaic is **still unchanged** and will still display its original missing roads. Next verify a **disposable, bounded tile bake** for the same source (plus a few known missing-road cases) and obtain **owner-only human visual acceptance** before changing canonical packs. TKT-033 stays in progress until this is done.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

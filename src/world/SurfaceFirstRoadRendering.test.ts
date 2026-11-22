@@ -492,8 +492,10 @@ describe('TKT-033: road ownership is committed only for emitted geometry', () =>
       });
       assert.ok(preview.descriptors);
       const resources = new SceneResourceManager();
+      const targetEvents: import('./infrastructure/roads/GraphRoadGeometryBuilder').RoadGeometryTraceEvent[] = [];
       try {
         const result = buildGraphAtGradeRoadGeometries({
+          roadGeometryTrace: { sourceId: 'way/phantom-primary', events: targetEvents },
           descriptors: preview.descriptors,
           roadWidthMultiplier: 1,
           surfaceFirst: true,
@@ -508,6 +510,7 @@ describe('TKT-033: road ownership is committed only for emitted geometry', () =>
             .map((v) => v.info.sourceFeatureId),
           rendered: [...result.renderedSourceIds],
           fullySubtracted: [...result.fullySubtractedRoadIds],
+          targetEvents,
         };
       } finally {
         resources.dispose();
@@ -517,12 +520,16 @@ describe('TKT-033: road ownership is committed only for emitted geometry', () =>
     const normal = run(false);
     assert.ok(normal.rendered.includes('way/phantom-primary'),
       'The preferred road should render when validation succeeds');
+    assert.equal(normal.targetEvents.length, 1);
+    assert.equal(normal.targetEvents[0].stage, 'emitted');
+    assert.ok((normal.targetEvents[0].triangleCount ?? 0) > 0);
     assert.ok(!normal.rendered.includes('way/visible-residential'),
       'The completely covered lower-priority road should remain subtracted');
 
     const lateReject = run(true);
     assert.ok(!lateReject.rendered.includes('way/phantom-primary'),
       'Simulated late validation must reject the higher-priority road');
+    assert.deepEqual(lateReject.targetEvents.map(e => e.stage), ['fault-injected-rejection']);
     assert.ok(lateReject.rendered.includes('way/visible-residential'),
       'A phantom, unrendered footprint must not occlude the real residential road');
     assert.ok(lateReject.emitted.includes('way/visible-residential'),

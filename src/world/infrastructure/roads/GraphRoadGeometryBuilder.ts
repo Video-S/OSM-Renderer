@@ -501,6 +501,67 @@ export interface GraphRoadRenderStats {
 /**
  * Input configuration for `buildGraphAtGradeRoadGeometries`.
  */
+export interface RoadGeometryTraceEvent {
+  sourceFeatureId: string;
+  edgeId: string;
+  subId: string;
+  stage:
+    | 'filtered-visibility' | 'invalid-edge' | 'invalid-subsegment'
+    | 'stroke-empty' | 'fully-subtracted' | 'bbox-outside'
+    | 'empty-shapes' | 'invalid-triangles' | 'clip-empty' | 'clip-invalid'
+    | 'fault-injected-rejection' | 'emitted' | 'exception';
+  /** First unexpected triangle on a validation failure, if one exists. */
+  invalidTriangle?: {
+    faceIndex: number;
+    reason: 'nonfinite' | 'non-upward' | 'no-valid-faces';
+    areaSquareMeters?: number;
+    normalY?: number;
+    vertices?: [number, number, number][];
+  };
+  triangleCount?: number;
+  polygonCount?: number;
+  blockerCount?: number;
+  message?: string;
+}
+
+export interface RoadGeometryTraceTarget {
+  sourceId: string;
+  events: RoadGeometryTraceEvent[];
+}
+
+function findFirstInvalidRoadTriangle(
+  geo: THREE.BufferGeometry
+): RoadGeometryTraceEvent['invalidTriangle'] {
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos) return { faceIndex: -1, reason: 'no-valid-faces' };
+  const idx = geo.getIndex();
+  const n = Math.floor((idx?.count ?? pos.count) / 3);
+  let valid = 0;
+  for (let i = 0; i < n; i++) {
+    const ids = [0, 1, 2].map(j => idx ? idx.getX(i * 3 + j) : i * 3 + j);
+    const verts = ids.map(j => [pos.getX(j), pos.getY(j), pos.getZ(j)] as [number, number, number]);
+    if (verts.some(v => v.some(x => !Number.isFinite(x)))) {
+      return { faceIndex: i, reason: 'nonfinite', vertices: verts };
+    }
+    const [a,b,c] = verts;
+    const ab = [b[0]-a[0],b[1]-a[1],b[2]-a[2]];
+    const ac = [c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+    const crossY = ab[2]*ac[0]-ab[0]*ac[2];
+    const crossX = ab[1]*ac[2]-ab[2]*ac[1];
+    const crossZ = ab[0]*ac[1]-ab[1]*ac[0];
+    const doubleArea = Math.hypot(crossX,crossY,crossZ);
+    const area = doubleArea * 0.5;
+    if (area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) continue;
+    const normalY = crossY / doubleArea;
+    if (normalY <= 0.99) {
+      return { faceIndex: i, reason: 'non-upward', areaSquareMeters: area,
+        normalY, vertices: verts };
+    }
+    valid++;
+  }
+  return valid === 0 ? { faceIndex: -1, reason: 'no-valid-faces' } : undefined;
+}
+
 export interface GraphRoadGeometryBuildOptions {
   /** Immutable graph-backed render descriptor bundle produced by `InfrastructureRenderAdapter`. */
   descriptors: InfrastructureRenderDescriptorBundle;
@@ -522,6 +583,8 @@ export interface GraphRoadGeometryBuildOptions {
    * Lets regression tests prove a non-emitted road cannot occlude later roads.
    */
   testOnlyRejectAfterTriangulation?: (sourceFeatureId: string) => boolean;
+  /** Optional, read-only, source-filtered trace of actual road generation decisions. */
+  roadGeometryTrace?: RoadGeometryTraceTarget;
 }
 
 /**
@@ -1111,6 +1174,20 @@ export function buildGraphAtGradeRoadGeometries(
   // A source can still have visible geometry elsewhere, so finalize after all edges.
   const e2PlusOccludedSourceCandidates = new Set<string>();
 
+  const trace = options.roadGeometryTrace;
+  const recordTrace = (
+    edge: RoadEdgeRenderDescriptor,
+    subId: string,
+    stage: RoadGeometryTraceEvent['stage'],
+    details: Pick<RoadGeometryTraceEvent, 'invalidTriangle' | 'triangleCount' | 'polygonCount' | 'blockerCount' | 'message'> = {}
+  ): void => {
+    if (!trace || !edge.sourceFeatureIds.includes(trace.sourceId)) return;
+    trace.events.push({
+      sourceFeatureId: trace.sourceId,
+      edgeId: edge.id, subId, stage, ...details,
+    });
+  };
+
   const isEligibleSurfaceEdge = (edge: RoadEdgeRenderDescriptor): boolean =>
     edge.isAtGradeBuildable && resolveSurfaceVisibility({
       osmTags: edge.primaryOsmTags,
@@ -1128,16 +1205,23 @@ export function buildGraphAtGradeRoadGeometries(
   );
 
   for (const edge of descriptors.roadEdges) {
-    if (!isEligibleSurfaceEdge(edge)) continue;
+    if (!isEligibleSurfaceEdge(edge)) {
+      recordTrace(edge, edge.id, 'filtered-visibility', {
+        message: 'isAtGradeBuildable=' + edge.isAtGradeBuildable,
+      });
+      continue;
+    }
     stats.atGradeRoadEdgeCount++;
 
     if (!edge.points || edge.points.length < 2) {
       stats.rejectedOrDegenerateCount++;
+      recordTrace(edge, edge.id, 'invalid-edge', { message: 'less than two points' });
       continue;
     }
     const len = computePolylineLength(edge.points as [number, number][]);
     if (!Number.isFinite(len) || len < 0.05) {
       stats.rejectedOrDegenerateCount++;
+      recordTrace(edge, edge.id, 'invalid-edge', { message: 'length=' + len });
       continue;
     }
 
@@ -1413,6 +1497,7 @@ export function buildGraphAtGradeRoadGeometries(
         const pts = sub.points;
         if (pts.length < 2) {
           stats.rejectedOrDegenerateCount++;
+          recordTrace(edge, sub.subId, 'invalid-subsegment');
           continue;
         }
         const { width, roadElevation, isPath, sourceFeatureIds: sids } = sub;
@@ -1441,6 +1526,7 @@ export function buildGraphAtGradeRoadGeometries(
             recordGraphRoadDiagnostic(diagnostics, 'e2plus_flat_ribbon_fallback', sub.subId);
           } else {
             stats.rejectedOrDegenerateCount++;
+            recordTrace(edge, sub.subId, 'stroke-empty');
             continue;
           }
         }
@@ -1489,6 +1575,7 @@ export function buildGraphAtGradeRoadGeometries(
           timing.ownershipClippingTimeMs += performance.now() - tClipStart;
           if (visible.length === 0) {
             stats.fullySubtractedCount++;
+            recordTrace(edge, sub.subId, 'fully-subtracted', { blockerCount: blockers.length });
             fullySubtractedRoadIds.add(sub.subId);
             fullySubtractedRoadIds.add(edge.id);
             for (const sid of sids) {
@@ -1508,6 +1595,7 @@ export function buildGraphAtGradeRoadGeometries(
               maxZ < tileClipBounds.minZ ||
               minZ > tileClipBounds.maxZ)
           ) {
+            recordTrace(edge, sub.subId, 'bbox-outside');
             continue;
           }
 
@@ -1525,6 +1613,13 @@ export function buildGraphAtGradeRoadGeometries(
             unclippedGeo.translate(0, roadElevation, 0);
             if (unclippedGeo.hasAttribute('uv')) unclippedGeo.deleteAttribute('uv');
             if (!validateAndPruneHorizontalGeometry(unclippedGeo)) {
+              // Collect a bounded failure witness before the geometry is disposed.
+              recordTrace(edge, sub.subId, 'invalid-triangles', {
+                invalidTriangle: findFirstInvalidRoadTriangle(unclippedGeo),
+                triangleCount: Math.floor((unclippedGeo.getIndex()?.count ??
+                  unclippedGeo.getAttribute('position').count) / 3),
+                polygonCount: visible.length, blockerCount: blockers.length,
+              });
               unclippedGeo.dispose();
               failedInvalidTriangles = true;
             } else if (!tileClipBounds) {
@@ -1535,11 +1630,15 @@ export function buildGraphAtGradeRoadGeometries(
               if (!clippedGeo) {
                 // Road bbox overlapped tileClipBounds without intersecting polygon area; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
+                recordTrace(edge, sub.subId, 'clip-empty');
                 continue;
               }
               if (validateAndPruneHorizontalGeometry(clippedGeo)) {
                 geo = clippedGeo;
               } else {
+                recordTrace(edge, sub.subId, 'clip-invalid', {
+                  invalidTriangle: findFirstInvalidRoadTriangle(clippedGeo),
+                });
                 clippedGeo.dispose();
                 // Micro-sliver clipped away at tile border; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
@@ -1551,6 +1650,9 @@ export function buildGraphAtGradeRoadGeometries(
           if (!geo) {
             timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
             if (failedEmptyShapes) {
+              recordTrace(edge, sub.subId, 'empty-shapes', {
+                polygonCount: visible.length, blockerCount: blockers.length,
+              });
               stats.emptyShapeCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
@@ -1566,6 +1668,7 @@ export function buildGraphAtGradeRoadGeometries(
             // Deterministic test for the same late-failure lifecycle as a
             // validator rejection; production callers never supply this hook.
             geo.dispose();
+            recordTrace(edge, sub.subId, 'fault-injected-rejection');
             stats.invalidTriangleGeometryCount++;
             stats.rejectedOrDegenerateCount++;
             recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
@@ -1611,6 +1714,11 @@ export function buildGraphAtGradeRoadGeometries(
           // Only surfaces backed by actual rendered triangles may take
           // ownership and subtract lower-priority road geometry.
           registerRoadFootprint(sub.subId, isPath, visible);
+          recordTrace(edge, sub.subId, 'emitted', {
+            polygonCount: visible.length, blockerCount: blockers.length,
+            triangleCount: Math.floor((geo.getIndex()?.count ??
+              geo.getAttribute('position').count) / 3),
+          });
           stats.renderedRoadRibbonCount++;
           for (const sid of sids) renderedSourceIds.add(sid);
           if (edge.roadClass === 'steps') {
@@ -1635,13 +1743,20 @@ export function buildGraphAtGradeRoadGeometries(
               }
             }
           }
-        } catch {
+        } catch (err) {
+          recordTrace(edge, sub.subId, 'exception', {
+            message: err instanceof Error ? err.message : String(err),
+            blockerCount: blockers.length,
+          });
           timing.ownershipClippingTimeMs += performance.now() - tClipStart;
           stats.surfaceClipFailureCount++;
           stats.rejectedOrDegenerateCount++;
           recordGraphRoadDiagnostic(diagnostics, 'e2plus_surface_clip_failed', sub.subId);
         }
       } catch (err) {
+        recordTrace(edge, sub.subId, 'exception', {
+          message: err instanceof Error ? err.message : String(err),
+        });
         console.warn(`Skipping invalid graph at-grade road segment ${sub.subId}`, err);
         stats.rejectedOrDegenerateCount++;
       }

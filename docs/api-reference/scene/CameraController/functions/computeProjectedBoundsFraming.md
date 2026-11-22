@@ -6,9 +6,9 @@
 
 # Function: computeProjectedBoundsFraming()
 
-> **computeProjectedBoundsFraming**(`bounds`, `viewportWidth`, `viewportHeight`, `fixedTiltAngle?`, `azimuthAngle?`, `paddingFactor?`): `object`
+> **computeProjectedBoundsFraming**(`bounds`, `viewportWidth`, `viewportHeight`, `fixedTiltAngle?`, `azimuthAngle?`, `paddingFactor?`, `minZoom?`, `maxZoom?`): `object`
 
-Defined in: scene/CameraController.tsx:58
+Defined in: scene/CameraController.tsx:65
 
 Computes projected bounds framing for the orthographic camera.
 Projects the 4 ground corners of the bounding box into screen coordinates
@@ -39,6 +39,14 @@ taking into account camera azimuth and polar tilt, applying viewport aspect rati
 ### paddingFactor?
 
 `number` = `1.25`
+
+### minZoom?
+
+`number` = `STANDARD_MIN_ZOOM`
+
+### maxZoom?
+
+`number` = `STANDARD_MAX_ZOOM`
 
 ## Returns
 

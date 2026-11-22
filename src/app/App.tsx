@@ -92,8 +92,19 @@ import {
 } from '../world/tiling/M1aVisualHarness';
 import {
   TileStreamManager,
+  INACTIVE_MOSAIC_IDENTITY,
+  createLoadingMosaicIdentity,
+  createErrorMosaicIdentity,
+  createMosaicIdentityFromDiagnostics,
+  type ActiveMosaicIdentity,
   type TileStreamDiagnosticsSnapshot,
 } from '../world/tiling/TileStreamManager';
+import {
+  REGIONAL_MIN_ZOOM_TILE_THRESHOLD,
+  clampCameraZoom,
+  parseRegionalMinZoomFromSearch,
+  resolveCameraZoomPolicy,
+} from '../scene/cameraZoomPolicy';
 import { utm32NToGeo } from '../world/tiling/RegionalProjection';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
@@ -268,9 +279,7 @@ export default function App() {
       disposeM1aHarnessScenes();
     }
     if (activeLocationIdRef.current !== 'hengelo_m2a_tiles') {
-      isM2aStreamingActiveRef.current = false;
-      setIsM2aStreamingActive(false);
-      disposeM2aStreamManager();
+      clearM2aStreamingOnDatasetSwitch();
     }
     setMapData(data);
   };
@@ -307,8 +316,44 @@ export default function App() {
   const [showM2aTileBoundaries, setShowM2aTileBoundaries] = useState<boolean>(true);
   const [m2aStreamDiagnostics, setM2aStreamDiagnostics] =
     useState<TileStreamDiagnosticsSnapshot | null>(null);
+  const [activeMosaicIdentity, setActiveMosaicIdentity] = useState<ActiveMosaicIdentity>(
+    INACTIVE_MOSAIC_IDENTITY
+  );
+  const activeMosaicIdentityRef = useRef<ActiveMosaicIdentity>(INACTIVE_MOSAIC_IDENTITY);
+  activeMosaicIdentityRef.current = activeMosaicIdentity;
+
+  const urlRegionalMinZoomOverride = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? parseRegionalMinZoomFromSearch(window.location.search)
+        : null,
+    []
+  );
+  const [programmaticRegionalMinZoom, setProgrammaticRegionalMinZoom] = useState<number | null>(
+    null
+  );
+
+  const isRegionalZoomContext =
+    (isM2aStreamingActive &&
+      (activeMosaicIdentity.isRegionalStreaming ||
+        (m2aStreamDiagnostics?.totalGridTiles ?? 0) > REGIONAL_MIN_ZOOM_TILE_THRESHOLD)) ||
+    (activeMosaicIdentity.status !== 'inactive' && activeMosaicIdentity.isRegionalStreaming);
+
+  const cameraZoomPolicy = useMemo(
+    () =>
+      resolveCameraZoomPolicy({
+        isRegionalStreaming: isRegionalZoomContext,
+        urlOverride: urlRegionalMinZoomOverride,
+        programmaticOverride: programmaticRegionalMinZoom,
+      }),
+    [isRegionalZoomContext, urlRegionalMinZoomOverride, programmaticRegionalMinZoom]
+  );
+  const cameraZoomPolicyRef = useRef(cameraZoomPolicy);
+  cameraZoomPolicyRef.current = cameraZoomPolicy;
+
   const tileStreamManagerRef = useRef<TileStreamManager | null>(null);
   const lastM2aDiagUiTimeRef = useRef<number>(0);
+  const m2aLoadTokenRef = useRef<number>(0);
   const isM1aHarnessActiveRef = useRef<boolean>(false);
   const isM2aStreamingActiveRef = useRef<boolean>(false);
 
@@ -335,7 +380,7 @@ export default function App() {
     setM1aHarnessMetrics(null);
   };
 
-  const disposeM2aStreamManager = () => {
+  const disposeM2aStreamManager = (resetIdentity: boolean = true) => {
     if (tileStreamManagerRef.current) {
       if (activeSceneRef.current === tileStreamManagerRef.current.scene) {
         activeSceneRef.current = null;
@@ -344,6 +389,17 @@ export default function App() {
       tileStreamManagerRef.current = null;
     }
     setM2aStreamDiagnostics(null);
+    if (resetIdentity) {
+      setActiveMosaicIdentity(INACTIVE_MOSAIC_IDENTITY);
+      setProgrammaticRegionalMinZoom(null);
+    }
+  };
+
+  const clearM2aStreamingOnDatasetSwitch = () => {
+    m2aLoadTokenRef.current += 1;
+    isM2aStreamingActiveRef.current = false;
+    setIsM2aStreamingActive(false);
+    disposeM2aStreamManager(true);
   };
 
   const switchM1aVisualMode = (nextMode: M1aVisualComparisonMode): number | null => {
@@ -424,9 +480,7 @@ export default function App() {
     setSelectedFeature(null);
     activeLocationIdRef.current = 'hengelo_m1a';
     setActiveLocationId('hengelo_m1a');
-    isM2aStreamingActiveRef.current = false;
-    setIsM2aStreamingActive(false);
-    disposeM2aStreamManager();
+    clearM2aStreamingOnDatasetSwitch();
     setStatusMessage('Fetching canonical Hengelo M1a 4×4 km study GeoJSON from local Overijssel SQLite store...');
 
     try {
@@ -611,8 +665,10 @@ export default function App() {
       experimentSkipUnchangedZoom?: boolean;
       themeId?: string;
       target?: [number, number, number];
+      regionalMinZoom?: number;
     }
   ) => {
+    const loadToken = ++m2aLoadTokenRef.current;
     const targetThemeId =
       extraOptions?.themeId && MAP_THEMES[extraOptions.themeId]
         ? extraOptions.themeId
@@ -648,7 +704,14 @@ export default function App() {
     isM1aHarnessActiveRef.current = false;
     setIsM1aHarnessActive(false);
     disposeM1aHarnessScenes();
-    disposeM2aStreamManager();
+    // Immediately clear any previously loaded mosaic identity & manager before fetching
+    isM2aStreamingActiveRef.current = false;
+    setIsM2aStreamingActive(false);
+    disposeM2aStreamManager(false);
+    setProgrammaticRegionalMinZoom(
+      typeof extraOptions?.regionalMinZoom === 'number' ? extraOptions.regionalMinZoom : null
+    );
+    setActiveMosaicIdentity(createLoadingMosaicIdentity(isRegionalPilot));
     if (activeSceneRef.current) {
       activeSceneRef.current.dispose();
       activeSceneRef.current = null;
@@ -664,7 +727,20 @@ export default function App() {
         setSelectedThemeId(extraOptions.themeId);
       }
 
-      const initialZoom = overrideZoom ?? 1.8;
+      const initialZoomRequested = overrideZoom ?? 1.8;
+      const provisionalZoomPolicy = resolveCameraZoomPolicy({
+        isRegionalStreaming: isRegionalPilot,
+        urlOverride: urlRegionalMinZoomOverride,
+        programmaticOverride:
+          typeof extraOptions?.regionalMinZoom === 'number'
+            ? extraOptions.regionalMinZoom
+            : null,
+      });
+      const provisionalZoom = clampCameraZoom(
+        initialZoomRequested,
+        provisionalZoomPolicy.minZoom,
+        provisionalZoomPolicy.maxZoom
+      );
       const initialTarget: [number, number, number] = extraOptions?.target ?? [0, 0, 0];
       const activeTheme = MAP_THEMES[targetThemeId] || MAP_THEMES.tactical;
 
@@ -677,7 +753,7 @@ export default function App() {
         experimentSkipUnchangedViewport: extraOptions?.experimentSkipUnchangedViewport,
         experimentSkipUnchangedZoom: extraOptions?.experimentSkipUnchangedZoom,
         initialTheme: activeTheme,
-        initialCameraZoom: initialZoom,
+        initialCameraZoom: provisionalZoom,
         onDiagnosticsChange: (diag) => {
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
@@ -699,8 +775,35 @@ export default function App() {
       const packMeta = await manager.initialize();
       const initElapsedMs = performance.now() - tInit0;
 
+      if (loadToken !== m2aLoadTokenRef.current) {
+        manager.dispose();
+        return {
+          initElapsedMs: Number(initElapsedMs.toFixed(2)),
+          packMetadata: packMeta,
+          sceneRevision: transitionRevisionRef.current,
+        };
+      }
+
+      const loadedDiagnostics = manager.getDiagnostics();
+      const resolvedIsRegional =
+        isRegionalPilot || loadedDiagnostics.totalGridTiles > REGIONAL_MIN_ZOOM_TILE_THRESHOLD;
+      const resolvedZoomPolicy = resolveCameraZoomPolicy({
+        isRegionalStreaming: resolvedIsRegional,
+        urlOverride: urlRegionalMinZoomOverride,
+        programmaticOverride:
+          typeof extraOptions?.regionalMinZoom === 'number'
+            ? extraOptions.regionalMinZoom
+            : null,
+      });
+      const initialZoom = clampCameraZoom(
+        initialZoomRequested,
+        resolvedZoomPolicy.minZoom,
+        resolvedZoomPolicy.maxZoom
+      );
+      manager.updateCameraZoom(initialZoom);
+
       // Seed initial viewport around target before first WebGL frame
-      const halfSpan = Math.max(256, 700 / Math.max(initialZoom, 0.15));
+      const halfSpan = Math.max(256, 700 / Math.max(initialZoom, resolvedZoomPolicy.minZoom));
       manager.updateViewport({
         minX: initialTarget[0] - halfSpan,
         maxX: initialTarget[0] + halfSpan,
@@ -761,6 +864,9 @@ export default function App() {
 
       isM2aStreamingActiveRef.current = true;
       setIsM2aStreamingActive(true);
+      setActiveMosaicIdentity(
+        createMosaicIdentityFromDiagnostics(loadedDiagnostics, resolvedIsRegional)
+      );
       setCurrentRawGeoJson(null);
       commitMapDataForRequest(requestId, emptyEnvelopeData);
       mapLoadTrackerRef.current.recordSceneGeometryBuild(requestId, {
@@ -798,9 +904,19 @@ export default function App() {
       };
     } catch (err: any) {
       console.error('Failed to initialize M2-A Runtime Tile Streaming:', err);
-      disposeM2aStreamManager();
+      if (loadToken !== m2aLoadTokenRef.current) {
+        throw err;
+      }
+      disposeM2aStreamManager(false);
       isM2aStreamingActiveRef.current = false;
       setIsM2aStreamingActive(false);
+      setProgrammaticRegionalMinZoom(null);
+      setActiveMosaicIdentity(
+        createErrorMosaicIdentity(
+          isRegionalPilot,
+          err?.message || 'Failed to initialize M2-A Runtime Tile Streaming'
+        )
+      );
       setError(`M2-A Tile Streaming Error: ${err?.message || String(err)}`);
       setLoading(false);
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
@@ -836,6 +952,7 @@ export default function App() {
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
+    clearM2aStreamingOnDatasetSwitch();
     setActiveLocationId('m21_switchyard');
     const tFixture0 = performance.now();
     const fixtureData = createRailwayPrototypeFixtureData();
@@ -886,6 +1003,7 @@ export default function App() {
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
+    clearM2aStreamingOnDatasetSwitch();
     setActiveLocationId('m23_prins_fork');
     try {
       const tParse0 = performance.now();
@@ -992,6 +1110,7 @@ export default function App() {
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
+    clearM2aStreamingOnDatasetSwitch();
     setActiveLocationId(reproId);
 
     try {
@@ -1176,6 +1295,7 @@ export default function App() {
     setError(null);
     setHoveredFeature(null);
     setSelectedFeature(null);
+    clearM2aStreamingOnDatasetSwitch();
     setStatusMessage(`Retrieving real OpenStreetMap data for ${loc.name}...`);
     try {
       const parsedData = await osmApiProvider.loadRegion({
@@ -1277,8 +1397,15 @@ export default function App() {
 
     const fixtureParam = params.get('fixture');
     const zoneParam = (params.get('zone') as RailwayPrototypeZoneId) || 'overview';
-    const zoomParam = params.get('zoom') ? parseFloat(params.get('zoom')!) : undefined;
-    const azParam = params.get('azimuth') ? parseFloat(params.get('azimuth')!) : undefined;
+    const rawZoomParam = params.get('zoom');
+    const parsedZoomParam =
+      rawZoomParam !== null && rawZoomParam.trim() !== '' ? Number(rawZoomParam.trim()) : NaN;
+    const zoomParam =
+      Number.isFinite(parsedZoomParam) && parsedZoomParam > 0 ? parsedZoomParam : undefined;
+    const rawAzParam = params.get('azimuth');
+    const parsedAzParam =
+      rawAzParam !== null && rawAzParam.trim() !== '' ? Number(rawAzParam.trim()) : NaN;
+    const azParam = Number.isFinite(parsedAzParam) ? parsedAzParam : undefined;
 
     const isBenchmarkMode =
       params.get('benchmark') === '1' || params.get('benchmark') === 'true' || fixtureParam === 'benchmark';
@@ -2086,6 +2213,7 @@ export default function App() {
         setError(null);
         setHoveredFeature(null);
         setSelectedFeature(null);
+        clearM2aStreamingOnDatasetSwitch();
         activeLocationIdRef.current = params.datasetId;
         setActiveLocationId(params.datasetId);
 
@@ -2203,11 +2331,9 @@ export default function App() {
         setHoveredFeature(null);
         setSelectedFeature(null);
         isM1aHarnessActiveRef.current = false;
-        isM2aStreamingActiveRef.current = false;
         setIsM1aHarnessActive(false);
-        setIsM2aStreamingActive(false);
         disposeM1aHarnessScenes();
-        disposeM2aStreamManager();
+        clearM2aStreamingOnDatasetSwitch();
         activeLocationIdRef.current = 'benchmark_unloaded';
         setActiveLocationId('benchmark_unloaded');
 
@@ -2337,6 +2463,7 @@ export default function App() {
         target?: [number, number, number];
         zoom?: number;
         azimuthDeg?: number;
+        regionalMinZoom?: number;
         waitForIdle?: boolean;
         timeoutMs?: number;
       } = {}) => {
@@ -2354,6 +2481,7 @@ export default function App() {
             experimentSkipUnchangedZoom: params.experimentSkipUnchangedZoom,
             themeId: params.themeId,
             target: params.target,
+            regionalMinZoom: params.regionalMinZoom,
           }
         );
         await waitForSceneReady(
@@ -2400,6 +2528,8 @@ export default function App() {
       },
       getTileStreamDiagnostics: () =>
         tileStreamManagerRef.current?.getDiagnostics() ?? null,
+      getActiveMosaicIdentity: () => activeMosaicIdentityRef.current,
+      getCameraZoomPolicy: () => cameraZoomPolicyRef.current,
       getSceneMeshCounts: () =>
         typeof (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__ === 'function'
           ? (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__()
@@ -2470,6 +2600,7 @@ export default function App() {
 
     setLoading(true);
     setError(null);
+    clearM2aStreamingOnDatasetSwitch();
     setStatusMessage(`Parsing uploaded GeoJSON file ${file.name}...`);
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -2705,8 +2836,8 @@ export default function App() {
                   frameRegionSignal={frameRegionCount}
                   rotateStepSignal={rotateStepCount}
                   target={CAMERA_TARGET}
-                  minZoom={isM2aStreamingActive && (m2aStreamDiagnostics?.totalGridTiles ?? 0) > 64 ? 0.015 : 0.15}
-                  maxZoom={16.0}
+                  minZoom={cameraZoomPolicy.minZoom}
+                  maxZoom={cameraZoomPolicy.maxZoom}
                   explicitPose={explicitPose}
                   onRegisterImperativePoseSetter={(setter) => {
                     imperativePoseSetterRef.current = setter;
@@ -3122,8 +3253,17 @@ export default function App() {
             <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold uppercase tracking-wider">
               M2-A Tile Streaming
             </span>
+            {m2aStreamDiagnostics.activeMosaicName && (
+              <span
+                data-testid="m2a-bar-active-mosaic"
+                title={m2aStreamDiagnostics.packPath ?? undefined}
+                className="px-2 py-0.5 rounded bg-slate-950 border border-emerald-500/30 text-emerald-200 font-mono text-[11px] font-semibold"
+              >
+                {m2aStreamDiagnostics.activeMosaicName}
+              </span>
+            )}
             <span className="font-mono text-[11px] text-slate-300">
-              {m2aStreamDiagnostics.snapshotId} · v{m2aStreamDiagnostics.bakeSchemaVersion} · {m2aStreamDiagnostics.tileSizeMeters}m · preload/retain {m2aStreamDiagnostics.preloadMarginTiles * m2aStreamDiagnostics.tileSizeMeters}/{m2aStreamDiagnostics.retainMarginTiles * m2aStreamDiagnostics.tileSizeMeters}m
+              {m2aStreamDiagnostics.snapshotId} · v{m2aStreamDiagnostics.bakeSchemaVersion} · {m2aStreamDiagnostics.tileSizeMeters}m · minZoom {cameraZoomPolicy.minZoom} · preload/retain {m2aStreamDiagnostics.preloadMarginTiles * m2aStreamDiagnostics.tileSizeMeters}/{m2aStreamDiagnostics.retainMarginTiles * m2aStreamDiagnostics.tileSizeMeters}m
             </span>
           </div>
 
@@ -4025,6 +4165,8 @@ export default function App() {
         }
         loadDiagnosticsHistory={mapLoadTrackerRef.current.getHistory()}
         liveWebGLSnapshot={liveTelemetry ?? latestTelemetryRef.current}
+        activeMosaicIdentity={activeMosaicIdentity}
+        cameraZoomPolicy={cameraZoomPolicy}
       />
     </div>
   );

@@ -46,6 +46,8 @@ import type {
 import type { InfrastructureRenderPreviewTiming } from '../world/infrastructure/rendering/InfrastructureRenderAdapter';
 import type { MapLoadDiagnosticsRecord } from '../world/dev/MapLoadDiagnostics';
 import type { LiveWebGLTelemetrySnapshot } from '../world/prototype/PerformanceBaselineHarness';
+import type { ActiveMosaicIdentity } from '../world/tiling/ActiveMosaicIdentity';
+import type { CameraZoomPolicy } from '../scene/cameraZoomPolicy';
 
 export interface DevToolsPanelProps {
   isOpen: boolean;
@@ -95,6 +97,9 @@ export interface DevToolsPanelProps {
   lastLoadDiagnostics?: MapLoadDiagnosticsRecord | null;
   loadDiagnosticsHistory?: MapLoadDiagnosticsRecord[];
   liveWebGLSnapshot?: LiveWebGLTelemetrySnapshot | null;
+  // Active baked mosaic / tile pack identity & camera zoom policy
+  activeMosaicIdentity?: ActiveMosaicIdentity | null;
+  cameraZoomPolicy?: CameraZoomPolicy | null;
 }
 
 export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
@@ -138,6 +143,8 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
   lastLoadDiagnostics = null,
   loadDiagnosticsHistory = [],
   liveWebGLSnapshot = null,
+  activeMosaicIdentity = null,
+  cameraZoomPolicy = null,
 }) => {
   const [activeDevTab, setActiveDevTab] = useState<'rendering' | 'inspection' | 'reporting' | 'fixtures'>('rendering');
 
@@ -268,6 +275,8 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
       },
       latestLoad: lastLoadDiagnostics,
       recentHistory: loadDiagnosticsHistory,
+      activeMosaic: activeMosaicIdentity,
+      cameraZoomPolicy,
     };
     const jsonText = JSON.stringify(payload, null, 2);
 
@@ -381,6 +390,159 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
         {/* TAB 1: RENDERING CONTROLS */}
         {activeDevTab === 'rendering' && (
           <div className="space-y-4">
+            {/* Active Regional Mosaic / Baked Tile Pack Identity & Zoom Limit */}
+            {activeMosaicIdentity && activeMosaicIdentity.status !== 'inactive' && (
+              <section
+                data-testid="active-mosaic-diagnostics"
+                className={`rounded-xl p-3.5 space-y-2.5 border ${
+                  activeMosaicIdentity.status === 'error'
+                    ? 'bg-rose-950/35 border-rose-500/40'
+                    : activeMosaicIdentity.status === 'loading'
+                      ? 'bg-amber-950/25 border-amber-500/40'
+                      : 'bg-slate-900/80 border-emerald-500/40'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-100">
+                    {activeMosaicIdentity.isRegionalStreaming
+                      ? 'Regional Mosaic Dataset'
+                      : 'Baked Tile Pack Dataset'}
+                  </span>
+                  <span
+                    data-testid="active-mosaic-status"
+                    className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
+                      activeMosaicIdentity.status === 'loaded'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : activeMosaicIdentity.status === 'loading'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                    }`}
+                  >
+                    {activeMosaicIdentity.status === 'loaded'
+                      ? 'Loaded'
+                      : activeMosaicIdentity.status === 'loading'
+                        ? 'Loading'
+                        : 'Unavailable'}
+                  </span>
+                </div>
+
+                {activeMosaicIdentity.status === 'loading' && (
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-amber-200">
+                    <div>
+                      <span className="text-slate-400">Active Mosaic: </span>
+                      <span>Loading manifest...</span>
+                    </div>
+                  </div>
+                )}
+
+                {activeMosaicIdentity.status === 'error' && (
+                  <div className="space-y-1.5">
+                    <div className="bg-slate-950/80 border border-rose-500/30 rounded-lg p-2.5 text-[11px] font-mono text-rose-200">
+                      <div>
+                        <span className="text-slate-400">Active Mosaic: </span>
+                        <span className="font-semibold text-rose-300">Unavailable</span>
+                      </div>
+                      {activeMosaicIdentity.errorMessage && (
+                        <div className="text-[10px] text-rose-300/90 mt-1 break-words">
+                          {activeMosaicIdentity.errorMessage}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeMosaicIdentity.status === 'loaded' && (
+                  <div className="space-y-2">
+                    <div className="bg-slate-950/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] font-mono">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-slate-400 shrink-0">Active Mosaic:</span>
+                        <span
+                          data-testid="active-mosaic-name"
+                          title={activeMosaicIdentity.packPath ?? undefined}
+                          className="text-emerald-300 font-bold text-right break-all"
+                        >
+                          {activeMosaicIdentity.mosaicName ?? 'Unknown (packPath omitted)'}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-slate-400 shrink-0">Source:</span>
+                        <span
+                          data-testid="active-mosaic-source"
+                          className="text-slate-200 text-right break-all"
+                        >
+                          {activeMosaicIdentity.snapshotId ?? 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-slate-400 shrink-0">Tiles · Schema:</span>
+                        <span
+                          data-testid="active-mosaic-tiles-schema"
+                          className="text-cyan-300 text-right"
+                        >
+                          {activeMosaicIdentity.tileCount !== null
+                            ? activeMosaicIdentity.tileCount
+                            : '—'}
+                          {' · '}
+                          {activeMosaicIdentity.bakeSchemaVersion ?? '—'}
+                          {activeMosaicIdentity.tileSizeMeters !== null
+                            ? ` (${activeMosaicIdentity.tileSizeMeters}m)`
+                            : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {activeMosaicIdentity.packPath && (
+                      <details className="bg-slate-950/60 border border-slate-800/80 rounded-lg px-2.5 py-1.5 text-[10px] font-mono text-slate-400">
+                        <summary className="cursor-pointer text-slate-300 hover:text-cyan-300 select-none">
+                          Full Manifest Path
+                        </summary>
+                        <div
+                          data-testid="active-mosaic-full-path"
+                          className="mt-1.5 text-slate-300 break-all select-all"
+                        >
+                          {activeMosaicIdentity.packPath}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {cameraZoomPolicy && (
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[10px] font-mono space-y-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-slate-400">Zoom-Out Limit (minZoom):</span>
+                      <span
+                        data-testid="effective-min-zoom"
+                        className="text-cyan-300 font-semibold"
+                      >
+                        {cameraZoomPolicy.minZoom}
+                        <span className="text-slate-400 font-normal">
+                          {' '}
+                          (
+                          {cameraZoomPolicy.source === 'regional_default'
+                            ? 'regional default'
+                            : cameraZoomPolicy.source === 'url_override'
+                              ? 'URL override'
+                              : cameraZoomPolicy.source === 'programmatic_override'
+                                ? 'programmatic override'
+                                : cameraZoomPolicy.source === 'fallback_invalid_override'
+                                  ? 'default fallback'
+                                  : 'standard'}
+                          {' · max '}
+                          {cameraZoomPolicy.maxZoom})
+                        </span>
+                      </span>
+                    </div>
+                    {cameraZoomPolicy.invalidOverrideRejected && (
+                      <div className="text-amber-300">
+                        Ignored invalid regionalMinZoom=&quot;{cameraZoomPolicy.requestedOverrideRaw}&quot;; fell back to {cameraZoomPolicy.minZoom}.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Production Infrastructure Engine Summary */}
             <section className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
@@ -1344,7 +1506,9 @@ export const DevToolsPanel: React.FC<DevToolsPanelProps> = ({
       {/* Footer Info */}
       <footer className="p-3 border-t border-slate-800/80 bg-slate-900/60 text-[10px] font-mono text-slate-400 flex items-center justify-between">
         <span>DevTools v1.0 · TKT-009</span>
-        <span>Cam: zoom {currentCameraPose.zoom.toFixed(1)}x · az {currentCameraPose.azimuthDeg ?? 45}°</span>
+        <span>
+          Cam: zoom {currentCameraPose.zoom.toFixed(2)}x · min {cameraZoomPolicy?.minZoom ?? 0.15} · az {currentCameraPose.azimuthDeg ?? 45}°
+        </span>
       </footer>
     </div>
   );

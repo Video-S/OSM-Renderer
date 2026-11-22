@@ -6,9 +6,7 @@
 
 # Interface: GraphRoadGeometryBuildOptions
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:504
-
-Input configuration for `buildGraphAtGradeRoadGeometries`.
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:643
 
 ## Properties
 
@@ -16,7 +14,7 @@ Input configuration for `buildGraphAtGradeRoadGeometries`.
 
 > **descriptors**: [`InfrastructureRenderDescriptorBundle`](../../../rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderDescriptorBundle.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:506
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:645
 
 Immutable graph-backed render descriptor bundle produced by `InfrastructureRenderAdapter`.
 
@@ -26,7 +24,7 @@ Immutable graph-backed render descriptor bundle produced by `InfrastructureRende
 
 > `optional` **diagnostics?**: [`MapFeatureDiagnostics`](../../../../../types/MapFeature/interfaces/MapFeatureDiagnostics.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:516
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:655
 
 Optional pipeline diagnostics object to record clipping failures or rejected geometry fallbacks.
 
@@ -36,7 +34,7 @@ Optional pipeline diagnostics object to record clipping failures or rejected geo
 
 > `optional` **gradeTransitionCoords?**: readonly (readonly \[`number`, `number`\])[]
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:512
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:651
 
 Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints (retained for interface compatibility).
 
@@ -46,9 +44,19 @@ Optional world coordinates `[x, z]` of legacy Stage 6D bridge/tunnel endpoints (
 
 > **resourceManager**: [`SceneResourceManager`](../../../../SceneResourceManager/classes/SceneResourceManager.md)
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:514
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:653
 
 Scene resource manager for deterministic GPU buffer registration and disposal.
+
+***
+
+### roadGeometryTrace?
+
+> `optional` **roadGeometryTrace?**: [`RoadGeometryTraceTarget`](RoadGeometryTraceTarget.md)
+
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:665
+
+Optional, read-only, source-filtered trace of actual road generation decisions.
 
 ***
 
@@ -56,7 +64,7 @@ Scene resource manager for deterministic GPU buffer registration and disposal.
 
 > **roadWidthMultiplier**: `number`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:508
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:647
 
 User/scene multiplier applied to canonical road widths.
 
@@ -66,9 +74,31 @@ User/scene multiplier applied to canonical road widths.
 
 > `optional` **surfaceFirst?**: `boolean`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:510
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:649
 
 E2+ independent rounded-stroke footprint construction; false preserves E2 exactly.
+
+***
+
+### testOnlyRejectAfterTriangulation?
+
+> `optional` **testOnlyRejectAfterTriangulation?**: (`sourceFeatureId`) => `boolean`
+
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:663
+
+Test-only fault injection: simulate a late triangulation rejection for a
+specific source ID. Never used by the app or the offline tile baker.
+Lets regression tests prove a non-emitted road cannot occlude later roads.
+
+#### Parameters
+
+##### sourceFeatureId
+
+`string`
+
+#### Returns
+
+`boolean`
 
 ***
 
@@ -76,6 +106,6 @@ E2+ independent rounded-stroke footprint construction; false preserves E2 exactl
 
 > `optional` **tileClipBounds?**: `ClipBox2D`
 
-Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:518
+Defined in: world/infrastructure/roads/GraphRoadGeometryBuilder.ts:657
 
 Optional tile XZ bounds; when provided, clips emitted road/step meshes to exact tile boundaries after priority subtraction.

@@ -30,6 +30,21 @@ import {
   formatTileId,
   type StudyGridSpec,
 } from './TileGrid';
+import {
+  deriveActiveMosaicNameFromPackPath,
+  type TileManifestLoadStatus,
+} from './ActiveMosaicIdentity';
+
+export {
+  deriveActiveMosaicNameFromPackPath,
+  createLoadingMosaicIdentity,
+  createErrorMosaicIdentity,
+  createMosaicIdentityFromDiagnostics,
+  INACTIVE_MOSAIC_IDENTITY,
+  type ActiveMosaicIdentity,
+  type ActiveMosaicStatus,
+  type TileManifestLoadStatus,
+} from './ActiveMosaicIdentity';
 
 export type TileStreamLifecycleState =
   | 'unloaded'
@@ -70,6 +85,11 @@ export interface TileTimingSummaryStats {
 }
 
 export interface TileStreamDiagnosticsSnapshot {
+  manifestStatus: TileManifestLoadStatus;
+  manifestError: string | null;
+  activeMosaicName: string | null;
+  packPath: string | null;
+  apiBaseUrl: string;
   snapshotId: string;
   bakeSchemaVersion: string;
   tileSizeMeters: number;
@@ -128,6 +148,9 @@ export interface TileStreamDiagnosticsSnapshot {
 }
 
 export interface TilePackManifestPayload {
+  available?: boolean;
+  packPath?: string;
+  dbSizeBytes?: number;
   metadata: TilePackMetadata;
   tiles: TileManifestEntry[];
 }
@@ -426,6 +449,9 @@ export class TileStreamManager {
   private readonly tilesByKey = new Map<string, ManagedTileRecord>();
 
   private metadata: TilePackMetadata | null = null;
+  private manifestStatus: TileManifestLoadStatus = 'idle';
+  private manifestPackPath: string | null = null;
+  private manifestError: string | null = null;
   private currentTheme: MapStyleTheme;
   private currentCameraZoom: number;
   private currentWireframe = false;
@@ -596,8 +622,53 @@ export class TileStreamManager {
     return this.metadata;
   }
 
+  get packPath(): string | null {
+    return this.manifestPackPath;
+  }
+
+  get activeMosaicName(): string | null {
+    return deriveActiveMosaicNameFromPackPath(this.manifestPackPath);
+  }
+
+  get currentManifestStatus(): TileManifestLoadStatus {
+    return this.manifestStatus;
+  }
+
   setBoundaryOverlayVisible(visible: boolean): void {
     this.boundaryOverlayResult.group.visible = visible;
+  }
+
+  /**
+   * Clears any currently loaded tiles and manifest metadata so a reload or
+   * failed manifest fetch can never report a previous dataset as active.
+   */
+  private resetLoadedManifestState(): void {
+    let detachedAny = false;
+    for (const record of this.tilesByKey.values()) {
+      if (record.abortController) {
+        record.abortController.abort();
+        record.abortController = null;
+      }
+      if (record.reconstructed) {
+        this.detachTileFromCompositeScene(record);
+        record.reconstructed.dispose();
+        record.reconstructed = null;
+        detachedAny = true;
+      }
+      record.decodedPayload = null;
+      record.decodedFootprint = null;
+      record.state = 'unloaded';
+    }
+    this.tilesByKey.clear();
+    this.metadata = null;
+    this.manifestPackPath = null;
+    this.currentViewport = null;
+    this.needsViewportRefresh = false;
+    this.previousFocus = null;
+    this.panLeadVector = { x: 0, z: 0 };
+    if (detachedAny) {
+      this.rebuildCompositeStats();
+    }
   }
 
   /**
@@ -610,29 +681,60 @@ export class TileStreamManager {
       throw new Error('TileStreamManager has been disposed.');
     }
     const t0 = performance.now();
-    let payload: TilePackManifestPayload;
+    this.resetLoadedManifestState();
+    this.manifestStatus = 'loading';
+    this.manifestError = null;
+    this.emitDiagnostics();
 
-    if (manifestOverride) {
-      payload = manifestOverride;
-    } else {
-      const response = await this.fetchFn(`${this.apiBaseUrl}/manifest`);
-      if (!response.ok) {
-        let errorMessage = `Failed to load tile manifest (HTTP ${response.status})`;
-        try {
-          const errJson = (await response.json()) as { error?: string };
-          if (errJson?.error) {
-            errorMessage = errJson.error;
+    let payload: TilePackManifestPayload;
+    try {
+      if (manifestOverride) {
+        payload = manifestOverride;
+      } else {
+        const response = await this.fetchFn(`${this.apiBaseUrl}/manifest`);
+        if (!response.ok) {
+          let errorMessage = `Failed to load tile manifest (HTTP ${response.status})`;
+          try {
+            const errJson = (await response.json()) as { error?: string };
+            if (errJson?.error) {
+              errorMessage = errJson.error;
+            }
+          } catch {
+            // ignore
           }
-        } catch {
-          // ignore
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+        payload = (await response.json()) as TilePackManifestPayload;
       }
-      payload = (await response.json()) as TilePackManifestPayload;
+
+      if (
+        !payload ||
+        payload.available === false ||
+        !payload.metadata ||
+        !Array.isArray(payload.tiles)
+      ) {
+        throw new Error('Tile manifest response is unavailable or malformed.');
+      }
+    } catch (err) {
+      this.resetLoadedManifestState();
+      this.manifestStatus = 'error';
+      this.manifestError = err instanceof Error ? err.message : String(err);
+      this.emitDiagnostics();
+      throw err;
+    }
+
+    if (this.isDisposed) {
+      throw new Error('TileStreamManager has been disposed.');
     }
 
     this.lastManifestLoadMs = performance.now() - t0;
     this.metadata = payload.metadata;
+    this.manifestPackPath =
+      typeof payload.packPath === 'string' && payload.packPath.trim().length > 0
+        ? payload.packPath.trim()
+        : null;
+    this.manifestStatus = 'loaded';
+    this.manifestError = null;
     this.tilesByKey.clear();
     this.currentViewport = null;
     this.needsViewportRefresh = false;
@@ -1123,14 +1225,22 @@ export class TileStreamManager {
     this.peakLoadedTiles = Math.max(this.peakLoadedTiles, loadedTiles);
     this.peakLoadingTiles = Math.max(this.peakLoadingTiles, loadingTiles);
 
+    const isLoaded = this.manifestStatus === 'loaded' && this.metadata !== null;
+    const loadedPackPath = isLoaded ? this.manifestPackPath : null;
+
     return {
-      snapshotId: this.metadata?.snapshotId ?? 'uninitialized',
-      bakeSchemaVersion: this.metadata?.bakeSchemaVersion ?? 'uninitialized',
-      tileSizeMeters: this.metadata?.tileSizeMeters ?? 512,
+      manifestStatus: this.manifestStatus,
+      manifestError: this.manifestError,
+      activeMosaicName: deriveActiveMosaicNameFromPackPath(loadedPackPath),
+      packPath: loadedPackPath,
+      apiBaseUrl: this.apiBaseUrl,
+      snapshotId: isLoaded ? this.metadata!.snapshotId : 'uninitialized',
+      bakeSchemaVersion: isLoaded ? this.metadata!.bakeSchemaVersion : 'uninitialized',
+      tileSizeMeters: isLoaded ? this.metadata!.tileSizeMeters : 512,
       preloadMarginTiles: this.preloadMarginTiles,
       retainMarginTiles: this.retainMarginTiles,
-      totalGridCols: this.metadata?.gridCols ?? 8,
-      totalGridRows: this.metadata?.gridRows ?? 8,
+      totalGridCols: isLoaded ? this.metadata!.gridCols : 8,
+      totalGridRows: isLoaded ? this.metadata!.gridRows : 8,
       totalGridTiles: this.tilesByKey.size,
       visibleTiles,
       fetchTargetTiles,
@@ -1243,6 +1353,12 @@ export class TileStreamManager {
       record.decodedFootprint = null;
       record.state = 'unloaded';
     }
+
+    this.tilesByKey.clear();
+    this.metadata = null;
+    this.manifestPackPath = null;
+    this.manifestStatus = 'idle';
+    this.manifestError = null;
 
     this.compositeScene.buildingsGroup.clear();
     this.compositeScene.roadsGroup.clear();

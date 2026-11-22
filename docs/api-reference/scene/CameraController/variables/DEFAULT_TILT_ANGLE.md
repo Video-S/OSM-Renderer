@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_TILT\_ANGLE**: `number`
 
-Defined in: scene/CameraController.tsx:49
+Defined in: scene/CameraController.tsx:56

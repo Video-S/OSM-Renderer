@@ -90,7 +90,27 @@ Interactive controls are provided via Drei's `MapControls`:
 
 ---
 
-## 8. Numerical & Geographic Limitations
+## 8. Centralized Camera Zoom Policy & Regional Zoom-Out Cap
 
-- **Local Tangent Projection Range**: The flat-Earth equirectangular projection assumes a constant meridian radius and cosine factor. For distances $> 25\text{ km}$ from the origin, distortion increases noticeably. The viewer is designed for neighborhood tiles up to $\sim 5\text{ km}$.
-- **Orthographic Zoom Bounds**: Very high zoom levels ($> 8.0$) can exhibit sub-centimeter floating point precision limits on WebGL float32 attributes. The controller clamps maximum zoom to $8.0$ and minimum zoom to $0.15$.
+Camera zoom limits are centralized in `src/scene/cameraZoomPolicy.ts` and enforced consistently across `CameraController` (`MapControls` scroll/pinch, projected-bounds framing, explicit poses, imperative jumps, camera resets, transition animations, and live zoom-policy transitions):
+
+- **Standard / Non-Regional Maps & Small Tile Fixtures (`<= 64` tiles)**:
+  - `STANDARD_MIN_ZOOM = 0.15`
+  - `STANDARD_MAX_ZOOM = 16.0` (auto-fit framing remains capped at `8.0` to avoid excessive close-up framing on tiny fixtures)
+- **Regional Streaming Default (`> 64` tiles / `/api/tiles-region`)**:
+  - `DEFAULT_REGIONAL_MIN_ZOOM = 0.15` — an interim conservative safety cap to prevent zooming out so far that hundreds of detailed LOD0 tiles render simultaneously before LOD1–LOD3 exist.
+  - `STANDARD_MAX_ZOOM = 16.0` remains unchanged so close-up inspection is unaffected.
+- **Developer URL Override (`regionalMinZoom`)**:
+  - Example: `?m2a=1&region=twente-pilot&regionalMinZoom=0.05`
+  - Validated strictly to finite positive numbers within `[0.01, 4.0]` (`MIN_ALLOWED_REGIONAL_MIN_ZOOM = 0.01`, `MAX_ALLOWED_REGIONAL_MIN_ZOOM = 4.0`).
+  - Invalid, non-finite, zero, negative, or out-of-range values are rejected and fall back safely to `0.15` (with a diagnostic notice in Developer Tools).
+  - Non-regional views and smaller Hengelo tile fixtures ignore `regionalMinZoom` and remain on `0.15`.
+- **Benchmark Full-Region Overview Opt-In**:
+  - `BENCHMARK_REGIONAL_OVERVIEW_MIN_ZOOM = 0.015` is passed explicitly by `benchmarks/regionalFrameCostRunner.ts` via both `regionalMinZoom=0.015` and `loadM2aStreaming({ regionalMinZoom: 0.015 })` so historical full-region overview scenarios (`zoom = 0.05`) retain exact comparability.
+
+---
+
+## 9. Numerical & Geographic Limitations
+
+- **Local Tangent Projection Range**: The flat-Earth equirectangular projection assumes a constant meridian radius and cosine factor. For distances $> 25\text{ km}$ from the origin, distortion increases noticeably. Regional baked tile mosaics use projected EPSG:32632 (UTM 32N) coordinates (`src/world/tiling/RegionalProjection.ts`) anchored at the mosaic study origin.
+- **Orthographic Zoom Bounds**: Close-up inspection is clamped to `maxZoom = 16.0` (with auto-framing capped at `8.0`) and zoom-out is clamped by the active `CameraZoomPolicy.minZoom` (`0.15` by default). Without LOD1–LOD3 simplification, overriding `regionalMinZoom` below `0.15` on large regional mosaics increases simultaneously rendered LOD0 tile and draw-call counts.

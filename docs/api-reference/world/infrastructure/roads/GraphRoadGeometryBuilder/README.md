@@ -15,12 +15,18 @@
 - [GraphRoadMeshIntegrityReport](interfaces/GraphRoadMeshIntegrityReport.md)
 - [GraphRoadRenderStats](interfaces/GraphRoadRenderStats.md)
 - [GraphRoadWindingDefect](interfaces/GraphRoadWindingDefect.md)
+- [RoadGeometryTraceEvent](interfaces/RoadGeometryTraceEvent.md)
+- [RoadGeometryTraceTarget](interfaces/RoadGeometryTraceTarget.md)
+- [RoadTriangleFailureAudit](interfaces/RoadTriangleFailureAudit.md)
 
 ## Variables
 
 - [MIN\_NONDEGENERATE\_TRIANGLE\_AREA\_M2](variables/MIN_NONDEGENERATE_TRIANGLE_AREA_M2.md)
+- [ROAD\_TRIANGLE\_VALIDATOR\_REVISION](variables/ROAD_TRIANGLE_VALIDATOR_REVISION.md)
 
 ## Functions
 
 - [auditGraphRoadMeshIntegrity](functions/auditGraphRoadMeshIntegrity.md)
 - [buildGraphAtGradeRoadGeometries](functions/buildGraphAtGradeRoadGeometries.md)
+- [inspectRoadTriangleFaces](functions/inspectRoadTriangleFaces.md)
+- [validateAndPruneHorizontalGeometry](functions/validateAndPruneHorizontalGeometry.md)

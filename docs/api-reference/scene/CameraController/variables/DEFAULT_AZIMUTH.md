@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_AZIMUTH**: `number`
 
-Defined in: scene/CameraController.tsx:50
+Defined in: scene/CameraController.tsx:57

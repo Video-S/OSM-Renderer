@@ -6,7 +6,7 @@
 
 # Interface: CameraControllerProps
 
-Defined in: scene/CameraController.tsx:21
+Defined in: scene/CameraController.tsx:28
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: scene/CameraController.tsx:21
 
 > `optional` **bounds?**: [`BoundingBox2D`](BoundingBox2D.md)
 
-Defined in: scene/CameraController.tsx:22
+Defined in: scene/CameraController.tsx:29
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: scene/CameraController.tsx:22
 
 > `optional` **controlsEnabled?**: `boolean`
 
-Defined in: scene/CameraController.tsx:44
+Defined in: scene/CameraController.tsx:51
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: scene/CameraController.tsx:44
 
 > `optional` **explicitPose?**: `object`
 
-Defined in: scene/CameraController.tsx:33
+Defined in: scene/CameraController.tsx:40
 
 #### azimuthRad?
 
@@ -54,7 +54,7 @@ Defined in: scene/CameraController.tsx:33
 
 > `optional` **fixedTiltAngle?**: `number`
 
-Defined in: scene/CameraController.tsx:29
+Defined in: scene/CameraController.tsx:36
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: scene/CameraController.tsx:29
 
 > `optional` **frameRegionSignal?**: `number`
 
-Defined in: scene/CameraController.tsx:25
+Defined in: scene/CameraController.tsx:32
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: scene/CameraController.tsx:25
 
 > `optional` **initialZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:32
+Defined in: scene/CameraController.tsx:39
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: scene/CameraController.tsx:32
 
 > `optional` **maxZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:31
+Defined in: scene/CameraController.tsx:38
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: scene/CameraController.tsx:31
 
 > `optional` **minZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:30
+Defined in: scene/CameraController.tsx:37
 
 ***
 
@@ -94,7 +94,7 @@ Defined in: scene/CameraController.tsx:30
 
 > `optional` **onRegisterImperativePoseSetter?**: (`setter`) => `void`
 
-Defined in: scene/CameraController.tsx:39
+Defined in: scene/CameraController.tsx:46
 
 #### Parameters
 
@@ -112,7 +112,7 @@ Defined in: scene/CameraController.tsx:39
 
 > `optional` **onResetComplete?**: () => `void`
 
-Defined in: scene/CameraController.tsx:27
+Defined in: scene/CameraController.tsx:34
 
 #### Returns
 
@@ -124,7 +124,7 @@ Defined in: scene/CameraController.tsx:27
 
 > `optional` **resetSignal?**: `number`
 
-Defined in: scene/CameraController.tsx:24
+Defined in: scene/CameraController.tsx:31
 
 ***
 
@@ -132,7 +132,7 @@ Defined in: scene/CameraController.tsx:24
 
 > `optional` **rotateStepSignal?**: `number`
 
-Defined in: scene/CameraController.tsx:26
+Defined in: scene/CameraController.tsx:33
 
 ***
 
@@ -140,7 +140,7 @@ Defined in: scene/CameraController.tsx:26
 
 > `optional` **target?**: \[`number`, `number`, `number`\]
 
-Defined in: scene/CameraController.tsx:28
+Defined in: scene/CameraController.tsx:35
 
 ***
 
@@ -148,4 +148,4 @@ Defined in: scene/CameraController.tsx:28
 
 > `optional` **verticalEnvelope?**: [`VerticalEnvelope`](VerticalEnvelope.md)
 
-Defined in: scene/CameraController.tsx:23
+Defined in: scene/CameraController.tsx:30

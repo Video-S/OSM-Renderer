@@ -265,6 +265,14 @@ To eliminate error-prone manual URL parameter editing and page reloads, a centra
 4. **Fixture Library**:
    - 1-click loading for canonical test fixtures: `Prins Hendrikkade South Fork (M2.3-E2)`, `Railway Switchyard & Throat (M2.1)`, `Station Hengelo Live`, and `Amsterdam Centraal Live`.
 
+5. **Active Mosaic & Regional Camera Diagnostics**:
+   - During M2-A baked tile / regional mosaic streaming, the top of the **Rendering** tab displays an **Active Mosaic** diagnostic card (`data-testid="active-mosaic-diagnostics"`) derived strictly from the manifest loaded by `TileStreamManager` (`/api/tiles-region/manifest` or `/api/tiles/manifest`, reusing `packPath` without reading environment variables or guessing from URLs):
+     - **Active Mosaic Name**: Distinguishes datasets such as `twente-pilot-1024m` vs. `twente-pilot-1024m-tkt033-candidate`.
+     - **Source Snapshot ID**, **Tile Count**, and **Bake Schema Version** (plus a collapsible **Full Manifest Path** disclosure for the full `packPath`).
+     - **Effective Zoom-Out Limit (`minZoom`)**: Displays the active `CameraZoomPolicy` value (`0.15` conservative regional default, validated `regionalMinZoom` URL override, programmatic benchmark opt-in, or fallback warning when an invalid override is rejected).
+     - **Loading & Unavailable States**: Switching datasets or failing a manifest request clears stale identity immediately (`Loading manifest...` / `Unavailable`) so a previously loaded mosaic is never reported as active.
+   - Automated regression coverage resides in `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`.
+
 ## 6. How to Report Verification Results
 
 When completing any implementation or bug-fix task, always report:

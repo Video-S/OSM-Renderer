@@ -3,6 +3,13 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls, OrthographicCamera } from '@react-three/drei';
 import type { MapControls as MapControlsImpl } from 'three-stdlib';
+import {
+  STANDARD_MAX_ZOOM,
+  STANDARD_MIN_ZOOM,
+  clampCameraZoom,
+  interpolateClampedCameraZoom,
+  resolveCameraResetOrFrameTarget,
+} from './cameraZoomPolicy';
 
 export interface BoundingBox2D {
   minX: number;
@@ -62,7 +69,8 @@ export function computeProjectedBoundsFraming(
   fixedTiltAngle: number = DEFAULT_TILT_ANGLE,
   azimuthAngle: number = DEFAULT_AZIMUTH,
   paddingFactor: number = 1.25,
-  minZoom: number = 0.15
+  minZoom: number = STANDARD_MIN_ZOOM,
+  maxZoom: number = STANDARD_MAX_ZOOM
 ): { target: [number, number, number]; position: [number, number, number]; zoom: number } {
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
@@ -106,9 +114,14 @@ export function computeProjectedBoundsFraming(
 
   const zoomU = viewportWidth / spanU;
   const zoomV = viewportHeight / spanV;
-  // Regional packs may span many kilometres; the actual MapControls minZoom
-  // still gates normal maps at 0.15 and permits wide overview only for larger packs.
-  const zoom = Math.max(minZoom, Math.min(zoomU, zoomV, 8.0));
+  const safeMax =
+    Number.isFinite(maxZoom) && maxZoom > 0 ? maxZoom : STANDARD_MAX_ZOOM;
+  const framingUpperCap = Math.min(8.0, safeMax);
+  const zoom = clampCameraZoom(
+    Math.min(zoomU, zoomV, framingUpperCap),
+    minZoom,
+    safeMax
+  );
 
   const dist = Math.min(Math.max(spanU, spanV) * 1.5, 25000);
   const camX = cx + dist * Math.sin(fixedTiltAngle) * sinAz;
@@ -201,13 +214,25 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   onResetComplete,
   target = DEFAULT_CAMERA_TARGET,
   fixedTiltAngle = DEFAULT_TILT_ANGLE,
-  minZoom = 0.15,
-  maxZoom = 16.0,
+  minZoom = STANDARD_MIN_ZOOM,
+  maxZoom = STANDARD_MAX_ZOOM,
   initialZoom = DEFAULT_INITIAL_ZOOM,
   explicitPose,
   onRegisterImperativePoseSetter,
   controlsEnabled = true,
 }) => {
+  const safeMaxZoom =
+    Number.isFinite(maxZoom) && maxZoom > 0 ? maxZoom : STANDARD_MAX_ZOOM;
+  const safeMinZoom =
+    Number.isFinite(minZoom) && minZoom > 0
+      ? Math.min(minZoom, safeMaxZoom)
+      : Math.min(STANDARD_MIN_ZOOM, safeMaxZoom);
+  const clampedInitialZoom = clampCameraZoom(
+    initialZoom,
+    safeMinZoom,
+    safeMaxZoom
+  );
+
   const controlsRef = useRef<MapControlsImpl>(null);
   const { camera, invalidate, gl, size } = useThree();
 
@@ -222,11 +247,11 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   const resetProgress = useRef(0);
   const startPos = useRef(new THREE.Vector3());
   const startTarget = useRef(new THREE.Vector3());
-  const startZoom = useRef(initialZoom);
+  const startZoom = useRef(clampedInitialZoom);
 
   const destPos = useRef(new THREE.Vector3(...DEFAULT_CAMERA_POS));
   const destTarget = useRef(new THREE.Vector3(...target));
-  const destZoom = useRef(initialZoom);
+  const destZoom = useRef(clampedInitialZoom);
 
   // Compute framing from region bounds when available
   const boundsFraming = useMemo(() => {
@@ -240,7 +265,8 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       fixedTiltAngle,
       DEFAULT_AZIMUTH,
       1.05,
-      minZoom
+      safeMinZoom,
+      safeMaxZoom
     );
   }, [
     bounds?.minX,
@@ -250,7 +276,8 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     size.width,
     size.height,
     fixedTiltAngle,
-    minZoom,
+    safeMinZoom,
+    safeMaxZoom,
   ]);
 
   // Prevent right-click browser context menu
@@ -279,16 +306,24 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       startPos.current.copy(camera.position);
       startTarget.current.copy(controlsRef.current.target);
       if ('zoom' in camera) {
-        startZoom.current = (camera as THREE.OrthographicCamera).zoom;
+        startZoom.current = clampCameraZoom(
+          (camera as THREE.OrthographicCamera).zoom,
+          safeMinZoom,
+          safeMaxZoom
+        );
       }
 
       destPos.current.set(...boundsFraming.position);
       destTarget.current.set(...boundsFraming.target);
-      destZoom.current = boundsFraming.zoom;
+      destZoom.current = clampCameraZoom(
+        boundsFraming.zoom,
+        safeMinZoom,
+        safeMaxZoom
+      );
 
       invalidate();
     }
-  }, [boundsFraming, camera, invalidate, bounds]);
+  }, [boundsFraming, camera, invalidate, bounds, safeMinZoom, safeMaxZoom]);
 
   // 1b. Handle viewport resize smoothly without resetting camera pose
   useEffect(() => {
@@ -298,17 +333,43 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     }
   }, [size.width, size.height, camera, invalidate]);
 
+  // 1c. Enforce zoom limit immediately whenever minZoom/maxZoom changes (e.g. mode/dataset switch)
+  useEffect(() => {
+    startZoom.current = clampCameraZoom(
+      startZoom.current,
+      safeMinZoom,
+      safeMaxZoom
+    );
+    destZoom.current = clampCameraZoom(
+      destZoom.current,
+      safeMinZoom,
+      safeMaxZoom
+    );
+    if ('zoom' in camera) {
+      const ortho = camera as THREE.OrthographicCamera;
+      const clamped = clampCameraZoom(ortho.zoom, safeMinZoom, safeMaxZoom);
+      if (clamped !== ortho.zoom) {
+        ortho.zoom = clamped;
+        ortho.updateProjectionMatrix();
+        controlsRef.current?.update();
+        invalidate();
+      }
+    }
+  }, [safeMinZoom, safeMaxZoom, camera, invalidate]);
+
   // 2. Handle explicit "Frame Region" signal
   useEffect(() => {
     if (frameRegionSignal > lastFrameRegionSignal.current && controlsRef.current) {
       lastFrameRegionSignal.current = frameRegionSignal;
 
-      const framing =
-        boundsFraming || {
-          position: DEFAULT_CAMERA_POS,
-          target: DEFAULT_CAMERA_TARGET,
-          zoom: DEFAULT_INITIAL_ZOOM,
-        };
+      const framing = resolveCameraResetOrFrameTarget({
+        boundsFraming,
+        fallbackPosition: DEFAULT_CAMERA_POS,
+        fallbackTarget: DEFAULT_CAMERA_TARGET,
+        fallbackZoom: DEFAULT_INITIAL_ZOOM,
+        minZoom: safeMinZoom,
+        maxZoom: safeMaxZoom,
+      });
 
       isResetting.current = true;
       resetProgress.current = 0;
@@ -316,7 +377,11 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       startPos.current.copy(camera.position);
       startTarget.current.copy(controlsRef.current.target);
       if ('zoom' in camera) {
-        startZoom.current = (camera as THREE.OrthographicCamera).zoom;
+        startZoom.current = clampCameraZoom(
+          (camera as THREE.OrthographicCamera).zoom,
+          safeMinZoom,
+          safeMaxZoom
+        );
       }
 
       destPos.current.set(...framing.position);
@@ -327,7 +392,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     } else {
       lastFrameRegionSignal.current = frameRegionSignal;
     }
-  }, [frameRegionSignal, boundsFraming, camera, invalidate]);
+  }, [frameRegionSignal, boundsFraming, camera, invalidate, safeMinZoom, safeMaxZoom]);
 
   // 3. Handle standard reset signal
   useEffect(() => {
@@ -340,14 +405,21 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       startTarget.current.copy(controlsRef.current.target);
 
       if ('zoom' in camera) {
-        startZoom.current = (camera as THREE.OrthographicCamera).zoom;
+        startZoom.current = clampCameraZoom(
+          (camera as THREE.OrthographicCamera).zoom,
+          safeMinZoom,
+          safeMaxZoom
+        );
       }
 
-      const framing = boundsFraming || {
-        position: DEFAULT_CAMERA_POS,
-        target: DEFAULT_CAMERA_TARGET,
-        zoom: initialZoom,
-      };
+      const framing = resolveCameraResetOrFrameTarget({
+        boundsFraming,
+        fallbackPosition: DEFAULT_CAMERA_POS,
+        fallbackTarget: DEFAULT_CAMERA_TARGET,
+        fallbackZoom: clampedInitialZoom,
+        minZoom: safeMinZoom,
+        maxZoom: safeMaxZoom,
+      });
 
       destPos.current.set(...framing.position);
       destTarget.current.set(...framing.target);
@@ -357,7 +429,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     } else {
       lastResetSignal.current = resetSignal;
     }
-  }, [resetSignal, boundsFraming, camera, initialZoom, invalidate]);
+  }, [resetSignal, boundsFraming, camera, clampedInitialZoom, invalidate, safeMinZoom, safeMaxZoom]);
 
   // 4. Handle manual 45-degree rotation steps
   useEffect(() => {
@@ -405,14 +477,18 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       controlsRef.current.target.set(tx, ty, tz);
       if ('zoom' in camera) {
         const ortho = camera as THREE.OrthographicCamera;
-        ortho.zoom = Math.max(minZoom, Math.min(maxZoom, explicitPose.zoom));
+        ortho.zoom = clampCameraZoom(
+          explicitPose.zoom,
+          safeMinZoom,
+          safeMaxZoom
+        );
         ortho.updateProjectionMatrix();
       }
       camera.lookAt(tx, ty, tz);
       controlsRef.current.update();
       invalidate();
     }
-  }, [explicitPose, fixedTiltAngle, minZoom, maxZoom, camera, invalidate]);
+  }, [explicitPose, fixedTiltAngle, safeMinZoom, safeMaxZoom, camera, invalidate]);
 
   // 5b. Register imperative pose setter so automated benchmarks do not trigger React re-renders per frame
   useEffect(() => {
@@ -438,7 +514,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       controlsRef.current.target.set(tx, ty, tz);
       if ('zoom' in camera) {
         const ortho = camera as THREE.OrthographicCamera;
-        ortho.zoom = Math.max(minZoom, Math.min(maxZoom, poseZoom));
+        ortho.zoom = clampCameraZoom(poseZoom, safeMinZoom, safeMaxZoom);
         const { near, far } = computeSceneFrustumPlanes(
           bounds,
           [camX, camY, camZ],
@@ -466,8 +542,8 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   }, [
     onRegisterImperativePoseSetter,
     fixedTiltAngle,
-    minZoom,
-    maxZoom,
+    safeMinZoom,
+    safeMaxZoom,
     bounds,
     verticalEnvelope,
     camera,
@@ -489,7 +565,13 @@ export const CameraController: React.FC<CameraControllerProps> = ({
 
       if ('zoom' in activeCamera) {
         const ortho = activeCamera as THREE.OrthographicCamera;
-        ortho.zoom = THREE.MathUtils.lerp(startZoom.current, destZoom.current, ease);
+        ortho.zoom = interpolateClampedCameraZoom(
+          startZoom.current,
+          destZoom.current,
+          ease,
+          safeMinZoom,
+          safeMaxZoom
+        );
         ortho.updateProjectionMatrix();
       }
 
@@ -508,6 +590,12 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       (activeCamera as THREE.OrthographicCamera).isOrthographicCamera
     ) {
       const ortho = activeCamera as THREE.OrthographicCamera;
+      const clampedZoom = clampCameraZoom(ortho.zoom, safeMinZoom, safeMaxZoom);
+      let projectionDirty = false;
+      if (clampedZoom !== ortho.zoom) {
+        ortho.zoom = clampedZoom;
+        projectionDirty = true;
+      }
       const t = controlsRef.current.target;
       const { near, far } = computeSceneFrustumPlanes(
         bounds,
@@ -518,6 +606,9 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       if (Math.abs(ortho.near - near) > 0.5 || Math.abs(ortho.far - far) > 2.0) {
         ortho.near = near;
         ortho.far = far;
+        projectionDirty = true;
+      }
+      if (projectionDirty) {
         ortho.updateProjectionMatrix();
       }
     }
@@ -534,7 +625,11 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       <OrthographicCamera
         makeDefault
         position={boundsFraming ? boundsFraming.position : DEFAULT_CAMERA_POS}
-        zoom={boundsFraming ? boundsFraming.zoom : initialZoom}
+        zoom={
+          boundsFraming
+            ? clampCameraZoom(boundsFraming.zoom, safeMinZoom, safeMaxZoom)
+            : clampedInitialZoom
+        }
         near={initialFrustum.near}
         far={initialFrustum.far}
       />
@@ -544,8 +639,8 @@ export const CameraController: React.FC<CameraControllerProps> = ({
         enabled={controlsEnabled}
         minPolarAngle={fixedTiltAngle}
         maxPolarAngle={fixedTiltAngle}
-        minZoom={minZoom}
-        maxZoom={maxZoom}
+        minZoom={safeMinZoom}
+        maxZoom={safeMaxZoom}
         enableDamping
         dampingFactor={0.12}
         screenSpacePanning={false}

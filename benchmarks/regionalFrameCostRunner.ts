@@ -12,6 +12,10 @@ import {
 import type { BenchmarkFrameTelemetry } from '../src/types/BenchmarkTelemetry';
 import type { SceneMeshCountsSnapshot } from './tileStreamingRunner';
 import type { TileStreamDiagnosticsSnapshot } from '../src/world/tiling/TileStreamManager';
+import {
+  BENCHMARK_REGIONAL_OVERVIEW_MIN_ZOOM,
+  REGIONAL_MIN_ZOOM_QUERY_PARAM,
+} from '../src/scene/cameraZoomPolicy';
 
 export type RegionalExperiment = 'baseline' | 'viewport' | 'zoom' | 'both';
 export interface RegionalFrameCostCli {
@@ -278,9 +282,13 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
     const page = await context.newPage();
     page.on('pageerror', (err: Error) => console.error('[regional:perf] Browser error:', err.message));
     await page.addInitScript('window.__name = (fn) => fn;');
-    await page.goto(opts.serverUrl + '/?benchmark=1&dock=collapsed', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
-    });
+    await page.goto(
+      `${opts.serverUrl}/?benchmark=1&dock=collapsed&${REGIONAL_MIN_ZOOM_QUERY_PARAM}=${BENCHMARK_REGIONAL_OVERVIEW_MIN_ZOOM}`,
+      {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      }
+    );
     await page.waitForFunction(
       () => Boolean((window as any).__BENCHMARK_HARNESS__ && document.querySelector('canvas')),
       { timeout: 30000 }
@@ -309,7 +317,7 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
       const order = repetition % 2 ? experiments : [...experiments].reverse();
       for (const experiment of order) {
         console.log('[regional:perf] Run ' + repetition + '/' + opts.runs + ', ' + experiment);
-        await page.evaluate(async (flags: { viewport: boolean; zoom: boolean }) => {
+        await page.evaluate(async (flags: { viewport: boolean; zoom: boolean; regionalMinZoom: number }) => {
           const h = (window as any).__BENCHMARK_HARNESS__;
           await h.unloadDataset();
           await h.loadM2aStreaming({
@@ -318,6 +326,7 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
             retainMarginTiles: 1,
             experimentSkipUnchangedViewport: flags.viewport,
             experimentSkipUnchangedZoom: flags.zoom,
+            regionalMinZoom: flags.regionalMinZoom,
             themeId: 'tactical',
             target: [0, 0, 0],
             zoom: 1.8,
@@ -328,6 +337,7 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
         }, {
           viewport: experiment === 'viewport' || experiment === 'both',
           zoom: experiment === 'zoom' || experiment === 'both',
+          regionalMinZoom: BENCHMARK_REGIONAL_OVERVIEW_MIN_ZOOM,
         });
 
         const phases: PhaseSummary[] = [];
@@ -516,6 +526,7 @@ export async function runRegionalFrameCostBenchmark(opts: RegionalFrameCostCli):
           'Foliage culling and railway chunk size were not altered.',
           'Frame intervals may be VSync limited; do not infer GPU throughput from frame intervals alone.',
           'Teleport-stress and settled phases must be interpreted separately.',
+          `Explicitly requests regionalMinZoom=${BENCHMARK_REGIONAL_OVERVIEW_MIN_ZOOM} so the full-region overview scenario (zoom=0.05) retains historical benchmark parity.`,
         ],
       },
       runs,

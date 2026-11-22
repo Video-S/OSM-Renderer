@@ -10,7 +10,7 @@ import { disposeIngestedStudyRegionPlans } from '../src/server/tiles/OfflineHeng
 import { ingestCanonicalStudyGeoJson } from '../src/world/tiling/TiledStudyPipeline';
 import { createAlignedStudyGrid, utmBoundsToGeoBounds } from '../src/world/tiling/TileGrid';
 import { utm32NToGeo } from '../src/world/tiling/RegionalProjection';
-import type { RoadGeometryTraceEvent } from '../src/world/infrastructure/roads/GraphRoadGeometryBuilder';
+import { ROAD_TRIANGLE_VALIDATOR_REVISION, type RoadGeometryTraceEvent } from '../src/world/infrastructure/roads/GraphRoadGeometryBuilder';
 
 /**
  * TKT-033 source-backed diagnostic in the SHARED road pipeline, before tile
@@ -207,6 +207,7 @@ export function diagnoseMissingRoad(opts: RoadDiagnosisOptions) {
     const sourceSurfaces = surfaces.filter((s) => match(s.sourceFeatureId, s.sourceFeatureIds));
     const result = {
       ticket: 'TKT-033',
+      roadTriangleValidatorRevision: ROAD_TRIANGLE_VALIDATOR_REVISION,
       purpose: 'Source-backed shared road generation before tile clipping, codec and streaming',
       snapshotId: query.snapshotMetadata.snapshotId,
       sourceSha256: query.snapshotMetadata.sourceSha256,
@@ -271,11 +272,20 @@ if (entrypoint) {
       result.plan?.nearestSourceGeometryMeters ?? 'absent');
     console.log('[tkt033] any-road triangle distance (m):',
       result.plan?.nearestAnyRoadGeometryMeters ?? 'absent');
+    console.log('[tkt033] triangle validator:', result.roadTriangleValidatorRevision);
     console.log('[tkt033] target road builder decisions:',
       result.roadGeometryTrace.map((x) => x.stage +
         (x.invalidTriangle ? '(' + x.invalidTriangle.reason +
           ', normalY=' + (x.invalidTriangle.normalY ?? 'n/a') + ')' : '')
       ).join(', ') || 'none');
+    for (const event of result.roadGeometryTrace) {
+      if (event.triangleAudit) console.log('[tkt033] triangle audit:', JSON.stringify({
+        upward: event.triangleAudit.upwardFaces,
+        precisionSliversPruned: event.triangleAudit.prunableFloat32SliverFaces,
+        fatalFaces: event.triangleAudit.fatalFaces,
+        firstFatalFace: event.triangleAudit.firstFatal?.faceIndex ?? null,
+      }));
+    }
     console.log('[tkt033] canonical packs unchanged; read JSON for detailed stage inventory');
   } catch (error) {
     console.error('[tkt033] ' + (error instanceof Error ? error.stack : String(error)));

@@ -183,6 +183,47 @@ function createNaturalTheme(
   };
 }
 
+/**
+ * Natural palettes represent physical-looking materials. The legacy modes retain
+ * their existing semantic highlights and glossy building finishes.
+ */
+export function isNaturalTheme(theme: MapStyleTheme): boolean {
+  return theme.id === 'natural_daylight' ||
+    theme.id === 'natural_cartographic' ||
+    theme.id === 'natural_game';
+}
+
+export function getThemeExposure(theme: MapStyleTheme): number {
+  // The shared studio rig + ACES exposure was washing out natural palettes.
+  return isNaturalTheme(theme) ? 0.95 : 1.15;
+}
+
+export function getBuildingFinish(
+  theme: MapStyleTheme,
+  surface: 'wall' | 'roof',
+  variant: 'default' | 'archetype' | 'landmark' = 'default',
+): { roughness: number; metalness: number } {
+  if (isNaturalTheme(theme)) {
+    // Typical masonry and tiled roofs are dielectric, not metallic.
+    return { roughness: 0.85, metalness: 0 };
+  }
+  if (variant === 'landmark') return { roughness: 0.5, metalness: 0.3 };
+  if (surface === 'roof') {
+    return variant === 'archetype'
+      ? { roughness: 0.38, metalness: 0.28 }
+      : { roughness: 0.4, metalness: 0.25 };
+  }
+  return variant === 'archetype'
+    ? { roughness: 0.58, metalness: 0.2 }
+    : { roughness: 0.65, metalness: 0.15 };
+}
+
+export function getLandmarkWallColor(theme: MapStyleTheme): string {
+  return isNaturalTheme(theme)
+    ? theme.buildingWallColor
+    : theme.id === 'tactical' ? '#f59e0b' : '#fef08a';
+}
+
 export const MAP_THEMES: Record<string, MapStyleTheme> = {
   tactical: {
     id: 'tactical',
@@ -737,87 +778,87 @@ export const MAP_THEMES: Record<string, MapStyleTheme> = {
     lightIntensity: 1.3,
   },
   natural_daylight: createNaturalTheme('natural_daylight', 'Natural Daylight', {
-    ground: '#8fa77a',
-    grid: '#7d9573',
-    wall: '#b8b8b6',
-    roof: '#3c444d',
-    asphalt: '#6a6e72',
-    paving: '#a8a69f',
-    dirt: '#98866d',
+    ground: '#7d9271',
+    grid: '#708363',
+    wall: '#abaeab',
+    roof: '#7b8081',
+    asphalt: '#65696c',
+    paving: '#999b93',
+    dirt: '#887e6c',
     rock: '#8d8b85',
     ballast: '#6b6861',
     sleeper: '#4e4945',
     rail: '#9ca4ab',
-    water: '#527f9b',
-    farmland: '#8ca96d',
-    grass: '#89b16e',
-    park: '#80a86b',
-    woodland: '#45683d',
-    wetland: '#739887',
-    sports: '#5b8b4d',
-    tree: '#376f38',
-    conifer: '#264e2c',
+    water: '#456d84',
+    farmland: '#82946e',
+    grass: '#7c986f',
+    park: '#749267',
+    woodland: '#3c5843',
+    wetland: '#6b8a80',
+    sports: '#587b50',
+    tree: '#356346',
+    conifer: '#284e3a',
     trunk: '#67513e',
     sand: '#c5b78f',
     ice: '#d6dfe1',
-    sky: '#cedfe9',
-    fog: '#b9c8b7',
-    lightIntensity: 1.6,
+    sky: '#c7d7de',
+    fog: '#aebcae',
+    lightIntensity: 1.05,
   }),
   natural_cartographic: createNaturalTheme('natural_cartographic', 'Natural Cartographic', {
-    ground: '#8f9b7e',
-    grid: '#75816c',
-    wall: '#b0b0ae',
-    roof: '#3e454c',
-    asphalt: '#6b6d70',
-    paving: '#a5a298',
-    dirt: '#8b7c67',
+    ground: '#7a856f',
+    grid: '#6c775f',
+    wall: '#a3a7a5',
+    roof: '#767b7e',
+    asphalt: '#626568',
+    paving: '#959891',
+    dirt: '#837769',
     rock: '#85837c',
     ballast: '#6a675f',
     sleeper: '#4d4b46',
     rail: '#979ea5',
-    water: '#52778e',
-    farmland: '#849969',
-    grass: '#88a379',
-    park: '#78946a',
-    woodland: '#455d3e',
-    wetland: '#738c7f',
-    sports: '#638954',
-    tree: '#466f40',
-    conifer: '#324f33',
+    water: '#47697c',
+    farmland: '#788663',
+    grass: '#7b8f71',
+    park: '#6f8564',
+    woodland: '#3d5542',
+    wetland: '#688176',
+    sports: '#577749',
+    tree: '#365e44',
+    conifer: '#2d4a38',
     trunk: '#665543',
     sand: '#b9ae91',
     ice: '#ced5d6',
-    sky: '#c3d1d9',
-    fog: '#afbdaf',
-    lightIntensity: 1.45,
+    sky: '#bccad0',
+    fog: '#a0ada0',
+    lightIntensity: 0.95,
   }),
   natural_game: createNaturalTheme('natural_game', 'Natural Game', {
-    ground: '#6f8a55',
-    grid: '#5a7449',
-    wall: '#b5b7b5',
-    roof: '#313d46',
-    asphalt: '#585d63',
-    paving: '#9b998e',
-    dirt: '#816e56',
+    ground: '#5f764e',
+    grid: '#4e6041',
+    wall: '#9ba4a4',
+    roof: '#747b7e',
+    asphalt: '#55595c',
+    paving: '#888d83',
+    dirt: '#766954',
     rock: '#747670',
     ballast: '#58564f',
     sleeper: '#45433f',
     rail: '#949da5',
-    water: '#3c6c88',
-    farmland: '#779f53',
-    grass: '#6d9c52',
-    park: '#66934f',
-    woodland: '#27492c',
-    wetland: '#507b64',
-    sports: '#477e3d',
-    tree: '#2f7138',
-    conifer: '#214f2b',
+    water: '#355a70',
+    farmland: '#658052',
+    grass: '#628254',
+    park: '#587749',
+    woodland: '#263d2b',
+    wetland: '#4b685a',
+    sports: '#3d6a40',
+    tree: '#29583a',
+    conifer: '#21452d',
     trunk: '#5d4a38',
     sand: '#ab9b75',
     ice: '#bcced6',
-    sky: '#a8bac4',
-    fog: '#819976',
-    lightIntensity: 1.35,
+    sky: '#aabcc4',
+    fog: '#7d9178',
+    lightIntensity: 0.9,
   }),
 };

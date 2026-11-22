@@ -1,4 +1,5 @@
 import test from 'node:test';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 import {
   createRegionalMosaicPlan,
@@ -9,6 +10,10 @@ import {
   type RegionalMosaicPackInput,
 } from './tiling/RegionalMosaicPlan';
 import type { TileManifestEntry, TilePackMetadata } from './tiling/TilePackContract';
+import {
+  DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH,
+  resolveRegionalMosaicIndexPath,
+} from '../server/tiles/RegionalMosaicHttpHandler';
 
 function mockInputs(
   config: RegionalMosaicConfig
@@ -65,6 +70,27 @@ function mockInputs(
   });
   return { plan, inputs };
 }
+
+test('Regional server defaults to accepted TKT-033 candidate; env override still works', () => {
+  assert.equal(
+    DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH,
+    'data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json'
+  );
+  assert.equal(
+    resolveRegionalMosaicIndexPath({} as NodeJS.ProcessEnv),
+    path.resolve(DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH)
+  );
+  assert.equal(
+    resolveRegionalMosaicIndexPath({ OVERIJSSEL_REGIONAL_MOSAIC_PATH: '  ' } as NodeJS.ProcessEnv),
+    path.resolve(DEFAULT_REGIONAL_MOSAIC_RELATIVE_PATH)
+  );
+  assert.equal(
+    resolveRegionalMosaicIndexPath({
+      OVERIJSSEL_REGIONAL_MOSAIC_PATH: 'data/osm/twente-pilot-1024m/mosaic.json',
+    } as NodeJS.ProcessEnv),
+    path.resolve('data/osm/twente-pilot-1024m/mosaic.json')
+  );
+});
 
 test('TKT-029: pilot grid covers 16.384km per side with 16 aligned independent 4x4 shards', () => {
   const plan = createRegionalMosaicPlan();

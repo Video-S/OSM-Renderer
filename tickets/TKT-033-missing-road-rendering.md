@@ -286,6 +286,18 @@ The grouped ten-event batch checker has passed **TypeScript/lint and production 
 
 The batch command itself cannot run in GitHub CI because the canonical source index and previously baked 2×2 control pack reside on the owner's machine. No claim of restored geometry for the ten outstanding crossings has been made yet.
 
+## Owner grouped road coverage report — 8 recovered, 1 owned by another road, 1 physical inset gap (2026-11-22)
+
+Owner ran `npm run osm:verify-remaining-missing-roads` using snapshot `overijssel-261114-8ae28196` and uploaded the full `benchmarks/results/tkt033-remaining/first-pass/remaining-roads-report.json`. The test reused the accepted Boerrichterkamp pack plus **four new disposable** 2×2 packs (no canonical pack modifications). All **10/10** requested crossing events were inspected with **0 group errors**:
+
+- **8 source-covered-both:** `way/874072936` service, `way/137733136` cycleway, `way/221267376` service **twice**, `way/546666718` residential, `way/51932698` residential, `way/6666519` primary, and `way/6655700` residential. For each, the correct source ID owns visible road-layer triangles in **both** distinct adjacent tile interiors at ±25cm, height +0.05m.
+- **1 other-road-covered-both:** `way/38892898` cycleway at E 352329.339, N 5794816. Source-specific samples are **uncovered** on both sides (matched source geometry metadata exists), but *other* visible road surfaces cover **both** insets at +0.05m. Nearby residential `way/546666718` is source-covered on both sides; probable overlapping/surface-ownership relationship, **not proven** from this report alone. Do not mark the cycleway's expected representation as resolved without checking graph ownership/position when needed.
+- **1 physical-sample-gap:** `way/14119316` cycleway at E 352312.35, N 5786624 on a horizontal tile seam. The **exact center point is source-covered at +0.05m** (tile 344:5651), but north 25cm (tile 344:5651) and south 25cm (tile 344:5650) are **both uncovered by any visible road triangles**. Both source-specific and any-road tests fail on the insets; matched source mesh metadata exists in both tiles. This pattern does **not** establish an entire missing cycleway: it could be tangency to the source line, ribbon width/position, clipping, triangulation, or a narrow physical seam gap. Need to distinguish source geometry near the crossing before changing any tolerance or clipper.
+
+**Interpretation:** The original absent-road witnesses are substantially improved after the Float32 winding fix: eight crossings now have direct source-attributed point coverage, one has physical surface coverage under another owner, and only one has a genuine missing *point sample* on both sides. These **small 2×2 query contexts differ from the original regional 4×4 shard inputs**, and tests do not prove continuous complete roads or owner visual quality across all sites. Boerrichterkamp remains the only owner visually accepted formerly missing road.
+
+**Next targeted step:** inspect the existing `west-south-pair-2x2.sqlite` without rebaking: sample a dense north/south cross-section around `way/14119316`, compute physical nearest source/any-road triangle distance and compare against exact canonical OSM centerline orientation (crossing vs endpoint/tangent). If an actual gap remains on both sides along the *real source centerline*, build a focused regression. No province or regional bake.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

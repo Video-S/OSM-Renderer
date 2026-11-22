@@ -1,48 +1,59 @@
-# Project History: Evolution of Road Surface & Junction Rendering
+# Project History
 
-## 1. Goalpost 1: Boundary-Derived Junction Synthesis (`legacy` Mode, `ADR-0002`)
+**What this is:** a short account of how OSM Renderer got here. It explains the important changes and lessons, without trying to document every experiment or ticket. For what works **today**, see [Current Status](./STATUS.md). For technical decisions and evidence, see the [ADRs](./decisions/README.md) and [tickets](../tickets/).
 
-During Goalpost 1, road rendering transitioned from naive overlapping polyline ribbons to **boundary-derived junction polygon synthesis** (`ADR-0002`):
-- **Approach**: Cluster road endpoints within a `0.15 m` radial tolerance (`TopologicalNodeIndex`), compute pairwise miter intersections between adjacent sorted incident arms around each node (`degree >= 2`), trim incoming road polylines back to their computed portal chords, and triangulate an explicit 2D junction polygon connecting the portal corners at a uniform `ROAD_SURFACE = 0.050 m` elevation.
-- **Strengths**: Eliminated gross coplanar z-fighting at well-spaced orthogonal 3-way and 4-way street intersections without resorting to vertical micro-tiering.
-- **Weaknesses**: Relied on heuristic coordinate clustering (`0.15 m`) and post-deduplication/post-chaining polylines, and struggled when acute angles or short segments caused miter points to project past adjacent vertices.
+## The story so far
 
----
+### 1. A detailed map of one city (October 2026)
 
-## 2. Exploratory Research: Independent BGT Road-Surface Reconstruction (`Closed / Not Adopted`)
+The project began as a browser-based 3D OpenStreetMap viewer with an isometric camera. We wanted convincing real-world roads, railways, buildings, and land use—not gameplay yet.
 
-Before integrating road rendering with the Stage B–D infrastructure graph, an offline Python/Shapely exploratory study (`research/road-surface-reconstruction/`) investigated whether variable lateral carriageway offsets $(w_L(s), w_R(s))$ and quadratic Bézier corner fillets could reconstruct physical Dutch BGT road surfaces directly from OSM centerlines:
-- **Outcome**: Across 6 Amsterdam development sites (`A01`–`A06`) and 6 holdout sites (`H01`–`H06`), complex junction synthesis degraded IoU relative to simpler buffered baselines whenever OSM lacked explicit lane/width/kerb geometry.
-- **Decision**: Closed as **Not Adopted** (`2026-11-08`). Zero code from the Python experiment entered production.
+The first approach built an entire local scene from OSM data when the map loaded. It was a useful prototype, but large areas took too long to process. Roads and other surfaces also overlapped, causing visual artifacts.
 
----
+### 2. Making roads and railways reliable (late October–19 November)
 
-## 3. Milestone 2.3 Stage E2 (`roads: 'graph'`): Graph-Driven Explicit Junction Solver (`TKT-008`)
+We tried explicitly constructing road junctions by trimming roads and joining their edges. This worked for simple intersections but broke down at tight corners, shallow forks, and dense footpath networks. Adding a road-network graph improved our understanding of connectivity, but did not make those junction shapes reliable by itself.
 
-Following the completion of the pure-TypeScript infrastructure topology graph (`M2.3-A` through `M2.3-E1`, `ADR-0009`), Stage E2 (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `roads: 'graph'`) replaced `TopologicalNodeIndex` with graph-driven road rendering:
-- **Approach**: Consumed `InfrastructureRenderDescriptorBundle` directly, keeping degree-2 continuity nodes as continuous mitered ribbons while running `solveBoundaryDerivedJunctionNode` at branching junctions (`degree >= 3`).
-- **Observed Failures in Real Urban Extracts**:
-  1. **Pedestrian Plazas & Cycleway Crossings (Hengelo Nieuwstraat / Stationsplein)**: Multi-way pedestrian and cycleway nodes with mixed widths and shallow incidence angles produced pinched portal chords, missing triangular corner wedges, or rejected junction patches.
-  2. **Closely Spaced Path & Footway Corners (Hengelo Sidewalk/Crossing Nodes)**: When two junctions occurred within `< 3 m` (e.g., sidewalk-to-crosswalk splits), portal trimming from both ends consumed the connecting segment or left pizza-slice corner notches.
-  3. **Acute Y-Forks & Dual-Carriageway Splits (Amsterdam Prins Hendrikkade, Hengelo Veloursstraat, Parallelweg)**: Shallow-angle forks (`15°–25°`) required aggressive miter clamping and fallback heuristics to prevent interior bowties or giant chord webs across the fork throat.
+An investigation into reconstructing road surfaces from Dutch BGT data was **not adopted**: the extra geometric assumptions did not consistently improve the result when the OSM inputs lacked enough detail.
 
----
+The turning point was **surface-first geometry**: construct road areas first and assign overlapping space to the correct surfaces, instead of trying to join individually trimmed junction pieces. This became **E2+ roads**. Railways developed into **R+**, with unified ballast surfaces and hybrid close-/far-view track rendering. The owner accepted E2+ and R+ as the production approaches on **19 November 2026**.
 
-## 4. Adoption of E2+ (`roads: 'graph-surface'`, `ADR-0010`): Surface-First Road Rendering
+**Lesson:** a correct connectivity graph and a visually correct road surface are different problems. Both matter.
 
-To resolve the brittleness of explicit portal-chord junction solvers on irregular OSM topology, **E2+** (`roads: 'graph-surface'`, `src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`) inverted the at-grade road geometry paradigm:
-- **Core Insight**: A road network's 2D surface is the **Boolean union of its buffered edge strokes**, resolved by deterministic road-class and tier ownership subtraction (`polygon-clipping`).
-- **Mechanism**:
-  1. Every at-grade road provenance segment is buffered into a rounded 2D stroke by unioning per-segment oriented rectangles (`width = w`) with 16-sided bend disks (`radius = w/2`) at interior vertices and eligible endpoint caps (first/last provenance boundaries, excluding boundary clips, grade transitions and closed loops).
-  2. Overlapping strokes are resolved in descending priority order (`vehicular > path`, higher road class first, then lexical edge ID tie-breaker) using 2D Boolean difference (`polygonClipping.difference`) accelerated by 2D AABB spatial pre-filtering.
-  3. Remaining visible `MultiPolygon` regions (with interior holes preserved) are triangulated via `THREE.ShapeUtils.triangulateShape` (`earcut`) at `ELEVATION_POLICY.ROAD_SURFACE` (`0.050 m`) with full source-feature provenance (`sourceFeatureId`, `sourceFeatureIds`, `osmTags`, `faceRanges`).
-- **Architectural Selection (`ADR-0010`)**: Extensive visual testing by the project owner across Hengelo and Amsterdam extracts confirmed a dramatic improvement in geometric consistency and corner continuity over E2. E2+ is now the **preferred architectural direction** for at-grade road rendering, undergoing automated geometry validation and performance baseline verification prior to promotion as the production default.
+[Road decision](./decisions/ADR-0010-surface-first-road-rendering.md) · [Railway decision](./decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) · [Discarded BGT research](../research/road-surface-reconstruction/README.md)
 
+### 3. From one scene to a streamed world (19–21 November)
 
-## Product goal and the lesson to preserve
+Even good geometry was too expensive to rebuild as one enormous browser scene. We switched to **offline baking**: generate detailed map tiles in advance, store them in SQLite files, and load only the tiles needed by the camera.
 
-The near-term deliverable is a high-fidelity, navigable OSM map renderer, initially for **Hengelo** and ultimately **Twente**; gameplay and large-agent simulation are later possibilities, not the current work. Precomputed/baked geometry is acceptable if it remains queryable.
+We pinned a reproducible Overijssel OSM snapshot and introduced a shared regional coordinate grid. Tests and measurements led us to **1,024-metre detailed tiles** for the regional pilot. The browser gained tile streaming, eviction, and resource cleanup.
 
-The architectural lesson is **not that the E2 graph was wrong**. Its topology, width/grade policies, OSM lineage and Boolean ownership made E2+ possible. Rather, independently constructing a junction patch and reconciling trimmed road portals proved fragile. A [targeted continuous-path fix](https://github.com/Video-S/OSM-Renderer/commit/918c051b78a99dc997d59621476af1063179140b) preceded [E2+](https://github.com/Video-S/OSM-Renderer/commit/5106b14918ff81025b3ddf64a0725491066ac108).
+**Lesson:** large geographic coverage does not require all of its geometry in browser memory at once.
 
-The unrelated Dutch BGT/Shapely reconstruction experiment was **not adopted** into E2+. Optional local reference datasets should not become mandatory runtime dependencies. The first [automated E2+ baseline](../research/surface-first-road-rendering/baseline-results.json) found a few residual defects, despite the project owner's strong visual findings.
+[Baked tiles and streaming](./decisions/ADR-0011-baked-tiles-and-runtime-streaming.md) · [Source data](../tickets/TKT-027-overijssel-snapshot-integrity.md)
+
+### 4. First regional success—and a testing lesson (21–22 November)
+
+We assembled a **16.4 × 16.4 km** Hengelo–Enschede pilot from **16 separately baked groups** containing **256 tiles**.
+
+When investigating missing roads, we discovered that some checks were still viewing an *older* baked dataset. After explicitly loading the corrected candidate and inspecting the affected locations, the owner accepted the pilot's result.
+
+That did **not** prove that every road, railway, or surface is continuous across all tile-group boundaries. That remains a separate correctness question.
+
+**Lesson:** always verify which dataset is actually loaded before diagnosing renderer defects.
+
+[Regional mosaics](./decisions/ADR-0012-bounded-regional-mosaics.md) · [Missing-road investigation](../tickets/TKT-033-missing-road-rendering.md)
+
+### 5. Expanding to Twente (22 November onward)
+
+The next target is a **49.2 × 41.0 km** rectangular map: **1,920 tiles** in **120 independently baked groups**. The first two groups—**32 tiles**—were successfully baked and integrity-verified on the owner's computer.
+
+At the time of this record, the full bake, cross-boundary checks, performance assessment, and human visual acceptance are **not yet complete**. The source also covers Overijssel, not every area beyond its border.
+
+[Full-Twente plan and validation](../tickets/TKT-034-full-twente-scale-out.md)
+
+## Where this is going
+
+The immediate product is still **the map renderer**. The priority is to finish regional correctness and performance work, then simplify and maintain the codebase. A large-scale zombie game is a possible later application, **not an implemented or currently approved feature**.
+
+This history should change only when a meaningful new chapter occurs. Routine status updates belong in [STATUS.md](./STATUS.md); design rationale belongs in the [ADRs](./decisions/README.md).

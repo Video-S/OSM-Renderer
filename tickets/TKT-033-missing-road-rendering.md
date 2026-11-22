@@ -96,6 +96,19 @@ After initial correction and targeted diagnostic tests:
 - **Pre-existing failures (not caused by TKT-033):** the four assertions in `JunctionAndTopology.test.ts` (provenance count, bow-tie clipping diagnostics, portal-gap validation and explicit-node junction count) fail on **both** the parent branch at commit `953249342cbb39205232b13ac3cdc255be33b36b` (GitHub Actions run `45030566400`) and the TKT-033 PR #9 branch (run `45032070443`) with matching expected/actual outcomes. These are separate existing test issues; do not silently claim a fully green CI suite or expand the missing-road fix to unrelated behavior.
 - **Not run in CI:** the canonical `overijssel-261114-8ae28196.sqlite` analysis, because the source index lives on the owner's machine, not in the repo. This prevents asserting that the fix restores specific Twente ways without follow-up evidence.
 
+## Owner canonical-source diagnostic result — `way/6661112` (2026-11-22)
+
+Owner executed the new `npm run osm:diagnose-missing-road` on their local immutable Overijssel source index. Report was successfully written to `benchmarks/results/tkt033-shared-road-diagnosis.json`. The **console output** establishes:
+
+- Source GeoJSON features found: **1**; parsed roads: **1**; graph edges: **1**.
+- Source-attributed *pre-tile* generated triangle within the diagnostic's 40 m search radius at UTM E 357376 / N 5791095.095: **none** (printed `absent`). This result means *no surface in the local 40 m neighborhood*, not necessarily no emitted triangle anywhere in the 2×2 study.
+- Nearest generated road triangle from *any* source: **19.9513 m** away.
+- Diagnostic does not apply tile clip, binary codec, or viewer streaming; canonical tile packs remain unchanged.
+
+**Interpretation:** This reproduces a source-backed road geometry absence near the specified OSM crossing *before* tile encoding and streaming, in a separately queried 2×2 study. It supports a shared road-plan issue, but the query context differs from the original 4×4 shard, and the exact cause is not yet known. The already-fixed premature-footprint bug is **not yet demonstrated** to be the cause of this way's failure.
+
+**Necessary next evidence:** inspect the newly generated full JSON (not yet supplied) for `inventory.graphEdges[].isAtGradeBuildable` / placement, `plan.renderedSourceId`, `plan.fullySubtractedSourceId`, rejected/buffer/clip counters, and nearest geometry owners; use that to select a specific stage for a bounded regression rather than guessing at width, clipping, layer or triangulation policy.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

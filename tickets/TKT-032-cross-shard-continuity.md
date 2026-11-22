@@ -307,6 +307,14 @@ The owner additionally reports having **seen roads disappear in the renderer bef
 
 **Owner requested deferral of the general missing-road investigation.** Tracked separately as **[TKT-033 — Missing Road Geometry in Shared Road Renderer](TKT-033-missing-road-rendering.md)** (`status: deferred`). No additional root-cause work or baker edits are planned now. The regional fidelity gate remains unapproved because owner-observed missing roads have not been resolved; this is a recorded known issue, not a silent sign-off. Resume TKT-033 only when reprioritized.
 
+## TKT-033 source-backed follow-up and axis-probe false positive (2026-11-22)
+
+After this ticket's historical deferral note, the owner **reopened TKT-033** and approved repair of confirmed shared geometry omissions. The precise Float32 sliver-winding validator defect was fixed; Boerrichterkamp (`way/6661112`) now renders in the canonical-source shared plan, in disposable baked SQLite LOD0 tiles, and was **visually confirmed by the owner** in the existing viewer. Eight other original neither-side crossing events have correct source-attributed decoded-tile coverage in bounded 2×2 bakes; one (`way/38892898` cycleway) is covered by *other-owned* visible road geometry and remains a semantic representation question.
+
+**Important correction to v3 audit methodology:** Hilgenhuesweg `way/14119316` (`highway=cycleway`, **0.2m OSM width**) genuinely crosses a horizontal tile seam at **39.3654°**. Axis-only north/south ±25cm probes at fixed easting are ~**19.3cm sideways** from its centerline—outside the 10cm half-width—and therefore incorrectly classify it as missing. The exact OSM centerline checked **nine points** over ±2m on both adjacent physical SQLite tiles; all were source-covered. **This is a source-geometry sampling false positive, not a missing cycleway.** Future seam audits of line-like features must follow their *actual segment tangents* across interfaces, distinguish tangencies/endpoints, and avoid using a fixed-axis uncovered sample alone as evidence of a missing road.
+
+TKT-033 has an isolated regression for tangent-aligned OSM sampling and no geometry/clipper change for Hilgenhuesweg. The original canonical **256-tile regional bake remains unchanged**; do not sign off TKT-032/TKT-029 based solely on smaller-context 2×2 results. The earlier deferral paragraph above is historical, not current ticket status.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.

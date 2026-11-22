@@ -130,6 +130,39 @@ npm run osm:diagnose-missing-road
 
 Upload the **overwritten** `benchmarks/results/tkt033-shared-road-diagnosis.json`. Its `roadGeometryTrace` contains the missing decisive per-way stage. If `invalid-triangles` is confirmed, repair the exact ring/winding/triangulation cause with an OSM-coordinate-derived regression, not a blanket polygon-clipping fallback; retain the strict upward winding and surface ownership tests. If an exception or other stage is found, fix that stage instead. **No canonical rebake or claimed visual fix yet.**
 
+## Canonical per-face rejection confirmed and precision fix (2026-11-22)
+
+Owner uploaded v2 `benchmarks/results/tkt033-shared-road-diagnosis.json` (source snapshot `overijssel-261114-8ae28196`): **`way/6661112` / Boerrichterkamp** has exactly one tracked road-builder decision, **`stage=invalid-triangles`**, despite valid `surface_open` 5.4m residential OSM/graph data. The polygon Boolean difference returned **1 visible polygon** against **2 blockers**; `THREE.ShapeGeometry` generated **21 faces**, but face **19** was downward (`normalY=-1`) with microscopic area **6.967457011342049 × 10⁻⁶ m²**. Sampled face vertices in local meters:
+
+```json
+[
+  [-17.274599075317383, 0.05000000074505806, -387.07470703125],
+  [-17.290800094604492, 0.05000000074505806, -387.04339599609375],
+  [-19.740299224853516, 0.05000000074505806, -382.3102111816406]
+]
+```
+
+The longest edge is ~**5.365m**, making this triangle only **2.60 micrometres** high relative to that edge. **Float32 spacing** at local Z≈−387m is ~**30.52 micrometres**, more than 10× the altitude. The triangle's signed winding is **not numerically reliable** at the storage precision. The previous validation rule rejected the **entire 21-face road** for *any* nondegenerate downward-facing triangle (area >1e-6m²). **This is now a confirmed specific cause of the Boerrichterkamp omission in the shared pre-tile road plan.**
+
+### Targeted fix on PR #9
+
+`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts` now treats a non-upward triangle as a **Float32-unresolvable sliver** only if its minimum altitude `2 × area / maxEdgeLength` is at most **2× the Float32 ULP** at the local vertex-coordinate scale. It **prunes that face only**, preserving other valid triangles. Geometry still fails if a face with reliably resolvable inverted winding exists or if *no* valid triangles remain. We do not invert indices, relax layer/tunnel policy, remove Boolean priority ownership, or convert rejected big triangles into visible surfaces. Existing area-based true degeneracy filtering is unchanged.
+
+Tests use the **exact offending three Float32 vertices** from the owner's real trace, plus a good face, and assert that the tiny inverted face is pruned and the rest survives; a visible **12.5m² inverted face still rejects the entire geometry**, and an all-sliver mesh is still rejected. The earlier phantom-occluder lifecycle fix and its fault-injection test are retained.
+
+**CI run `45035372928` on code commit `07720e2f9caaff66564a55b8c553c675287dba3c`:** TypeScript/build **passed**, `MissingRoadDiagnosis.test.ts` **passed**, **new canonical-face sliver tests passed**, earlier ownership lifecycle regression **passed**, rest of the E2+ road test suite **passed**. The combined test job still has exactly **4 pre-existing `JunctionAndTopology.test.ts` failures** matching the parent branch; do not say all CI is green.
+
+### Next decisive check (owner's immutable source index)
+
+```powershell
+git pull --ff-only
+npm run osm:diagnose-missing-road
+```
+
+**Expected but not yet observed:** `roadGeometryTrace` for `way/6661112` switches from `invalid-triangles` to `emitted`, `plan.renderedSourceId` becomes `true`, and `nearestSourceGeometryMeters` approaches **0m** at the selected OSM crossing. If a second reliably inverted face still rejects it, the new trace reports the next exact face for investigation. Upload this overwritten JSON before assuming the real road is restored.
+
+The accepted 16×16 regional tiles have **not** been rebaked. Once pre-tile geometry is confirmed, use a **disposable small-area bake** and **owner-only visual QA** before considering replacement of canonical packs or sign-off.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

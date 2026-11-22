@@ -781,16 +781,52 @@ function recordGraphRoadDiagnostic(
 }
 
 /**
+ * Distinguish a genuinely reversed triangle from a near-collinear
+ * triangulation sliver whose winding is below Float32 position resolution.
+ *
+ * Three.js ShapeGeometry stores vertices in Float32. At, for example,
+ * local Z=-387m the coordinate spacing is about 0.0000305m; a sliver thinner
+ * than that can change its signed area solely through rounding. Removing it
+ * is safer than rejecting the entire otherwise valid road ribbon.
+ *
+ * This is deliberately a precision-relative criterion rather than a blanket
+ * area threshold: a large, visibly inverted face still fails validation.
+ */
+function hasUnresolvableFloat32Winding(
+  vertices: readonly (readonly [number, number])[],
+  areaSquareMeters: number
+): boolean {
+  let largestEdge = 0;
+  let maxAbsoluteCoordinate = 0;
+  for (let i = 0; i < 3; i++) {
+    const [x, z] = vertices[i];
+    const [nx, nz] = vertices[(i + 1) % 3];
+    largestEdge = Math.max(largestEdge, Math.hypot(nx - x, nz - z));
+    maxAbsoluteCoordinate = Math.max(maxAbsoluteCoordinate, Math.abs(x), Math.abs(z));
+  }
+  if (largestEdge <= 0) return true;
+
+  // The spacing between neighboring normal Float32 values at this coordinate
+  // magnitude; subnormal values are already handled by the 1e-6m² area floor.
+  const float32Ulp = 2 ** (Math.floor(Math.log2(
+    Math.max(maxAbsoluteCoordinate, 2 ** -126)
+  )) - 23);
+  const altitude = (2 * areaSquareMeters) / largestEdge;
+  return altitude <= 2 * float32Ulp;
+}
+
+/**
  * Validates and cleans a horizontal road/path/step/junction `BufferGeometry` in place:
- * - Verifies that NO non-degenerate triangle (`area > 1e-6 m²`) has downward/inverted winding (`crossY <= 0`).
- *   Never conceals inverted triangles by flipping normals or reversing indices.
+ * - Rejects all visibly inverted triangles (`geomNormal.y <= 0.99`) rather than reversing indices.
+ *   Tiny near-collinear triangles with altitude below Float32 coordinate spacing are
+ *   pruned instead, because their winding cannot be represented reliably.
  * - Filters out zero-area collinear sliver triangles (`area <= 1e-6 m²`) emitted by earcut or pinched quads.
  * - Ensures stored vertex normals on all active vertices are `[0, 1, 0]`.
  *
- * Returns `true` if the geometry has `>= 1` valid upward-facing triangles and `0` inverted triangles,
- * or `false` if any non-degenerate triangle is inverted or no valid triangles remain.
+ * Returns `true` if at least one valid upward-facing triangle remains and
+ * no resolvably inverted triangles exist; otherwise returns `false`.
  */
-function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean {
+export function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean {
   const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || posAttr.count < 3) return false;
 
@@ -849,7 +885,14 @@ function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean 
 
     const ny = cy / doubleArea;
     if (ny <= 0.99) {
-      // Never conceal an inverted or non-upward triangle by flipping normals or indices
+      // The polygon tessellator may produce micrometre-scale slivers whose
+      // Float32 vertex rounding reverses their apparent winding. Drop only
+      // those unresolvable faces; keep rejecting genuine inversions.
+      if (hasUnresolvableFloat32Winding(
+        [[x0, z0], [x1, z1], [x2, z2]], area
+      )) {
+        continue;
+      }
       return false;
     }
 

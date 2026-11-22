@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MAP_THEMES } from '../styles/mapThemes';
+import {
+  MAP_THEMES,
+  getBuildingFinish,
+  getLandmarkWallColor,
+  getThemeExposure,
+  isNaturalTheme,
+} from '../styles/mapThemes';
+import { ThemeMaterialRegistry } from './tiling/ThemeMaterialRegistry';
 
 const naturalIds = ['natural_daylight', 'natural_cartographic', 'natural_game'] as const;
 const developedLanduse = [
@@ -70,4 +77,49 @@ test('all three natural variants have different material palettes', () => {
   assert.equal(new Set(themes.map((theme) => theme.groundColor)).size, 3);
   assert.equal(new Set(themes.map((theme) => theme.buildingRoofColor)).size, 3);
   assert.equal(new Set(themes.map((theme) => theme.waterColor)).size, 3);
+});
+
+test('natural rendering uses reduced exposure and dielectric matte roofs', () => {
+  const tactical = MAP_THEMES.tactical;
+  assert.equal(getThemeExposure(tactical), 1.15);
+  assert.equal(getBuildingFinish(tactical, 'roof').metalness, 0.25);
+  assert.equal(getLandmarkWallColor(tactical), '#f59e0b');
+
+  for (const id of naturalIds) {
+    const theme = MAP_THEMES[id];
+    assert.equal(isNaturalTheme(theme), true);
+    assert.ok(getThemeExposure(theme) < getThemeExposure(tactical));
+    assert.ok(theme.lightIntensity < tactical.lightIntensity);
+    assert.deepEqual(getBuildingFinish(theme, 'roof'), { roughness: 0.85, metalness: 0 });
+    assert.deepEqual(getBuildingFinish(theme, 'wall', 'archetype'), { roughness: 0.85, metalness: 0 });
+    assert.equal(getLandmarkWallColor(theme), theme.buildingWallColor);
+  }
+});
+
+test('streamed building materials restore legacy finishes after switching themes', () => {
+  const registry = new ThemeMaterialRegistry(MAP_THEMES.daylight);
+  try {
+    const roof = registry.getMaterial('building:roof:default');
+    const archetypeRoof = registry.getMaterial('building:roof:arch_civic');
+    const wall = registry.getMaterial('building:wall:default');
+    const landmarkWall = registry.getMaterial('building:wall:landmark');
+
+    assert.equal(roof.metalness, 0.25);
+    assert.equal(archetypeRoof.metalness, 0.28);
+    registry.applyTheme(MAP_THEMES.natural_daylight);
+    assert.equal(roof.metalness, 0);
+    assert.equal(roof.roughness, 0.85);
+    assert.equal(archetypeRoof.metalness, 0);
+    assert.equal(wall.metalness, 0);
+    assert.equal(landmarkWall.color.getHexString(), MAP_THEMES.natural_daylight.buildingWallColor.slice(1));
+
+    registry.applyTheme(MAP_THEMES.daylight);
+    assert.equal(roof.metalness, 0.25);
+    assert.equal(roof.roughness, 0.4);
+    assert.equal(archetypeRoof.metalness, 0.28);
+    assert.equal(wall.metalness, 0.15);
+    assert.equal(landmarkWall.color.getHexString(), 'fef08a');
+  } finally {
+    registry.dispose();
+  }
 });

@@ -12,7 +12,7 @@ closed: 2026-11-09
 # TKT-010: M2.3-E3-A1 Railway Graph Descriptor Integration
 
 ## Summary
-Implement **Stage E3-A1 (`M2.3-E3-A1`)** of Milestone 2.3 per accepted [M2.3-E3 Implementation Proposal](../docs/m2-3-e3-railway-rendering-proposal.md): allow the verified Candidate B railway renderer (`RailwayGeometryBuilder.ts`) to consume `RailwayEdgeRenderDescriptor` data under `?topologyRailways=graph`, while retaining `?topologyRailways=legacy` as the production default and fallback, strictly preserving existing Candidate B geometry generation rules.
+Implement **Stage E3-A1 (`M2.3-E3-A1`)** of Milestone 2.3 per accepted [M2.3-E3 Implementation Proposal](../docs/plans/m2-3-e3-railway-rendering-proposal.md): allow the verified Candidate B railway renderer (`RailwayGeometryBuilder.ts`) to consume `RailwayEdgeRenderDescriptor` data under `?topologyRailways=graph`, while retaining `?topologyRailways=legacy` as the production default and fallback, strictly preserving existing Candidate B geometry generation rules.
 
 ## Context
 Following project-owner acceptance of Stage E1 (`TKT-007`) and Stage E2 (`TKT-008`), Stage E3 addresses graph-driven railway rendering. The project owner has authorized Stage E3-A1 (Descriptor Integration), while deferring graph-informed switch changes (E3-A2), surface-first ballast (E3-B), and later stages.
@@ -50,7 +50,7 @@ Prior to Stage E3-A1:
    - Initial performance baseline recorded.
 
 ## Acceptance criteria
-- [x] `docs/m2-3-e3-railway-rendering-proposal.md` updated with project-owner architectural corrections.
+- [x] `docs/plans/m2-3-e3-railway-rendering-proposal.md` updated with project-owner architectural corrections.
 - [x] `RailwayInfrastructureRenderSource` extended to `'legacy' | 'graph-preview' | 'graph'` in `InfrastructureRenderAdapter.ts`.
 - [x] `adaptRailwayEdgeDescriptorsToFeatures` implemented and exported in `InfrastructureRenderAdapter.ts`.
 - [x] `RailwayGeometryBuilder.ts` updated to accept `renderSource`, `descriptors`, and `diagnostics` in `BuildRailwayPrototypeOptions`, routing to adapted graph descriptors when `renderSource === 'graph'` with observable fallback.

@@ -77,6 +77,6 @@ Prior to this ticket:
 ## Related files and documentation
 - Source: `src/app/App.tsx`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`, `src/components/DevToolsPanel.tsx`, `src/world/dev/ReproductionReport.ts`, `src/world/GeometryBuilder.ts`
 - Tests: `src/world/DevToolsAndReproduction.test.ts`
-- Documentation: `docs/architecture.md`, `docs/testing-and-diagnostics.md`, `GEMINI.md`
+- Documentation: `docs/architecture/overview.md`, `docs/guides/testing-and-diagnostics.md`, `GEMINI.md`
 
 

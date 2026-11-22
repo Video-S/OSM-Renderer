@@ -1,6 +1,6 @@
 # Current Project Status
 
-> **Updated: 2026-11-22.** This page is the living summary of *current implementation and verified outcomes*. Ticket records retain their own statuses and acceptance gates. Historical milestone-by-milestone status text is preserved in [the 2026-11-22 status archive](./history/status-before-regional-reconciliation-2026-11-22.md); earlier plans are not live status declarations.
+> **Updated: 2026-11-22.** This page is the living summary of *current implementation and verified outcomes*. Ticket records retain their own statuses and acceptance gates. Historical milestone-by-milestone status text is preserved in [the 2026-11-22 status archive](history/status-before-regional-reconciliation-2026-11-22.md); earlier plans are not live status declarations.
 
 ## Product and current priorities
 
@@ -18,7 +18,7 @@
 | Regional pilot | **16 × 16** LOD0 tiles × **1,024 m** = 16.384 × 16.384 km, in **16 independently baked 4 × 4 shards**, owner-accepted TKT-033 candidate. | Owner visually checked previously missing-road locations **after confirming the active candidate mosaic**. This is not blanket cross-shard sign-off (TKT-032). |
 | Mosaic identity and camera guard | Developer Tools reports identity from the **actually loaded manifest**; server defaults to `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json` when available. Larger regions default to `minZoom=0.15` with validated explicit `regionalMinZoom` overrides. | Owner smoke-tested zoom and identified the correct served bake. An override can still render costly LOD0 overviews. |
 
-Source: [architecture](./architecture.md), [ADRs 0011–0013](./decisions/README.md), [TKT-028](../tickets/TKT-028-regional-tiling-streaming-lod.md), [TKT-029](../tickets/TKT-029-regional-mosaic-pilot.md), [TKT-033](../tickets/TKT-033-missing-road-rendering.md).
+Source: [architecture](architecture/overview.md), [ADRs 0011–0013](decisions/README.md), [TKT-028](../tickets/TKT-028-regional-tiling-streaming-lod.md), [TKT-029](../tickets/TKT-029-regional-mosaic-pilot.md), [TKT-033](../tickets/TKT-033-missing-road-rendering.md).
 
 ## In progress: Full Twente (TKT-034)
 
@@ -47,10 +47,10 @@ These are **ticket file statuses as currently recorded**, which may lag owner de
 - `TKT-033`: `implementation_in_progress`, although owner accepted the corrected candidate at previously affected locations.
 - `TKT-034`: **in_progress**, awaiting full bake/QA.
 
-Historic benchmarks, acceptance snapshots, proposals and investigation detail are retained in [the archived status](./history/status-before-regional-reconciliation-2026-11-22.md), [regional proposal](./regional-tiling-streaming-lod-proposal.md) and [tickets](../tickets/). **Do not treat historical proposal wording as current runtime behavior.**
+Historic benchmarks, acceptance snapshots, proposals and investigation detail are retained in [the archived status](history/status-before-regional-reconciliation-2026-11-22.md), [regional proposal](plans/regional-tiling-streaming-lod-proposal.md) and [tickets](../tickets/). **Do not treat historical proposal wording as current runtime behavior.**
 
 ## Verification policy
 
 Automated checks are valuable but separate from owner visual QA. The TKT-034 implementation handoff reported **32 focused tests passed, TypeScript/lint passed and Vite build passed** in Gemini's environment. The owner's independent local **two-shard bake + verifier passed** with the results above. This documentation-only reconciliation **does not claim that test/build commands were re-run**.
 
-For code changes run `npm test`, `npm run lint`, `npm run build`; run `npm run docs:api` when exported TypeScript API documentation changes. See [testing and diagnostics](./testing-and-diagnostics.md).
+For code changes run `npm test`, `npm run lint`, `npm run build`; run `npm run docs:api` when exported TypeScript API documentation changes. See [testing and diagnostics](guides/testing-and-diagnostics.md).

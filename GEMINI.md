@@ -4,7 +4,7 @@ This repository contains a **3D OpenStreetMap renderer and camera/navigation sys
 
 ## Read before making changes
 
-1. Start with [`docs/README.md`](docs/README.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/architecture.md`](docs/architecture.md), the [ADR index](docs/decisions/README.md), and the specific ticket under [`tickets/`](tickets/). Consult renderer-specific documents where relevant.
+1. Start with [`docs/README.md`](docs/README.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/architecture/overview.md`](docs/architecture/overview.md), the [ADR index](docs/decisions/README.md), and the specific ticket under [`tickets/`](tickets/). Consult renderer-specific documents where relevant.
 2. **Source of truth:** current source code explains behavior; tests define executable contracts; **`docs/STATUS.md`** describes current accepted and pending milestones; ADRs record architectural rationale; tickets define per-task acceptance. Historical plans, proposed architectures, outdated snapshots and benchmarks must not be mistaken for the current implementation.
 3. Report discrepancies among source, tests, current docs and old tickets explicitly rather than papering over them.
 
@@ -32,7 +32,7 @@ Historical Goalpost 2 planning documents and ADRs remain relevant to the *why*, 
 
 ## Ticket workflow and repository hygiene
 
-Follow [`docs/ticket-workflow.md`](docs/ticket-workflow.md) and [`tickets/README.md`](tickets/README.md). Read the complete ticket before implementation. Keep status and verification notes accurate, but do **not** silently close a ticket simply because some subcomponents passed. TKT-032 has outstanding broader shard-seam validation; TKT-034 remains in progress until the full region is independently checked.
+Follow [`docs/guides/ticket-workflow.md`](docs/guides/ticket-workflow.md) and [`tickets/README.md`](tickets/README.md). Read the complete ticket before implementation. Keep status and verification notes accurate, but do **not** silently close a ticket simply because some subcomponents passed. TKT-032 has outstanding broader shard-seam validation; TKT-034 remains in progress until the full region is independently checked.
 
 Use `main` only when the owner explicitly authorizes direct changes; Google AI Studio's checkout limitation is not permission to merge or change branches without direction.
 

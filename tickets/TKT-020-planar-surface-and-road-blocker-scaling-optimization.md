@@ -25,7 +25,7 @@ Eliminate the superlinear CPU bottlenecks in `resolveAndValidatePlanarPolygons` 
 
 ## 1. Context & Measured Baseline (`TKT-019` Windows & Container Evidence)
 
-The `TKT-019` Hengelo `S1`–`S5` scaling experiment (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`) established three concrete, high-leverage findings:
+The `TKT-019` Hengelo `S1`–`S5` scaling experiment (`benchmarks/results/tkt019-hengelo-scaling.json`, `docs/reports/tkt019-hengelo-scaling-report.md`) established three concrete, high-leverage findings:
 
 1. **Planar Surface Resolution Dominates Regional Build Time (`76.3%` at `S4` Legacy)**:
    - On Windows (`Intel Core i7-14650HX`), `planarSurfaceResolutionMs` scales from `31.6 ms` (`S1`, $N=60$) to `267.7 ms` (`S2`, $N=271$), `2,297.6 ms` (`S3`, $N=857$), and **`11,020.2 ms` (`S4`, $N=2,102$)** out of `14,448.1 ms` total scene generation.
@@ -97,7 +97,7 @@ The `TKT-019` Hengelo `S1`–`S5` scaling experiment (`benchmarks/results/tkt019
 
 ## Related Files and Documentation
 - Source: `src/world/PlanarLayerValidator.ts`, `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/GeometryBuilder.ts`, `benchmarks/scalingWorker.ts`, `benchmarks/scalingRunner.ts`, `benchmarks/types.ts`
-- Baseline & Candidate Artifacts: `benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`, `benchmarks/results/tkt020-hengelo-scaling.json`, `docs/tkt020-hengelo-scaling-report.md`, `tickets/TKT-019-regional-rendering-scalability.md`
+- Baseline & Candidate Artifacts: `benchmarks/results/tkt019-hengelo-scaling.json`, `docs/reports/tkt019-hengelo-scaling-report.md`, `benchmarks/results/tkt020-hengelo-scaling.json`, `docs/reports/tkt020-hengelo-scaling-report.md`, `tickets/TKT-019-regional-rendering-scalability.md`
 
 ---
 
@@ -107,10 +107,10 @@ The `TKT-019` Hengelo `S1`–`S5` scaling experiment (`benchmarks/results/tkt019
    - Captured unmodified Phase 2 (`PlanarLayerValidator`) and Phase 3 (`GraphRoadGeometryBuilder`) outputs across `S1`–`S4` prior to code edits and verified post-optimization equivalence:
      - **Planar (`S1`–`S4`)**: 100% identical MultiPolygon SHA-256 hashes, `resolvedArea`, `topologicalRank`, `higherOverlappingIds`, `conflictsResolved` (`50`/`216`/`713`/`1676`), `unionedCount` (`1`/`2`/`3`/`4`), `booleanSubtractionsCount` (`13`/`54`/`134`/`395`), violation counts (`0`/`3`/`13`/`46`), and `maxResidualFillOverlapSqMeters` (`0.000088`/`0.000343`/`0.001259`/`0.002057`), reducing standalone planar time from `138.9` / `640.1` / `5,078.6` / `23,242.0 ms` to `94.6` / `149.0` / `498.2` (`-90.2%`) / `1,063.1 ms` (`-95.4%`). (1 S3 violation `overlapAreaSqMeters` differed by `3.6e-12 m²` floating-point rounding from Sutherland-Hodgman edge clipping, with identical rounded scalars and MultiPolygon SHAs.)
      - **Roads (`S1`–`S4`, `graph-e2-e3` & `surface-first-e2plus-rplus`)**: 100% bit-identical SHA-256 digests on every road mesh's `position`, `index`, and `faceRanges`, `cpuBufferMemory.totalBytes`, `overlappingBlockerCount` (`517`/`2,015`/`6,523`/`15,888`), polygons, holes, and triangles, while cutting `candidateBlockerCheckCount` from `15,567` / `203,206` / `2,254,714` / `14,418,060` to `1,626` / `6,133` / `18,139` (`-99.20%`) / `40,196` (`-99.72%`).
-2. **Bounded `S1`–`S4` Scaling Benchmark (`benchmarks/results/tkt020-hengelo-scaling.json`, `docs/tkt020-hengelo-scaling-report.md`)**:
-   - Command: `npx tsx benchmarks/scalingRunner.ts --max-scale=S4 --warmup=1 --iterations=3 --max-rss-mb=3072 --max-old-space-size-mb=2048 --timeout-ms=120000 --validator-max-edges=250 --out=benchmarks/results/tkt020-hengelo-scaling.json --md-out=docs/tkt020-hengelo-scaling-report.md`
+2. **Bounded `S1`–`S4` Scaling Benchmark (`benchmarks/results/tkt020-hengelo-scaling.json`, `docs/reports/tkt020-hengelo-scaling-report.md`)**:
+   - Command: `npx tsx benchmarks/scalingRunner.ts --max-scale=S4 --warmup=1 --iterations=3 --max-rss-mb=3072 --max-old-space-size-mb=2048 --timeout-ms=120000 --validator-max-edges=250 --out=benchmarks/results/tkt020-hengelo-scaling.json --md-out=docs/reports/tkt020-hengelo-scaling-report.md`
    - **`12/12` workloads completed** (`S1`–`S4` × `production-legacy`, `graph-e2-e3`, `surface-first-e2plus-rplus`) with `gcInvokedBeforeRun: true`, `0` disposal leaks (`netLeakedGeometries: 0`, `netLeakedMaterials: 0`), `null` `roadSubStagesMs` (`disabled_by_config`) on `graph-e2-e3`, and non-overlapping `primitiveConstructionMs` vs. `polygonUnionMs` on `E2+`.
    - `S4` full scene median times: `9,771.0 ms` (`production-legacy`, planar `1,160.4 ms`), `5,442.7 ms` (`graph-e2-e3`, planar `1,108.2 ms`), `8,669.7 ms` (`surface-first-e2plus-rplus`, planar `1,141.2 ms`) — resolving the previous `120 s` `S4` timeouts on `E2` and `E2+`.
-   - Note: `S5` was intentionally omitted (`--max-scale=S4`); `benchmarks/results/tkt019-hengelo-scaling.json` and `docs/tkt019-hengelo-scaling-report.md` remain untouched; container workspace has no `.git` metadata (`not_a_git_repository`).
+   - Note: `S5` was intentionally omitted (`--max-scale=S4`); `benchmarks/results/tkt019-hengelo-scaling.json` and `docs/reports/tkt019-hengelo-scaling-report.md` remain untouched; container workspace has no `.git` metadata (`not_a_git_repository`).
 3. **Automated Tests, Lint, Build, and API Docs**:
    - Focused regression suites (`PlanarAndRoadSpatialIndex.test.ts` [5], `GraphRoadRendering.test.ts`, `SurfaceFirstRoadRendering.test.ts`, `PizzaSlicePathJunctions.test.ts`, `RegionalScalabilityBenchmark.test.ts` [8], `ElevationAndZIndex.test.ts`, `BenchmarkInfrastructure.test.ts`, `BenchmarkReliability.test.ts`, `FeatureCoverage.test.ts`, `GeometryBuilder.test.ts`), `npx tsx benchmarks/cpuRunner.ts --quick --no-save`, `npm run lint` (`tsc --noEmit`), `npm run build` (`vite build`), and `npm run docs:api` (`typedoc`) all verified passing after final edits. (Full `npm test` remains deferred under open `TKT-018`.)

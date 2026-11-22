@@ -6,8 +6,8 @@ Welcome to the repository-local issue tracking system. This directory hosts Git-
 
 ## Quick Reference
 
-- **Template**: [`TEMPLATE.md`](./TEMPLATE.md)
-- **Detailed Workflow Guide**: [`docs/ticket-workflow.md`](../docs/ticket-workflow.md)
+- **Template**: [`TEMPLATE.md`](TEMPLATE.md)
+- **Detailed Workflow Guide**: [`docs/guides/ticket-workflow.md`](../docs/guides/ticket-workflow.md)
 - **Ticket ID Format**: `TKT-NNN` (e.g., `TKT-001`, `TKT-002`)
 - **Ticket Filename Format**: `TKT-NNN-<kebab-case-title>.md` (e.g., `TKT-001-building-boundary-clipping.md`)
 
@@ -16,7 +16,7 @@ Welcome to the repository-local issue tracking system. This directory hosts Git-
 ## 1. Creating a Ticket
 
 1. **Find Next ID**: Inspect the existing files in `tickets/`. Find the highest numeric ID and allocate the next unused sequential number (e.g., if highest is `TKT-003`, next is `TKT-004`). If no tickets exist yet, start with `TKT-001`.
-2. **Copy Template**: Copy [`TEMPLATE.md`](./TEMPLATE.md) to a new file named `tickets/TKT-NNN-<short-descriptive-title>.md`.
+2. **Copy Template**: Copy [`TEMPLATE.md`](TEMPLATE.md) to a new file named `tickets/TKT-NNN-<short-descriptive-title>.md`.
 3. **Fill Frontmatter**: Update YAML frontmatter with the assigned ID, concise title, appropriate type, initial status (`open`), priority, and today's date (`YYYY-MM-DD`).
 4. **Complete Sections**: Provide clear summary, context, observed vs. expected behavior, reproduction steps, and observable acceptance criteria.
 5. **Commit**: Commit the new ticket file to Git alongside related branch work or as an independent task.

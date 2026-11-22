@@ -441,7 +441,7 @@ async function main() {
     'm2-1-prototype',
     'amsterdam-centraal-full-420m.json'
   );
-  const baselineJsonPath = path.join(ROOT_DIR, 'docs', 'm2-1-baseline-data.json');
+  const baselineJsonPath = path.join(ROOT_DIR, 'docs', 'reports', 'm2-1-baseline-data.json');
   let existingBaselineData: any = null;
   if (fs.existsSync(baselineJsonPath)) {
     try {
@@ -787,7 +787,7 @@ async function main() {
     },
   };
 
-  const outputPath = path.join(ROOT_DIR, 'docs', 'm2-1-baseline-data.json');
+  const outputPath = path.join(ROOT_DIR, 'docs', 'reports', 'm2-1-baseline-data.json');
   fs.writeFileSync(outputPath, JSON.stringify(outputPayload, null, 2), 'utf-8');
   console.log(`\nSuccessfully written baseline data to ${outputPath}`);
 }

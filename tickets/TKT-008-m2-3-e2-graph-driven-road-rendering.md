@@ -52,7 +52,7 @@ Prior to Stage E2:
 - [x] Localized road-footprint junction polygon synthesis (`solveBoundaryDerivedJunctionNode`, `extractPolylineSpan`, 100% full-width orthogonal portals, curved local curb chains, and 2D Boolean difference on clamped-trim approaches), non-pinching degree-2 continuity joins (`applyDegree2SharedContinuityPortal`), curve-preserving ribbon sanitization (`sanitizeSubSegmentPolylineAndPortals`), upward-wound step treads (`generateGraphStepTreads`), semicircular cap 2D clipping footprints (`buildGraphRibbonPolygonRing`), and authoritative graph-only grade-transition cap suppression implemented.
 - [x] Elevated bridges, tunnels, portals, and grade-separated structures remain on Stage 6D without omission or duplication at grade transitions.
 - [x] Comprehensive automated test suite (`src/world/GraphRoadRendering.test.ts` — `16` tests) passing via `npm test`, verifying all 20 topology cases, edge-case junctions, deliberate negative audit tests, localized road-footprint and curve/width preservation regressions, 270-way road-heavy urban benchmark, `ZFightingValidator` invariants, provenance/inspection across simplified edges, mode isolation, and 10-permutation determinism.
-- [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to reflect `M2.3-E2`.
+- [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/geometry-and-rendering.md`, `docs/guides/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to reflect `M2.3-E2`.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
 - [ ] Project owner reviews Stage E2 implementation to close `TKT-008`.
 
@@ -223,4 +223,4 @@ Prior to Stage E2:
 ## Related files and documentation
 - Source: `src/world/FeatureCatalogue.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`, `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `typedoc.json`
 - Tests: `src/world/GraphRoadRendering.test.ts`, `src/world/InfrastructureRenderAdapter.test.ts`
-- Documentation: `docs/decisions/ADR-0002-boundary-derived-road-junction-meshing.md`, `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`, `GEMINI.md`
+- Documentation: `docs/decisions/ADR-0002-boundary-derived-road-junction-meshing.md`, `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/geometry-and-rendering.md`, `docs/architecture/data-pipeline-and-feature-support.md`, `docs/guides/testing-and-diagnostics.md`, `GEMINI.md`

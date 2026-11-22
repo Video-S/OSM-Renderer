@@ -156,7 +156,7 @@ The project owner ran the requested 2-pair `--require-hardware` benchmark on an 
 
 The old section 5 recommendation is preserved as historical experiment context. **Do not treat its proposed M3 multi-LOD solution as approved or the production tile-size decision as final.**
 
-Follow-up: [`tickets/TKT-028-F1-physical-margin-parity.md`](../tickets/TKT-028-F1-physical-margin-parity.md) adds a benchmark-only, opt-in `--match-physical-margins` switch. It holds **512 m preload / 1,024 m retention** fixed for both tile widths (1024 m uses fractional `0.5 / 1` tile margins). The previous baseline and 512 m production configuration remain unchanged.
+Follow-up: [`tickets/TKT-028-F1-physical-margin-parity.md`](../../tickets/TKT-028-F1-physical-margin-parity.md) adds a benchmark-only, opt-in `--match-physical-margins` switch. It holds **512 m preload / 1,024 m retention** fixed for both tile widths (1024 m uses fractional `0.5 / 1` tile margins). The previous baseline and 512 m production configuration remain unchanged.
 
 Next step: complete the matched-margin canonical Windows run and confirm actual 1,024 m eviction/reload and stable resources before selecting a production tile width.
 
@@ -170,7 +170,7 @@ The new paired RTX 4060 Ti comparison shows **2,900 → 1,224** far-overview dra
 
 The strict baseline memory check flagged 512 m because the first NW visit had 20 loaded tiles but all subsequent NW visits held exactly 19; the underlying geometry/BVH resources were stable thereafter. No progressive resource growth was observed. Do not reinterpret JavaScript heap fluctuations as proof of a leak.
 
-Run-to-run frame-time variation is meaningful: large tiles are not guaranteed to beat small tiles on every individual frame, and one of the two 1,024 m repeated-pan runs had five intervals over 33.3 ms. **1,024 m is the preferred *candidate*, not a promoted default** until owner-led visual QA confirms no visible loading gaps or unacceptable stutter. See [TKT-028-F1](../tickets/TKT-028-F1-physical-margin-parity.md) for detailed metrics and acceptance gates.
+Run-to-run frame-time variation is meaningful: large tiles are not guaranteed to beat small tiles on every individual frame, and one of the two 1,024 m repeated-pan runs had five intervals over 33.3 ms. **1,024 m is the preferred *candidate*, not a promoted default** until owner-led visual QA confirms no visible loading gaps or unacceptable stutter. See [TKT-028-F1](../../tickets/TKT-028-F1-physical-margin-parity.md) for detailed metrics and acceptance gates.
 
 ### Human Visual Comparison — Exact Matched Margins
 

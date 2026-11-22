@@ -24,7 +24,7 @@ Open **http://localhost:3000/**. The regional pilot shortcut is:
 
 - **http://localhost:3000/?m2a=1&region=twente-pilot&devtools=1**
 
-The regional server defaults to `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`. This is a **local generated artifact**, not a guaranteed repository download. If it is missing, the regional manifest returns an error rather than silently substituting the old bake. The Overijssel PBF and its SQLite index are also local/generated data; see [offline dataset setup](docs/offline-overijssel-osm-dataset.md). Initial setup or large baking jobs can consume substantial disk space and time.
+The regional server defaults to `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`. This is a **local generated artifact**, not a guaranteed repository download. If it is missing, the regional manifest returns an error rather than silently substituting the old bake. The Overijssel PBF and its SQLite index are also local/generated data; see [offline dataset setup](docs/architecture/offline-overijssel-osm-dataset.md). Initial setup or large baking jobs can consume substantial disk space and time.
 
 To select a different completed mosaic, start the server with an explicit path **before** running `npm run dev`:
 
@@ -53,6 +53,6 @@ npm run build
 
 ## Documentation
 
-Start with [documentation index](docs/README.md), [current status](docs/STATUS.md), [architecture](docs/architecture.md), [ADR index](docs/decisions/README.md) and [tickets](tickets/README.md). Historical proposals and benchmarks remain in the repository for provenance; **current code/tests and the current-status document take precedence over old plans**.
+Start with [documentation index](docs/README.md), [current status](docs/STATUS.md), [architecture](docs/architecture/overview.md), [ADR index](docs/decisions/README.md) and [tickets](tickets/README.md). Historical proposals and benchmarks remain in the repository for provenance; **current code/tests and the current-status document take precedence over old plans**.
 
 AI coding assistants should consult [GEMINI.md](GEMINI.md) and preserve the scope of the explicitly authorized task.

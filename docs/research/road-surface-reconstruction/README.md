@@ -6,9 +6,9 @@
 > - **Production Integration**: **None**. This research prototype is completely isolated and will not be merged into or replace the production renderer (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`).  
 > - **Further Development**: **Not planned**. Retained strictly for historical, benchmarking, and research reference.  
 > - **Rationale Summary**: The experimental model demonstrated modest improvements on unseen locations (mean holdout IoU 0.6398 to 0.6585, with only 2 of 6 holdout sites improving IoU). The majority of gains originated from enhanced OSM width and placement interpretation rather than the new junction geometry. Furthermore, the evaluation compared against an independent simplified baseline rather than our existing graph-driven E2 renderer. The project owner has decided to continue advancing the existing OSM graph renderer and its tag/metadata handling rather than adopting this experimental architecture.  
-> - **Full Report**: See [REPORT.md](./REPORT.md) for the complete quantitative evaluation, ablation tables, error analysis, and formal owner decision.
+> - **Full Report**: See [REPORT.md](REPORT.md) for the complete quantitative evaluation, ablation tables, error analysis, and formal owner decision.
 
-This directory (`research/road-surface-reconstruction/`) contains a standalone, mathematically documented research prototype for reconstructing physical motor-vehicle road surfaces and junction geometry from OpenStreetMap (OSM) data, evaluated against independent Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) road-surface polygons.
+This directory (`docs/research/road-surface-reconstruction/`) contains a standalone, mathematically documented research prototype for reconstructing physical motor-vehicle road surfaces and junction geometry from OpenStreetMap (OSM) data, evaluated against independent Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) road-surface polygons.
 
 > **Isolation Guarantee**: This implementation is completely independent of the production TypeScript renderer and Stage E2 (`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`). It does not import, modify, or target any production renderer code or fixtures.
 
@@ -46,17 +46,17 @@ Using the Python 3.10+ virtual environment (`shapely`, `pyproj`, `matplotlib`, `
 
 ```bash
 # 1. Run automated unit and regression tests
-/tmp/pyvenv/bin/pytest research/road-surface-reconstruction/tests/ -v
+/tmp/pyvenv/bin/pytest docs/research/road-surface-reconstruction/tests/ -v
 
 # 2. Run full quantitative evaluation on Development (A01-A06) and Holdout (H01-H06) splits
-/tmp/pyvenv/bin/python research/road-surface-reconstruction/evaluate.py
+/tmp/pyvenv/bin/python docs/research/road-surface-reconstruction/evaluate.py
 
 # 3. Regenerate visual comparison figures
-/tmp/pyvenv/bin/python research/road-surface-reconstruction/plot_comparisons.py
+/tmp/pyvenv/bin/python docs/research/road-surface-reconstruction/plot_comparisons.py
 
 # 4. Run standalone CLI reconstruction on any OSM GeoJSON file
-/tmp/pyvenv/bin/python research/road-surface-reconstruction/reconstruct.py \
-  --input research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson \
+/tmp/pyvenv/bin/python docs/research/road-surface-reconstruction/reconstruct.py \
+  --input docs/research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson \
   --output /tmp/a03_reconstructed.geojson \
   --site-id A03 \
   --mode full_reconstruction

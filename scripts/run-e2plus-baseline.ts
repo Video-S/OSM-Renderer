@@ -509,13 +509,13 @@ function loadBenchmarkDatasets(): BenchmarkDatasetSpec[] {
   // Load real-world OSM extracts from research archives
   const pilotGeoJson = JSON.parse(
     fs.readFileSync(
-      path.join(ROOT_DIR, 'research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson'),
+      path.join(ROOT_DIR, 'docs/research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson'),
       'utf8'
     )
   );
   const pilotSitesRaw = JSON.parse(
     fs.readFileSync(
-      path.join(ROOT_DIR, 'research/road-surface-reconstruction/baseline_archive/pilot_sites.json'),
+      path.join(ROOT_DIR, 'docs/research/road-surface-reconstruction/baseline_archive/pilot_sites.json'),
       'utf8'
     )
   );
@@ -523,13 +523,13 @@ function loadBenchmarkDatasets(): BenchmarkDatasetSpec[] {
 
   const holdoutGeoJson = JSON.parse(
     fs.readFileSync(
-      path.join(ROOT_DIR, 'research/road-surface-reconstruction/holdout_data/holdout_osm.geojson'),
+      path.join(ROOT_DIR, 'docs/research/road-surface-reconstruction/holdout_data/holdout_osm.geojson'),
       'utf8'
     )
   );
   const holdoutSitesRaw = JSON.parse(
     fs.readFileSync(
-      path.join(ROOT_DIR, 'research/road-surface-reconstruction/holdout_data/holdout_sites.json'),
+      path.join(ROOT_DIR, 'docs/research/road-surface-reconstruction/holdout_data/holdout_sites.json'),
       'utf8'
     )
   );
@@ -745,7 +745,7 @@ function runBaseline() {
 
   const outPath = path.join(
     ROOT_DIR,
-    'research/surface-first-road-rendering/baseline-results.json'
+    'docs/research/surface-first-road-rendering/baseline-results.json'
   );
   fs.writeFileSync(outPath, JSON.stringify(outputPayload, null, 2), 'utf8');
 

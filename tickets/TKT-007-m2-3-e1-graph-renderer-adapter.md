@@ -48,7 +48,7 @@ Prior to Stage E1:
 - [x] Pure TypeScript `InfrastructureRenderAdapter.ts` implemented under `src/world/infrastructure/rendering/` exposing road, railway, and cross-domain render descriptors, lineage maps, contract validation, and preview preparation.
 - [x] Independent `InfrastructureRenderOptions` (`roads` and `railways`: `'legacy' | 'graph-preview'`) wired with URL query parameter parsing (`topologyRoads`, `topologyRailways`), zero redundant work in `'legacy'` mode, single shared `InfrastructureGraph` build when either preview mode is active, and full compatibility with `railwayPrototypeMode` and `railwayGroupOverride`.
 - [x] Comprehensive automated test suite (`src/world/InfrastructureRenderAdapter.test.ts`) passing via `npm test`, covering adapter determinism, road/railway/cross-domain descriptor accuracy, source lineage, immutability, preview switch parsing, legacy renderer buffer/provenance invariance, and performance benchmarks.
-- [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to document E1 and planned stages E2–E5.
+- [x] Documentation (`GEMINI.md`, `docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/geometry-and-rendering.md`, `docs/architecture/data-pipeline-and-feature-support.md`, `docs/guides/testing-and-diagnostics.md`, and `docs/api-reference/`) updated to document E1 and planned stages E2–E5.
 - [x] `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` executed and passing with zero errors.
 - [x] Project owner reviews Stage E1 implementation to close `TKT-007`.
 
@@ -76,4 +76,4 @@ Prior to Stage E1:
 ## Related files and documentation
 - Source: `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`, `src/world/GeometryBuilder.ts`, `src/app/App.tsx`, `typedoc.json`
 - Tests: `src/world/InfrastructureRenderAdapter.test.ts`
-- Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`, `GEMINI.md`
+- Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/geometry-and-rendering.md`, `docs/architecture/data-pipeline-and-feature-support.md`, `docs/guides/testing-and-diagnostics.md`, `GEMINI.md`

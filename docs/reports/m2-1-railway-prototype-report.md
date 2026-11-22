@@ -1,7 +1,7 @@
 # Milestone 2.1 Deliverable: Performance Baseline & Isolated Railway Prototype Evaluation (`TKT-002`)
 
 > **Status**: In Review — Candidate B Runtime Performance Validated (Amsterdam Central runs smoothly at ~144 FPS on user machine); Ready for M2.1 Decision Gate Sign-Off  
-> **Ticket**: [`TKT-002`](../tickets/TKT-002-m2-1-performance-baseline-and-railway-prototype.md) (Blocks [`TKT-001`](../tickets/TKT-001-railway-overlap-brightness-and-sleeper-regression.md) / M2.2)  
+> **Ticket**: [`TKT-002`](../../tickets/TKT-002-m2-1-performance-baseline-and-railway-prototype.md) (Blocks [`TKT-001`](../../tickets/TKT-001-railway-overlap-brightness-and-sleeper-regression.md) / M2.2)  
 > **Date**: 2026-11-03  
 > **Scope**: Reproducible Goalpost 1 performance baseline + isolated side-by-side experimental evaluation of **Candidate A** (Pure Procedural Multi-Layer UV Ribbons) vs. **Candidate B** (Hybrid Close-Zoom 3D Extruded Geometry + Medium/Far Procedural UV Ribbons). Neither candidate is approved for production integration prior to formal M2.1 gate review.
 
@@ -56,7 +56,7 @@ During controlled baseline isolation on Amsterdam Centraal (`420m`), Configurati
 4. **LOD Transition Quantification**:
    - Measured empirical visual deltas over a continuous zoom sweep (`4.3` to `4.7`): Candidate B's cross-representation delta (0.71% mean grayscale change, 2.99% pixels changed > 8%) is comparable to Candidate A's normal camera zoom delta over the same span (0.53% mean change, 2.43% pixels changed). Same-zoom representation delta at `zoom = 4.6` is 0.30% mean grayscale difference.
 5. **Benchmark Integrity & Single Source of Truth**:
-   - All benchmark metrics derive strictly from [`docs/m2-1-baseline-data.json`](./m2-1-baseline-data.json). Timings report medians across 5 runs, distinguishing Node CPU builds from headless browser WebGL telemetry.
+   - All benchmark metrics derive strictly from [`docs/reports/m2-1-baseline-data.json`](m2-1-baseline-data.json). Timings report medians across 5 runs, distinguishing Node CPU builds from headless browser WebGL telemetry.
 
 ---
 
@@ -131,7 +131,7 @@ To guarantee that test claims match actual executable assertions, `src/world/Per
 
 ## 3. Reconsideration of Close-Zoom Sleeper Density
 
-The specification in `docs/geometry-and-rendering.md` outlines canonical dimensions:
+The specification in `docs/architecture/geometry-and-rendering.md` outlines canonical dimensions:
 - Physical sleeper period: `0.60 m` (standard European/AREMA mainline spacing $\approx 1,667$ ties/km)
 - Physical sleeper length (along track): `0.26 m` (`260 mm`)
 - Physical sleeper width (across track): `2.50 m` (`2500 mm`)
@@ -139,7 +139,7 @@ The specification in `docs/geometry-and-rendering.md` outlines canonical dimensi
 The initial prototype utilized a visual spacing of `1.45 m` (with visual length `0.36 m`), which made close-range track appear visibly sparse.
 
 ### 3.1 Density Sweep Evaluation on 65-Way Benchmark
-We evaluated three candidate densities on the full 65-way synthetic switchyard dataset (all values recorded in `candidateBDensitySweep` of [`docs/m2-1-baseline-data.json`](./m2-1-baseline-data.json)):
+We evaluated three candidate densities on the full 65-way synthetic switchyard dataset (all values recorded in `candidateBDensitySweep` of [`docs/reports/m2-1-baseline-data.json`](m2-1-baseline-data.json)):
 
 | Sleeper Spacing Parameter | Tie Count | Turnout Bearers | Sleeper Vertices | Total Rail Vertices | CPU Buffer Footprint | Build Time (Node) | Visual Character & Aliasing Assessment |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
@@ -169,7 +169,7 @@ In the unoptimized prototype, railway bridges were uniformly sampled every `0.35
 ### 4.3 Multi-Interval Lateral Subtraction (`subtractIntervalFromList`)
 When `multiIntervalClip: false` is used (`subtractLateralInterval`), if an interior cut splits a wide bearer into two outer segments, only the single wider segment is kept.
 - **Optimization (`multiIntervalClip: true`)**: Replaces single-interval truncation with list-based interval subtraction (`subtractIntervalFromList`), retaining all sub-segments that meet the minimum support width (`0.26 m` when covering a rail seat `±gaugeOffsetHalf ± 0.02 m`, or `0.38 m` otherwise).
-- **Measured Impact**: On the Amsterdam Centraal 180m throat extract (`realOsmVerification.amsterdamCentraal` in `docs/m2-1-baseline-data.json`), enabling `multiIntervalClip: true` and adaptive bridge sampling preserves **83 multi-interval split stations** (`9,478` boxes in `candidateB_unoptimized` vs. `9,569` boxes in `candidateB`), and **1 split station** on the full 420m dataset (`22,469` vs. `22,470` boxes).
+- **Measured Impact**: On the Amsterdam Centraal 180m throat extract (`realOsmVerification.amsterdamCentraal` in `docs/reports/m2-1-baseline-data.json`), enabling `multiIntervalClip: true` and adaptive bridge sampling preserves **83 multi-interval split stations** (`9,478` boxes in `candidateB_unoptimized` vs. `9,569` boxes in `candidateB`), and **1 split station** on the full 420m dataset (`22,469` vs. `22,470` boxes).
 
 ### 4.4 Sleeper Geometry Architecture: `THREE.InstancedMesh` with Variable Bearer Scaling
 The initial prototype merged all 3D sleeper boxes into a monolithic `BufferGeometry`. While simple, this allocated **63.68 MB** of CPU buffer memory on Amsterdam Centraal (`22,469` sleepers).
@@ -228,7 +228,7 @@ To isolate the representation change from camera zoom scaling:
 
 ## 6. Reproducible Goalpost 1 Performance Baseline & Benchmark Integrity
 
-All benchmark figures are derived strictly from [`docs/m2-1-baseline-data.json`](./m2-1-baseline-data.json) ($N = 5$ runs: 1 cold start + 4 warm runs).
+All benchmark figures are derived strictly from [`docs/reports/m2-1-baseline-data.json`](m2-1-baseline-data.json) ($N = 5$ runs: 1 cold start + 4 warm runs).
 
 ### 6.1 Benchmark Environment & Specs
 - **Hardware & Host OS**: Linux `x86_64`, Intel Xeon container environment.
@@ -303,7 +303,7 @@ Both candidates were tested across all four application themes at `zoom = 6.0`:
 
 ## 8. Real OpenStreetMap Verification & Controlled 4-Configuration Runtime Comparison
 
-Synthetic switchyard fixtures represent idealized track geometry. To establish real-world viability, we tested actual OpenStreetMap extracts from Station Hengelo and Amsterdam Centraal (recorded under `realOsmVerification` and `amsterdamFull4ConfigComparison` in [`docs/m2-1-baseline-data.json`](./m2-1-baseline-data.json)).
+Synthetic switchyard fixtures represent idealized track geometry. To establish real-world viability, we tested actual OpenStreetMap extracts from Station Hengelo and Amsterdam Centraal (recorded under `realOsmVerification` and `amsterdamFull4ConfigComparison` in [`docs/reports/m2-1-baseline-data.json`](m2-1-baseline-data.json)).
 
 > **Provenance of `candidateB_unoptimized` vs. `candidateB` in `realOsmVerification`**:  
 > In `scripts/generate-baseline-json.ts`, both `candidateB_unoptimized` and `candidateB` execute the current `buildRailwayPrototypeGroup` sleeper-placement algorithm, differing only in optimization flags:
@@ -314,7 +314,7 @@ Synthetic switchyard fixtures represent idealized track geometry. To establish r
 - **Source**: OpenStreetMap Overpass API (extracted 2026-11-01).
 - **Location**: `52.2623° N, 6.7934° E` (Radius $350\text{ m}$).
 - **Topology**: 67 parsed railway ways, 162 raw features, 0 bridges, 0 tunnels, 2 short chained ways ($< 2\text{ m}$). Sample OSM IDs: `way/97083386`, `way/97083393`, `way/97083397`, `way/97083402`, `way/97083406`.
-- **Recorded Results (`docs/m2-1-baseline-data.json`)**:
+- **Recorded Results (`docs/reports/m2-1-baseline-data.json`)**:
   - *Candidate A*: `13.59 ms` build, `10,888` vertices, `10,352` triangles, `3` draw calls, `486.0 KB` CPU buffer.
   - *Candidate B (`candidateB_unoptimized`)*: `344.23 ms` build, `158,200` merged vertices, `91,370` triangles, `5` draw calls, `4,797.0 KB` CPU buffer, **`6,549` sleeper boxes**, **`1,250` shared turnout bearers** (`0` multi-interval split stations).
   - *Candidate B (`candidateB` optimized)*: `114.31 ms` build (**3.0× faster**), `27,240` unique buffer vertices (`158,200` rendered with instances), `25,890` unique buffer triangles (`91,370` rendered with instances), `42` draw calls (across `10` spatial chunks), `1,369.6 KB` CPU buffer memory (**71.4% memory reduction**), **`6,549` sleeper boxes**, and **`1,250` shared turnout bearers**. Because Station Hengelo has `0` bridges and `0` interior multi-interval split stations, `candidateB_unoptimized` and `candidateB` emit the exact same `6,549` sleeper boxes and `1,250` turnout bearers.
@@ -323,7 +323,7 @@ Synthetic switchyard fixtures represent idealized track geometry. To establish r
 - **Source**: OpenStreetMap Overpass API (extracted 2026-11-01).
 - **Location**: `52.378° N, 4.900° E` (Radius $180\text{ m}$).
 - **Topology**: 160 parsed railway ways, 771 raw features, 83 bridges, 14 tunnels, 78 untagged service/usage tracks.
-- **Recorded Results (`docs/m2-1-baseline-data.json`)**:
+- **Recorded Results (`docs/reports/m2-1-baseline-data.json`)**:
   - *Candidate A*: `90.43 ms` build, `68,356` vertices, `42,306` triangles, `7` draw calls, `2,140.5 KB` buffer memory.
   - *Candidate B (`candidateB_unoptimized`)*: `3,687.60 ms` build, `717,508` vertices, `456,164` triangles, `9` draw calls, `22,941.0 KB` (`22.40 MB`) buffer memory, **`9,478` sleeper boxes**, and **`1,347` shared turnout bearers** (`multiIntervalClip: false`, `0` split stations).
   - *Candidate B (`candidateB` optimized)*: `241.37 ms` build (**15.3× faster**), `96,264` unique buffer vertices (`287,624` rendered with instances), `68,452` unique buffer triangles (`164,132` rendered with instances), `94` draw calls (across `15` spatial chunks), `3,545.9 KB` (`3.46 MB`) buffer memory (**84.5% memory reduction**), **`9,569` sleeper boxes**, **`1,322` shared turnout bearers**, and **`83` multi-interval split stations** preserved (`multiIntervalClip: true` + adaptive bridge sampling).
@@ -349,7 +349,7 @@ To isolate the true rendering cost of railways from the non-railway base map und
    - **Station Throat Frustum Culling**: **59.4%** of railway triangles culled during close inspection (`zoom = 8.0`) via 128m static spatial chunking.
 
 ### 8.4 Single-Variable Step-by-Step Optimization Breakdown (Candidate B on Amsterdam 420m)
-Each optimization was evaluated strictly one variable at a time against the unoptimized baseline on the full Amsterdam Centraal dataset (`candidateBSingleVariableExperiments` in `docs/m2-1-baseline-data.json`):
+Each optimization was evaluated strictly one variable at a time against the unoptimized baseline on the full Amsterdam Centraal dataset (`candidateBSingleVariableExperiments` in `docs/reports/m2-1-baseline-data.json`):
 
 | Step / Variable Under Test | Total Railway Build Time (ms) | Query Time (ms) | Segments Examined | Overlap Time (ms) | Emitted Sleepers | Railway CPU Buffer (MB) | Throat Raycast Latency (ms) | Culling at Zoom 8.0 (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -393,4 +393,4 @@ Each optimization was evaluated strictly one variable at a time against the unop
 - **Performance Blocker Status**: **Resolved**. Candidate B's runtime performance is no longer considered an outstanding blocker for M2.1.
 - **Visual Direction**: Candidate B remains the leading visual direction due to its physical sleeper definition, shared turnout bearers, and rail geometry. Candidate A remains a fully validated, lightweight procedural comparison point.
 - **Production Gate**: Neither candidate is approved or integrated into production `GeometryBuilder.ts`.
-- **Ticket Status**: Ticket [`TKT-002`](../tickets/TKT-002-m2-1-performance-baseline-and-railway-prototype.md) remains open with status **`in_review`**, awaiting formal user decision gate sign-off before Milestone 2.2 (`TKT-001`) begins.
+- **Ticket Status**: Ticket [`TKT-002`](../../tickets/TKT-002-m2-1-performance-baseline-and-railway-prototype.md) remains open with status **`in_review`**, awaiting formal user decision gate sign-off before Milestone 2.2 (`TKT-001`) begins.

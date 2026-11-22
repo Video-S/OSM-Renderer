@@ -1,9 +1,9 @@
 # E2+ — Surface-First Road Rendering (`roads: 'graph-surface'`)
 
-- **Status**: Selected as the **preferred architectural direction** for at-grade road rendering ([`ADR-0010`](../../docs/decisions/ADR-0010-surface-first-road-rendering.md)), undergoing validation and targeted edge-case refinement before promotion to the production default (`'legacy'` remains the default).
-- **Pipeline Specification**: [`docs/e2-plus-surface-first-road-rendering.md`](../../docs/e2-plus-surface-first-road-rendering.md)
-- **Historical Context**: [`docs/project-history.md`](../../docs/project-history.md)
-- **Validation & Migration Roadmap**: [`docs/road-rendering-roadmap.md`](../../docs/road-rendering-roadmap.md)
+- **Status**: Selected as the **preferred architectural direction** for at-grade road rendering ([`ADR-0010`](../../decisions/ADR-0010-surface-first-road-rendering.md)), undergoing validation and targeted edge-case refinement before promotion to the production default (`'legacy'` remains the default).
+- **Pipeline Specification**: [`docs/architecture/e2-plus-surface-first-road-rendering.md`](../../architecture/e2-plus-surface-first-road-rendering.md)
+- **Historical Context**: [`docs/project-history.md`](../../project-history.md)
+- **Validation & Migration Roadmap**: [`docs/plans/road-rendering-roadmap.md`](../../plans/road-rendering-roadmap.md)
 
 ---
 
@@ -80,7 +80,7 @@ To regenerate the full 12-dataset comparison (`legacy` vs. `graph` E2 vs. `graph
 npx tsx scripts/run-e2plus-baseline.ts
 ```
 
-### Summary of Measured Results (`research/surface-first-road-rendering/baseline-results.json`)
+### Summary of Measured Results (`docs/research/surface-first-road-rendering/baseline-results.json`)
 
 | Dataset | Mode | Ways | Road Gen Med (ms) | Buffer / Union (ms) | Clip (ms) | Tri (ms) | Unions / Diffs | Road Tris | Overlaps (`>10cm²`) | Winding / Deg | Cov Ratio | Coverage Defects |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|

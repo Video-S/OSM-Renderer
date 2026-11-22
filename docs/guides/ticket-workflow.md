@@ -1,6 +1,6 @@
 # Ticket Workflow & Lifecycle Guide
 
-This document defines the authoritative workflow and operational lifecycle for tracking, implementing, and verifying issues using the repository-local Markdown ticket system located in [`tickets/`](../tickets/).
+This document defines the authoritative workflow and operational lifecycle for tracking, implementing, and verifying issues using the repository-local Markdown ticket system located in [`tickets/`](../../tickets/).
 
 Both human developers and AI assistants (Gemini) must follow these procedures to maintain consistency, auditability, and software quality.
 
@@ -110,7 +110,7 @@ Tickets are created when a bug is detected, a feature is scoped, technical debt 
 Before modifying code or creating assets, execute these pre-implementation steps:
 
 1. **Read the Ticket**: Thoroughly read the entire ticket specification and acceptance criteria.
-2. **Read Project Context & Rules**: Consult [`GEMINI.md`](../GEMINI.md), [`docs/README.md`](./README.md), and relevant domain specifications (e.g., [`docs/architecture.md`](./architecture.md), [`docs/geometry-and-rendering.md`](./geometry-and-rendering.md)).
+2. **Read Project Context & Rules**: Consult [`GEMINI.md`](../../GEMINI.md), [`docs/README.md`](../README.md), and relevant domain specifications (e.g., [`docs/architecture/overview.md`](../architecture/overview.md), [`docs/architecture/geometry-and-rendering.md`](../architecture/geometry-and-rendering.md)).
 3. **Inspect Existing Code & Tests**: Review the targeted source files and tests to understand existing contracts.
 4. **Confirm the Issue**: Validate that the observed behavior reproduces or still applies in the current codebase. If the issue is already resolved or obsolete, document that finding rather than making unnecessary changes.
 5. **Architectural Alignment**: Ensure the proposed solution respects existing architectural decisions. If an ADR change is necessary, document the rationale.
@@ -168,7 +168,7 @@ A ticket may only be moved to `closed` when all acceptance criteria have been sa
 
 - **One Ticket, One Problem**: Keep tickets focused and atomic.
 - **Observable Criteria**: Frame criteria as verifiable facts (e.g., "Road junction triangles do not overlap at elevation y=0.04m" rather than "Road looks good").
-- **Relative Markdown Links**: Always use relative paths when referencing repository files (e.g., `[GeometryBuilder.ts](../src/world/GeometryBuilder.ts)`).
+- **Relative Markdown Links**: Always use relative paths when referencing repository files (e.g., `[GeometryBuilder.ts](../../src/world/GeometryBuilder.ts)`).
 - **Supporting Assets**: Optional visual screenshots or logs may be placed in appropriate asset directories when helpful, but screenshot generation or review is never a mandatory requirement for ticket closeout.
 - **No Secrets**: Never commit tokens, credentials, or sensitive data in tickets or attachments.
 - **Summary Reporting**: In AI assistant turn completions, always explicitly state the ticket IDs that were worked on, closed, blocked, or remain open.

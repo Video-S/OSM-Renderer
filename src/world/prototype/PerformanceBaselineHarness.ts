@@ -181,7 +181,7 @@ export function runCpuAndLifecycleBenchmark(
 ): CpuBenchmarkReport {
   if ((mode as string) === 'baseline') {
     throw new Error(
-      "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer and is frozen in docs/m2-1-baseline-data.json. Current source builds do not contain the superseded Goalpost 1 railway implementation."
+      "The 'baseline' benchmark mode represents the historical Goalpost 1 renderer and is frozen in docs/reports/m2-1-baseline-data.json. Current source builds do not contain the superseded Goalpost 1 railway implementation."
     );
   }
   const builder = new GeometryBuilder();

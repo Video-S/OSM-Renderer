@@ -95,7 +95,7 @@ We adopt **Candidate B (Hybrid Close-Zoom 3D Instanced Sleepers & Extruded Rails
 
 - `src/world/RailwayRendering.test.ts`: Production unit and integration tests covering `UvRibbonBuilder`, `RailwayTopology`, turnout/parallel sleeper support, zoom LOD switching (`zoom = 8.0` vs `zoom = 1.0`), `faceRanges` / `instanceInfos` provenance, 4-theme updates, and `SceneResourceManager` disposal.
 - `src/world/PerformanceBaseline.test.ts`: 14 benchmark and geometric regression tests covering the 65-way switchyard, closely spaced parallel tracks (`2.1 m–2.5 m`), turnout-to-parallel transitions, Station Hengelo (`67` ways), and Amsterdam Centraal (`160` ways).
-- `docs/m2-1-railway-prototype-report.md` & `docs/m2-1-baseline-data.json`: Recorded M2.1 evaluation report and single-source benchmark dataset.
+- `docs/reports/m2-1-railway-prototype-report.md` & `docs/reports/m2-1-baseline-data.json`: Recorded M2.1 evaluation report and single-source benchmark dataset.
 
 ---
 

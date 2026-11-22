@@ -39,6 +39,6 @@ The planned footprint is a **rectangle**, not the Twente administrative boundary
 - `scripts/{bake-regional-pilot,verify-regional-mosaic,audit-regional-seams}.ts`
 - `src/server/tiles/RegionalMosaicHttpHandler.ts`
 - `src/world/TilingFullTwenteScale.test.ts`, `src/world/TilingRegionalMosaic.test.ts`
-- [ADR-0011](./ADR-0011-baked-tiles-and-runtime-streaming.md), [ADR-0009](./ADR-0009-infrastructure-graph-topology.md)
+- [ADR-0011](ADR-0011-baked-tiles-and-runtime-streaming.md), [ADR-0009](ADR-0009-infrastructure-graph-topology.md)
 
 Do not promote the TKT-034 implementation to fully accepted before its outstanding owner-controlled checks complete.

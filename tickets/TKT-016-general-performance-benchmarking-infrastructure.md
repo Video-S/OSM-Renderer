@@ -31,7 +31,7 @@ As OSM Renderer progresses toward larger regions (such as Twente) and evaluates 
 - [x] Browser runner collects median/p95/p99 frame intervals, CPU frame render times, actual WebGL draw calls (`gl.info.render.calls`), rendered triangles (`gl.info.render.triangles`), GPU timer queries (or explicit unsupported/disjoint status), WebGL driver resource counts, browser JS heap metrics, and scene initialization/first-render latency, clearly labeling hardware vs. software (SwiftShader) WebGL renderers.
 - [x] Versioned, validated JSON report schema (`1.0.0`) and comparison tool (`npm run bench:compare`) computing absolute and percentage deltas, flagging incompatible datasets or configurations, handling missing/unsupported metrics explicitly, and supporting configurable regression thresholds.
 - [x] Automated test suite (`src/world/BenchmarkInfrastructure.test.ts`) verifying statistical calculations, schema validation, dataset hashing, CPU runner execution, resource cleanup, baseline comparison, incompatible report detection, and unsupported metric handling.
-- [x] Developer documentation (`docs/benchmarking-and-profiling.md`, plus updates to `docs/testing-and-diagnostics.md`, `docs/README.md`, and `docs/STATUS.md`) covering execution, metric definitions, memory/GPU measurement limitations, and Node.js / Chrome DevTools / WebGL profiling workflows.
+- [x] Developer documentation (`docs/guides/benchmarking-and-profiling.md`, plus updates to `docs/guides/testing-and-diagnostics.md`, `docs/README.md`, and `docs/STATUS.md`) covering execution, metric definitions, memory/GPU measurement limitations, and Node.js / Chrome DevTools / WebGL profiling workflows.
 - [x] Existing application behavior, geometry output, `npm test`, `npm run lint`, `npm run build`, and `npm run docs:api` pass without regressions.
 
 ## Implementation notes
@@ -55,5 +55,5 @@ As OSM Renderer progresses toward larger regions (such as Twente) and evaluates 
 - Source: `benchmarks/`, `src/world/prototype/PerformanceBaselineHarness.ts`, `src/scene/MapScene.tsx`, `src/app/App.tsx`
 - Baselines: `benchmarks/baselines/cpu-baseline.json`, `benchmarks/baselines/browser-baseline.json`
 - Tests: `src/world/BenchmarkInfrastructure.test.ts`, `src/world/PerformanceBaseline.test.ts`
-- Documentation: `docs/benchmarking-and-profiling.md`, `docs/testing-and-diagnostics.md`, `docs/README.md`, `docs/STATUS.md`
+- Documentation: `docs/guides/benchmarking-and-profiling.md`, `docs/guides/testing-and-diagnostics.md`, `docs/README.md`, `docs/STATUS.md`
 

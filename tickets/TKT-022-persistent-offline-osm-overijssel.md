@@ -22,7 +22,7 @@ Live Overpass requests from `/api/osm-data` frequently stall or time out (5–25
 - [x] Persistent SQLite + R\*Tree spatial store (`node:sqlite` + SQLite `rtree`) queries arbitrary `(lat, lon, radiusMeters)` regions directly on disk without reading the whole PBF per request, without holding the province in server RAM, and survives server restarts with zero C++ native build toolchains on Windows/Linux/macOS.
 - [x] `/api/osm-data` routes Overijssel coordinates (`isPointInOverijssel(lat, lon)` against the exact Geofabrik `overijssel.poly` boundary) exclusively to the local store (`X-OSM-Source: overijssel-offline`), never silently falling back to Overpass when missing/failing (returns explicit HTTP 503 with setup instructions), while non-Overijssel coordinates continue using Overpass.
 - [x] Emits `TKT-021`-compatible `Server-Timing`, `X-OSM-Cache`, `X-OSM-Source`, `X-OSM-Snapshot`, and `X-OSM-Feature-Count` headers (`MapLoadDiagnostics` recognizes `'overijssel-offline'`).
-- [x] Cross-platform setup scripts (`npm run osm:fetch-overijssel`, `npm run osm:build-overijssel-index`, `npm run osm:setup-overijssel`), `.gitignore` exclusions for generated PBF/SQLite artifacts, `.env.example` overrides, and documentation (`docs/offline-overijssel-osm-dataset.md`) are in place.
+- [x] Cross-platform setup scripts (`npm run osm:fetch-overijssel`, `npm run osm:build-overijssel-index`, `npm run osm:setup-overijssel`), `.gitignore` exclusions for generated PBF/SQLite artifacts, `.env.example` overrides, and documentation (`docs/architecture/offline-overijssel-osm-dataset.md`) are in place.
 - [x] Smoke-tested on live `/api/osm-data` after server restart across Station Hengelo, Enschede Centrum, and Zwolle Station with small details, infrastructure, persistence, and `TKT-021` timing breakdown verified.
 
 ## Implementation Notes
@@ -52,4 +52,4 @@ Live Overpass requests from `/api/osm-data` frequently stall or time out (5–25
 - Source: `src/server/osm/overijsselConfig.ts`, `src/server/osm/overijsselBoundary.ts`, `src/server/osm/OsmPbfReader.ts`, `src/server/osm/OverijsselIndexBuilder.ts`, `src/server/osm/OverijsselOsmStore.ts`, `src/server/osm/osmDataHandler.ts`, `server.ts`, `src/world/dev/MapLoadDiagnostics.ts`
 - Scripts: `scripts/fetch-overijssel-pbf.ts`, `scripts/build-overijssel-index.ts`, `scripts/setup-overijssel.ts`
 - Tests: `src/world/OverijsselOfflineStore.test.ts`
-- Documentation: `docs/offline-overijssel-osm-dataset.md`, `docs/STATUS.md`
+- Documentation: `docs/architecture/offline-overijssel-osm-dataset.md`, `docs/STATUS.md`

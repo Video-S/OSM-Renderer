@@ -35,7 +35,7 @@ Running `npm test` (`tsx --test --test-concurrency=1 src/world/*.test.ts`) makes
 - [ ] Document the established root cause(s) of Windows 16 GB RAM exhaustion in `## Implementation notes` (e.g., whether driven by specific heavy test files, retained buffers, `node:test` isolation, or `tsx` loader overhead).
 - [ ] Add explicit memory limits, cleanup/disposal hygiene where tests retain large scenes unnecessarily, and isolated sequential/batched execution if required so full test execution remains responsive on 16 GB hosts.
 - [ ] Introduce a dedicated lightweight smoke-test script (e.g., `npm run test:smoke`) covering core invariants and benchmark/infrastructure reliability without triggering heavy multi-city sweeps.
-- [ ] Ensure `.github/workflows/validation.yml` and `docs/testing-and-diagnostics.md` reflect the updated test commands and isolation guarantees.
+- [ ] Ensure `.github/workflows/validation.yml` and `docs/guides/testing-and-diagnostics.md` reflect the updated test commands and isolation guarantees.
 - [ ] Verify `npm run lint`, `npm run build`, smoke tests, and isolated test batches pass cleanly.
 
 ## Implementation Notes
@@ -53,5 +53,5 @@ Running `npm test` (`tsx --test --test-concurrency=1 src/world/*.test.ts`) makes
 ## Related Files and Documentation
 - Scripts & CI: `package.json`, `.github/workflows/validation.yml`
 - Test Suite: `src/world/*.test.ts`
-- Documentation: `docs/testing-and-diagnostics.md`, `docs/STATUS.md`
+- Documentation: `docs/guides/testing-and-diagnostics.md`, `docs/STATUS.md`
 - Predecessor: `tickets/TKT-017-benchmark-infrastructure-reliability.md`

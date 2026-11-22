@@ -471,8 +471,8 @@ function loadSmallRealWorldDataset(provider: LocalGeoJsonProvider): LoadedBenchm
 
 function loadMediumRealWorldDataset(provider: LocalGeoJsonProvider): LoadedBenchmarkDataset {
   const railRelPath = 'src/world/prototype/realOsmRailwayExtracts.json';
-  const holdoutRelPath = 'research/road-surface-reconstruction/holdout_data/holdout_osm.geojson';
-  const holdoutSitesRelPath = 'research/road-surface-reconstruction/holdout_data/holdout_sites.json';
+  const holdoutRelPath = 'docs/research/road-surface-reconstruction/holdout_data/holdout_osm.geojson';
+  const holdoutSitesRelPath = 'docs/research/road-surface-reconstruction/holdout_data/holdout_sites.json';
 
   const railRaw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, railRelPath), 'utf8'));
   const holdoutGeo = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, holdoutRelPath), 'utf8'));
@@ -538,9 +538,9 @@ function loadMediumRealWorldDataset(provider: LocalGeoJsonProvider): LoadedBench
 
 function loadLargeRealWorldDataset(provider: LocalGeoJsonProvider): LoadedBenchmarkDataset {
   const railRelPath = 'src/world/prototype/realOsmRailwayExtracts.json';
-  const pilotRelPath = 'research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson';
+  const pilotRelPath = 'docs/research/road-surface-reconstruction/baseline_archive/pilot_osm.geojson';
   const pilotSitesRelPath =
-    'research/road-surface-reconstruction/baseline_archive/pilot_sites.json';
+    'docs/research/road-surface-reconstruction/baseline_archive/pilot_sites.json';
 
   const railRaw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, railRelPath), 'utf8'));
   const pilotGeo = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, pilotRelPath), 'utf8'));

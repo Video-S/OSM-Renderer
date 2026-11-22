@@ -1,6 +1,6 @@
 # System Architecture — Current Implementation
 
-> **Reconciled: 2026-11-22.** This describes the **implemented** renderer. The older [regional LOD proposal](./regional-tiling-streaming-lod-proposal.md) is retained as an architectural research/roadmap document, **not** a list of already delivered capabilities. See [current status](./STATUS.md) and [ADRs](./decisions/README.md).
+> **Reconciled: 2026-11-22.** This describes the **implemented** renderer. The older [regional LOD proposal](../plans/regional-tiling-streaming-lod-proposal.md) is retained as an architectural docs/research/roadmap document, **not** a list of already delivered capabilities. See [current status](../STATUS.md) and [ADRs](../decisions/README.md).
 
 ## 1. Product and execution paths
 
@@ -22,7 +22,7 @@ There are **two supported data/geometry paths**, sharing production E2+/R+ infra
 - **Other layers:** water, land use, ground cover, building extrusion, bridges and tunnels are built using `GeometryBuilder.ts`, `BridgeAndTunnelBuilder.ts`, `ElevationPolicy.ts` and relevant layer processors. Semantic 2D ownership and physical Y elevation are distinct; `polygonOffset` mitigates some depth conflicts.
 - **Feature inspection and themes:** `faceRanges`, `instanceInfos`, BVH metadata and `ThemeMaterialRegistry.ts` preserve inspection and fast theme updates in the baked path.
 
-References: [ADR-0008](./decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md), [ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md), [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md).
+References: [ADR-0008](../decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md), [ADR-0009](../decisions/ADR-0009-infrastructure-graph-topology.md), [ADR-0010](../decisions/ADR-0010-surface-first-road-rendering.md).
 
 ## 3. Offline source, baking and manifest pipeline
 
@@ -63,7 +63,7 @@ The accepted **16 × 16** pilot has 16 independently baked shards (256 tiles). T
 | `src/scene/CameraController.tsx` and `src/scene/cameraZoomPolicy.ts` | Orthographic projection, pan/tilt, projected bounds framing, camera limits and transitions |
 | `src/components/DevToolsPanel.tsx` | Active mosaic/zoom-source readout, performance counters and reproducible diagnostics |
 
-A `TileStreamManager` manifest is reported **loaded only after tile records/overlays initialize successfully**. Errors clear partial tiles and the active identity. The **accepted regional zoom-out floor** is `0.15` for datasets larger than 64 tiles, with an explicit validated `regionalMinZoom` escape hatch; `maxZoom=16.0`. Smaller maps retain standard zoom policy. See [ADR-0013](./decisions/ADR-0013-regional-camera-zoom-policy.md).
+A `TileStreamManager` manifest is reported **loaded only after tile records/overlays initialize successfully**. Errors clear partial tiles and the active identity. The **accepted regional zoom-out floor** is `0.15` for datasets larger than 64 tiles, with an explicit validated `regionalMinZoom` escape hatch; `maxZoom=16.0`. Smaller maps retain standard zoom policy. See [ADR-0013](../decisions/ADR-0013-regional-camera-zoom-policy.md).
 
 **Ownership boundary:** source providers/graph construction return typed data; the geometry layer produces Three.js resources; streaming and scene lifecycle managers own resource disposal. UI code does not manually manipulate tile vertex buffers. Tile source and manifest identity must not be guessed from URL aliases.
 
@@ -77,8 +77,8 @@ A `TileStreamManager` manifest is reported **loaded only after tile records/over
 
 ## 6. Decision records and longer-term options
 
-- [ADR-0011](./decisions/ADR-0011-baked-tiles-and-runtime-streaming.md): offline baked tiles, projection, data format and runtime streaming.
-- [ADR-0012](./decisions/ADR-0012-bounded-regional-mosaics.md): bounded shard baking, manifest gateway, dataset selection and seam risks.
-- [ADR-0013](./decisions/ADR-0013-regional-camera-zoom-policy.md): zoom safety cap and benchmark overrides.
+- [ADR-0011](../decisions/ADR-0011-baked-tiles-and-runtime-streaming.md): offline baked tiles, projection, data format and runtime streaming.
+- [ADR-0012](../decisions/ADR-0012-bounded-regional-mosaics.md): bounded shard baking, manifest gateway, dataset selection and seam risks.
+- [ADR-0013](../decisions/ADR-0013-regional-camera-zoom-policy.md): zoom safety cap and benchmark overrides.
 
-**Not yet implemented / separately scoped:** global precomputed topology/geometry plans, multi-LOD1–LOD3 overview rendering, full Overijssel streaming, gameplay, routing agents or simulation. The [regional tiling proposal](./regional-tiling-streaming-lod-proposal.md) and [Goalpost 2 plan](./goalpost-2-plan.md) preserve the historical design rationale without implying current authorization or implementation.
+**Not yet implemented / separately scoped:** global precomputed topology/geometry plans, multi-LOD1–LOD3 overview rendering, full Overijssel streaming, gameplay, routing agents or simulation. The [regional tiling proposal](../plans/regional-tiling-streaming-lod-proposal.md) and [Goalpost 2 plan](../plans/goalpost-2-plan.md) preserve the historical design rationale without implying current authorization or implementation.

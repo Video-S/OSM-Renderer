@@ -42,11 +42,11 @@ Empirically measure CPU pipeline performance, memory footprint, resource cleanup
 - [x] Deterministic offline Hengelo `S1`–`S5` real OSM dataset extraction tool (`benchmarks/prepareHengeloScalingDatasets.ts`) and committed `S1`–`S5` datasets with `manifest.json` (bboxes, ODbL attribution, OSM timestamp, SHA-256 hashes).
 - [x] Read-only instrumentation on `GeometryBuilder.ts` exposing `legacyRoadStats`, `legacyRoadTimingMs`, and `planarValidationReport` without altering any rendered geometry.
 - [x] Resource-bounded scaling runner (`benchmarks/scalingRunner.ts`, `benchmarks/scalingWorker.ts`, `benchmarks/scalingDatasets.ts`, `benchmarks/scalingReport.ts`) with isolated child processes, Windows/POSIX RSS & timeout enforcement, progression cutoff, and Windows PowerShell CLI compatibility.
-- [x] Reproducible Hengelo `S1`–`S5` scaling JSON (`benchmarks/results/tkt019-hengelo-scaling.json`) + Markdown analysis report (`docs/tkt019-hengelo-scaling-report.md`) incorporating the project owner's Windows S1–S5 hardware/host measurements and root-cause analysis.
-- [x] Focused automated regression tests (`src/world/RegionalScalabilityBenchmark.test.ts`), updated docs (`docs/benchmarking-and-profiling.md`, `docs/STATUS.md`), clean `tsc --noEmit`, `vite build`, and `npm run docs:api`.
+- [x] Reproducible Hengelo `S1`–`S5` scaling JSON (`benchmarks/results/tkt019-hengelo-scaling.json`) + Markdown analysis report (`docs/reports/tkt019-hengelo-scaling-report.md`) incorporating the project owner's Windows S1–S5 hardware/host measurements and root-cause analysis.
+- [x] Focused automated regression tests (`src/world/RegionalScalabilityBenchmark.test.ts`), updated docs (`docs/guides/benchmarking-and-profiling.md`, `docs/STATUS.md`), clean `tsc --noEmit`, `vite build`, and `npm run docs:api`.
 - [x] Narrowly scoped follow-up optimization ticket (`tickets/TKT-020-planar-surface-and-road-blocker-scaling-optimization.md`) filed with baseline comparisons, geometry-equivalence requirements, and regression test contracts.
 
-## Key Verified Findings (`benchmarks/results/tkt019-hengelo-scaling.json` & `docs/tkt019-hengelo-scaling-report.md`)
+## Key Verified Findings (`benchmarks/results/tkt019-hengelo-scaling.json` & `docs/reports/tkt019-hengelo-scaling-report.md`)
 
 1. **Owner Windows Scaling Progression (`Intel Core i7-14650HX`, 16 GB RAM, `commit dc422d200874`, `gitDirty: true`)**:
    - **`production-legacy`**: Completed **`S1` (`86.4 ms`)**, **`S2` (`458.1 ms`)**, **`S3` (`3,131.7 ms`, `650.4 MB` peak RSS)**, and **`S4` (`14,448.1 ms` median scene build, `11,020.2 ms` planar resolution, `1,106.1 MB` / `1.11 GB` peak RSS, `39.74 MB` `cpuBufferMemory`, `272` meshes, `606,126` base / `1,366,736` instanced triangles)**. Halted at **`S5` (`4 × 4 km`)** due to `120 s` wall-clock timeout during `iter_1_scene_build`.
@@ -80,7 +80,7 @@ Empirically measure CPU pipeline performance, memory footprint, resource cleanup
 
 ## Related Files and Documentation
 - Extraction & Infrastructure: `benchmarks/prepareHengeloScalingDatasets.ts`, `benchmarks/scalingDatasets.ts`, `benchmarks/scalingWorker.ts`, `benchmarks/scalingRunner.ts`, `benchmarks/scalingReport.ts`, `benchmarks/types.ts`, `benchmarks/datasets/hengelo-scaling/manifest.json`
-- Benchmark Artifact & Analysis Report: `benchmarks/results/tkt019-hengelo-scaling.json`, `docs/tkt019-hengelo-scaling-report.md`
+- Benchmark Artifact & Analysis Report: `benchmarks/results/tkt019-hengelo-scaling.json`, `docs/reports/tkt019-hengelo-scaling-report.md`
 - Follow-Up Optimization Ticket: `tickets/TKT-020-planar-surface-and-road-blocker-scaling-optimization.md`
 - Source Instrumentation: `src/world/GeometryBuilder.ts`
 - Tests: `src/world/RegionalScalabilityBenchmark.test.ts`

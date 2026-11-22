@@ -1,7 +1,7 @@
 # TKT-028 Milestone M2-B: Tile Streaming Performance & Memory Validation Report
 
 > **Document Status (`2026-11-21`)**: **M2-B Validation Infrastructure & Synthetic/Lifecycle Verification Complete; Canonical `8 × 8` Hengelo Hardware GPU Run Pending Project-Owner Execution**  
-> **Ticket**: [`TKT-028`](../tickets/TKT-028-regional-tiling-streaming-lod.md) (`in_progress` — `M1a` & `M1b` accepted, `M2-A` visually accepted, `M2-B` diagnostic validation)  
+> **Ticket**: [`TKT-028`](../../tickets/TKT-028-regional-tiling-streaming-lod.md) (`in_progress` — `M1a` & `M1b` accepted, `M2-A` visually accepted, `M2-B` diagnostic validation)  
 > **Scope Constraint**: Diagnostic evaluation **only** — preserves the `512 m` tile grid, `OSMTILE1` codec (`BAKE_SCHEMA_VERSION = '1.1.0'`), shared `ThemeMaterialRegistry`, `CameraController` `minZoom = 0.15`, and existing `GeometryBuilder` batching with **zero performance optimizations implemented**.
 
 ---

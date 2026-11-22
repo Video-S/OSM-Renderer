@@ -5,9 +5,9 @@
 - **Author**: Core Infrastructure & Rendering Engineering
 - **Date**: 2026-11-09 (Updated with Project Owner Corrections)
 - **Governing ADRs**: 
-  - [`ADR-0008: Hybrid Railway Rendering and UV-Ribbon Architecture`](../docs/decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) (Authoritative for Candidate B production railway renderer)
-  - [`ADR-0009: Infrastructure Graph Topology`](../docs/decisions/ADR-0009-infrastructure-graph-topology.md) (Authoritative for railway graph, switches, and flat crossings)
-  - [`ADR-0010: Surface-First At-Grade Road Rendering (E2+)`](../docs/decisions/ADR-0010-surface-first-road-rendering.md) (Preferred architectural pattern for planar surface occupancy)
+  - [`ADR-0008: Hybrid Railway Rendering and UV-Ribbon Architecture`](../decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) (Authoritative for Candidate B production railway renderer)
+  - [`ADR-0009: Infrastructure Graph Topology`](../decisions/ADR-0009-infrastructure-graph-topology.md) (Authoritative for railway graph, switches, and flat crossings)
+  - [`ADR-0010: Surface-First At-Grade Road Rendering (E2+)`](../decisions/ADR-0010-surface-first-road-rendering.md) (Preferred architectural pattern for planar surface occupancy)
 
 ---
 
@@ -58,7 +58,7 @@ Railway rendering encompasses fundamentally different physical layers that must 
 ### 1.2 Discrepancies and Clarifications Between Code and Plans
 
 - **Discrepancy 1: `topologyRailways=graph` resolution**:
-  - `docs/goalpost-2-plan.md` implied `graph` mode would be wired during Stage E2. In reality, `InfrastructureRenderAdapter.ts` explicitly deferred graph railway rendering:
+  - `docs/plans/goalpost-2-plan.md` implied `graph` mode would be wired during Stage E2. In reality, `InfrastructureRenderAdapter.ts` explicitly deferred graph railway rendering:
     > "Graph-driven railway rendering `'graph'` remains deferred to Stage E3; setting `topologyRailways=graph` in Stage E2 resolves safely to `'legacy'`."
   - Therefore, the runtime engine currently runs `buildRailwayInfrastructure` directly on `data.railways` (the unsimplified, chained GeoJSON array). The graph descriptors created in E1 are validated in tests but are **not yet consumed by the 3D scene builder**.
 - **Discrepancy 2: Geometric switch-blade tapering vs. Graph switch confirmation**:

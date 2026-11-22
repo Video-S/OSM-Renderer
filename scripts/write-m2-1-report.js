@@ -31,7 +31,7 @@ Per review instructions, **Candidate B is the leading visual direction** due to 
 4. **LOD Transition Quantification**:
    - Measured empirical visual deltas over a continuous zoom sweep (\`4.3\` to \`4.7\`): Candidate B's cross-representation delta (0.71% mean grayscale change, 2.99% pixels changed > 8%) is comparable to Candidate A's normal camera zoom delta over the same span (0.53% mean change, 2.43% pixels changed). Same-zoom representation delta at \`zoom = 4.6\` is 0.30% mean grayscale difference.
 5. **Benchmark Integrity & Single Source of Truth**:
-   - All benchmark metrics in this report, test outputs, and committed data derive strictly from [\`docs/m2-1-baseline-data.json\`](./m2-1-baseline-data.json). Timings report medians and min–max spread across 5 runs (separating cold start from warm runs), distinguishing Node CPU builds from headless browser WebGL telemetry.
+   - All benchmark metrics in this report, test outputs, and committed data derive strictly from [\`docs/reports/m2-1-baseline-data.json\`](./m2-1-baseline-data.json). Timings report medians and min–max spread across 5 runs (separating cold start from warm runs), distinguishing Node CPU builds from headless browser WebGL telemetry.
 
 ---
 
@@ -98,7 +98,7 @@ To guarantee geometric rigor beyond mere triangle counts, \`src/world/Performanc
 
 ## 3. Reconsideration of Close-Zoom Sleeper Density
 
-The specification in \`docs/geometry-and-rendering.md\` outlines canonical dimensions:
+The specification in \`docs/architecture/geometry-and-rendering.md\` outlines canonical dimensions:
 - Physical sleeper period: \`0.60 m\` (standard European/AREMA mainline spacing $\\approx 1,667$ ties/km)
 - Physical sleeper length (along track): \`0.26 m\` (\`260 mm\`)
 - Physical sleeper width (across track): \`2.50 m\` (\`2500 mm\`)
@@ -180,7 +180,7 @@ To isolate the representation change from camera zoom scaling:
 
 ## 6. Reproducible Goalpost 1 Performance Baseline & Benchmark Integrity
 
-All benchmark figures are derived strictly from [\`docs/m2-1-baseline-data.json\`](./m2-1-baseline-data.json) ($N = 5$ runs: 1 cold start + 4 warm runs).
+All benchmark figures are derived strictly from [\`docs/reports/m2-1-baseline-data.json\`](./m2-1-baseline-data.json) ($N = 5$ runs: 1 cold start + 4 warm runs).
 
 ### 6.1 Benchmark Environment & Specs
 - **Hardware & Host OS**: Linux \`x86_64\`, Intel Xeon container environment.
@@ -296,5 +296,5 @@ Synthetic switchyard fixtures represent idealized track geometry. To establish r
 - Neither candidate is approved for production integration into \`src/world/GeometryBuilder.ts\` until the reviewer formally signs off on the M2.1 decision gate.
 `;
 
-fs.writeFileSync('docs/m2-1-railway-prototype-report.md', report, 'utf8');
-console.log('Successfully wrote docs/m2-1-railway-prototype-report.md');
+fs.writeFileSync('docs/reports/m2-1-railway-prototype-report.md', report, 'utf8');
+console.log('Successfully wrote docs/reports/m2-1-railway-prototype-report.md');

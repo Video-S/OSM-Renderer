@@ -1,6 +1,6 @@
 # Goalpost 2 — Infrastructure Rendering & Robustness: Approved Technical Proposal & Implementation Plan
 
-> **Historical plan note (2026-11-22):** This document preserves the 2026-10-31 planned sequence, requirements and benchmark assumptions. It is **not** a live checklist of what remains authorized or unimplemented. E2+/R+ are now the sole production infrastructure renderers (TKT-026 closed); offline regional 1,024 m tiled streaming and an accepted 16 km pilot exist (ADRs 0011–0013). See [current status](./STATUS.md) and [current architecture](./architecture.md). Broader Twente, LOD1–LOD3 and gameplay have separate acceptance gates.
+> **Historical plan note (2026-11-22):** This document preserves the 2026-10-31 planned sequence, requirements and benchmark assumptions. It is **not** a live checklist of what remains authorized or unimplemented. E2+/R+ are now the sole production infrastructure renderers (TKT-026 closed); offline regional 1,024 m tiled streaming and an accepted 16 km pilot exist (ADRs 0011–0013). See [current status](../STATUS.md) and [current architecture](../architecture/overview.md). Broader Twente, LOD1–LOD3 and gameplay have separate acceptance gates.
 
 > **Status**: Approved — Milestone 2.1 (`TKT-002`) Authorized for Execution  
 > **Date**: 2026-10-31  
@@ -309,7 +309,7 @@ flowchart LR
   - Extract `src/world/infrastructure/railways/RailwayTopology.ts` and `RailwayGeometryBuilder.ts`.
   - Leave road, junction, bridge, tunnel (`BridgeAndTunnelBuilder.ts`), and barrier implementations in place.
   - Replace Stage 5 of `GeometryBuilder.ts` with a clean delegation call to `RailwayGeometryBuilder`, removing `RailClearanceSpatialIndex`, `resolveRailPolylineClearance`, `scopeSleeperGrid`, and `applyRibbonMinScreenWidthShader`.
-  - Update `docs/geometry-and-rendering.md` (Section 7) and `ADR-0005` / new railway ADR to match the verified implementation.
+  - Update `docs/architecture/geometry-and-rendering.md` (Section 7) and `ADR-0005` / new railway ADR to match the verified implementation.
 - **Dependencies**: Milestone 2.1 visual verification approval.
 - **Acceptance Criteria**:
   1. `RailwayGeometryBuilder`, `RailwayTopology`, and `UvRibbonBuilder` have clear, single-purpose responsibilities and pass standalone unit tests (`src/world/RailwayRendering.test.ts`).
@@ -360,7 +360,7 @@ flowchart LR
   - Re-run the 7-metric benchmark suite across all 3 reference datasets and compare against the M2.1 baseline.
   - Target the top measured CPU bottleneck in `GeometryBuilder.ts` (currently the sequential `O(N × M)` `placedRoadFootprints` bounding-box scan and redundant `polygon-clipping` calls on 1D portal-touching roads) using a 2D uniform spatial grid index and portal-touch fast-skip.
   - Audit `SceneResourceManager` disposal and `renderer.info.memory` across repeated dataset loads and theme transitions.
-  - Finalize documentation updates (`docs/STATUS.md`, `docs/architecture.md`, `docs/geometry-and-rendering.md`, `docs/testing-and-diagnostics.md`, and ADRs).
+  - Finalize documentation updates (`docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/geometry-and-rendering.md`, `docs/guides/testing-and-diagnostics.md`, and ADRs).
 - **Dependencies**: Milestones 2.1–2.4.
 - **Acceptance Criteria**:
   1. Complete before-and-after benchmark table (M2.1 Baseline vs. M2.5 Final) documented for all 3 reference datasets across all 7 metrics.
@@ -399,5 +399,5 @@ flowchart LR
   - Update `ADR-0005-multi-component-railways.md` and add `ADR-0008` documenting the M2.1 experimental findings and the chosen railway rendering architecture.
   - Add `ADR-0009` documenting the domain-preserving `InfrastructureGraph` taxonomy (intra-modal junctions/switches vs. grade transitions vs. non-traversable level-crossing surface interactions).
 - **`docs/`**:
-  - Synchronize `docs/geometry-and-rendering.md` (Section 7 railways, level crossings, and conservative road markings).
-  - Synchronize `docs/STATUS.md` and `docs/testing-and-diagnostics.md` (correcting the theme list to `tactical`, `daylight`, `CLASSIFIED`, `blueprint` and recording the M2.1–M2.5 benchmark metrics).
+  - Synchronize `docs/architecture/geometry-and-rendering.md` (Section 7 railways, level crossings, and conservative road markings).
+  - Synchronize `docs/STATUS.md` and `docs/guides/testing-and-diagnostics.md` (correcting the theme list to `tactical`, `daylight`, `CLASSIFIED`, `blueprint` and recording the M2.1–M2.5 benchmark metrics).

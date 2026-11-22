@@ -1,6 +1,6 @@
 # Project History
 
-**What this is:** a short account of how OSM Renderer got here. It explains the important changes and lessons, without trying to document every experiment or ticket. For what works **today**, see [Current Status](./STATUS.md). For technical decisions and evidence, see the [ADRs](./decisions/README.md) and [tickets](../tickets/).
+**What this is:** a short account of how OSM Renderer got here. It explains the important changes and lessons, without trying to document every experiment or ticket. For what works **today**, see [Current Status](STATUS.md). For technical decisions and evidence, see the [ADRs](decisions/README.md) and [tickets](../tickets/).
 
 ## The story so far
 
@@ -20,7 +20,7 @@ The turning point was **surface-first geometry**: construct road areas first and
 
 **Lesson:** a correct connectivity graph and a visually correct road surface are different problems. Both matter.
 
-[Road decision](./decisions/ADR-0010-surface-first-road-rendering.md) · [Railway decision](./decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) · [Discarded BGT research](../research/road-surface-reconstruction/README.md)
+[Road decision](decisions/ADR-0010-surface-first-road-rendering.md) · [Railway decision](decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md) · [Discarded BGT research](research/road-surface-reconstruction/README.md)
 
 ### 3. From one scene to a streamed world (19–21 November)
 
@@ -30,7 +30,7 @@ We pinned a reproducible Overijssel OSM snapshot and introduced a shared regiona
 
 **Lesson:** large geographic coverage does not require all of its geometry in browser memory at once.
 
-[Baked tiles and streaming](./decisions/ADR-0011-baked-tiles-and-runtime-streaming.md) · [Source data](../tickets/TKT-027-overijssel-snapshot-integrity.md)
+[Baked tiles and streaming](decisions/ADR-0011-baked-tiles-and-runtime-streaming.md) · [Source data](../tickets/TKT-027-overijssel-snapshot-integrity.md)
 
 ### 4. First regional success—and a testing lesson (21–22 November)
 
@@ -42,7 +42,7 @@ That did **not** prove that every road, railway, or surface is continuous across
 
 **Lesson:** always verify which dataset is actually loaded before diagnosing renderer defects.
 
-[Regional mosaics](./decisions/ADR-0012-bounded-regional-mosaics.md) · [Missing-road investigation](../tickets/TKT-033-missing-road-rendering.md)
+[Regional mosaics](decisions/ADR-0012-bounded-regional-mosaics.md) · [Missing-road investigation](../tickets/TKT-033-missing-road-rendering.md)
 
 ### 5. Expanding to Twente (22 November onward)
 
@@ -56,4 +56,4 @@ At the time of this record, the full bake, cross-boundary checks, performance as
 
 The immediate product is still **the map renderer**. The priority is to finish regional correctness and performance work, then simplify and maintain the codebase. A large-scale zombie game is a possible later application, **not an implemented or currently approved feature**.
 
-This history should change only when a meaningful new chapter occurs. Routine status updates belong in [STATUS.md](./STATUS.md); design rationale belongs in the [ADRs](./decisions/README.md).
+This history should change only when a meaningful new chapter occurs. Routine status updates belong in [STATUS.md](STATUS.md); design rationale belongs in the [ADRs](decisions/README.md).

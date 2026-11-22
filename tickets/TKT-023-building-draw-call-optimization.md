@@ -111,4 +111,4 @@ Measured on the frozen `benchmarks/datasets/hengelo-scaling/hengelo-s4-2km.geojs
 ## Related files and documentation
 - Source: `src/world/GeometryBuilder.ts` (`mergeBuildingItemsByMaterial`, Stage 9 `buildingsByBucket`)
 - Tests: `src/world/BuildingBatching.test.ts`, `src/world/FeatureCoverage.test.ts`, `src/world/GeometryBuilder.test.ts`
-- Documentation: `docs/geometry-and-rendering.md`, `docs/STATUS.md`
+- Documentation: `docs/architecture/geometry-and-rendering.md`, `docs/STATUS.md`

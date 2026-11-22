@@ -9,7 +9,7 @@
 
 ## Context and problem
 
-The synchronous single-scene OSM geometry builder works for bounded local areas but cannot be scaled naively to a whole region: parsing, surface Boolean operations, mesh generation, WebGL submission and residency would grow with the entire map. Local equirectangular coordinates from [ADR-0001](./ADR-0001-geographic-coordinates-and-local-projection.md) are useful for live/local queries but are not the common grid used by large offline mosaics.
+The synchronous single-scene OSM geometry builder works for bounded local areas but cannot be scaled naively to a whole region: parsing, surface Boolean operations, mesh generation, WebGL submission and residency would grow with the entire map. Local equirectangular coordinates from [ADR-0001](ADR-0001-geographic-coordinates-and-local-projection.md) are useful for live/local queries but are not the common grid used by large offline mosaics.
 
 ## Decision
 
@@ -37,4 +37,4 @@ The present design shifts costly synthesis offline and bounds browser residency,
 
 ## Scope and related decisions
 
-Complements, **does not wholly supersede**, [ADR-0001](./ADR-0001-geographic-coordinates-and-local-projection.md): equirectangular is the local/live path; UTM is the offline tiled path. Related to [ADR-0005](./ADR-0005-source-feature-provenance-and-diagnostics.md), [ADR-0006](./ADR-0006-gpu-resource-lifecycle-and-disposal.md), [ADR-0009](./ADR-0009-infrastructure-graph-topology.md), [ADR-0010](./ADR-0010-surface-first-road-rendering.md) and [ADR-0012](./ADR-0012-bounded-regional-mosaics.md).
+Complements, **does not wholly supersede**, [ADR-0001](ADR-0001-geographic-coordinates-and-local-projection.md): equirectangular is the local/live path; UTM is the offline tiled path. Related to [ADR-0005](ADR-0005-source-feature-provenance-and-diagnostics.md), [ADR-0006](ADR-0006-gpu-resource-lifecycle-and-disposal.md), [ADR-0009](ADR-0009-infrastructure-graph-topology.md), [ADR-0010](ADR-0010-surface-first-road-rendering.md) and [ADR-0012](ADR-0012-bounded-regional-mosaics.md).

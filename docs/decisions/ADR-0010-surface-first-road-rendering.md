@@ -2,7 +2,7 @@
 
 - **Status**: Accepted — Promoted to Sole Production Road Architecture (`TKT-026`, `closed` 2026-11-19)
 - **Date**: 2026-11-09
-- **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](./ADR-0002-boundary-derived-road-junction-meshing.md). **Related, not superseded:** [`ADR-0009`](./ADR-0009-infrastructure-graph-topology.md) (topology and source-data contracts remain authoritative)
+- **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](ADR-0002-boundary-derived-road-junction-meshing.md). **Related, not superseded:** [`ADR-0009`](ADR-0009-infrastructure-graph-topology.md) (topology and source-data contracts remain authoritative)
 
 > **Reading note (2026-11-22):** The original "Controlled Experimental Rollout" text below is historical. The later **Production Promotion Update (TKT-026, 2026-11-19)** records the current outcome: E2+ roads and R+ railways are the sole production renderers. Do not treat pre-promotion alternatives as currently selectable.
 
@@ -52,7 +52,7 @@ The project owner repeatedly reports substantially improved real-world visuals. 
 
 Legacy remains the default. Before switching defaults: resolve or document the remaining diagnostic case with regression fixtures; verify geometry and source attribution; benchmark whole-Hengelo and progressively larger Twente tiles; obtain owner visual approval. The initial benchmark does not prove Twente-scale performance.
 
-Related: [technical design](../e2-plus-surface-first-road-rendering.md), [history](../project-history.md), [roadmap](../road-rendering-roadmap.md), [benchmark](../../research/surface-first-road-rendering/baseline-results.json).
+Related: [technical design](../architecture/e2-plus-surface-first-road-rendering.md), [history](../project-history.md), [roadmap](../plans/road-rendering-roadmap.md), [benchmark](../research/surface-first-road-rendering/baseline-results.json).
 
 ## Production Promotion Update (`TKT-026` — Closed 2026-11-19)
 

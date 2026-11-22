@@ -11,7 +11,7 @@ updated: 2026-11-09
 # TKT-011: M2.3-E3-A2 Graph-Informed Railway Switch Rendering
 
 ## Summary
-Implement **Stage E3-A2 (`M2.3-E3-A2`)** of Milestone 2.3 per accepted [M2.3-E3 Implementation Proposal](../docs/m2-3-e3-railway-rendering-proposal.md): utilize verified railway graph descriptors (`RailwayNodeRenderDescriptor.turnoutTopology` and `RailwayEdgeRenderDescriptor`) to guide turnout bearer sharing, sleeper support attribution, and diverging rail tapering under an explicit, opt-in switch policy, resolving missing and misaligned sleepers without rewriting Candidate B or altering legacy defaults.
+Implement **Stage E3-A2 (`M2.3-E3-A2`)** of Milestone 2.3 per accepted [M2.3-E3 Implementation Proposal](../docs/plans/m2-3-e3-railway-rendering-proposal.md): utilize verified railway graph descriptors (`RailwayNodeRenderDescriptor.turnoutTopology` and `RailwayEdgeRenderDescriptor`) to guide turnout bearer sharing, sleeper support attribution, and diverging rail tapering under an explicit, opt-in switch policy, resolving missing and misaligned sleepers without rewriting Candidate B or altering legacy defaults.
 
 ## Context
 Stage E3-A1 (`TKT-010`) successfully wired `RailwayEdgeRenderDescriptor` consumption into Candidate B under `?topologyRailways=graph`. Visual verification by the project owner confirmed that while general rendering parity is preserved, historical Candidate B railway defects persist:
@@ -87,6 +87,6 @@ Prior to Stage E3-A2:
 - Source: `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`
 - Source: `src/components/DevToolsPanel.tsx`
 - Tests: `src/world/GraphRailwayRendering.test.ts`
-- Documentation: `docs/m2-3-e3-railway-rendering-proposal.md`
+- Documentation: `docs/plans/m2-3-e3-railway-rendering-proposal.md`
 - Documentation: `docs/STATUS.md`
 

@@ -24,7 +24,7 @@ Implemented in this milestone without altering E2+'s geometry generation algorit
 4. **Source-Feature Provenance Verification (Task A4)**:
    - Audits `faceRanges`, `sourceFeatureId`, `sourceFeatureIds`, `RoadClass` subtype, preserved `osmTags`, spatial bounding envelope containment across provenance splits (`#seg0`, `#seg1`), deduplication lineage, and `fullySubtractedRoadIds`.
 5. **Lightweight Performance Instrumentation (Tasks B1–B3)**:
-   - Stage-separated wall-clock timings (`GraphRoadGenerationTiming` on `roadsGroup.userData.graphRoadTiming`) and deterministic geometry/Boolean counters (`GraphRoadRenderStats` on `roadsGroup.userData.graphRoadStats`), surfaced in `DevToolsPanel.tsx`, `window.__M21_LAB__.getSnapshot()`, and `research/surface-first-road-rendering/baseline-results.json`.
+   - Stage-separated wall-clock timings (`GraphRoadGenerationTiming` on `roadsGroup.userData.graphRoadTiming`) and deterministic geometry/Boolean counters (`GraphRoadRenderStats` on `roadsGroup.userData.graphRoadStats`), surfaced in `DevToolsPanel.tsx`, `window.__M21_LAB__.getSnapshot()`, and `docs/research/surface-first-road-rendering/baseline-results.json`.
 
 ---
 

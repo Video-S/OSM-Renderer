@@ -50,7 +50,7 @@ Local Windows setup revealed a reproducible integrity-check mismatch when downlo
 - [x] Historical `benchmarks/datasets/hengelo-scaling/manifest.json` (`53d1f2d0...`) and archived `TKT-019`/`TKT-022` records preserved untouched.
 - [x] Strict SHA-256 verification enforced on both download and index build (mismatched downloads discarded; actionable error output includes expected vs. actual SHA-256, MD5, byte count, affected path, and recovery commands).
 - [x] SQLite `metadata` records `snapshot_mode` (`'canonical' | 'custom'`), distinct `snapshot_id`, `source_sha256`, `source_md5`, and `source_bytes`; `build-overijssel-index.ts`, `OverijsselOsmStore.ts`, and `server.ts` prevent reusing incompatible SQLite indexes.
-- [x] Custom snapshot workflow and Windows PowerShell invocations (`npx tsx scripts/setup-overijssel.ts ...`, `OVERIJSSEL_*` env vars, quoted `"--"`, and `npm_config_*` fallbacks) work and are documented in `docs/offline-overijssel-osm-dataset.md`.
+- [x] Custom snapshot workflow and Windows PowerShell invocations (`npx tsx scripts/setup-overijssel.ts ...`, `OVERIJSSEL_*` env vars, quoted `"--"`, and `npm_config_*` fallbacks) work and are documented in `docs/architecture/offline-overijssel-osm-dataset.md`.
 - [x] Focused synthetic-fixture verification (`OverijsselOfflineStore.test.ts` + `npm run lint`) passes without downloading/indexing the full Overijssel dataset inside AI Studio; `TKT-026` remains untouched (`in_progress` pending owner visual approval).
 
 ## Implementation notes
@@ -68,4 +68,4 @@ Local Windows setup revealed a reproducible integrity-check mismatch when downlo
 - Source: `src/server/osm/overijsselConfig.ts`, `src/server/osm/OverijsselIndexBuilder.ts`, `src/server/osm/OverijsselOsmStore.ts`, `server.ts`, `.env.example`
 - Scripts: `scripts/fetch-overijssel-pbf.ts`, `scripts/build-overijssel-index.ts`, `scripts/setup-overijssel.ts`
 - Tests: `src/world/OverijsselOfflineStore.test.ts`
-- Documentation: `docs/offline-overijssel-osm-dataset.md`, `docs/STATUS.md`, `benchmarks/datasets/hengelo-scaling/manifest.json`
+- Documentation: `docs/architecture/offline-overijssel-osm-dataset.md`, `docs/STATUS.md`, `benchmarks/datasets/hengelo-scaling/manifest.json`

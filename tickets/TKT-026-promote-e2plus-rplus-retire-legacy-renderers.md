@@ -42,7 +42,7 @@ Two distinct `4 × 4 km` (`16.00 km²`) pre-migration benchmark runs were record
 
 ### Run A: Headless SwiftShader Baseline (`1280 × 800`, Cold SQLite Miss on Live `r = 2000 m`) vs. `TKT-025`
 
-Collected in isolated Playwright Chromium (`1280 × 800`, ANGLE Vulkan SwiftShader) matching the exact [`TKT-025`](./TKT-025-large-map-loading-bottleneck-investigation.md) environment (`roads: 'legacy'` cold-miss baseline vs. `E2+/R+` `roads: 'graph-surface', railways: 'graph-R+'`):
+Collected in isolated Playwright Chromium (`1280 × 800`, ANGLE Vulkan SwiftShader) matching the exact [`TKT-025`](TKT-025-large-map-loading-bottleneck-investigation.md) environment (`roads: 'legacy'` cold-miss baseline vs. `E2+/R+` `roads: 'graph-surface', railways: 'graph-R+'`):
 
 | Metric | S5 Frozen (`4 × 4 km`) — Legacy (`TKT-025`) | S5 Frozen (`4 × 4 km`) — **E2+/R+** (Run A) | Live Overijssel (`4 × 4 km`, cold) — Legacy (`TKT-025`) | Live Overijssel (`4 × 4 km`, cold) — **E2+/R+** (Run A) |
 |---|---|---|---|---|

@@ -87,4 +87,4 @@ Make the CPU and WebGL browser benchmarking infrastructure (`benchmarks/`, `src/
 - Source: `src/types/BenchmarkTelemetry.ts`, `src/world/prototype/BenchmarkRailwayTelemetry.ts`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`, `src/app/App.tsx`, `benchmarks/cliAndServer.ts`, `benchmarks/browserRunner.ts`, `benchmarks/cpuRunner.ts`, `benchmarks/compare.ts`, `benchmarks/serializer.ts`, `benchmarks/types.ts`, `benchmarks/environment.ts`, `package.json`
 - Baselines: `benchmarks/baselines/cpu-baseline.json`, `benchmarks/baselines/browser-baseline.json` (`v1.1.0`)
 - Tests & Follow-Up: `src/world/BenchmarkReliability.test.ts`, `src/world/BenchmarkInfrastructure.test.ts`, `tickets/TKT-018-full-test-suite-resource-and-memory-investigation.md`
-- Documentation: `docs/benchmarking-and-profiling.md`, `docs/testing-and-diagnostics.md`, `docs/STATUS.md`, `docs/README.md`
+- Documentation: `docs/guides/benchmarking-and-profiling.md`, `docs/guides/testing-and-diagnostics.md`, `docs/STATUS.md`, `docs/README.md`

@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-We designed, implemented, and evaluated an independent, mathematically defensible algorithm (`research/road-surface-reconstruction/reconstruct.py`) that reconstructs physical motor-vehicle carriageway surfaces and junction geometry from OpenStreetMap (OSM) data in projected Dutch national grid coordinates (`EPSG:28992`), benchmarked against official Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) ground-level carriageway polygons.
+We designed, implemented, and evaluated an independent, mathematically defensible algorithm (`docs/research/road-surface-reconstruction/reconstruct.py`) that reconstructs physical motor-vehicle carriageway surfaces and junction geometry from OpenStreetMap (OSM) data in projected Dutch national grid coordinates (`EPSG:28992`), benchmarked against official Dutch **BGT** (*Basisregistratie Grootschalige Topografie*) ground-level carriageway polygons.
 
 ### Key Quantitative Findings
 
@@ -146,5 +146,5 @@ This is an explicit project decision **not to adopt** the experimental algorithm
 ### Disposition
 
 - **Production Integration**: **None**. Production road rendering remains on the active TypeScript graph architecture (`M2.3-E2` / `TKT-008`).
-- **Archive Status**: The complete Python implementation (`reconstruct.py`), test suite (`tests/`), validation scripts (`evaluate.py`, `fetch_holdout_data.py`), visual comparison figures (`figures/`), mathematical formulation (`MODEL.md`), and raw GeoJSON outputs (`outputs/`) are preserved as-is under `research/road-surface-reconstruction/` for historical, benchmarking, and reference purposes. No further development or maintenance of this experimental branch is planned.
+- **Archive Status**: The complete Python implementation (`reconstruct.py`), test suite (`tests/`), validation scripts (`evaluate.py`, `fetch_holdout_data.py`), visual comparison figures (`figures/`), mathematical formulation (`MODEL.md`), and raw GeoJSON outputs (`outputs/`) are preserved as-is under `docs/research/road-surface-reconstruction/` for historical, benchmarking, and reference purposes. No further development or maintenance of this experimental branch is planned.
 

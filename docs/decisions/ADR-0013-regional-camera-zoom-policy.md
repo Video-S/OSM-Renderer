@@ -32,6 +32,6 @@ An orthographic camera's screen coverage expands rapidly as zoom decreases. The 
 - `src/app/App.tsx`, `src/components/DevToolsPanel.tsx`
 - `benchmarks/regionalFrameCostRunner.ts`
 - `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`
-- [ADR-0007](./ADR-0007-orthographic-camera-framing-and-navigation.md), [ADR-0011](./ADR-0011-baked-tiles-and-runtime-streaming.md), [TKT-031](../../tickets/TKT-031-regional-frame-cost-investigation.md)
+- [ADR-0007](ADR-0007-orthographic-camera-framing-and-navigation.md), [ADR-0011](ADR-0011-baked-tiles-and-runtime-streaming.md), [TKT-031](../../tickets/TKT-031-regional-frame-cost-investigation.md)
 
 This ADR **extends rather than supersedes** ADR-0007: orthographic projection and framing remain, but effective zoom limits now depend on the active dataset.

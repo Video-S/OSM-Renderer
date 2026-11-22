@@ -83,5 +83,5 @@ Prior to Stage B:
 ## Related files and documentation
 - Source: `src/world/infrastructure/topology/types.ts`, `src/world/infrastructure/topology/OsmNodeIdEnricher.ts`, `src/world/infrastructure/topology/RoadNetworkBuilder.ts`, `src/world/infrastructure/topology/InfrastructureGraph.ts`, `src/world/TopologicalNodeIndex.ts`, `src/world/LocalGeoJsonProvider.ts`, `src/types/MapFeature.ts`, `server.ts`
 - Tests: `src/world/RoadNetworkTopology.test.ts`, `src/world/JunctionAndTopology.test.ts`
-- Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture.md`, `docs/data-pipeline-and-feature-support.md`, `docs/testing-and-diagnostics.md`
+- Documentation: `docs/decisions/ADR-0009-infrastructure-graph-topology.md`, `docs/STATUS.md`, `docs/architecture/overview.md`, `docs/architecture/data-pipeline-and-feature-support.md`, `docs/guides/testing-and-diagnostics.md`
 

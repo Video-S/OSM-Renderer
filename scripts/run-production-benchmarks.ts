@@ -73,8 +73,8 @@ async function main() {
   };
 
   console.table(results);
-  fs.writeFileSync('docs/m2-2-production-benchmarks.json', JSON.stringify(results, null, 2));
-  console.log('Saved benchmark results to docs/m2-2-production-benchmarks.json');
+  fs.writeFileSync('docs/reports/m2-2-production-benchmarks.json', JSON.stringify(results, null, 2));
+  console.log('Saved benchmark results to docs/reports/m2-2-production-benchmarks.json');
 }
 
 main().catch((err) => {

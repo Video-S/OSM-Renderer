@@ -434,6 +434,94 @@ passing.
 256-tile Twente region, then separate source-based and human-only
 regional visual/continuity checks. No automatic LLM visual QA.
 
+## Decision gate: owner authorizes full Twente candidate rebake (2026-11-22)
+
+**Decision: APPROVED for an isolated, full 16-shard / 256-tile Twente
+candidate rebake, NOT approved for replacement/promotion of the existing
+regional mosaic.** Use the source-backed TKT-033 graph-road fixes. All
+original 11 missing-crossing investigations are accounted for with bounded
+evidence, but no 4×4 regional replacement pack has yet been produced. Human
+visual and regional cross-shard acceptance remain open.
+
+**Build provenance:** run on branch
+`tkt-033-shared-road-geometry-correctness` (PR #9, stacked on TKT-032),
+same immutable `overijssel-261114-8ae28196` source index / full SHA
+`8ae281964831675c89f45db6aaa3566168a224767d3313c7068ad255c5f221c0`.
+Use the unchanged Twente pilot config (16×16 tiles at 1024 m, 4×4 tile
+shards, 64 m collars, 1024 m query context). The **existing**
+`data/osm/twente-pilot-1024m/` must not be touched.
+
+**Owner's PowerShell candidate bake (from repo root, server stopped):**
+
+```powershell
+git status --short
+git branch --show-current
+git pull --ff-only
+$candidate = "data/osm/twente-pilot-1024m-tkt033-candidate"
+if (Test-Path $candidate) { throw "Candidate directory already exists; do not reuse an unknown earlier bake" }
+npx tsx scripts/bake-regional-pilot.ts "--out-dir=$candidate"
+if ($LASTEXITCODE -ne 0) { throw "Candidate bake failed; do not promote" }
+npx tsx scripts/verify-regional-mosaic.ts "--index=$candidate/mosaic.json"
+if ($LASTEXITCODE -ne 0) { throw "Candidate integrity verification failed; do not promote" }
+```
+
+Before the command, the checkout should be on the named branch and have no
+unrelated local modifications. `npx tsx` is deliberate: the owner's npm
+consumes `--flag=value` arguments when passed through `npm run ... --`.
+Never pass `--force`, `--max-shards`, reduced dimensions, or the old
+canonical output directory. If interrupted, keep the partial candidate
+for diagnosis; decide whether to resume or create a fresh named candidate
+after inspecting the exact state. A different directory avoids implicit
+reuse of old renderer-revision packs, because existing-shard reuse checks
+source/schema, **not renderer commit revision**.
+
+**Integrity gate before any human viewing:** the verifier must report
+16 source-consistent complete shard packs, 256 decoded tiles, aligned
+manifests and successful hash/decode checks. Size and triangle totals may
+differ from the old 235.68 MiB compressed snapshot; a byte-for-byte match
+is not required and does not prove correct geometry.
+
+**Human-only visual gate, after pack verification:** stop any old dev server;
+then in that same PowerShell process:
+
+```powershell
+$env:OVERIJSSEL_REGIONAL_MOSAIC_PATH = (Resolve-Path "$candidate/mosaic.json").Path
+npm run dev
+```
+
+Open `http://localhost:3000/?m2a=1&region=twente-pilot`.
+The environment variable changes the **source pack path**, not the URL.
+Inspect original Boerrichterkamp missing segment, other TKT-032 missing-road
+witnesses, road/cycleway ownership at Aaltje Noordewierstraat, narrow
+Hilgenhuesweg, sample shard boundaries and controls, rail alignment,
+bridge/tunnel visibility including negative layers, picking, fills and
+streaming. Owner alone decides visual acceptance; no LLM screenshots.
+After stopping the server, remove `Env:OVERIJSSEL_REGIONAL_MOSAIC_PATH`
+and restart to view the original dataset.
+
+**Broader regional source-to-output gate:** the TKT-032 seam auditor
+can be run against the **candidate index** using distinct output files,
+but its fixed-axis 25cm road probes are known to misclassify narrow diagonal
+features. Compare actionable, source-aligned findings and named controls;
+do not treat raw v3 warning totals as a binary pass/fail or as proof of
+missing geometry. Regional acceptance additionally depends on unresolved
+cross-shard road/rail/portal continuity and CI triage.
+
+**CI caveat:** TKT-033 focused diagnostics, typecheck and build passed at
+`c810f6f`; overall CI still has three failing jobs spanning four known
+junction assertions and four other road/rail/elevation tests. Baseline
+equivalence for the latter is unproven. These are **not** blockers to
+generating an isolated diagnostic candidate, but production promotion
+requires explicit severity/baseline review (or fixes) and separate
+TKT-029/TKT-032 sign-off.
+
+**Promotion: explicitly NOT authorized.** Do not delete, overwrite, swap,
+or rename the old accepted 16-shard mosaic. Next evidence requested from
+the owner: new bake completion console summary and `verify-regional-mosaic`
+16-shard/256-tile output, then their human viewer assessment.
+No regional rebake was executed by ChatGPT; the source index and pack
+exist only on the owner's machine.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

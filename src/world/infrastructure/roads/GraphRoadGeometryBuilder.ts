@@ -93,6 +93,8 @@ const STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES = new Set<string>([
  * Minimum triangle area (`m²`) below which an indexed face is classified as degenerate.
  */
 export const MIN_NONDEGENERATE_TRIANGLE_AREA_M2 = 1e-6;
+/** Included in source-backed reports to distinguish a stale local checkout. */
+export const ROAD_TRIANGLE_VALIDATOR_REVISION = 'float32-sliver-pruning-v2';
 
 /**
  * Detailed attribution for a winding or normal-orientation defect detected on an at-grade road,
@@ -521,6 +523,7 @@ export interface RoadGeometryTraceEvent {
   triangleCount?: number;
   polygonCount?: number;
   blockerCount?: number;
+  triangleAudit?: RoadTriangleFailureAudit;
   message?: string;
 }
 
@@ -529,37 +532,112 @@ export interface RoadGeometryTraceTarget {
   events: RoadGeometryTraceEvent[];
 }
 
-function findFirstInvalidRoadTriangle(
-  geo: THREE.BufferGeometry
-): RoadGeometryTraceEvent['invalidTriangle'] {
+
+export interface RoadTriangleFailureAudit {
+  totalFaces: number;
+  upwardFaces: number;
+  areaDegenerateFaces: number;
+  prunableFloat32SliverFaces: number;
+  fatalFaces: number;
+  /** First face that actually causes validation to reject the road. */
+  firstFatal?: NonNullable<RoadGeometryTraceEvent['invalidTriangle']>;
+  /** Bounded geometric evidence; only problematic faces, not all valid faces. */
+  problemFaces: Array<{
+    faceIndex: number;
+    disposition: 'pruned-degenerate' | 'pruned-float32-sliver' | 'fatal-nonfinite' | 'fatal-non-upward';
+    areaSquareMeters?: number;
+    normalY?: number;
+    altitudeMeters?: number;
+    float32UlpMeters?: number;
+    vertices?: [number, number, number][];
+  }>;
+}
+
+/**
+ * Source-filtered diagnostic mirroring validateAndPruneHorizontalGeometry.
+ * In particular, an inverted face discarded as an unresolvable Float32
+ * sliver must NOT be reported as the reason an entire road was rejected.
+ */
+export function inspectRoadTriangleFaces(
+  geo: THREE.BufferGeometry,
+  maxProblemFaces = 24
+): RoadTriangleFailureAudit {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (!pos) return { faceIndex: -1, reason: 'no-valid-faces' };
   const idx = geo.getIndex();
-  const n = Math.floor((idx?.count ?? pos.count) / 3);
-  let valid = 0;
-  for (let i = 0; i < n; i++) {
-    const ids = [0, 1, 2].map(j => idx ? idx.getX(i * 3 + j) : i * 3 + j);
+  const n = pos ? Math.floor((idx?.count ?? pos.count) / 3) : 0;
+  const audit: RoadTriangleFailureAudit = {
+    totalFaces: n,
+    upwardFaces: 0,
+    areaDegenerateFaces: 0,
+    prunableFloat32SliverFaces: 0,
+    fatalFaces: 0,
+    problemFaces: [],
+  };
+  if (!pos) {
+    audit.firstFatal = { faceIndex: -1, reason: 'no-valid-faces' };
+    return audit;
+  }
+  for (let face = 0; face < n; face++) {
+    const ids = [0,1,2].map(j => idx ? idx.getX(face * 3 + j) : face * 3 + j);
     const verts = ids.map(j => [pos.getX(j), pos.getY(j), pos.getZ(j)] as [number, number, number]);
     if (verts.some(v => v.some(x => !Number.isFinite(x)))) {
-      return { faceIndex: i, reason: 'nonfinite', vertices: verts };
+      audit.fatalFaces++;
+      if (!audit.firstFatal) audit.firstFatal = { faceIndex: face, reason: 'nonfinite', vertices: verts };
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({ faceIndex: face, disposition: 'fatal-nonfinite', vertices: verts });
+      }
+      continue;
     }
     const [a,b,c] = verts;
-    const ab = [b[0]-a[0],b[1]-a[1],b[2]-a[2]];
-    const ac = [c[0]-a[0],c[1]-a[1],c[2]-a[2]];
-    const crossY = ab[2]*ac[0]-ab[0]*ac[2];
-    const crossX = ab[1]*ac[2]-ab[2]*ac[1];
-    const crossZ = ab[0]*ac[1]-ab[1]*ac[0];
-    const doubleArea = Math.hypot(crossX,crossY,crossZ);
+    const ax = b[0]-a[0], ay = b[1]-a[1], az = b[2]-a[2];
+    const bx = c[0]-a[0], by = c[1]-a[1], bz = c[2]-a[2];
+    const cx = ay*bz-az*by, cy = az*bx-ax*bz, cz = ax*by-ay*bx;
+    const doubleArea = Math.hypot(cx, cy, cz);
     const area = doubleArea * 0.5;
-    if (area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) continue;
-    const normalY = crossY / doubleArea;
-    if (normalY <= 0.99) {
-      return { faceIndex: i, reason: 'non-upward', areaSquareMeters: area,
-        normalY, vertices: verts };
+    if (!Number.isFinite(area) || area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
+      audit.areaDegenerateFaces++;
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({
+          faceIndex: face, disposition: 'pruned-degenerate', areaSquareMeters: area,
+        });
+      }
+      continue;
     }
-    valid++;
+    const ny = cy / doubleArea;
+    if (ny <= 0.99) {
+      const coords: [number, number][] = [[a[0],a[2]],[b[0],b[2]],[c[0],c[2]]];
+      let longest = 0, coordMax = 0;
+      for (let k=0; k<3; k++) {
+        longest=Math.max(longest,Math.hypot(coords[(k+1)%3][0]-coords[k][0],coords[(k+1)%3][1]-coords[k][1]));
+        coordMax=Math.max(coordMax,Math.abs(coords[k][0]),Math.abs(coords[k][1]));
+      }
+      const altitude = longest > 0 ? doubleArea / longest : 0;
+      const ulp = 2**(Math.floor(Math.log2(Math.max(coordMax,2**-126)))-23);
+      const prunable = hasUnresolvableFloat32Winding(coords,area);
+      if (prunable) {
+        audit.prunableFloat32SliverFaces++;
+      } else {
+        audit.fatalFaces++;
+        if (!audit.firstFatal) audit.firstFatal = {
+          faceIndex: face, reason: 'non-upward', areaSquareMeters: area, normalY: ny, vertices: verts,
+        };
+      }
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({
+          faceIndex: face,
+          disposition: prunable ? 'pruned-float32-sliver' : 'fatal-non-upward',
+          areaSquareMeters: area, normalY: ny, altitudeMeters: altitude,
+          float32UlpMeters: ulp, vertices: verts,
+        });
+      }
+    } else {
+      audit.upwardFaces++;
+    }
   }
-  return valid === 0 ? { faceIndex: -1, reason: 'no-valid-faces' } : undefined;
+  if (!audit.firstFatal && audit.upwardFaces === 0) {
+    audit.firstFatal = { faceIndex: -1, reason: 'no-valid-faces' };
+  }
+  return audit;
 }
 
 export interface GraphRoadGeometryBuildOptions {
@@ -1222,7 +1300,7 @@ export function buildGraphAtGradeRoadGeometries(
     edge: RoadEdgeRenderDescriptor,
     subId: string,
     stage: RoadGeometryTraceEvent['stage'],
-    details: Pick<RoadGeometryTraceEvent, 'invalidTriangle' | 'triangleCount' | 'polygonCount' | 'blockerCount' | 'message'> = {}
+    details: Pick<RoadGeometryTraceEvent, 'invalidTriangle' | 'triangleAudit' | 'triangleCount' | 'polygonCount' | 'blockerCount' | 'message'> = {}
   ): void => {
     if (!trace || !edge.sourceFeatureIds.includes(trace.sourceId)) return;
     trace.events.push({
@@ -1656,13 +1734,18 @@ export function buildGraphAtGradeRoadGeometries(
             unclippedGeo.translate(0, roadElevation, 0);
             if (unclippedGeo.hasAttribute('uv')) unclippedGeo.deleteAttribute('uv');
             if (!validateAndPruneHorizontalGeometry(unclippedGeo)) {
-              // Collect a bounded failure witness before the geometry is disposed.
-              recordTrace(edge, sub.subId, 'invalid-triangles', {
-                invalidTriangle: findFirstInvalidRoadTriangle(unclippedGeo),
-                triangleCount: Math.floor((unclippedGeo.getIndex()?.count ??
-                  unclippedGeo.getAttribute('position').count) / 3),
-                polygonCount: visible.length, blockerCount: blockers.length,
-              });
+              // Only the requested source receives a detailed failure scan.
+              // Match the validator's Float32 sliver policy when selecting
+              // the *fatal* triangle, not merely the first downward face.
+              if (trace && edge.sourceFeatureIds.includes(trace.sourceId)) {
+                const triangleAudit = inspectRoadTriangleFaces(unclippedGeo);
+                recordTrace(edge, sub.subId, 'invalid-triangles', {
+                  invalidTriangle: triangleAudit.firstFatal,
+                  triangleAudit,
+                  triangleCount: triangleAudit.totalFaces,
+                  polygonCount: visible.length, blockerCount: blockers.length,
+                });
+              }
               unclippedGeo.dispose();
               failedInvalidTriangles = true;
             } else if (!tileClipBounds) {
@@ -1679,9 +1762,12 @@ export function buildGraphAtGradeRoadGeometries(
               if (validateAndPruneHorizontalGeometry(clippedGeo)) {
                 geo = clippedGeo;
               } else {
-                recordTrace(edge, sub.subId, 'clip-invalid', {
-                  invalidTriangle: findFirstInvalidRoadTriangle(clippedGeo),
-                });
+                if (trace && edge.sourceFeatureIds.includes(trace.sourceId)) {
+                  const triangleAudit = inspectRoadTriangleFaces(clippedGeo);
+                  recordTrace(edge, sub.subId, 'clip-invalid', {
+                    invalidTriangle: triangleAudit.firstFatal, triangleAudit,
+                  });
+                }
                 clippedGeo.dispose();
                 // Micro-sliver clipped away at tile border; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;

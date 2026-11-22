@@ -249,6 +249,37 @@ After the canonical-source and disposable **4-tile SQLite** source-attributed co
 
 **TKT-033 overall remains open:** the original 256-tile Twente regional mosaic still contains the old bake, other previously observed missing roads have not yet been separately rechecked, and the parent TKT-032 cross-shard gate remains distinct. This is one successfully verified root cause and repair, not blanket acceptance of the whole region. Avoid unnecessary additional manual QA until a focused follow-up on representative remaining source crossings is warranted.
 
+## Remaining original missing-road events — grouped encoded-tile audit prepared (2026-11-22)
+
+Owner approved checking the **other originally missing roads** after visually confirming Boerrichterkamp is back.
+
+Revisited the full TKT-032 v3 canonical `tkt032-seam-audit-v3.json`: there were **11 road crossing events with no physical road triangle on either 25 cm seam inset**, spanning **10 distinct source OSM ways**. The visually fixed `way/6661112` accounts for one event. That leaves **10 crossing events across 9 distinct OSM way IDs** (including two events for `way/221267376`). These were previously human-observed missing roads but **the new geometry result has not yet been measured at those locations**.
+
+Implemented `scripts/verify-remaining-missing-roads.ts`, exposed as **`npm run osm:verify-remaining-missing-roads`**. It uses exactly the ten source IDs, original UTM crossing points and seam axes from the TKT-032 v3 report, not invented locations. To minimize cost, the ten points are grouped into **five** geographically contiguous 2×2 study grids:
+
+| Group | Source ways / events | Pack strategy |
+|---|---|---|
+| `central-east-existing` | `way/874072936`, `way/137733136`, `way/221267376` (twice): **4 events** | Reuse Boerrichterkamp's proven disposable pack, but first require the fixed `way/6661112` control road to be visibly covered at both boundary insets |
+| `west-north-pair` | `way/38892898`, `way/546666718`: **2 events** | Fresh disposable 2×2 pack |
+| `far-northeast` | `way/51932698`: **1 event** | Fresh disposable 2×2 pack |
+| `west-middle-primary` | `way/6666519`: **1 event** | Fresh disposable 2×2 pack |
+| `west-south-pair` | `way/6655700`, `way/14119316`: **2 events** | Fresh disposable 2×2 pack |
+
+Each pack uses the **same immutable canonical OSM source SHA**, actual offline bake/SQLite codec/decoder, the fixed renderer, and the same **768m context margin** as the successfully verified case. For each crossing, query the actual decoded **visible non-underground road triangles** at the exact crossing and two distinct **±25cm seam-inset tile interiors**, with separate source-specific and source-independent physical coverage. Outcome is one of `source-covered-both`, `source-one-sided`, `other-road-covered-both` (possible legitimate priority ownership), or `physical-sample-gap`. Presence on one sampled point **is not** a complete road or full cross-shard topology proof.
+
+The one-command script puts four **new** four-tile SQLite packs plus a single structured combined JSON under `benchmarks/results/tkt033-remaining/first-pass/`. It refuses to overwrite a prior run; `--run-id=second-pass` opts into a new run. The existing Boerrichterkamp pack is **opened read-only** and the canonical regional `data/osm/twente-pilot-1024m` directory remains untouched. Per-group errors are reported without aborting the other checks. CI tests pin all ten source events, geometry bounds/tile seams, safe output path semantics and classifications.
+
+**Owner next:**
+
+```powershell
+git pull --ff-only
+npm run osm:verify-remaining-missing-roads
+```
+
+Upload the **single** resulting `benchmarks/results/tkt033-remaining/first-pass/remaining-roads-report.json` (not any SQLite packs). Analyze specific uncovered or source-asymmetric locations before any larger bake or manual QA. If a group is not genuinely missing due to an OSM source-line displacement or legitimate cross-class ownership, do not misclassify it as a regression.
+
+**No acceptance claimed** for these ten locations until the owner's actual report is reviewed. TKT-033 / PR #9 remain in progress; parent TKT-032 seam continuity is a separate gate.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

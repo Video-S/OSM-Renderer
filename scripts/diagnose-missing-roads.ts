@@ -162,7 +162,7 @@ export function diagnoseMissingRoad(opts: RoadDiagnosisOptions) {
   let region: ReturnType<typeof ingestCanonicalStudyGeoJson> | null = null;
   try {
     region = ingestCanonicalStudyGeoJson(query.geojson, grid);
-    const match = (value: string | undefined, values?: string[]) =>
+    const match = (value: string | undefined, values?: readonly string[]) =>
       value === opts.sourceId || values?.includes(opts.sourceId) === true;
     const original = (query.geojson.features ?? []).filter((f: any) =>
       String(f.id ?? f.properties?.['@id'] ?? f.properties?.id ?? '') === opts.sourceId

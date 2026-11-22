@@ -1,5 +1,188 @@
 import { MapStyleTheme } from '../types/MapFeature';
 
+/**
+ * Natural base themes encode plausible surface materials, not feature categories.
+ * Zoning and building archetypes remain available through inspection/overlays.
+ * Equivalent source classifications get the same color across the entire scene.
+ */
+interface NaturalThemePalette {
+  ground: string;
+  grid: string;
+  wall: string;
+  roof: string;
+  asphalt: string;
+  paving: string;
+  dirt: string;
+  rock: string;
+  ballast: string;
+  sleeper: string;
+  rail: string;
+  water: string;
+  farmland: string;
+  grass: string;
+  park: string;
+  woodland: string;
+  wetland: string;
+  sports: string;
+  tree: string;
+  conifer: string;
+  trunk: string;
+  sand: string;
+  ice: string;
+  sky: string;
+  fog: string;
+  lightIntensity: number;
+}
+
+function createNaturalTheme(
+  id: 'natural_daylight' | 'natural_cartographic' | 'natural_game',
+  name: string,
+  p: NaturalThemePalette,
+): MapStyleTheme {
+  const building = { wall: p.wall, roof: p.roof };
+
+  return {
+    id,
+    name,
+    groundColor: p.ground,
+    gridColor: p.grid,
+    buildingWallColor: p.wall,
+    buildingRoofColor: p.roof,
+    buildingArchetypeColors: {
+      religious: { ...building },
+      transit: { ...building },
+      civic: { ...building },
+      commercial: { ...building },
+      industrial: { ...building },
+      historic: { ...building },
+    },
+    waterColor: p.water,
+    parkColor: p.park,
+    terrainColors: {
+      forest: p.woodland,
+      wood: p.woodland,
+      scrub: p.grass,
+      heath: p.grass,
+      grassland: p.grass,
+      meadow: p.grass,
+      wetland: p.wetland,
+      marsh: p.wetland,
+      reedbed: p.wetland,
+      swamp: p.wetland,
+      mangrove: p.wetland,
+      bog: p.wetland,
+      tidalflat: p.dirt,
+      mud: p.dirt,
+      beach: p.sand,
+      shoal: p.sand,
+      sand: p.sand,
+      bare_rock: p.rock,
+      scree: p.rock,
+      shingle: p.rock,
+      glacier: p.ice,
+      park: p.park,
+      garden: p.park,
+      nature_reserve: p.park,
+      playground: p.park,
+      dog_park: p.park,
+      golf_course: p.park,
+      pitch: p.sports,
+      track: p.dirt,
+      stadium: p.ground,
+      sports_centre: p.ground,
+      ice_rink: p.ice,
+      marina: p.water,
+      camp_site: p.grass,
+      flowerbed: p.park,
+    },
+    foliageColors: {
+      trunk: p.trunk,
+      broadleaved: p.tree,
+      needleleaved: p.conifer,
+      leafless: p.rock,
+    },
+    barrierColors: {
+      hedge: p.woodland,
+      wall: p.wall,
+      city_wall: p.rock,
+      fence: p.rail,
+      cliff: p.rock,
+    },
+    roadColors: {
+      // Road hierarchy is data for inspection, not a base material color.
+      motorway: p.asphalt,
+      trunk: p.asphalt,
+      primary: p.asphalt,
+      secondary: p.asphalt,
+      tertiary: p.asphalt,
+      residential: p.asphalt,
+      living_street: p.asphalt,
+      service: p.asphalt,
+      pedestrian: p.paving,
+      footway: p.paving,
+      cycleway: p.asphalt,
+      bridleway: p.dirt,
+      steps: p.paving,
+      path: p.dirt,
+      track: p.dirt,
+      runway: p.asphalt,
+      taxiway: p.asphalt,
+      platform: p.paving,
+      pier: p.paving,
+      raceway: p.asphalt,
+      busway: p.asphalt,
+      bus_guideway: p.asphalt,
+      construction: p.dirt,
+      bridge: p.asphalt,
+      unclassified: p.asphalt,
+    },
+    railwayColors: {
+      ballast: p.ballast,
+      sleeper: p.sleeper,
+      rail: p.rail,
+    },
+    landuseColors: {
+      // Built-up zoning must not create artificial patchwork ground colors.
+      residential: p.ground,
+      commercial: p.ground,
+      industrial: p.ground,
+      retail: p.ground,
+      institutional: p.ground,
+      education: p.ground,
+      healthcare: p.ground,
+      civic: p.ground,
+      religious: p.ground,
+      military: p.ground,
+      tourism_area: p.ground,
+      railway: p.ground,
+      garages: p.ground,
+      power: p.ground,
+      water_works: p.ground,
+      landuse: p.ground,
+      construction: p.dirt,
+      brownfield: p.dirt,
+      landfill: p.dirt,
+      cemetery: p.park,
+      allotments: p.park,
+      farmland: p.farmland,
+      farmyard: p.dirt,
+      orchard: p.park,
+      vineyard: p.park,
+      plant_nursery: p.park,
+      quarry: p.rock,
+      parking: p.asphalt,
+      parking_space: p.asphalt,
+      apron: p.asphalt,
+      aerodrome: p.asphalt,
+      platform_area: p.paving,
+      pedestrian_area: p.paving,
+    },
+    skyColor: p.sky,
+    fogColor: p.fog,
+    lightIntensity: p.lightIntensity,
+  };
+}
+
 export const MAP_THEMES: Record<string, MapStyleTheme> = {
   tactical: {
     id: 'tactical',
@@ -553,4 +736,88 @@ export const MAP_THEMES: Record<string, MapStyleTheme> = {
     fogColor: '#02182b',
     lightIntensity: 1.3,
   },
+  natural_daylight: createNaturalTheme('natural_daylight', 'Natural Daylight', {
+    ground: '#8fa77a',
+    grid: '#7d9573',
+    wall: '#b8b8b6',
+    roof: '#3c444d',
+    asphalt: '#6a6e72',
+    paving: '#a8a69f',
+    dirt: '#98866d',
+    rock: '#8d8b85',
+    ballast: '#6b6861',
+    sleeper: '#4e4945',
+    rail: '#9ca4ab',
+    water: '#527f9b',
+    farmland: '#8ca96d',
+    grass: '#89b16e',
+    park: '#80a86b',
+    woodland: '#45683d',
+    wetland: '#739887',
+    sports: '#5b8b4d',
+    tree: '#376f38',
+    conifer: '#264e2c',
+    trunk: '#67513e',
+    sand: '#c5b78f',
+    ice: '#d6dfe1',
+    sky: '#cedfe9',
+    fog: '#b9c8b7',
+    lightIntensity: 1.6,
+  }),
+  natural_cartographic: createNaturalTheme('natural_cartographic', 'Natural Cartographic', {
+    ground: '#8f9b7e',
+    grid: '#75816c',
+    wall: '#b0b0ae',
+    roof: '#3e454c',
+    asphalt: '#6b6d70',
+    paving: '#a5a298',
+    dirt: '#8b7c67',
+    rock: '#85837c',
+    ballast: '#6a675f',
+    sleeper: '#4d4b46',
+    rail: '#979ea5',
+    water: '#52778e',
+    farmland: '#849969',
+    grass: '#88a379',
+    park: '#78946a',
+    woodland: '#455d3e',
+    wetland: '#738c7f',
+    sports: '#638954',
+    tree: '#466f40',
+    conifer: '#324f33',
+    trunk: '#665543',
+    sand: '#b9ae91',
+    ice: '#ced5d6',
+    sky: '#c3d1d9',
+    fog: '#afbdaf',
+    lightIntensity: 1.45,
+  }),
+  natural_game: createNaturalTheme('natural_game', 'Natural Game', {
+    ground: '#6f8a55',
+    grid: '#5a7449',
+    wall: '#b5b7b5',
+    roof: '#313d46',
+    asphalt: '#585d63',
+    paving: '#9b998e',
+    dirt: '#816e56',
+    rock: '#747670',
+    ballast: '#58564f',
+    sleeper: '#45433f',
+    rail: '#949da5',
+    water: '#3c6c88',
+    farmland: '#779f53',
+    grass: '#6d9c52',
+    park: '#66934f',
+    woodland: '#27492c',
+    wetland: '#507b64',
+    sports: '#477e3d',
+    tree: '#2f7138',
+    conifer: '#214f2b',
+    trunk: '#5d4a38',
+    sand: '#ab9b75',
+    ice: '#bcced6',
+    sky: '#a8bac4',
+    fog: '#819976',
+    lightIntensity: 1.35,
+  }),
 };

@@ -378,19 +378,61 @@ from the owner report with synthetic decoded-owner outcomes, including gap,
 alien-owner, reversion, and ambiguous-lineage negative controls.
 The regression cannot replace a real canonical source/SQLite execution.
 
-**Owner gate (no rebake):**
+**Canonical owner gate: PASS (2026-11-22, read-only existing pack).**
+
+The owner's `way-38892898-ownership-v2.json` uses canonical Overijssel
+snapshot `overijssel-261114-8ae28196`, source SHA256
+`8ae281964831675c89f45db6aaa3566168a224767d3313c7068ad255c5f221c0`.
+The corridor status is **`consistent-sampled-ownership`**.
+
+- Exactly **77** valid 10 cm-spaced centerline samples, extending from
+  0.05 m to 7.65 m from OSM node `462001787`; the seam is 2.47817 m
+  from that node. Tiles `344:5658` (25 probes) and `344:5659` (52 probes)
+  are both represented.
+- **27** samples have physical residential ownership from
+  `way/546666718`; subsequent **50** samples have physical cycleway
+  ownership from `way/38892898`. No uncovered, alien-owned or
+  unattributed samples were observed.
+- Residential ownership ends at **2.65 m** and cycleway ownership begins
+  at **2.75 m** from the shared node (a 10 cm transition bracket), just
+  beyond the seam. This is the expected surface-priority handoff.
+
+**Disposition:** The last original suspected missing cycleway is a
+*sampled-ownership false alarm*, consistent with valid residential-first
+polygon subtraction at the shared-node junction. No renderer change or
+additional disposable bake is indicated for this case. All 11 original
+physically-absent crossing events now have a local explanation / pointwise
+coverage witness; this is **not** regional connectivity or visual
+sign-off. A 10 cm sample interval cannot exclude sub-interval gaps,
+off-centerline issues, or visual-semantic problems. Maintain TKT-033 and
+draft PR #9 pending the separate regional bake/acceptance decision.
+
+**CLI correction:** On the owner's npm version,
+`npm run osm:inspect-cycleway-ownership -- --report-id=v2` was
+**incorrectly consumed as npm config**, so the script retried the existing
+`v1` path. The successfully used direct invocation is:
 
 ```powershell
-git pull --ff-only
-npm run osm:inspect-cycleway-ownership -- --report-id=v2
+npx tsx scripts/inspect-cycleway-ownership.ts --report-id=v2
 ```
 
-Upload `benchmarks/results/tkt033-remaining/first-pass/way-38892898-ownership-v2.json`.
-If the corridor is consistent, record the original cycleway crossing
-as legitimate *sampled* priority ownership. Do not mark all of TKT-033
-finished, merge PR #9, or authorize the untouched canonical 256-tile
-Twente rebake on that basis alone. The broader regional and
-visual gates remain separate.
+Do not overwrite existing reports. No further local rerun is necessary.
+
+**CI at commit `c810f6f` (Actions run `45053856422`):**
+TypeScript/build **PASS**; `CyclewayOwnershipDiagnosis.test.ts` **PASS**;
+`CyclewaySeamDiagnosis.test.ts` and `RemainingMissingRoads.test.ts`
+**PASS**. Full CI is **not** green (27 successful jobs, 3 failing
+jobs): four existing `JunctionAndTopology.test.ts` failures recur,
+with three failures in road/rail network topology tests and one
+railway `ElevationAndZIndex.test.ts` failure in unrelated suites.
+These additional failures were not modified by this junction diagnosis,
+but their baseline equivalence is not established here. Review them
+under the appropriate workstream; do not misrepresent CI as fully
+passing.
+
+**Next gate:** explicit decision whether to rebake the canonical
+256-tile Twente region, then separate source-based and human-only
+regional visual/continuity checks. No automatic LLM visual QA.
 
 ## Acceptance criteria
 

@@ -1,108 +1,84 @@
-# System Architecture
+# System Architecture — Current Implementation
 
-## 1. System Overview
+> **Reconciled: 2026-11-22.** This describes the **implemented** renderer. The older [regional LOD proposal](./regional-tiling-streaming-lod-proposal.md) is retained as an architectural research/roadmap document, **not** a list of already delivered capabilities. See [current status](./STATUS.md) and [ADRs](./decisions/README.md).
 
-The 3D Map Viewer is a client-side WebGL application built on **React 19**, **TypeScript**, **Three.js (r186)**, and **React Three Fiber (v9)** with **Tailwind CSS**. It ingests vector geographic data from OpenStreetMap (OSM) via local GeoJSON bundles or remote Overpass API queries, transforms spherical coordinates to a local Euclidean Cartesian space (meters), synthesizes procedural 3D meshes for roads, junctions, buildings, railways, waterways, and land use, and displays them via an orthographic isometric camera with interactive navigation.
+## 1. Product and execution paths
 
-### Core Architectural Goals
-- **High Visual Stability**: Eliminates z-fighting at ordinary at-grade intersections and coplanar ground surfaces using surface-first rounded road strokes, priority-ordered 2D Boolean ownership clipping (`E2+`), unified surface-first railway ballast (`R+`), and deterministic depth bias (`polygonOffset`).
-- **Physical Elevation Model**: Establishes a uniform at-grade road baseline (`+0.050 m`) and reserves true geometric elevation changes for real grade-separated structures (bridges rising to `+2.850 m`, tunnels descending to `-2.0 m`).
-- **Strict Bounded Region Pipeline**: Enforces axis-aligned bounding box clipping across all geometry types so geometry never bleeds beyond the queried geographic bounds.
-- **Deterministic GPU Resource Lifecycle**: Centralizes geometry registration and disposal via `SceneResourceManager` to prevent memory leaks during camera reframing, theme changes, and region reloads.
+The OSM Renderer is a browser-based isometric 3D geographic viewer (React 19, TypeScript, Three.js r186, React Three Fiber v9, Tailwind, Node/Express). Its scope is **rendering map content and navigating it**; gameplay, agents and physics have not been implemented.
 
----
+There are **two supported data/geometry paths**, sharing production E2+/R+ infrastructure semantics:
 
-## 2. Major Components & Responsibilities
+| Path | Source and coordinate model | Geometry work | Typical use |
+| --- | --- | --- | --- |
+| **Live/local map** | Local GeoJSON / Overpass via `LocalGeoJsonProvider.ts` and `OsmApiProvider.ts`; local equirectangular `WorldCoordinates.ts` | `GeometryBuilder.ts` synthesizes meshes for the requested bounded region at runtime | Smaller city extracts, fixtures, reproduction packages |
+| **Offline baked regional streaming** | Canonical indexed Overijssel OSM; aligned UTM `EPSG:25832` grid from `RegionalProjection.ts` / `TileGrid.ts` | Offline `OfflineHengeloTileBaker.ts` generates compressed `OSMTILE1` SQLite shards; browser fetches/decodes/reconstructs **only relevant tiles** | 1,024 m LOD0 Hengelo/Twente mosaic and scale experiments |
 
-| Subsystem | Primary Modules | Responsibilities |
-| :--- | :--- | :--- |
-| **Data Ingestion & Providers** | `src/world/MapDataProvider.ts`<br>`src/world/LocalGeoJsonProvider.ts`<br>`src/world/OsmApiProvider.ts` | Ingests GeoJSON or Overpass OSM data, clips polylines and polygons to the region bounding box, extracts raw OSM node IDs, and parses features into typed collections with provenance diagnostics. |
-| **Feature Classification** | `src/types/MapFeature.ts`<br>`src/world/FeatureCatalogue.ts` | Defines data structures for roads, buildings, railways, waterways, parks, and land-use. Resolves ambiguous OSM tags into concrete rendering categories. |
-| **Coordinate Projection** | `src/world/WorldCoordinates.ts` | Converts WGS84 coordinates `[lon, lat]` into local metric Euclidean coordinates `[x, z]` centered around the dataset origin `(lon0, lat0)`. Provides haversine distance and inverse projection. |
-| **Topological Indexing** | `src/world/TopologicalNodeIndex.ts` | Clusters road and railway endpoints within a 15 cm tolerance or resolves explicit OSM node IDs with deterministic tie-breaking. Enforces `layerScope` isolation so bridges and tunnels do not merge with at-grade roads. |
-| **Infrastructure Topology & Graph Construction** | `src/world/infrastructure/topology/types.ts`<br>`src/world/infrastructure/topology/OsmNodeIdEnricher.ts`<br>`src/world/infrastructure/topology/RoadNetworkBuilder.ts`<br>`src/world/infrastructure/topology/RailwayNetworkBuilder.ts`<br>`src/world/infrastructure/topology/CrossModalAnalyzer.ts`<br>`src/world/infrastructure/topology/InfrastructureGraph.ts` | Enriches converted Overpass/XML GeoJSON features with verified per-vertex OSM node IDs (`_nodeIds`, `_nodeIdsByPart`) and constructs pure-TypeScript OSMnx-style road and railway topology graphs (`RoadNetwork`, `RailwayNetwork`, `RailwayFlatCrossingRelation`, `LevelCrossingRelation`, `GradeTransitionRelation`, `GradeSeparatedCrossingRelation`, `InfrastructureGraph`) from non-destructive `ProcessedMapData.topologySource` records (`ADR-0009`). |
-| **Graph-to-Renderer Adapter (`M2.3-E1`, `TKT-026`)** | `src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts` | Pure, deterministic adapter converting `InfrastructureGraph` into render-ready road, railway, and cross-domain descriptors (`InfrastructureRenderDescriptorBundle`) with full source-feature lineage and contract validation for the permanent production E2+/R+ architecture (`roads: 'graph-surface'`, `railways: 'graph-R+'`). |
-| **Procedural Geometry Generation** | `src/world/GeometryBuilder.ts`<br>`src/world/BridgeAndTunnelBuilder.ts`<br>`src/world/ElevationPolicy.ts`<br>`src/world/infrastructure/roads/GraphRoadGeometryBuilder.ts`<br>`src/world/infrastructure/roads/SurfaceFirstRoadFootprints.ts`<br>`src/world/infrastructure/railways/RailwayGeometryBuilder.ts`<br>`src/world/infrastructure/railways/RailwayTopology.ts`<br>`src/world/infrastructure/rendering/UvRibbonBuilder.ts`<br>`src/world/infrastructure/rendering/InfrastructureShaderChunks.ts` | Synthesizes surface-first rounded-stroke road footprints with spatially indexed priority-ordered Boolean ownership clipping (`E2+`), surface-first railway ballast with hybrid 3D/UV-ribbon sleepers and rails (`R+`), extruded building prisms with courtyard holes, bridges with approach ramps, and 3D tunnel portals. |
-| **Scene & Resource Management** | `src/world/SceneResourceManager.ts`<br>`src/scene/MapScene.tsx` | Manages Three.js scene graphs, materials, instanced meshes, and immediate disposal of intermediate BufferGeometries during generation. |
-| **Camera & Viewport Controls** | `src/scene/CameraController.tsx` | Controls the Three.js OrthographicCamera, computes bounding-box framing for rotated views, clamps near/far planes, and manages pan/zoom/tilt interactions. |
-| **Geometry Validation & Diagnostics** | `src/world/ZFightingValidator.ts`<br>`src/world/PlanarLayerValidator.ts` | Validates triangle coplanarity, positive-area road-vs-road overlaps, junction portal continuity, and non-self-intersection. |
-| **Application UI** | `src/App.tsx`<br>`src/components/AddressSearchModal.tsx`<br>`src/styles/mapThemes.ts` | Provides theme selectors (Tactical, Blueprint, Minimal, Dark), dataset location pickers, feature inspection popovers, and diagnostic badges. |
+**Important:** The offline regional projection **extends** the local projection decision in ADR-0001 rather than replacing every live/local query. Neither path currently has multi-resolution LOD1–LOD3.
 
----
+## 2. Production feature geometry
 
-## 3. Runtime Data Flow
+- **Roads:** E2+ / `graph-surface`, using `InfrastructureGraph` render descriptors, rounded full-width 2D footprints in `SurfaceFirstRoadFootprints.ts`, deterministic priority-ordered Boolean surface ownership and triangulation. The earlier legacy/E2 explicit junction solver is not a production choice (TKT-026; ADR-0010).
+- **Railways:** R+ / `graph-R+`, graph-informed topology, surface-first ballast and hybrid instanced/UV-rendered sleepers and rails. Source provenance, verified graph relationships, bridge/at-grade/tunnel transitions and railway crossing semantics remain separate from mere 2D intersections.
+- **Other layers:** water, land use, ground cover, building extrusion, bridges and tunnels are built using `GeometryBuilder.ts`, `BridgeAndTunnelBuilder.ts`, `ElevationPolicy.ts` and relevant layer processors. Semantic 2D ownership and physical Y elevation are distinct; `polygonOffset` mitigates some depth conflicts.
+- **Feature inspection and themes:** `faceRanges`, `instanceInfos`, BVH metadata and `ThemeMaterialRegistry.ts` preserve inspection and fast theme updates in the baked path.
 
-The runtime pipeline flows monotonically from geographic data ingestion to WebGL rendering:
+References: [ADR-0008](./decisions/ADR-0008-hybrid-railway-rendering-and-uv-ribbon-architecture.md), [ADR-0009](./decisions/ADR-0009-infrastructure-graph-topology.md), [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md).
 
-```mermaid
-flowchart TD
-    A[OSM XML / Overpass JSON / GeoJSON Data] --> A1[OsmNodeIdEnricher: Verified Per-Vertex _nodeIds / _nodeIdsByPart]
-    A1 --> B[Data Provider: LocalGeoJsonProvider / OsmApiProvider]
-    B --> C[WorldCoordinates Projection: WGS84 to Local Meters]
-    C --> D[Region Boundary Clipping: Liang-Barsky & Topology-Aware Polygon Clip]
-    D --> E[Feature Classification & Diagnostic Accounting]
-    E --> E1[ProcessedMapData.topologySource: Road Parts, Railway Parts & 5-Kind Infrastructure Points]
-    E1 --> E2[buildInfrastructureGraph: RoadNetworkBuilder + RailwayNetworkBuilder + CrossModalAnalyzer]
-    E2 --> E3[InfrastructureRenderAdapter: E2+ graph-surface & R+ graph-R+ Render Descriptors]
-    E --> F[TopologicalNodeIndex: Legacy Node Indexing for Residual Utilities]
-    F --> G[GeometryBuilder: Multi-Stage Procedural Synthesis]
-    E3 --> G
-    
-    subgraph Geometry Synthesis
-        G1[Ground Cover & Water Cutouts]
-        G2[E2+ Surface-First Road Footprints & Ownership Clipping]
-        G3[R+ Surface-First Railway Ballast, Graph Switches & Hybrid Sleepers/Rails]
-        G4[Bridge Ramps, Piers & Tunnel Portals]
-        G5[Building Footprint Holes & Extrusions]
-        G --> G1 & G2 & G3 & G4 & G5
-    end
+## 3. Offline source, baking and manifest pipeline
 
-    G1 & G2 & G3 & G4 & G5 --> H[BuiltSceneGeometry & SceneResourceManager]
-    H --> I[MapScene: R3F Canvas & Three.js Groups]
-    I --> J[CameraController: Projected Bounds Framing & MapControls]
+```text
+Canonical overijssel-261114-8ae28196 OSM snapshot
+  -> OverijsselOsmStore / spatial SQLite index (source SHA checked)
+  -> RegionalMosaicPlan: aligned 1,024 m grid, 4 x 4-tile shards
+  -> OfflineHengeloTileBaker: bounded per-shard OSM query and E2+/R+ synthesis
+  -> OSMTILE1 schema 1.1.0 + tile metadata/BVHs -> SQLite shard files
+  -> complete, verified mosaic.json (never for a partial bake)
+  -> RegionalMosaicHttpHandler: one manifest, rebased tile origins, tile endpoints
+  -> TileStreamManager: viewport request/worker decode/tile reconstruction/disposal
+  -> MapScene + CameraController: scene, inspection, camera controls
 ```
 
----
+The region is a **single logical mosaic**, not a single in-memory geometry scene. Shard builds use a 1,024 m OSM query context margin and a 64 m tile collar. These are **local mitigations** and are not equivalent to a globally computed infrastructure graph. Full cross-shard semantic/geometry parity remains an explicit validation gate (TKT-032).
 
-## 4. State & Resource Ownership
+The accepted **16 × 16** pilot has 16 independently baked shards (256 tiles). The **48 × 40** full-Twente plan has 120 shards (1,920 tiles). The new scale-out implementation scans shard metadata sequentially when creating the manifest and uses an LRU pool of at most **16 open SQLite shard handles** for payload requests; it supports resumable baking and partial verification. The full output is **still awaiting completion and owner acceptance** (TKT-034).
 
-### Application State vs. Scene State
-- **React State (`App.tsx`)**: Owns the active `mapData` (of type `ProcessedMapData`), active `themeId`, camera reset/frame signals, search modal visibility, and inspectable feature popup state.
-- **Three.js Scene State (`MapScene.tsx` & `GeometryBuilder.ts`)**: Owns WebGL resources including `BufferGeometry`, `Material`, `Group`, and `Mesh` instances.
-- **Geometry Lifecycle (`BuiltSceneGeometry`)**:
-  - `buildScene()` compiles `ProcessedMapData` into grouped Three.js meshes.
-  - All intermediate temporary geometries created during merging (e.g., individual road segment strips or individual building prisms) are tracked by `SceneResourceManager.registerIntermediateGeometry()` and immediately freed via `releaseIntermediateGeometry()`.
-  - When a dataset is reloaded or the component unmounts, `BuiltSceneGeometry.dispose()` performs a single-pass disposal of all retained scene geometries and materials.
+### Dataset selection and truth
 
-### Developer Tools & Reproduction Architecture (`TKT-009`, `TKT-026`)
-- **Centralized Developer State (`App.tsx`, `DevToolsPanel.tsx`)**: Unifies the active production architecture readout (`infrastructureRenderOptions`: `roads: 'graph-surface'`, `railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`), diagnostic overlays (`wireframe`, `showGraphOverlay`), spatial area selection (`isSpatialSelectActive`, `selectedBoxMeters`), and fixture navigation (`onLoadSwitchyard`, `onLoadPrinsFork`, etc.) into explicit application state without fractured state containers.
-- **Reproduction Pipeline (`src/world/dev/ReproductionReport.ts`)**:
-  - `extractConnectedOsmFeatures`: Isolates target OSM features (via click selection or 2D spatial box) along with immediate connected incident context sharing verified OSM node IDs, strictly preserving `_nodeIds` and coordinates without fabricating synthetic junctions.
-  - `buildReproductionPackage`: Compiles issue metadata, active rendering configuration, camera pose, and GeoJSON `FeatureCollection` into a portable JSON package.
-  - `validateReproductionPackage` & `LocalGeoJsonProvider.parseGeoJson`: Re-imports exported reports to reconstitute the exact dataset, camera position, and renderer options in-memory.
+- Regional routes: `/api/tiles-region/manifest`, `/api/tiles-region/:lod/:tx/:ty` (plus versioned forms).
+- Server default: `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`, provided it exists.
+- Explicit override: `OVERIJSSEL_REGIONAL_MOSAIC_PATH` set **before restarting the server**; unavailable/mismatched data returns a clear manifest error, not a fallback to an unverified bake.
+- `?region=twente-pilot`, `?region=twente` and `?region=twente-full` are **viewer aliases** to the same regional API. They **do not** override the server mosaic selection.
+- Developer Tools derives the displayed **Active Mosaic** name, `packPath`, snapshot, tile count and schema from the *successfully loaded manifest*. Loading/errors/dataset switches clear stale active-mosaic state.
 
----
+## 4. Runtime streaming, ownership and camera
 
-## 5. Architectural Boundaries
+| Component | Responsibility |
+| --- | --- |
+| `src/app/App.tsx` | Application mode, dataset lifecycle, active mosaic diagnostics, tile manager disposal/switch token, camera policy and UI state |
+| `src/world/tiling/TileStreamManager.ts` | Manifest/metadata lifecycle; viewport tile selection, fetch, worker decode, load/eviction diagnostics, tile-owned cleanup |
+| `src/world/tiling/TileDecodeClient.ts` | Worker-based compressed tile decode |
+| `src/world/tiling/TileSceneReconstructor.ts` | Reconstructs tile-local scene geometry and provenance from decoded payload |
+| `src/world/tiling/ThemeMaterialRegistry.ts` and `src/world/SceneResourceManager.ts` | Share thematic materials and dispose scene/geometry/BVH allocations |
+| `src/scene/MapScene.tsx` | Three.js/R3F scene presentation and inspection |
+| `src/scene/CameraController.tsx` and `src/scene/cameraZoomPolicy.ts` | Orthographic projection, pan/tilt, projected bounds framing, camera limits and transitions |
+| `src/components/DevToolsPanel.tsx` | Active mosaic/zoom-source readout, performance counters and reproducible diagnostics |
 
-1. **UI vs. Renderer Boundary**: React components (`App.tsx`, `AddressSearchModal.tsx`) never directly manipulate Three.js buffer attributes or mesh vertex arrays. Communication happens through props passed into `MapScene` and standard event handlers (`onInspectFeature`).
-2. **Provider vs. Geometry Boundary**: `MapDataProvider` outputs purely mathematical and semantic representations (`ProcessedMapData` containing metric coordinate arrays, metadata tags, bounding boxes, and non-destructive `topologySource` records). Providers do not create Three.js objects or materials.
-3. **Topology & Adapter vs. Renderer Boundary (`ADR-0009`, `ADR-0010`, `TKT-026`)**: `RoadNetworkBuilder`, `RailwayNetworkBuilder`, `CrossModalAnalyzer`, `buildInfrastructureGraph` (`src/world/infrastructure/topology/`), and `InfrastructureRenderAdapter` (`src/world/infrastructure/rendering/InfrastructureRenderAdapter.ts`) operate on pure TypeScript data structures with zero React, Three.js, renderer, or WebGL imports. Under `TKT-026` (`closed`), **E2+ (`roads: 'graph-surface'`)** is the sole production road renderer and **R+ (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`)** is the sole production railway renderer, while obsolete legacy and intermediate road/railway branches have been retired.
-4. **Geometry vs. Camera Boundary**: `GeometryBuilder` constructs world-space meshes positioned relative to the dataset origin `(0, 0, 0)`. It exposes bounding boxes (`bounds`) to `CameraController.tsx`, which uses purely projective math to adjust orthographic zoom and target offsets.
+A `TileStreamManager` manifest is reported **loaded only after tile records/overlays initialize successfully**. Errors clear partial tiles and the active identity. The **accepted regional zoom-out floor** is `0.15` for datasets larger than 64 tiles, with an explicit validated `regionalMinZoom` escape hatch; `maxZoom=16.0`. Smaller maps retain standard zoom policy. See [ADR-0013](./decisions/ADR-0013-regional-camera-zoom-policy.md).
 
----
+**Ownership boundary:** source providers/graph construction return typed data; the geometry layer produces Three.js resources; streaming and scene lifecycle managers own resource disposal. UI code does not manually manipulate tile vertex buffers. Tile source and manifest identity must not be guessed from URL aliases.
 
-## 6. Known Architectural Constraints
+## 5. Accuracy and performance constraints
 
-- **Client-Side Single-Threaded Processing**: All polygon clipping (`polygon-clipping`), triangulation (`THREE.ShapeUtils.triangulateShape`), and ribbon generation run synchronously on the main JavaScript thread. Large queries (> 5,000 features) must be budgeted carefully to avoid frame drops.
-- **Bounded Local Coordinate Frame**: Projections use an equirectangular flat-Earth projection tangent to the dataset center `(originLon, originLat)`. Metric accuracy degrades as distance from the origin exceeds ~25 km; the viewer is optimized for urban neighborhood tiles up to ~5 km across.
-- **Goalpost 2 Scope Boundary**: The active project scope is Goalpost 2: Infrastructure Topology, Railway Rendering, and Surface Markings. The architecture includes OSM-derived infrastructure connectivity and topology, including road and railway networks (`M2.1`, `M2.2`, `M2.3-A/B/C/D/E1`, `M2.3-E3`, `M2.3-E4-A`, and `M2.3-E5` / `TKT-026` complete and closed; `M2.3-E4-T`/`E4-T2` pending project-owner review; `M2.3-E4-B` requiring separate explicit project-owner approval). While infrastructure topology models connectivity that may provide a foundation for future pathfinding, this does not authorize implementation of gameplay movement, game-agent AI, physics, entity collision, or dynamic traffic simulation. Speculative streaming architectures and unrelated gameplay systems remain strictly out of scope; approved regional tiling/streaming planning is tracked explicitly under `TKT-028` (`open`, proposal only pending owner authorization).
+1. **No global topology parity claim:** independent shard synthesis can disagree at boundaries for long ways/relations, bridges/tunnels, waterways and sleeper phase. TKT-032 is still blocked as a broader continuity gate; accepting a small set of corrected TKT-033 roads does not resolve every seam.
+2. **LOD0 overview GPU cost:** the complete 16 km detailed overview was around 7,373 draw calls and 42.6 ms GPU on one RTX 4060 Ti test. Defaults restrict zoom-out to prevent accidental all-tile render; this is not an overview LOD system.
+3. **OSM extract boundaries:** the full-Twente rectangle crosses outside the Overijssel data source, leaving missing exterior map geometry. This must not be misdiagnosed as a stream failure.
+4. **Large-region coordinate and depth precision:** UTM coordinates are rebased locally, but large full-region frustums can still degrade depth-buffer resolution. Visual checks remain necessary for coplanar markings and portal details.
+5. **Verification layers are different:** checksum/manifest/decode tests establish pack integrity, seam audits sample local correctness, and the **project owner** performs final visual acceptance. None implies the others automatically.
 
+## 6. Decision records and longer-term options
 
+- [ADR-0011](./decisions/ADR-0011-baked-tiles-and-runtime-streaming.md): offline baked tiles, projection, data format and runtime streaming.
+- [ADR-0012](./decisions/ADR-0012-bounded-regional-mosaics.md): bounded shard baking, manifest gateway, dataset selection and seam risks.
+- [ADR-0013](./decisions/ADR-0013-regional-camera-zoom-policy.md): zoom safety cap and benchmark overrides.
 
-
-
-
-## E2+/R+ Production Architecture Addendum (`TKT-026` — Closed 2026-11-19)
-
-As of `TKT-026` (`closed`, following project-owner visual approval on `2026-11-19`), **E2+ (`roads: 'graph-surface'`)** is the sole production road renderer and **R+ (`railways: 'graph-R+'`, `railwaySwitchPolicy: 'graph'`, `railwayBallastStrategy: 'surface-first'`)** is the sole production railway renderer; all legacy and intermediate infrastructure renderers have been retired. E2+ buffers full-width road provenance centerlines into rounded 2D footprints (`SurfaceFirstRoadFootprints.ts`) and partitions overlapping at-grade areas via spatially indexed (`32 m` `RoadFootprintSpatialGrid`) priority-ordered Boolean subtraction at `ROAD_SURFACE = 0.050 m`. R+ unifies overlapping at-grade railway ballast beds via 2D polygon union while rendering hybrid close-zoom 3D sleepers/rails and medium/far procedural UV-ribbons with graph-informed turnout semantics. See [ADR-0010](./decisions/ADR-0010-surface-first-road-rendering.md), [E2+ technical design](./e2-plus-surface-first-road-rendering.md), and [the road rendering roadmap](./road-rendering-roadmap.md).
+**Not yet implemented / separately scoped:** global precomputed topology/geometry plans, multi-LOD1–LOD3 overview rendering, full Overijssel streaming, gameplay, routing agents or simulation. The [regional tiling proposal](./regional-tiling-streaming-lod-proposal.md) and [Goalpost 2 plan](./goalpost-2-plan.md) preserve the historical design rationale without implying current authorization or implementation.

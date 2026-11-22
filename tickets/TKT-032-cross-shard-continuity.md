@@ -331,3 +331,9 @@ TKT-033 has an isolated regression for tangent-aligned OSM sampling and no geome
 No province-wide bake, generic batching, detailed whole-region render optimization, offline LOD, strategic/map-on-map UI, camera limits, gameplay, new tile size, or broad redesign. Preserve the existing detailed renderer and its source-backed semantics.
 
 **Principle:** Establish whether the world we already built is continuous before extending its geographic footprint.
+
+## Candidate visual recheck — western primary road remains broken (2026-11-22)
+
+Owner completed a fresh TKT-033 candidate regional bake (16/16 shards, 256/256 nonempty verified tiles, 236.09 MiB compressed; original mosaic preserved). Owner visually reports several former missing-road sites restored but **`way/6666519` western primary road is still absent/cut off** and supplied a screenshot. The original witness E=351822.700, N=5790720 is **exactly on** internal 4×4 shard boundary `horizontal-r1-2-c1`, between `r01-c01` and `r02-c01` (north tile 343:5655, south tile 343:5654). This is strong evidence to prioritize cross-shard diagnosis but not yet a causal proof. An earlier positive 2×2 disposable pack probe has a different source-planning context and does not close this failure.
+
+**Current outcome:** new full regional candidate **failed human visual acceptance**, despite passing pack hash/identity checks; do not promote/replace the old mosaic or sign off TKT-032/TKT-029. TKT-033 documents the exact read-only filtered source/mesh seam audit command and follow-up plan. Preserve both mosaic directories. Avoid generic rebaking or speculative seam fixes.

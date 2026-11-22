@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MapStyleTheme, RoadClass } from '../../types/MapFeature';
-import { MAP_THEMES } from '../../styles/mapThemes';
+import { MAP_THEMES, getBuildingFinish, getLandmarkWallColor } from '../../styles/mapThemes';
 import {
   DEPTH_OFFSET_CONFIG,
   getLanduseElevationAndOffset,
@@ -521,40 +521,45 @@ export class ThemeMaterialRegistry {
     if (slotKey === 'building:wall:default') {
       const mat = new THREE.MeshStandardMaterial({
         color: theme.buildingWallColor,
-        roughness: 0.65,
-        metalness: 0.15,
+        ...getBuildingFinish(theme, 'wall'),
       });
       return {
         slotKey,
         material: mat,
-        applyTheme: (t) => mat.color.set(t.buildingWallColor),
+        applyTheme: (t) => {
+          mat.color.set(t.buildingWallColor);
+          Object.assign(mat, getBuildingFinish(t, 'wall'));
+        },
       };
     }
 
     if (slotKey === 'building:roof:default') {
       const mat = new THREE.MeshStandardMaterial({
         color: theme.buildingRoofColor,
-        roughness: 0.4,
-        metalness: 0.25,
+        ...getBuildingFinish(theme, 'roof'),
       });
       return {
         slotKey,
         material: mat,
-        applyTheme: (t) => mat.color.set(t.buildingRoofColor),
+        applyTheme: (t) => {
+          mat.color.set(t.buildingRoofColor);
+          Object.assign(mat, getBuildingFinish(t, 'roof'));
+        },
       };
     }
 
     if (slotKey === 'building:wall:landmark') {
-      const resolveColor = (t: MapStyleTheme) => (t.id === 'tactical' ? '#f59e0b' : '#fef08a');
       const mat = new THREE.MeshStandardMaterial({
-        color: resolveColor(theme),
-        roughness: 0.5,
-        metalness: 0.3,
+        color: getLandmarkWallColor(theme),
+        ...getBuildingFinish(theme, 'wall', 'landmark'),
       });
       return {
         slotKey,
         material: mat,
-        applyTheme: (t) => mat.color.set(resolveColor(t)),
+        applyTheme: (t) => {
+          mat.color.set(getLandmarkWallColor(t));
+          Object.assign(mat, getBuildingFinish(t, 'wall', 'landmark'));
+        },
       };
     }
 
@@ -568,13 +573,15 @@ export class ThemeMaterialRegistry {
       };
       const mat = new THREE.MeshStandardMaterial({
         color: resolveColor(theme),
-        roughness: isRoof ? 0.38 : 0.58,
-        metalness: isRoof ? 0.28 : 0.2,
+        ...getBuildingFinish(theme, isRoof ? 'roof' : 'wall', 'archetype'),
       });
       return {
         slotKey,
         material: mat,
-        applyTheme: (t) => mat.color.set(resolveColor(t)),
+        applyTheme: (t) => {
+          mat.color.set(resolveColor(t));
+          Object.assign(mat, getBuildingFinish(t, isRoof ? 'roof' : 'wall', 'archetype'));
+        },
       };
     }
 

@@ -88,6 +88,14 @@ npx tsx scripts/diagnose-missing-roads.ts --feature=way/6666519 --out=benchmarks
 
 Once the source-backed output exists, determine whether the phantom-occluder fix actually affects those OSM ways; address any distinct defect separately. Do not overwrite or rebake the accepted region until an isolated regression and owner review justify it.
 
+### CI validation and baseline comparison
+
+After initial correction and targeted diagnostic tests:
+
+- **Passed on TKT-033:** TypeScript `lint` / production build; `MissingRoadDiagnosis.test.ts`; the complete E2+ `SurfaceFirstRoadRendering.test.ts` suite, **including the new fault-injection test**.
+- **Pre-existing failures (not caused by TKT-033):** the four assertions in `JunctionAndTopology.test.ts` (provenance count, bow-tie clipping diagnostics, portal-gap validation and explicit-node junction count) fail on **both** the parent branch at commit `953249342cbb39205232b13ac3cdc255be33b36b` (GitHub Actions run `45030566400`) and the TKT-033 PR #9 branch (run `45032070443`) with matching expected/actual outcomes. These are separate existing test issues; do not silently claim a fully green CI suite or expand the missing-road fix to unrelated behavior.
+- **Not run in CI:** the canonical `overijssel-261114-8ae28196.sqlite` analysis, because the source index lives on the owner's machine, not in the repo. This prevents asserting that the fix restores specific Twente ways without follow-up evidence.
+
 ## Acceptance criteria (when work resumes)
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

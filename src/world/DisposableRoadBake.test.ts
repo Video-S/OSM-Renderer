@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { parseDisposableRoadBakeArgs } from '../../scripts/bake-and-verify-missing-road';
+import { parseDisposableRoadBakeArgs, visibleRoadOnlyTile } from '../../scripts/bake-and-verify-missing-road';
+import {
+  TILE_MESH_FLAG_VISIBLE,
+  TILE_MESH_FLAG_HIDDEN_UNDERGROUND,
+  type DecodedTilePayload,
+} from './tiling/TilePackContract';
 
 test('TKT-033: disposable source-backed bake defaults to safe separate 2x2 pack', () => {
   const root = path.resolve('tkt033-nonexistent-test-root');
@@ -49,4 +54,18 @@ test('TKT-033: explicit coordinates and noncanonical diagnostic filenames remain
   assert.equal(parsed.target.contextMeters, 1024);
   assert.equal(path.basename(parsed.packPath), 'custom-repro.sqlite');
   assert.equal(path.basename(parsed.jsonPath), 'custom-repro.json');
+});
+
+test('TKT-033: only physically visible road meshes qualify as packed coverage', () => {
+  const tile = {
+    meshes: [
+      { layer: 'roads', name: 'real road', flags: TILE_MESH_FLAG_VISIBLE },
+      { layer: 'roads', name: 'invisible road', flags: 0 },
+      { layer: 'roads', name: 'hidden underground', flags: TILE_MESH_FLAG_VISIBLE | TILE_MESH_FLAG_HIDDEN_UNDERGROUND },
+      { layer: 'landuse', name: 'not a road', flags: TILE_MESH_FLAG_VISIBLE },
+    ],
+  } as unknown as DecodedTilePayload;
+  const filtered = visibleRoadOnlyTile(tile);
+  assert.deepEqual(filtered.meshes.map(m => m.name), ['real road']);
+  assert.equal(tile.meshes.length, 4, 'The original decoded payload remains untouched');
 });

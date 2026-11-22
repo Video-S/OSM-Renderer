@@ -656,6 +656,47 @@ clarification**, not automatically passed.
 Focused source-line test and TypeScript/build jobs in Actions run
 `45058475136` are both **PASS**, but complete CI has other failures.
 
+## Screenshot annotation resolves referent: R2 missing at regional shard boundary (2026-11-22)
+
+The owner supplied an annotated image of the same candidate screenshot:
+**R1** is the continuous cyan carriageway; **R2** is a distinct,
+parallel carriageway that visually terminates at the drawn red seam.
+The red mark designates the border at the observed cutoff. This
+explicit human identification **supersedes** our speculative
+interpretation that the blue road might be the sole target or that the
+cutoff belonged to an unrelated side road.
+
+The 39/39 geometrical probes apply **only to OSM way
+`way/6666519`**, name Hengelosestraat. **We have not yet mapped that
+way ID to R1 or R2** and must not transfer its passing coverage result
+to the other carriageway. R2 visual cutoff remains a confirmed
+candidate-region issue. Whether R2 is another OSM one-way road,
+a split graph-edge source or a material/streamer effect is **unknown**.
+
+**Next diagnostic uses existing auditor, no new bake:** identify all
+source road-line crossings at the same `horizontal-r1-2-c1` interface
+near the original E 351822.700 witness, rather than forcing the
+`--feature=way/6666519` filter. A report with all candidates retains
+seam easting, tags, tile-pair IDs, metadata, and two source-surface
+probe statuses. Inspect the nearby candidates around E ±50m first.
+Do not infer an R2 OSM ID before reading the report.
+
+```powershell
+git pull --ff-only
+npx tsx scripts/audit-regional-seams.ts `
+  "--index=data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json" `
+  "--boundary=horizontal-r1-2-c1" `
+  "--out=benchmarks/results/tkt033-primary-paired-carriageways-v1.json" `
+  "--markdown-out=benchmarks/results/tkt033-primary-paired-carriageways-v1.md"
+```
+
+Owner uploads `tkt033-primary-paired-carriageways-v1.json`.
+Then identify candidate R2 source ID(s) and run source-tangent
+coverage / actual surface-owner checks for the corresponding
+centerline and adjacent tiles. This auditor remains fixed-axis,
+sample-based triage, not road-width or continuous topology proof.
+Leave original and candidate packs untouched. No LLM visual testing.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

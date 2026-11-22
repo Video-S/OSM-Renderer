@@ -27,6 +27,7 @@
     "osm:audit-regional-seams": "tsx scripts/audit-regional-seams.ts",
     "osm:diagnose-missing-road": "tsx scripts/diagnose-missing-roads.ts",
     "osm:bake-verify-missing-road": "tsx scripts/bake-and-verify-missing-road.ts",
+    "osm:verify-remaining-missing-roads": "tsx scripts/verify-remaining-missing-roads.ts",
     "osm:audit-tile-batching": "tsx scripts/audit-tile-batching.ts",
     "osm:verify-hengelo-tiles": "tsx scripts/verify-hengelo-tiles.ts"
   },

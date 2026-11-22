@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parsePrimaryRegionalSeamArgs } from '../../scripts/inspect-primary-regional-seam';
 import {
   planPrimaryRoadCorridor, PRIMARY_ROAD_SAMPLE_OFFSETS,
   type UTM,
@@ -69,4 +70,23 @@ test('TKT-033: reject unrelated or ambiguous geometry instead of emitting mislea
   assert.equal(planPrimaryRoadCorridor({
     lines: [near], easting: E, northing: N, offsets: [-2],
   }).status, 'inconclusive');
+});
+
+
+test('TKT-033: paired-way arguments require explicit identity and exact witness', () => {
+  const parsed = parsePrimaryRegionalSeamArgs(
+    ['--source-id=way/140066819', '--easting=351809.454'],
+    '/tmp/tkt033-tests');
+  assert.equal(parsed.sourceId, 'way/140066819');
+  assert.equal(parsed.witness.easting, 351809.454);
+  assert.equal(parsed.witness.northing, 5790720);
+  assert.match(parsed.reportPath, /tkt033-paired-candidate-corridor-way-140066819-v1\.json$/);
+  assert.throws(() => parsePrimaryRegionalSeamArgs(
+    ['--source-id=way/140066819'], '/tmp/tkt033-tests'), /together/);
+  assert.throws(() => parsePrimaryRegionalSeamArgs(
+    ['--easting=351809.454'], '/tmp/tkt033-tests'), /together/);
+  assert.throws(() => parsePrimaryRegionalSeamArgs(
+    ['--source-id=way/not-a-way', '--easting=351809.454'], '/tmp/tkt033-tests'), /Invalid source/);
+  assert.throws(() => parsePrimaryRegionalSeamArgs(
+    ['--source-id=way/140066819', '--easting=NaN'], '/tmp/tkt033-tests'), /Invalid UTM/);
 });

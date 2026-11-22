@@ -313,6 +313,22 @@ npm run osm:inspect-cycleway-seam
 
 Upload only `benchmarks/results/tkt033-remaining/first-pass/way-14119316-cross-section-v1.json`. If the cycleway truly crosses the seam and uncovered samples lie **along** its centerline, investigate geometric clipping/ownership and build a source-backed regression. If its line only touches or ends on the seam and correctly visible triangles exist along the actual line, classify the original 25cm samples as false negatives; never alter clipping tolerances based solely on those probes. `way/38892898` remains a separate probable surface-ownership case.
 
+## Cycleway `way/14119316`: **false positive**, not a seam defect (2026-11-22)
+
+Owner supplied the full read-only `way-14119316-cross-section-v1.json` generated against the previously baked `west-south-pair-2x2.sqlite`, using the canonical OSM SHA. It identifies OSM `way/14119316`, **Hilgenhuesweg**, as `highway=cycleway`, `foot=yes`, `width="0.2 m"`, with **9 source nodes**. The source line **properly crosses** the horizontal tile seam N=5786624 at **E=352312.349776**, within 0.000224m of the audit point, making an angle of **39.3654° to the seam**.
+
+The original TKT-032 + batch probe kept E=352312.35 fixed while moving ±0.25m in N. For this diagonal line that creates a **~0.193m perpendicular displacement** from the source centerline. A 0.2m-wide way has nominal **0.1m half-width**, so these probes are legitimately **outside** the drawn cycleway; they cannot establish a physical discontinuity.
+
+**Direct decoded-pack evidence:** all **9** follow-up samples on the *actual OSM line*, at signed distances −2, −1, −0.5, −0.25, 0, +0.25, +0.5, +1, +2 metres, are **source-attributed `covered`**, at render elevation +0.05m and nearest source triangle distance **0m**. They include samples in both adjacent decoded tiles **344:5651** and **344:5650**, so the road is represented across the seam. Along the *wrong* fixed-axis transect, ±0.25m is uncovered with the nearest surface ~0.093m away, whereas ±0.1m is covered. This matches the expected behavior for a narrow diagonal way.
+
+**Conclusion:** The previously reported `physical-sample-gap` for `way/14119316` is a **sampling-method false positive**, not a confirmed renderer or clipper defect. No geometry or tiling fix is warranted. The broader audit must use **tangent-aligned probes along the true OSM centerline** for linear roads/paths, not arbitrary axis-aligned offsets. For source curves crossing at OSM vertices or lying nearly parallel to a seam, classify the witness as inconclusive unless both offsets can reliably be sampled along its geometry.
+
+**Regression correction:** added `tangentAlignedRoadSeamProbes()` and tests containing the exact real OSM segment that demonstrate the false positive: the fixed-axis 25cm probes lie >0.19m from the centerline while tangent-aligned 25cm probes are on-line in two different tiles. Renamed the grouped checker's misleading `physical-sample-gap` outcome to **`axis-inset-uncovered`**; the original immutable first-pass JSON retains historical names. The grouped checker still exposes axis-only metadata and is **not a substitute** for centerline-following source validation.
+
+**Other unresolved observation:** `way/38892898` cycleway is not source-attributed at the original crossing, although visible road geometry from another owner covers both sample points (neighboring `way/546666718` residential is present). Investigate semantic ownership/offset if visual representation of this cycleway is required; do not conflate source attribution with absence of a road surface.
+
+Of the original **11** neither-side road samples, **9 events** (`way/6661112` plus eight more) have new **source-attributed physical coverage** in disposable 2×2 packs; **one** is physically covered by a different road owner, and **one** is the proven axis-sampling false positive. This is strong evidence of improvement but **not** proof of correctness at every original 4×4 shard crossing, nor visual acceptance of the full regional map. The canonical **256-tile Twente mosaic is unchanged**.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

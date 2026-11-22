@@ -616,6 +616,46 @@ Upload `benchmarks/results/tkt033-primary-candidate-corridor-v1.json`
 for source/decoded-tile diagnosis. Do not upload SQLite packs yet.
 Do not promote the candidate or run another full rebake.
 
+## Candidate primary centerline check: 39/39 source-covered; screenshot referent needs identification (2026-11-22)
+
+Owner ran `npx tsx scripts/inspect-primary-regional-seam.ts` on the **new**
+candidate `twente-pilot-1024m-tkt033-candidate` and uploaded the full
+`tkt033-primary-candidate-corridor-v1.json`. The report pins OSM source
+`way/6666519`, **Hengelosestraat**, `highway=primary`, `oneway=yes`,
+with one 14-node source LineString. The source-line closest distance to
+the exact original seam crossing is only **0.000257m**.
+
+The source-based planner sampled **39** true-line positions up to **256m
+south along the OSM line** and **192m north** of E 351822.700, N 5790720.
+**20/20 southern-shard and 19/19 northern-shard samples** have
+source-owned, visible road triangles at **+0.05m** with no other-road
+substitutions and no uncovered positions. These are 4x4 regional shard
+packs `r02-c01` / `r01-c01`, NOT the old 2x2 disposable case.
+The earlier fixed-axis ±25cm seam probes also passed.
+
+**Correction to the earlier diagnosis:** neither binary omission of this
+source centerline nor a gap at the **sampled** crossing positions is
+supported by these results. A photograph of apparently missing nearby
+road remains evidence of an apparent viewer problem, but may refer to
+an adjoining source way (e.g., a side road) rather than
+`way/6666519`. In the default Tactical theme, `highway=primary`
+is bright cyan (`#38bdf8`); the broad cyan carriageway visible in the
+owner's screenshot may be Hengelosestraat itself. **Do not equate
+the screenshot's unidentified missing segment with this OSM ID without
+confirming the visible referent.** Off-centerline width, adjacent-way
+ownership, material/depth occlusion and tile streaming still require
+specific evidence to distinguish.
+
+**Next step:** owner identifies/highlights the precise *missing segment*
+in the supplied screenshot or uses feature inspector to identify
+neighbors. Then target the actual source way/UTM location before
+creating new geometry fixes. Do not generate another broad seam report
+or rebake the 256 tiles. Candidate visual sign-off remains **pending
+clarification**, not automatically passed.
+
+Focused source-line test and TypeScript/build jobs in Actions run
+`45058475136` are both **PASS**, but complete CI has other failures.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

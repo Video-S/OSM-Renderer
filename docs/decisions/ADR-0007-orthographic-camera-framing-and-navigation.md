@@ -81,3 +81,4 @@ We implement an **Isometric Orthographic Camera System** with projected bounds f
 ## Superseded or Related Decisions
 
 - Related to `ADR-0001` (World Coordinates) and `ADR-0003` (Region Clipping).
+- **Regional extension (2026-11-22):** [ADR-0013](./ADR-0013-regional-camera-zoom-policy.md) adds a centralized policy for regional datasets. The `[0.15, 8.0]` bracket above is the original framing description, not the current complete controls policy: interactive `maxZoom=16.0`, while computed bounds framing has its own upper cap; larger mosaics default to `minZoom=0.15` and allow a validated developer override. ADR-0007's core orthographic projection remains accepted.

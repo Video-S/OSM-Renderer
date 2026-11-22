@@ -103,7 +103,6 @@ test('TKT-033: canonical cycleway junction follows the shared node across both d
   const report = analyzeJunctionCorridor(plan, p => ownershipEvidence(
     p.distanceMeters < plan.seamDistanceMeters ? 'residential' : 'cycleway'));
   assert.equal(report.status, 'consistent-sampled-ownership');
-  if (report.status === 'inconclusive') assert.fail(report.reason);
   assert.ok('transition' in report && report.transition);
   assert.ok('counts' in report && report.counts.uncovered === 0);
 });

@@ -241,6 +241,14 @@ To revert the temporary server override, stop the dev server, run `Remove-Item E
 
 **TKT-033 state:** confirmed fix at source-plan stage and encoded-tile stage; waiting on owner-only actual viewer visual acceptance and any broader pilot-rebake decision. PR #9 remains draft.
 
+## Owner visual acceptance — Boerrichterkamp restored (2026-11-22)
+
+After the canonical-source and disposable **4-tile SQLite** source-attributed coverage gates passed, the owner loaded the disposable pack in the actual M2-A 1,024m viewer using the temporary `OVERIJSSEL_TILE_PACK_1024M_PATH` override (`?m2a=1&tileSize=1024`) and confirmed: **“Yeah, it's there!”** This is direct **human visual confirmation that `way/6661112` / Boerrichterkamp appears in the updated test-pack viewer**, resolving the previously observed complete absence at this location. The viewer was deliberately not tested via LLM screenshots.
+
+**Acceptance for this specific case: PASS** — source ingestion → graph planning → precise winding fix → road triangles → disposable tile encode/decode → real viewer. The owner only confirmed the road's presence; do **not** claim that every metre, all junction connections, or the boundary seam was explicitly checked during visual QA.
+
+**TKT-033 overall remains open:** the original 256-tile Twente regional mosaic still contains the old bake, other previously observed missing roads have not yet been separately rechecked, and the parent TKT-032 cross-shard gate remains distinct. This is one successfully verified root cause and repair, not blanket acceptance of the whole region. Avoid unnecessary additional manual QA until a focused follow-up on representative remaining source crossings is warranted.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.
@@ -248,7 +256,7 @@ To revert the temporary server override, stop the dev server, run `Remove-Item E
 - [ ] Focused fix plus regression tests cover missing-road case and intentional surface-ownership/hidden-layer negative controls.
 - [ ] Affected roads are physically present and correctly connected in bounded replacement output, with source feature inspection retained.
 - [ ] Existing relevant automated tests, lint and build pass.
-- [ ] Owner manually confirms representative formerly missing roads now appear.
+- [x] Owner visually confirms Boerrichterkamp (`way/6661112`) now appears in disposable viewer; remaining originally missing roads and regional map are pending.
 
 ## Explicit non-goals
 

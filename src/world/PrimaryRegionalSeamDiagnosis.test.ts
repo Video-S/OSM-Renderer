@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parsePrimaryRegionalSeamArgs } from '../../scripts/inspect-primary-regional-seam';
 import {
-  planPrimaryRoadCorridor, PRIMARY_ROAD_SAMPLE_OFFSETS,
+  planPrimaryRoadCorridor, roadPerpendicularSample, PRIMARY_ROAD_SAMPLE_OFFSETS,
   type UTM,
 } from '../../scripts/primary-regional-seam-corridor';
 
@@ -89,4 +89,14 @@ test('TKT-033: paired-way arguments require explicit identity and exact witness'
     ['--source-id=way/not-a-way', '--easting=351809.454'], '/tmp/tkt033-tests'), /Invalid source/);
   assert.throws(() => parsePrimaryRegionalSeamArgs(
     ['--source-id=way/140066819', '--easting=NaN'], '/tmp/tkt033-tests'), /Invalid UTM/);
+});
+
+test('TKT-033: cross-road samples move perpendicular to source tangent on both sides', () => {
+  const line: UTM[] = [[E, N - 10], [E, N + 10]];
+  const left = roadPerpendicularSample([line], [E, N], -3);
+  const right = roadPerpendicularSample([line], [E, N], 3);
+  assert.deepEqual(left, [E + 3, N]);
+  assert.deepEqual(right, [E - 3, N]);
+  assert.equal(roadPerpendicularSample([line], [E + 2, N], 1), null);
+  assert.equal(roadPerpendicularSample([], [E, N], 1), null);
 });

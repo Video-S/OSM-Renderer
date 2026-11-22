@@ -38,13 +38,13 @@ All ADRs must be structured using the reusable template:
 
 ## Index of Architectural Decisions
 
-The following architectural decisions have been accepted and represent the established architecture across Goalpost 1 and Goalpost 2 (M2.1–M2.3):
+These ADRs span historic Goalpost 1 decisions and current regional architecture. Original decisions are preserved; later ADRs may qualify their scope. For current implementation status see [../STATUS.md](../STATUS.md).
 
 - **[ADR-0001: Geographic Coordinates, Projection, and Local World Coordinates](./ADR-0001-geographic-coordinates-and-local-projection.md)**  
-  Local equirectangular metric projection centered at dataset origin $(0, 0, 0)$ with metric axes (+X East, +Y Up, +Z South).
+  Local/live equirectangular projection (+X East, +Y Up, +Z South); offline regional tiling uses UTM EPSG:25832 as recorded in ADR-0011.
 
 - **[ADR-0002: Boundary-Derived Road Junction Polygon Synthesis and Coplanar Overlap Resolution](./ADR-0002-boundary-derived-road-junction-meshing.md)**  
-  Elimination of road intersection z-fighting via true polyline arc-length trimming and synthesized coplanar junction polygons at uniform baseline `0.050 m`.
+  Historical, superseded road strategy: trimmed roads and explicit junction polygons. Production roads use E2+ (ADR-0010).
 
 - **[ADR-0003: Loaded Region Boundary Clipping and Bounded Scene Sizing](./ADR-0003-loaded-region-boundary-clipping.md)**  
   Strict metric bounding box clipping using Liang-Barsky line clipping and a topology-aware convex decomposition polygon fallback for concave and holed shapes.
@@ -68,5 +68,18 @@ The following architectural decisions have been accepted and represent the estab
   OSMnx-referenced pure-TypeScript infrastructure topology graph (`RoadNetwork`, `RailwayNetwork`, `GradeTransitionRelation`, `RailwayFlatCrossingRelation`, `LevelCrossingRelation`, `GradeSeparatedCrossingRelation`), non-destructive pre-deduplication/pre-chaining `TopologySourceData` handoff, non-interstitial degree-2 simplification with per-segment provenance, and staged renderer integration plan.
 
 - **[ADR-0010: Surface-First At-Grade Road Rendering (`E2+` / `roads: 'graph-surface'`)](./ADR-0010-surface-first-road-rendering.md)**  
-  Selection and `TKT-026` production promotion (`in_progress` pending owner visual approval) of surface-first rounded 2D edge-stroke buffering and priority-ordered Boolean ownership subtraction (`SurfaceFirstRoadFootprints.ts`) as the sole production at-grade road renderer, retiring Legacy and E2 (`ADR-0002` / `solveBoundaryDerivedJunctionNode`).
+  Selection and completed `TKT-026` production promotion (owner-approved 2026-11-19) of surface-first rounded 2D edge-stroke buffering and priority-ordered Boolean ownership subtraction (`SurfaceFirstRoadFootprints.ts`) as the sole production at-grade road renderer, retiring Legacy and E2 (`ADR-0002` / `solveBoundaryDerivedJunctionNode`).
+
+- **[ADR-0011: Baked Geometry Tiles, Regional Projection, and Runtime Streaming](./ADR-0011-baked-tiles-and-runtime-streaming.md)**  
+  Accepted implemented LOD0 offline `OSMTILE1` packs, UTM regional alignment, tile decoding/eviction, themes and provenance; clarifies the separate local/live projection.
+
+- **[ADR-0012: Bounded Offline Shards and Manifest-Based Regional Mosaics](./ADR-0012-bounded-regional-mosaics.md)**  
+  Accepted pilot 4 × 4 shards, manifest rebasing, resumable baking, default candidate, bounded SQLite handles; 120-shard full Twente remains pending validation.
+
+- **[ADR-0013: Regional Orthographic Zoom-Out Safety Policy](./ADR-0013-regional-camera-zoom-policy.md)**  
+  Accepted LOD0 `minZoom=0.15` guard, validated developer overrides and explicit benchmark overview; not LOD1–LOD3.
+
+## Decision record status convention
+
+An ADR may be accepted for one implemented scope while a broader application remains experimental. Keep historical decisions and dates intact. For a new execution path, cross-reference earlier decisions rather than incorrectly marking them globally superseded.
 

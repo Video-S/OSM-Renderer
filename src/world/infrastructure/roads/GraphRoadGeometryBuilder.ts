@@ -516,6 +516,12 @@ export interface GraphRoadGeometryBuildOptions {
   diagnostics?: ProcessedMapData['diagnostics'];
   /** Optional tile XZ bounds; when provided, clips emitted road/step meshes to exact tile boundaries after priority subtraction. */
   tileClipBounds?: ClipBox2D;
+  /**
+   * Test-only fault injection: simulate a late triangulation rejection for a
+   * specific source ID. Never used by the app or the offline tile baker.
+   * Lets regression tests prove a non-emitted road cannot occlude later roads.
+   */
+  testOnlyRejectAfterTriangulation?: (sourceFeatureId: string) => boolean;
 }
 
 /**
@@ -1491,7 +1497,9 @@ export function buildGraphAtGradeRoadGeometries(
             }
             continue;
           }
-          registerRoadFootprint(sub.subId, isPath, visible);
+          // Ownership must not be committed before a renderable mesh exists.
+          // An otherwise valid polygon may fail shape conversion, triangulation,
+          // winding validation or tile clipping, leaving a phantom blocker.
 
           if (
             tileClipBounds &&
@@ -1554,6 +1562,16 @@ export function buildGraphAtGradeRoadGeometries(
             continue;
           }
 
+          if (options.testOnlyRejectAfterTriangulation?.(sub.sourceFeatureId)) {
+            // Deterministic test for the same late-failure lifecycle as a
+            // validator rejection; production callers never supply this hook.
+            geo.dispose();
+            stats.invalidTriangleGeometryCount++;
+            stats.rejectedOrDegenerateCount++;
+            recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
+            continue;
+          }
+
           timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
           resourceManager.registerGeometry(geo);
           stats.outputPolygonCount += visible.length;
@@ -1590,6 +1608,9 @@ export function buildGraphAtGradeRoadGeometries(
           };
           if (!roadsByClass.has(edge.roadClass)) roadsByClass.set(edge.roadClass, []);
           roadsByClass.get(edge.roadClass)!.push({ geom: geo, info: roadInfo });
+          // Only surfaces backed by actual rendered triangles may take
+          // ownership and subtract lower-priority road geometry.
+          registerRoadFootprint(sub.subId, isPath, visible);
           stats.renderedRoadRibbonCount++;
           for (const sid of sids) renderedSourceIds.add(sid);
           if (edge.roadClass === 'steps') {

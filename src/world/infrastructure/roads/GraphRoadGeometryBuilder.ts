@@ -93,6 +93,8 @@ const STRUCTURAL_NON_SURFACE_ROAD_MESH_NAMES = new Set<string>([
  * Minimum triangle area (`m²`) below which an indexed face is classified as degenerate.
  */
 export const MIN_NONDEGENERATE_TRIANGLE_AREA_M2 = 1e-6;
+/** Included in source-backed reports to distinguish a stale local checkout. */
+export const ROAD_TRIANGLE_VALIDATOR_REVISION = 'float32-sliver-pruning-v2';
 
 /**
  * Detailed attribution for a winding or normal-orientation defect detected on an at-grade road,
@@ -501,6 +503,143 @@ export interface GraphRoadRenderStats {
 /**
  * Input configuration for `buildGraphAtGradeRoadGeometries`.
  */
+export interface RoadGeometryTraceEvent {
+  sourceFeatureId: string;
+  edgeId: string;
+  subId: string;
+  stage:
+    | 'filtered-visibility' | 'invalid-edge' | 'invalid-subsegment'
+    | 'stroke-empty' | 'fully-subtracted' | 'bbox-outside'
+    | 'empty-shapes' | 'invalid-triangles' | 'clip-empty' | 'clip-invalid'
+    | 'fault-injected-rejection' | 'emitted' | 'exception';
+  /** First unexpected triangle on a validation failure, if one exists. */
+  invalidTriangle?: {
+    faceIndex: number;
+    reason: 'nonfinite' | 'non-upward' | 'no-valid-faces';
+    areaSquareMeters?: number;
+    normalY?: number;
+    vertices?: [number, number, number][];
+  };
+  triangleCount?: number;
+  polygonCount?: number;
+  blockerCount?: number;
+  triangleAudit?: RoadTriangleFailureAudit;
+  message?: string;
+}
+
+export interface RoadGeometryTraceTarget {
+  sourceId: string;
+  events: RoadGeometryTraceEvent[];
+}
+
+
+export interface RoadTriangleFailureAudit {
+  totalFaces: number;
+  upwardFaces: number;
+  areaDegenerateFaces: number;
+  prunableFloat32SliverFaces: number;
+  fatalFaces: number;
+  /** First face that actually causes validation to reject the road. */
+  firstFatal?: NonNullable<RoadGeometryTraceEvent['invalidTriangle']>;
+  /** Bounded geometric evidence; only problematic faces, not all valid faces. */
+  problemFaces: Array<{
+    faceIndex: number;
+    disposition: 'pruned-degenerate' | 'pruned-float32-sliver' | 'fatal-nonfinite' | 'fatal-non-upward';
+    areaSquareMeters?: number;
+    normalY?: number;
+    altitudeMeters?: number;
+    float32UlpMeters?: number;
+    vertices?: [number, number, number][];
+  }>;
+}
+
+/**
+ * Source-filtered diagnostic mirroring validateAndPruneHorizontalGeometry.
+ * In particular, an inverted face discarded as an unresolvable Float32
+ * sliver must NOT be reported as the reason an entire road was rejected.
+ */
+export function inspectRoadTriangleFaces(
+  geo: THREE.BufferGeometry,
+  maxProblemFaces = 24
+): RoadTriangleFailureAudit {
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  const idx = geo.getIndex();
+  const n = pos ? Math.floor((idx?.count ?? pos.count) / 3) : 0;
+  const audit: RoadTriangleFailureAudit = {
+    totalFaces: n,
+    upwardFaces: 0,
+    areaDegenerateFaces: 0,
+    prunableFloat32SliverFaces: 0,
+    fatalFaces: 0,
+    problemFaces: [],
+  };
+  if (!pos) {
+    audit.firstFatal = { faceIndex: -1, reason: 'no-valid-faces' };
+    return audit;
+  }
+  for (let face = 0; face < n; face++) {
+    const ids = [0,1,2].map(j => idx ? idx.getX(face * 3 + j) : face * 3 + j);
+    const verts = ids.map(j => [pos.getX(j), pos.getY(j), pos.getZ(j)] as [number, number, number]);
+    if (verts.some(v => v.some(x => !Number.isFinite(x)))) {
+      audit.fatalFaces++;
+      if (!audit.firstFatal) audit.firstFatal = { faceIndex: face, reason: 'nonfinite', vertices: verts };
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({ faceIndex: face, disposition: 'fatal-nonfinite', vertices: verts });
+      }
+      continue;
+    }
+    const [a,b,c] = verts;
+    const ax = b[0]-a[0], ay = b[1]-a[1], az = b[2]-a[2];
+    const bx = c[0]-a[0], by = c[1]-a[1], bz = c[2]-a[2];
+    const cx = ay*bz-az*by, cy = az*bx-ax*bz, cz = ax*by-ay*bx;
+    const doubleArea = Math.hypot(cx, cy, cz);
+    const area = doubleArea * 0.5;
+    if (!Number.isFinite(area) || area <= MIN_NONDEGENERATE_TRIANGLE_AREA_M2) {
+      audit.areaDegenerateFaces++;
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({
+          faceIndex: face, disposition: 'pruned-degenerate', areaSquareMeters: area,
+        });
+      }
+      continue;
+    }
+    const ny = cy / doubleArea;
+    if (ny <= 0.99) {
+      const coords: [number, number][] = [[a[0],a[2]],[b[0],b[2]],[c[0],c[2]]];
+      let longest = 0, coordMax = 0;
+      for (let k=0; k<3; k++) {
+        longest=Math.max(longest,Math.hypot(coords[(k+1)%3][0]-coords[k][0],coords[(k+1)%3][1]-coords[k][1]));
+        coordMax=Math.max(coordMax,Math.abs(coords[k][0]),Math.abs(coords[k][1]));
+      }
+      const altitude = longest > 0 ? doubleArea / longest : 0;
+      const ulp = 2**(Math.floor(Math.log2(Math.max(coordMax,2**-126)))-23);
+      const prunable = hasUnresolvableFloat32Winding(coords,area);
+      if (prunable) {
+        audit.prunableFloat32SliverFaces++;
+      } else {
+        audit.fatalFaces++;
+        if (!audit.firstFatal) audit.firstFatal = {
+          faceIndex: face, reason: 'non-upward', areaSquareMeters: area, normalY: ny, vertices: verts,
+        };
+      }
+      if (audit.problemFaces.length < maxProblemFaces) {
+        audit.problemFaces.push({
+          faceIndex: face,
+          disposition: prunable ? 'pruned-float32-sliver' : 'fatal-non-upward',
+          areaSquareMeters: area, normalY: ny, altitudeMeters: altitude,
+          float32UlpMeters: ulp, vertices: verts,
+        });
+      }
+    } else {
+      audit.upwardFaces++;
+    }
+  }
+  if (!audit.firstFatal && audit.upwardFaces === 0) {
+    audit.firstFatal = { faceIndex: -1, reason: 'no-valid-faces' };
+  }
+  return audit;
+}
+
 export interface GraphRoadGeometryBuildOptions {
   /** Immutable graph-backed render descriptor bundle produced by `InfrastructureRenderAdapter`. */
   descriptors: InfrastructureRenderDescriptorBundle;
@@ -516,6 +655,14 @@ export interface GraphRoadGeometryBuildOptions {
   diagnostics?: ProcessedMapData['diagnostics'];
   /** Optional tile XZ bounds; when provided, clips emitted road/step meshes to exact tile boundaries after priority subtraction. */
   tileClipBounds?: ClipBox2D;
+  /**
+   * Test-only fault injection: simulate a late triangulation rejection for a
+   * specific source ID. Never used by the app or the offline tile baker.
+   * Lets regression tests prove a non-emitted road cannot occlude later roads.
+   */
+  testOnlyRejectAfterTriangulation?: (sourceFeatureId: string) => boolean;
+  /** Optional, read-only, source-filtered trace of actual road generation decisions. */
+  roadGeometryTrace?: RoadGeometryTraceTarget;
 }
 
 /**
@@ -712,16 +859,52 @@ function recordGraphRoadDiagnostic(
 }
 
 /**
+ * Distinguish a genuinely reversed triangle from a near-collinear
+ * triangulation sliver whose winding is below Float32 position resolution.
+ *
+ * Three.js ShapeGeometry stores vertices in Float32. At, for example,
+ * local Z=-387m the coordinate spacing is about 0.0000305m; a sliver thinner
+ * than that can change its signed area solely through rounding. Removing it
+ * is safer than rejecting the entire otherwise valid road ribbon.
+ *
+ * This is deliberately a precision-relative criterion rather than a blanket
+ * area threshold: a large, visibly inverted face still fails validation.
+ */
+function hasUnresolvableFloat32Winding(
+  vertices: readonly (readonly [number, number])[],
+  areaSquareMeters: number
+): boolean {
+  let largestEdge = 0;
+  let maxAbsoluteCoordinate = 0;
+  for (let i = 0; i < 3; i++) {
+    const [x, z] = vertices[i];
+    const [nx, nz] = vertices[(i + 1) % 3];
+    largestEdge = Math.max(largestEdge, Math.hypot(nx - x, nz - z));
+    maxAbsoluteCoordinate = Math.max(maxAbsoluteCoordinate, Math.abs(x), Math.abs(z));
+  }
+  if (largestEdge <= 0) return true;
+
+  // The spacing between neighboring normal Float32 values at this coordinate
+  // magnitude; subnormal values are already handled by the 1e-6m² area floor.
+  const float32Ulp = 2 ** (Math.floor(Math.log2(
+    Math.max(maxAbsoluteCoordinate, 2 ** -126)
+  )) - 23);
+  const altitude = (2 * areaSquareMeters) / largestEdge;
+  return altitude <= 2 * float32Ulp;
+}
+
+/**
  * Validates and cleans a horizontal road/path/step/junction `BufferGeometry` in place:
- * - Verifies that NO non-degenerate triangle (`area > 1e-6 m²`) has downward/inverted winding (`crossY <= 0`).
- *   Never conceals inverted triangles by flipping normals or reversing indices.
+ * - Rejects all visibly inverted triangles (`geomNormal.y <= 0.99`) rather than reversing indices.
+ *   Tiny near-collinear triangles with altitude below Float32 coordinate spacing are
+ *   pruned instead, because their winding cannot be represented reliably.
  * - Filters out zero-area collinear sliver triangles (`area <= 1e-6 m²`) emitted by earcut or pinched quads.
  * - Ensures stored vertex normals on all active vertices are `[0, 1, 0]`.
  *
- * Returns `true` if the geometry has `>= 1` valid upward-facing triangles and `0` inverted triangles,
- * or `false` if any non-degenerate triangle is inverted or no valid triangles remain.
+ * Returns `true` if at least one valid upward-facing triangle remains and
+ * no resolvably inverted triangles exist; otherwise returns `false`.
  */
-function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean {
+export function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean {
   const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || posAttr.count < 3) return false;
 
@@ -780,7 +963,14 @@ function validateAndPruneHorizontalGeometry(geo: THREE.BufferGeometry): boolean 
 
     const ny = cy / doubleArea;
     if (ny <= 0.99) {
-      // Never conceal an inverted or non-upward triangle by flipping normals or indices
+      // The polygon tessellator may produce micrometre-scale slivers whose
+      // Float32 vertex rounding reverses their apparent winding. Drop only
+      // those unresolvable faces; keep rejecting genuine inversions.
+      if (hasUnresolvableFloat32Winding(
+        [[x0, z0], [x1, z1], [x2, z2]], area
+      )) {
+        continue;
+      }
       return false;
     }
 
@@ -1105,6 +1295,20 @@ export function buildGraphAtGradeRoadGeometries(
   // A source can still have visible geometry elsewhere, so finalize after all edges.
   const e2PlusOccludedSourceCandidates = new Set<string>();
 
+  const trace = options.roadGeometryTrace;
+  const recordTrace = (
+    edge: RoadEdgeRenderDescriptor,
+    subId: string,
+    stage: RoadGeometryTraceEvent['stage'],
+    details: Pick<RoadGeometryTraceEvent, 'invalidTriangle' | 'triangleAudit' | 'triangleCount' | 'polygonCount' | 'blockerCount' | 'message'> = {}
+  ): void => {
+    if (!trace || !edge.sourceFeatureIds.includes(trace.sourceId)) return;
+    trace.events.push({
+      sourceFeatureId: trace.sourceId,
+      edgeId: edge.id, subId, stage, ...details,
+    });
+  };
+
   const isEligibleSurfaceEdge = (edge: RoadEdgeRenderDescriptor): boolean =>
     edge.isAtGradeBuildable && resolveSurfaceVisibility({
       osmTags: edge.primaryOsmTags,
@@ -1122,16 +1326,23 @@ export function buildGraphAtGradeRoadGeometries(
   );
 
   for (const edge of descriptors.roadEdges) {
-    if (!isEligibleSurfaceEdge(edge)) continue;
+    if (!isEligibleSurfaceEdge(edge)) {
+      recordTrace(edge, edge.id, 'filtered-visibility', {
+        message: 'isAtGradeBuildable=' + edge.isAtGradeBuildable,
+      });
+      continue;
+    }
     stats.atGradeRoadEdgeCount++;
 
     if (!edge.points || edge.points.length < 2) {
       stats.rejectedOrDegenerateCount++;
+      recordTrace(edge, edge.id, 'invalid-edge', { message: 'less than two points' });
       continue;
     }
     const len = computePolylineLength(edge.points as [number, number][]);
     if (!Number.isFinite(len) || len < 0.05) {
       stats.rejectedOrDegenerateCount++;
+      recordTrace(edge, edge.id, 'invalid-edge', { message: 'length=' + len });
       continue;
     }
 
@@ -1407,6 +1618,7 @@ export function buildGraphAtGradeRoadGeometries(
         const pts = sub.points;
         if (pts.length < 2) {
           stats.rejectedOrDegenerateCount++;
+          recordTrace(edge, sub.subId, 'invalid-subsegment');
           continue;
         }
         const { width, roadElevation, isPath, sourceFeatureIds: sids } = sub;
@@ -1435,6 +1647,7 @@ export function buildGraphAtGradeRoadGeometries(
             recordGraphRoadDiagnostic(diagnostics, 'e2plus_flat_ribbon_fallback', sub.subId);
           } else {
             stats.rejectedOrDegenerateCount++;
+            recordTrace(edge, sub.subId, 'stroke-empty');
             continue;
           }
         }
@@ -1483,6 +1696,7 @@ export function buildGraphAtGradeRoadGeometries(
           timing.ownershipClippingTimeMs += performance.now() - tClipStart;
           if (visible.length === 0) {
             stats.fullySubtractedCount++;
+            recordTrace(edge, sub.subId, 'fully-subtracted', { blockerCount: blockers.length });
             fullySubtractedRoadIds.add(sub.subId);
             fullySubtractedRoadIds.add(edge.id);
             for (const sid of sids) {
@@ -1491,7 +1705,9 @@ export function buildGraphAtGradeRoadGeometries(
             }
             continue;
           }
-          registerRoadFootprint(sub.subId, isPath, visible);
+          // Ownership must not be committed before a renderable mesh exists.
+          // An otherwise valid polygon may fail shape conversion, triangulation,
+          // winding validation or tile clipping, leaving a phantom blocker.
 
           if (
             tileClipBounds &&
@@ -1500,6 +1716,7 @@ export function buildGraphAtGradeRoadGeometries(
               maxZ < tileClipBounds.minZ ||
               minZ > tileClipBounds.maxZ)
           ) {
+            recordTrace(edge, sub.subId, 'bbox-outside');
             continue;
           }
 
@@ -1517,6 +1734,18 @@ export function buildGraphAtGradeRoadGeometries(
             unclippedGeo.translate(0, roadElevation, 0);
             if (unclippedGeo.hasAttribute('uv')) unclippedGeo.deleteAttribute('uv');
             if (!validateAndPruneHorizontalGeometry(unclippedGeo)) {
+              // Only the requested source receives a detailed failure scan.
+              // Match the validator's Float32 sliver policy when selecting
+              // the *fatal* triangle, not merely the first downward face.
+              if (trace && edge.sourceFeatureIds.includes(trace.sourceId)) {
+                const triangleAudit = inspectRoadTriangleFaces(unclippedGeo);
+                recordTrace(edge, sub.subId, 'invalid-triangles', {
+                  invalidTriangle: triangleAudit.firstFatal,
+                  triangleAudit,
+                  triangleCount: triangleAudit.totalFaces,
+                  polygonCount: visible.length, blockerCount: blockers.length,
+                });
+              }
               unclippedGeo.dispose();
               failedInvalidTriangles = true;
             } else if (!tileClipBounds) {
@@ -1527,11 +1756,18 @@ export function buildGraphAtGradeRoadGeometries(
               if (!clippedGeo) {
                 // Road bbox overlapped tileClipBounds without intersecting polygon area; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
+                recordTrace(edge, sub.subId, 'clip-empty');
                 continue;
               }
               if (validateAndPruneHorizontalGeometry(clippedGeo)) {
                 geo = clippedGeo;
               } else {
+                if (trace && edge.sourceFeatureIds.includes(trace.sourceId)) {
+                  const triangleAudit = inspectRoadTriangleFaces(clippedGeo);
+                  recordTrace(edge, sub.subId, 'clip-invalid', {
+                    invalidTriangle: triangleAudit.firstFatal, triangleAudit,
+                  });
+                }
                 clippedGeo.dispose();
                 // Micro-sliver clipped away at tile border; valid skip
                 timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
@@ -1543,6 +1779,9 @@ export function buildGraphAtGradeRoadGeometries(
           if (!geo) {
             timing.triangulationAndValidationTimeMs += performance.now() - tTriStart;
             if (failedEmptyShapes) {
+              recordTrace(edge, sub.subId, 'empty-shapes', {
+                polygonCount: visible.length, blockerCount: blockers.length,
+              });
               stats.emptyShapeCount++;
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_empty_shapes', sub.subId);
@@ -1551,6 +1790,17 @@ export function buildGraphAtGradeRoadGeometries(
               stats.rejectedOrDegenerateCount++;
               recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
             }
+            continue;
+          }
+
+          if (options.testOnlyRejectAfterTriangulation?.(sub.sourceFeatureId)) {
+            // Deterministic test for the same late-failure lifecycle as a
+            // validator rejection; production callers never supply this hook.
+            geo.dispose();
+            recordTrace(edge, sub.subId, 'fault-injected-rejection');
+            stats.invalidTriangleGeometryCount++;
+            stats.rejectedOrDegenerateCount++;
+            recordGraphRoadDiagnostic(diagnostics, 'e2plus_invalid_triangles', sub.subId);
             continue;
           }
 
@@ -1590,6 +1840,14 @@ export function buildGraphAtGradeRoadGeometries(
           };
           if (!roadsByClass.has(edge.roadClass)) roadsByClass.set(edge.roadClass, []);
           roadsByClass.get(edge.roadClass)!.push({ geom: geo, info: roadInfo });
+          // Only surfaces backed by actual rendered triangles may take
+          // ownership and subtract lower-priority road geometry.
+          registerRoadFootprint(sub.subId, isPath, visible);
+          recordTrace(edge, sub.subId, 'emitted', {
+            polygonCount: visible.length, blockerCount: blockers.length,
+            triangleCount: Math.floor((geo.getIndex()?.count ??
+              geo.getAttribute('position').count) / 3),
+          });
           stats.renderedRoadRibbonCount++;
           for (const sid of sids) renderedSourceIds.add(sid);
           if (edge.roadClass === 'steps') {
@@ -1614,13 +1872,20 @@ export function buildGraphAtGradeRoadGeometries(
               }
             }
           }
-        } catch {
+        } catch (err) {
+          recordTrace(edge, sub.subId, 'exception', {
+            message: err instanceof Error ? err.message : String(err),
+            blockerCount: blockers.length,
+          });
           timing.ownershipClippingTimeMs += performance.now() - tClipStart;
           stats.surfaceClipFailureCount++;
           stats.rejectedOrDegenerateCount++;
           recordGraphRoadDiagnostic(diagnostics, 'e2plus_surface_clip_failed', sub.subId);
         }
       } catch (err) {
+        recordTrace(edge, sub.subId, 'exception', {
+          message: err instanceof Error ? err.message : String(err),
+        });
         console.warn(`Skipping invalid graph at-grade road segment ${sub.subId}`, err);
         stats.rejectedOrDegenerateCount++;
       }

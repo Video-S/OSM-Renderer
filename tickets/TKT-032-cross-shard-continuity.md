@@ -307,6 +307,14 @@ The owner additionally reports having **seen roads disappear in the renderer bef
 
 **Owner requested deferral of the general missing-road investigation.** Tracked separately as **[TKT-033 — Missing Road Geometry in Shared Road Renderer](TKT-033-missing-road-rendering.md)** (`status: deferred`). No additional root-cause work or baker edits are planned now. The regional fidelity gate remains unapproved because owner-observed missing roads have not been resolved; this is a recorded known issue, not a silent sign-off. Resume TKT-033 only when reprioritized.
 
+## TKT-033 source-backed follow-up and axis-probe false positive (2026-11-22)
+
+After this ticket's historical deferral note, the owner **reopened TKT-033** and approved repair of confirmed shared geometry omissions. The precise Float32 sliver-winding validator defect was fixed; Boerrichterkamp (`way/6661112`) now renders in the canonical-source shared plan, in disposable baked SQLite LOD0 tiles, and was **visually confirmed by the owner** in the existing viewer. Eight other original neither-side crossing events have correct source-attributed decoded-tile coverage in bounded 2×2 bakes; one (`way/38892898` cycleway) is covered by *other-owned* visible road geometry and remains a semantic representation question.
+
+**Important correction to v3 audit methodology:** Hilgenhuesweg `way/14119316` (`highway=cycleway`, **0.2m OSM width**) genuinely crosses a horizontal tile seam at **39.3654°**. Axis-only north/south ±25cm probes at fixed easting are ~**19.3cm sideways** from its centerline—outside the 10cm half-width—and therefore incorrectly classify it as missing. The exact OSM centerline checked **nine points** over ±2m on both adjacent physical SQLite tiles; all were source-covered. **This is a source-geometry sampling false positive, not a missing cycleway.** Future seam audits of line-like features must follow their *actual segment tangents* across interfaces, distinguish tangencies/endpoints, and avoid using a fixed-axis uncovered sample alone as evidence of a missing road.
+
+TKT-033 has an isolated regression for tangent-aligned OSM sampling and no geometry/clipper change for Hilgenhuesweg. The original canonical **256-tile regional bake remains unchanged**; do not sign off TKT-032/TKT-029 based solely on smaller-context 2×2 results. The earlier deferral paragraph above is historical, not current ticket status.
+
 ## Completion checklist
 
 - [ ] Audit all 24 internal interfaces and 9 four-way junctions with bounded memory and provenance.
@@ -323,3 +331,15 @@ The owner additionally reports having **seen roads disappear in the renderer bef
 No province-wide bake, generic batching, detailed whole-region render optimization, offline LOD, strategic/map-on-map UI, camera limits, gameplay, new tile size, or broad redesign. Preserve the existing detailed renderer and its source-backed semantics.
 
 **Principle:** Establish whether the world we already built is continuous before extending its geographic footprint.
+
+## Candidate visual recheck — western primary road remains broken (2026-11-22)
+
+Owner completed a fresh TKT-033 candidate regional bake (16/16 shards, 256/256 nonempty verified tiles, 236.09 MiB compressed; original mosaic preserved). Owner visually reports several former missing-road sites restored but **`way/6666519` western primary road is still absent/cut off** and supplied a screenshot. The original witness E=351822.700, N=5790720 is **exactly on** internal 4×4 shard boundary `horizontal-r1-2-c1`, between `r01-c01` and `r02-c01` (north tile 343:5655, south tile 343:5654). This is strong evidence to prioritize cross-shard diagnosis but not yet a causal proof. An earlier positive 2×2 disposable pack probe has a different source-planning context and does not close this failure.
+
+**Current outcome:** new full regional candidate **failed human visual acceptance**, despite passing pack hash/identity checks; do not promote/replace the old mosaic or sign off TKT-032/TKT-029. TKT-033 documents the exact read-only filtered source/mesh seam audit command and follow-up plan. Preserve both mosaic directories. Avoid generic rebaking or speculative seam fixes.
+
+## Correction: western primary candidate visually passes when correct pack served (2026-11-22)
+
+**Supersedes the immediately preceding western primary candidate visual failure section.** The owner checked the regional HTTP manifest and confirmed that the screenshot with the apparent R2 seam cutoff was taken while the server was still using the **old** `twente-pilot-1024m/mosaic.json`, despite the new candidate having been baked and audited offline. After restarting with `OVERIJSSEL_REGIONAL_MOSAIC_PATH` pointing to `twente-pilot-1024m-tkt033-candidate/mosaic.json`, the live manifest returned the new candidate's `packPath`. The owner then visually confirmed **all previously broken TKT-033 test locations**, including parallel R1/R2 at the western primary road, are present and correct. The screenshot therefore does **not** document a defect in the new candidate.
+
+This closes the **known missing-road visual regression gate**, not TKT-032's broader 24-interface/9-junction source-to-render checks, railway/portal parity, general map acceptance, or remaining CI failures. The candidate remains unpromoted. Future visual-test notes must include the live regional manifest `packPath` to establish which mosaic is actually being inspected.

@@ -23,6 +23,7 @@ import {
   type GeometryBuilderOptions,
   type GraphRoadGeometryBuildResult,
 } from '../GeometryBuilder';
+import type { RoadGeometryTraceTarget } from '../infrastructure/roads/GraphRoadGeometryBuilder';
 import { resolveAndValidatePlanarPolygons } from '../PlanarLayerValidator';
 import { LocalGeoJsonProvider } from '../LocalGeoJsonProvider';
 import {
@@ -298,6 +299,8 @@ export function ingestCanonicalStudyGeoJson(
   grid: StudyGridSpec,
   options?: {
     infrastructureRenderOptions?: Partial<InfrastructureRenderOptions>;
+    /** Optional read-only source-targeted shared road builder trace. */
+    roadGeometryTrace?: RoadGeometryTraceTarget;
   }
 ): IngestedStudyRegion {
   const t0 = performance.now();
@@ -518,6 +521,7 @@ export function ingestCanonicalStudyGeoJson(
       surfaceFirst: true,
       gradeTransitionCoords,
       resourceManager: roadPlanResourceManager,
+      roadGeometryTrace: options?.roadGeometryTrace,
     });
     atGradeRoadPlan.roadsByClass.forEach((items) => {
       for (const item of items) {

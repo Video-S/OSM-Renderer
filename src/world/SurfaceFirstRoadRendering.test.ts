@@ -24,6 +24,8 @@ import {
   SurfaceFirstBufferInstrumentation,
 } from './infrastructure/roads/SurfaceFirstRoadFootprints';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
+import { buildGraphAtGradeRoadGeometries, inspectRoadTriangleFaces, validateAndPruneHorizontalGeometry } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import { SceneResourceManager } from './SceneResourceManager';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { ProcessedMapData, RoadClass, RoadFeature } from '../types/MapFeature';
 import prinsForkRepro from './prototype/PrinsHendrikkadeForkFixture.json';
@@ -463,6 +465,158 @@ function buildSurfaceFirstScene(data: ProcessedMapData, roadWidthMultiplier = 1.
   });
   return builder.buildScene(data, MAP_THEMES.tactical);
 }
+
+describe('TKT-033: precision-limited earcut sliver regression from Boerrichterkamp', () => {
+  const validFace = [
+    0, 0.05, 0,
+    0, 0.05, 10,
+    10, 0.05, 0,
+  ];
+  const sourceFace19 = [
+    // Actual failing Float32 vertices from canonical way/6661112,
+    // Boerrichterkamp, EPSG:25832 near E=357376 N=5791095.
+    // Area=6.967457e-6m², inverted normalY=-1, long edge=5.365m.
+    -17.274599075317383, 0.05000000074505806, -387.07470703125,
+    -17.290800094604492, 0.05000000074505806, -387.04339599609375,
+    -19.740299224853516, 0.05000000074505806, -382.3102111816406,
+  ];
+  function makeGeometry(faces: number[]): THREE.BufferGeometry {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(faces, 3));
+    return geometry;
+  }
+
+  it('prunes actual Float32-inverted 0.0026mm thin face without rejecting good road triangles', () => {
+    const geo = makeGeometry([...validFace, ...sourceFace19]);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), true);
+      assert.equal(geo.getIndex()?.count, 3,
+        'Only the numerically unresolved face must be pruned');
+      assert.deepEqual(Array.from(geo.getIndex()!.array), [0, 1, 2]);
+      const normals = geo.getAttribute('normal');
+      assert.deepEqual([normals.getX(0), normals.getY(0), normals.getZ(0)], [0, 1, 0]);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('still rejects a genuinely inverted, visible triangle even when another face is valid', () => {
+    const visibleInversion = [
+      0, 0.05, 0,
+      5, 0.05, 0,
+      0, 0.05, 5,
+    ]; // area 12.5m², normalY=-1
+    const geo = makeGeometry([...validFace, ...visibleInversion]);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('reports the actual fatal face after a pruned sliver, rather than the first inverted face', () => {
+    const resolvedInversion = [
+      0, 0.05, 0,
+      5, 0.05, 0,
+      0, 0.05, 5,
+    ];
+    const geo = makeGeometry([...validFace, ...sourceFace19, ...resolvedInversion]);
+    try {
+      const audit = inspectRoadTriangleFaces(geo);
+      assert.equal(audit.totalFaces, 3);
+      assert.equal(audit.upwardFaces, 1);
+      assert.equal(audit.prunableFloat32SliverFaces, 1);
+      assert.equal(audit.fatalFaces, 1);
+      assert.equal(audit.firstFatal?.faceIndex, 2,
+        'The trace must not misidentify a precision-pruned face as the real rejection');
+      assert.deepEqual(audit.problemFaces.map(f => f.disposition),
+        ['pruned-float32-sliver', 'fatal-non-upward']);
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('never accepts a road consisting solely of numerically negligible slivers', () => {
+    const geo = makeGeometry(sourceFace19);
+    try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+});
+
+describe('TKT-033: road ownership is committed only for emitted geometry', () => {
+  it('a failed high-priority road must not silently subtract a lower-priority road', () => {
+    const makeData = () => createSyntheticDataset([
+      {
+        id: 'way/phantom-primary',
+        roadClass: 'primary',
+        width: 12,
+        points: [[-80, 0], [80, 0]],
+        nodeIds: ['primary-start', 'primary-end'],
+      },
+      {
+        id: 'way/visible-residential',
+        roadClass: 'residential',
+        width: 7,
+        points: [[-80, 0], [80, 0]],
+        nodeIds: ['residential-start', 'residential-end'],
+      },
+    ], 'TKT-033-Phantom-Surface-Regression');
+
+    const run = (rejectPrimary: boolean) => {
+      const data = makeData();
+      const preview = prepareInfrastructureRenderPreview(data, {
+        roads: 'graph-surface', railways: 'graph-R+',
+      });
+      assert.ok(preview.descriptors);
+      const resources = new SceneResourceManager();
+      const targetEvents: import('./infrastructure/roads/GraphRoadGeometryBuilder').RoadGeometryTraceEvent[] = [];
+      try {
+        const result = buildGraphAtGradeRoadGeometries({
+          roadGeometryTrace: { sourceId: 'way/phantom-primary', events: targetEvents },
+          descriptors: preview.descriptors,
+          roadWidthMultiplier: 1,
+          surfaceFirst: true,
+          resourceManager: resources,
+          diagnostics: data.diagnostics,
+          testOnlyRejectAfterTriangulation: rejectPrimary
+            ? (id) => id === 'way/phantom-primary'
+            : undefined,
+        });
+        return {
+          emitted: [...result.roadsByClass.values()].flat()
+            .map((v) => v.info.sourceFeatureId),
+          rendered: [...result.renderedSourceIds],
+          fullySubtracted: [...result.fullySubtractedRoadIds],
+          targetEvents,
+        };
+      } finally {
+        resources.dispose();
+      }
+    };
+
+    const normal = run(false);
+    assert.ok(normal.rendered.includes('way/phantom-primary'),
+      'The preferred road should render when validation succeeds');
+    assert.equal(normal.targetEvents.length, 1);
+    assert.equal(normal.targetEvents[0].stage, 'emitted');
+    assert.ok((normal.targetEvents[0].triangleCount ?? 0) > 0);
+    assert.ok(!normal.rendered.includes('way/visible-residential'),
+      'The completely covered lower-priority road should remain subtracted');
+
+    const lateReject = run(true);
+    assert.ok(!lateReject.rendered.includes('way/phantom-primary'),
+      'Simulated late validation must reject the higher-priority road');
+    assert.deepEqual(lateReject.targetEvents.map(e => e.stage), ['fault-injected-rejection']);
+    assert.ok(lateReject.rendered.includes('way/visible-residential'),
+      'A phantom, unrendered footprint must not occlude the real residential road');
+    assert.ok(lateReject.emitted.includes('way/visible-residential'),
+      'Missing source attribution must also be backed by real emitted triangles');
+  });
+});
 
 describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance Instrumentation', () => {
   it('parses graph-surface road mode and graph-R+ railway mode as permanent defaults', () => {

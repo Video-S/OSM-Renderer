@@ -163,6 +163,16 @@ npm run osm:diagnose-missing-road
 
 The accepted 16×16 regional tiles have **not** been rebaked. Once pre-tile geometry is confirmed, use a **disposable small-area bake** and **owner-only visual QA** before considering replacement of canonical packs or sign-off.
 
+## Second owner run still reports face 19 — diagnostic trace corrected (2026-11-22)
+
+Owner uploaded another 7,142-byte `tkt033-shared-road-diagnosis.json` from the same source snapshot. Its reported fields are **unchanged**: `renderedSourceId=false`, `stage=invalid-triangles`, `faceIndex=19`, `normalY=-1`, `area=6.967457e-6 m²`; 65 overall `invalidTriangleGeometryCount`, nearest any-road distance 19.9513m.
+
+**Important diagnostic ambiguity discovered in source inspection:** `findFirstInvalidRoadTriangle()` was implemented **independently** of the validator and returned the first downward-facing face **even if `validateAndPruneHorizontalGeometry()` had correctly pruned that specific Float32-unresolvable face**. Thus the unchanged `faceIndex=19` does **not prove** the precision fix failed. Two plausible explanations remain: (a) owner's local code/report is stale, or (b) face 19 was skipped correctly but a **later reliably inverted face** still rejected the 21-face geometry, while the old trace misleadingly pointed to face 19. Earlier text that suggested only stale source was too strong.
+
+**Diagnostic fix:** the new `inspectRoadTriangleFaces()` applies the **exact same area and Float32 winding rules** as production validation and reports bounded per-face outcomes `pruned-degenerate`, `pruned-float32-sliver`, `fatal-nonfinite`, `fatal-non-upward`, plus summary counts of valid, pruned and fatal triangles and the **actual first fatal** face. Source-backed JSON and console now include marker `roadTriangleValidatorRevision: "float32-sliver-pruning-v2"`, allowing an unambiguous check that the current code was run. Regression test deliberately places the known source face 19 before a large inverted triangle, asserts the trace skips the harmless face and identifies the subsequent fatal one, and verifies the validator rejects the genuine inversion.
+
+**Next evidence needed:** re-run on the TKT-033 branch after `git pull --ff-only`, check that console explicitly prints `triangle validator: float32-sliver-pruning-v2`, and inspect/upload the regenerated JSON `roadGeometryTrace[].triangleAudit`. Do **not** rebake canonical packs or claim Boerrichterkamp now renders until `renderedSourceId=true` in a source-backed run and the owner visually verifies disposable baked output.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

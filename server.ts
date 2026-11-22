@@ -14,7 +14,10 @@ import { fetchOverijsselPbf } from './scripts/fetch-overijssel-pbf';
 import { runBuildOverijsselIndex } from './scripts/build-overijssel-index';
 import { createTilePackHttpHandler } from './src/server/tiles/tilePackHttpHandler';
 import { resolveTilePackPathForTileSize } from './src/server/tiles/TilePackSqliteStore';
-import { createRegionalMosaicHttpHandler } from './src/server/tiles/RegionalMosaicHttpHandler';
+import {
+  createRegionalMosaicHttpHandler,
+  resolveRegionalMosaicIndexPath,
+} from './src/server/tiles/RegionalMosaicHttpHandler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,8 +85,7 @@ const tilePack1024Controller = createTilePackHttpHandler({
 });
 // Lazily opened, isolated 16km pilot; missing mosaic index returns a clear 503.
 const regionalMosaicController = createRegionalMosaicHttpHandler({
-  indexPath: process.env.OVERIJSSEL_REGIONAL_MOSAIC_PATH?.trim() ||
-    path.resolve('data/osm/twente-pilot-1024m/mosaic.json'),
+  indexPath: resolveRegionalMosaicIndexPath(),
 });
 
 // 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)

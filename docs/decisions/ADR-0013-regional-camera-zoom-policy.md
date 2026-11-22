@@ -28,7 +28,7 @@ An orthographic camera's screen coverage expands rapidly as zoom decreases. The 
 
 ## Related implementation and evidence
 
-- `src/scene/{cameraZoomPolicy,CameraController}.ts` (`CameraController.tsx` for the latter)
+- `src/scene/cameraZoomPolicy.ts` and `src/scene/CameraController.tsx`
 - `src/app/App.tsx`, `src/components/DevToolsPanel.tsx`
 - `benchmarks/regionalFrameCostRunner.ts`
 - `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`

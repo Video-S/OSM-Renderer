@@ -633,7 +633,7 @@ export interface ProcessedMapData {
 }
 
 export interface MapStyleTheme {
-  id: 'tactical' | 'daylight' | 'dusk' | 'blueprint';
+  id: 'tactical' | 'daylight' | 'dusk' | 'blueprint' | 'natural_daylight' | 'natural_cartographic' | 'natural_game';
   name: string;
   groundColor: string;
   gridColor: string;

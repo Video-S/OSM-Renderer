@@ -4,6 +4,8 @@
 - **Date**: 2026-11-09
 - **Supersedes (for preferred at-grade road geometry strategy)**: [`ADR-0002`](./ADR-0002-boundary-derived-road-junction-meshing.md). **Related, not superseded:** [`ADR-0009`](./ADR-0009-infrastructure-graph-topology.md) (topology and source-data contracts remain authoritative)
 
+> **Reading note (2026-11-22):** The original "Controlled Experimental Rollout" text below is historical. The later **Production Promotion Update (TKT-026, 2026-11-19)** records the current outcome: E2+ roads and R+ railways are the sole production renderers. Do not treat pre-promotion alternatives as currently selectable.
+
 ## Context
 
 Stage E2 (`roads: 'graph'`, documented in `ADR-0009`) replaced Legacy pairwise centerline splitting with topological road graph nodes, degree-2 continuity miter portals, and boundary-derived `N`-way junction patches (`solveBoundaryDerivedJunctionNode`). While E2 improved provenance attribution and eliminated many Legacy overlap defects, extensive real-world testing across Dutch urban extracts (Hengelo, Amsterdam, Utrecht) exposed fundamental geometric fragility in explicit junction trimming and portal-handoff patching:

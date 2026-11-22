@@ -573,13 +573,13 @@ candidate. Human-only visual sign-off remains mandatory.
 
 ## Candidate primary seam follow-up: exact inset geometry PASS; broader corridor untested (2026-11-22)
 
-Owner ran \`tkt033-primary-candidate-seam-v1.json\` against the
+Owner ran `tkt033-primary-candidate-seam-v1.json` against the
 **new** verified 16-shard candidate. The filtered audit reports exactly
-one OSM crossing of \`way/6666519\` at E 351822.700, N 5790720.000,
-boundary \`horizontal-r1-2-c1\`:
+one OSM crossing of `way/6666519` at E 351822.700, N 5790720.000,
+boundary `horizontal-r1-2-c1`:
 
-- source-emitted metadata **both** (north \`r01-c01\` / tile
-  \`343:5655\`; south \`r02-c01\` / tile \`343:5654\`);
+- source-emitted metadata **both** (north `r01-c01` / tile
+  `343:5655`; south `r02-c01` / tile `343:5654`);
 - source-owned road triangles **covered at both 25cm axis-inset probes**,
   height **+0.05m** each, with one matching mesh in each decoded tile;
 - layer, bridge and tunnel tags match; no source surface asymmetry.
@@ -592,9 +592,9 @@ two 25cm points, off-centerline road width, or streamer visibility could
 still explain the observation. Do not mark the regional visual gate passed.
 
 **New read-only next-stage code (not yet run on owner packs):**
-\`scripts/inspect-primary-regional-seam.ts\`, with pure planner
-\`scripts/primary-regional-seam-corridor.ts\`, and regressions
-\`src/world/PrimaryRegionalSeamDiagnosis.test.ts\`. The script reads
+`scripts/inspect-primary-regional-seam.ts`, with pure planner
+`scripts/primary-regional-seam-corridor.ts`, and regressions
+`src/world/PrimaryRegionalSeamDiagnosis.test.ts`. The script reads
 the exact canonical source centerline and actual two *4x4* candidate
 shard SQLite files, taking bounded true-arc samples up to 256m each
 side of the original crossing. It reports source-attributed visible
@@ -605,14 +605,14 @@ misaligned/duplicate source lines, or missing sample sides. Sample
 evidence cannot establish continuous topology, width, camera culling,
 or streaming behavior.
 
-**Owner command (no bake, no pack mutation, direct \`npx tsx\`):**
+**Owner command (no bake, no pack mutation, direct `npx tsx`):**
 
-\`\`\`powershell
+```powershell
 git pull --ff-only
 npx tsx scripts/inspect-primary-regional-seam.ts
-\`\`\`
+```
 
-Upload \`benchmarks/results/tkt033-primary-candidate-corridor-v1.json\`
+Upload `benchmarks/results/tkt033-primary-candidate-corridor-v1.json`
 for source/decoded-tile diagnosis. Do not upload SQLite packs yet.
 Do not promote the candidate or run another full rebake.
 

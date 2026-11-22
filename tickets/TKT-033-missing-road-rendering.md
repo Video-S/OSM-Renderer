@@ -213,6 +213,34 @@ npm run osm:bake-verify-missing-road
 
 Upload only `benchmarks/results/tkt033-disposable/way-6661112-2x2-report.json`, **not the SQLite pack**. If `verified-sample-coverage`, the source-backed road survives tile bake, codec and decode on both sides of this test boundary. The existing 256-tile map remains unchanged. If it fails, use that targeted report to fix a specific packed-tile issue before any canonical repack.
 
+## Encoded-tile gate: PASS on canonical OSM source (2026-11-22)
+
+The owner ran `npm run osm:bake-verify-missing-road` and supplied the resulting **`way-6661112-2x2-report.json`**. The test wrote a **new, separate** four-tile SQLite pack under `benchmarks/results/tkt033-disposable`, using snapshot `overijssel-261114-8ae28196` with source SHA `8ae281964831675c89f45db6aaa3566168a224767d3313c7068ad255c5f221c0`. **No canonical regional tile packs were altered.**
+
+- **`status=verified-sample-coverage`**; 4/4 tiles nonempty, 160,876 total triangles, 2,975,080 vertices and 4,099 referenced features (all layers combined).
+- Original missing road `way/6661112` is physically **`covered`** by **visible, non-underground road-layer triangles** after SQLite bake, codec and decode at the exact original UTM point and all four 25cm insets.
+- **Both required cross-tile insets pass:** west E 357375.75 within tile `348:5655`, east E 357376.25 within tile `349:5655`; both surface elevations are **+0.05m**.
+- The exact-on-boundary sample also reported covered but is informational due to half-open tile ownership. The north/south insets reported covered in the same eastern tile.
+- This verifies source identity and **sampled physical surface geometry in adjacent decoded tiles**. It does **not** prove every meter of the OSM way, full junction connectivity, independent regional-shard equality, nor actual viewer display. Do not mark visual acceptance as complete from probes.
+
+### Manual visual QA using the existing viewer (no new server route or code needed)
+
+The existing **1,024m tile experimental endpoint** can serve any explicitly supplied pack path via `OVERIJSSEL_TILE_PACK_1024M_PATH` (see `resolveTilePackPathForTileSize`, `server.ts`); the viewer's `?m2a=1&tileSize=1024` selects `/api/tiles-1024m` and frames the manifest's actual 2×2 extent.
+
+From PowerShell in the project root, **stop any running dev server**, then run:
+
+```powershell
+git pull --ff-only
+$env:OVERIJSSEL_TILE_PACK_1024M_PATH = "benchmarks/results/tkt033-disposable/way-6661112-2x2.sqlite"
+npm run dev
+```
+
+Open `http://localhost:3000/?m2a=1&tileSize=1024`. This serves the **disposable four tiles, not the Twente mosaic**. The Boerrichterkamp sample lies about **375m south of the test grid's local origin** (E 357376, N 5791095.095). Pan/zoom in and confirm the road appears and crosses the vertical tile boundary without a gap; check neighboring road/cycleway priority and any unintended sliver artifacts. Manual visual QA is **owner only**; no LLM screenshot assertions.
+
+To revert the temporary server override, stop the dev server, run `Remove-Item Env:OVERIJSSEL_TILE_PACK_1024M_PATH`, then restart `npm run dev`. The original regional viewer remains at `http://localhost:3000/?m2a=1&region=twente-pilot` and continues to serve the **old** regional mosaic until that mosaic is deliberately rebaked.
+
+**TKT-033 state:** confirmed fix at source-plan stage and encoded-tile stage; waiting on owner-only actual viewer visual acceptance and any broader pilot-rebake decision. PR #9 remains draft.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

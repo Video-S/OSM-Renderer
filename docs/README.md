@@ -2,6 +2,18 @@
 
 Welcome to the 3D Map Viewer documentation. This repository implements a high-fidelity, browser-based 3D map viewer using OpenStreetMap data, React, TypeScript, Three.js, and React Three Fiber.
 
+## Start here: current information
+
+1. [Repository overview and local setup](../README.md)
+2. [Current implementation and verification status](./STATUS.md)
+3. [Implemented architecture](./architecture.md)
+4. [Architectural decision records](./decisions/README.md) — especially [ADR-0011](./decisions/ADR-0011-baked-tiles-and-runtime-streaming.md), [ADR-0012](./decisions/ADR-0012-bounded-regional-mosaics.md), and [ADR-0013](./decisions/ADR-0013-regional-camera-zoom-policy.md)
+5. [TKT-034 full-Twente staged bake and acceptance](../tickets/TKT-034-full-twente-scale-out.md)
+
+**Interpretation:** source/tests explain behavior, the status/architecture documents describe current implementation and acceptance, ADRs explain decisions, and tickets carry the task gates. Older proposals, milestone snapshots and benchmark notes are retained as history, not as authoritative current feature descriptions. The 16 km pilot is accepted; **full Twente remains unverified**.
+
+---
+
 ## Documentation Structure
 
 This documentation is organized into two distinct categories:
@@ -14,7 +26,7 @@ This documentation is organized into two distinct categories:
 ## Manually Maintained Documents
 
 - **[Current Project Status (STATUS.md)](./STATUS.md)**  
-  Tracks the active goalpost and implementation milestones (Goalpost 2: M2.1–M2.3 E2+ & R+ promoted and closed under `TKT-026`; `TKT-027` closed; `TKT-028` regional tiling proposal open), verified test/build status, known limitations, and next steps.
+  Authoritative status: E2+/R+ production, accepted 16 km pilot, in-progress TKT-034 full-Twente bake, verification boundaries, current risks and next steps. Earlier status snapshots are archived.
 
 - **[System Architecture (architecture.md)](./architecture.md)**  
   High-level system overview, component responsibilities, runtime data flow, module relationships, and architectural boundaries.
@@ -41,7 +53,7 @@ This documentation is organized into two distinct categories:
   Immutable canonical Geofabrik Overijssel snapshot (`overijssel-261114-8ae28196`), SQLite + R\*Tree spatial storage, strict `source_sha256` verification, and PowerShell setup guide (`TKT-022`, `TKT-027`).
 
 - **[Regional Tiling, Streaming, Offline Baking & Orthographic LOD Proposal (`TKT-028`) (regional-tiling-streaming-lod-proposal.md)](./regional-tiling-streaming-lod-proposal.md)**  
-  Proposed baked-first hybrid architecture for Twente and Overijssel: conformal regional projection, `512 m`–`4,096 m` quadtree tiers, global `InfrastructureGraph` topology, `64 m` collar surface clipping, floating-origin streaming, orthographic zoom LOD, and Hengelo Milestone M1 PoC (`open` pending approval).
+  Historical proposal and future options, **not** a current feature inventory. LOD0 baked-first UTM tiling is implemented; global topology parity and LOD1–LOD3 remain proposed. Consult ADR-0011/0012 and current status.
 
 - **[Testing & Diagnostics (testing-and-diagnostics.md)](./testing-and-diagnostics.md)**  
   Unit/integration test suite, coplanar triangle overlap validators, junction portal continuity checks, E2+ surface-first geometry validator & performance counters, and regression verification.
@@ -50,7 +62,7 @@ This documentation is organized into two distinct categories:
   Reproducible Node.js CPU (`npm run bench:cpu`) and Playwright + Chromium WebGL (`npm run bench:browser`) benchmarking infrastructure, frozen offline datasets, versioned JSON reports, baseline comparison (`npm run bench:compare`), metric definitions, and step-by-step CPU/memory/WebGL profiling guides (`TKT-016`, `TKT-017`).
 
 - **[Architectural Decision Records (decisions/README.md)](./decisions/README.md)**  
-  Index of formal architectural decision records (ADRs) and guidelines on recording decisions.
+  Index of architectural decision records, **including regional ADR-0011/0012/0013**, with guidance on historical versus currently applicable decisions.
   - **[ADR Template (decisions/ADR-TEMPLATE.md)](./decisions/ADR-TEMPLATE.md)**: Reusable template for proposing and documenting architectural decisions.
 
 - **[Ticket Workflow & Lifecycle (ticket-workflow.md)](./ticket-workflow.md)**  

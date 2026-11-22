@@ -24,6 +24,8 @@ import {
   SurfaceFirstBufferInstrumentation,
 } from './infrastructure/roads/SurfaceFirstRoadFootprints';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
+import { buildGraphAtGradeRoadGeometries } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import { SceneResourceManager } from './SceneResourceManager';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { ProcessedMapData, RoadClass, RoadFeature } from '../types/MapFeature';
 import prinsForkRepro from './prototype/PrinsHendrikkadeForkFixture.json';
@@ -463,6 +465,70 @@ function buildSurfaceFirstScene(data: ProcessedMapData, roadWidthMultiplier = 1.
   });
   return builder.buildScene(data, MAP_THEMES.tactical);
 }
+
+describe('TKT-033: road ownership is committed only for emitted geometry', () => {
+  it('a failed high-priority road must not silently subtract a lower-priority road', () => {
+    const makeData = () => createSyntheticDataset([
+      {
+        id: 'way/phantom-primary',
+        roadClass: 'primary',
+        width: 12,
+        points: [[-80, 0], [80, 0]],
+        nodeIds: ['primary-start', 'primary-end'],
+      },
+      {
+        id: 'way/visible-residential',
+        roadClass: 'residential',
+        width: 7,
+        points: [[-80, 0], [80, 0]],
+        nodeIds: ['residential-start', 'residential-end'],
+      },
+    ], 'TKT-033-Phantom-Surface-Regression');
+
+    const run = (rejectPrimary: boolean) => {
+      const data = makeData();
+      const preview = prepareInfrastructureRenderPreview(data, {
+        roads: 'graph-surface', railways: 'graph-R+',
+      });
+      assert.ok(preview.descriptors);
+      const resources = new SceneResourceManager();
+      try {
+        const result = buildGraphAtGradeRoadGeometries({
+          descriptors: preview.descriptors,
+          roadWidthMultiplier: 1,
+          surfaceFirst: true,
+          resourceManager: resources,
+          diagnostics: data.diagnostics,
+          testOnlyRejectAfterTriangulation: rejectPrimary
+            ? (id) => id === 'way/phantom-primary'
+            : undefined,
+        });
+        return {
+          emitted: [...result.roadsByClass.values()].flat()
+            .map((v) => v.info.sourceFeatureId),
+          rendered: [...result.renderedSourceIds],
+          fullySubtracted: [...result.fullySubtractedRoadIds],
+        };
+      } finally {
+        resources.dispose();
+      }
+    };
+
+    const normal = run(false);
+    assert.ok(normal.rendered.includes('way/phantom-primary'),
+      'The preferred road should render when validation succeeds');
+    assert.ok(!normal.rendered.includes('way/visible-residential'),
+      'The completely covered lower-priority road should remain subtracted');
+
+    const lateReject = run(true);
+    assert.ok(!lateReject.rendered.includes('way/phantom-primary'),
+      'Simulated late validation must reject the higher-priority road');
+    assert.ok(lateReject.rendered.includes('way/visible-residential'),
+      'A phantom, unrendered footprint must not occlude the real residential road');
+    assert.ok(lateReject.emitted.includes('way/visible-residential'),
+      'Missing source attribution must also be backed by real emitted triangles');
+  });
+});
 
 describe('E2+ Surface-First Road Rendering, Geometry Validation & Performance Instrumentation', () => {
   it('parses graph-surface road mode and graph-R+ railway mode as permanent defaults', () => {

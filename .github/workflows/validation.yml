@@ -37,6 +37,7 @@ jobs:
           - files: "src/world/DisposableRoadBake.test.ts"
           - files: "src/world/RemainingMissingRoads.test.ts"
           - files: "src/world/CyclewaySeamDiagnosis.test.ts"
+          - files: "src/world/CyclewayOwnershipDiagnosis.test.ts"
           - files: "src/world/PerformanceBaseline.test.ts src/world/WorldCoordinates.test.ts src/world/FeatureCoverage.test.ts"
           - files: "src/world/AdjacentServiceJunctions.test.ts src/world/BuswayRendering.test.ts src/world/PizzaSlicePathJunctions.test.ts"
           - files: "src/world/PathJunctionCornerSmoothing.test.ts src/world/DevToolsAndReproduction.test.ts"

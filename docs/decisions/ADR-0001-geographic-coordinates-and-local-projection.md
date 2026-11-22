@@ -75,4 +75,5 @@ We adopt a **Local Equirectangular Tangent Projection** anchored at the dataset'
 
 ## Superseded or Related Decisions
 
-- None.
+- **Scope clarification (2026-11-22):** This decision remains accepted for **live/local non-tiled datasets** using `WorldCoordinates.ts`. Offline regional tiles instead use the UTM `EPSG:25832` grid and local tile placement documented in [ADR-0011](./ADR-0011-baked-tiles-and-runtime-streaming.md). This is an additional supported path, not a global repeal of equirectangular projection.
+- The original UTM alternative discussion addressed neighborhood-scale Goalpost 1 constraints, not the later multi-kilometer offline mosaic.

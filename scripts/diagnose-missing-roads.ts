@@ -10,6 +10,7 @@ import { disposeIngestedStudyRegionPlans } from '../src/server/tiles/OfflineHeng
 import { ingestCanonicalStudyGeoJson } from '../src/world/tiling/TiledStudyPipeline';
 import { createAlignedStudyGrid, utmBoundsToGeoBounds } from '../src/world/tiling/TileGrid';
 import { utm32NToGeo } from '../src/world/tiling/RegionalProjection';
+import type { RoadGeometryTraceEvent } from '../src/world/infrastructure/roads/GraphRoadGeometryBuilder';
 
 /**
  * TKT-033 source-backed diagnostic in the SHARED road pipeline, before tile
@@ -161,7 +162,12 @@ export function diagnoseMissingRoad(opts: RoadDiagnosisOptions) {
   }
   let region: ReturnType<typeof ingestCanonicalStudyGeoJson> | null = null;
   try {
-    region = ingestCanonicalStudyGeoJson(query.geojson, grid);
+    // Only trace the selected source: avoids enormous logs from thousands
+    // of unrelated OSM roads while retaining actual per-stage failure evidence.
+    const roadTrace: RoadGeometryTraceEvent[] = [];
+    region = ingestCanonicalStudyGeoJson(query.geojson, grid, {
+      roadGeometryTrace: { sourceId: opts.sourceId, events: roadTrace },
+    });
     const match = (value: string | undefined, values?: readonly string[]) =>
       value === opts.sourceId || values?.includes(opts.sourceId) === true;
     const original = (query.geojson.features ?? []).filter((f: any) =>
@@ -207,6 +213,7 @@ export function diagnoseMissingRoad(opts: RoadDiagnosisOptions) {
       selected: { sourceId: opts.sourceId, easting: opts.easting, northing: opts.northing },
       local: { x, z },
       grid: { ...grid.studyUtmBounds, contextMeters: opts.contextMeters },
+      roadGeometryTrace: roadTrace,
       inventory: {
         sourceFeatures: original,
         parsedRoadCount: parsed.length,
@@ -262,6 +269,11 @@ if (entrypoint) {
       result.plan?.nearestSourceGeometryMeters ?? 'absent');
     console.log('[tkt033] any-road triangle distance (m):',
       result.plan?.nearestAnyRoadGeometryMeters ?? 'absent');
+    console.log('[tkt033] target road builder decisions:',
+      result.roadGeometryTrace.map((x) => x.stage +
+        (x.invalidTriangle ? '(' + x.invalidTriangle.reason +
+          ', normalY=' + (x.invalidTriangle.normalY ?? 'n/a') + ')' : '')
+      ).join(', ') || 'none');
     console.log('[tkt033] canonical packs unchanged; read JSON for detailed stage inventory');
   } catch (error) {
     console.error('[tkt033] ' + (error instanceof Error ? error.stack : String(error)));

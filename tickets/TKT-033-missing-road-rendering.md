@@ -818,6 +818,47 @@ visual result separately, then continue other TKT-029 gates before
 promotion. No LLM visual QA.
 
 
+## Owner-confirmed candidate regression acceptance — PASS (2026-11-22)
+
+**Resolved:** the apparent western primary R2 seam cutoff was seen while
+the local viewer was serving the **old** verified mosaic, not the newly
+rebaked TKT-033 candidate. The owner inspected the running endpoint:
+
+```powershell
+(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath
+```
+
+Initially this returned
+`.../data/osm/twente-pilot-1024m/mosaic.json`. After explicitly
+setting `OVERIJSSEL_REGIONAL_MOSAIC_PATH` before server startup, the
+same endpoint returned
+`.../data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`.
+The owner then visually revisited **all known previously broken TKT-033
+test locations**, including the annotated parallel R1/R2 primary-road
+seam, and confirmed they are **present and rendering correctly**.
+
+**Disposition:** All *known original missing-road regression locations*
+pass the human check on the **correct candidate mosaic**, in addition
+to the existing 16-shard/256-tile payload integrity gate and bounded
+source-owned geometry/width probes. The former **"candidate visual
+FAIL"** and **"R2 still missing"** findings in historical sections
+above are now **superseded**: they came from testing the wrong
+(old) pack. Do not carry those observations forward as evidence of a
+defect in the candidate. No viewer streaming/mesh fix or additional
+bake is indicated for R2.
+
+**Scope:** This is a *focused TKT-033 human regression pass*, not a
+province-wide or 256-tile exhaustive visual audit, proof of all shard
+seams, rail/bridge/portal semantics, resolution of unrelated CI
+failures, or authorization to overwrite the existing mosaic. Keep
+TKT-032 and TKT-029 broader acceptance gates and PR #9 review
+separate. Candidate remains isolated until an explicit promotion
+decision.
+
+**Prevent recurrence:** show the active regional mosaic identifier/path
+in the developer diagnostics UI, and add an API `packPath` check to
+the human visual-test checklist before reporting regressions.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.
@@ -825,7 +866,7 @@ promotion. No LLM visual QA.
 - [ ] Focused fix plus regression tests cover missing-road case and intentional surface-ownership/hidden-layer negative controls.
 - [ ] Affected roads are physically present and correctly connected in bounded replacement output, with source feature inspection retained.
 - [ ] Existing relevant automated tests, lint and build pass.
-- [x] Owner visually confirms Boerrichterkamp (`way/6661112`) now appears in disposable viewer; remaining originally missing roads and regional map are pending.
+- [x] Owner confirms all previously broken TKT-033 test locations on the verified **new candidate regional mosaic** (after correcting the server's old-pack selection); broader regional acceptance is separate.
 
 ## Explicit non-goals
 

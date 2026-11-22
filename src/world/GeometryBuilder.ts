@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getBuildingFinish, getLandmarkWallColor } from '../styles/mapThemes';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   BarrierFeature,
@@ -4428,24 +4429,21 @@ export class GeometryBuilder {
     const wallMat = resourceManager.registerMaterial(
       new THREE.MeshStandardMaterial({
         color: theme.buildingWallColor,
-        roughness: 0.65,
-        metalness: 0.15,
+        ...getBuildingFinish(theme, 'wall'),
       })
     );
 
     const roofMat = resourceManager.registerMaterial(
       new THREE.MeshStandardMaterial({
         color: theme.buildingRoofColor,
-        roughness: 0.4,
-        metalness: 0.25,
+        ...getBuildingFinish(theme, 'roof'),
       })
     );
 
     const landmarkWallMat = resourceManager.registerMaterial(
       new THREE.MeshStandardMaterial({
-        color: theme.id === 'tactical' ? '#f59e0b' : '#fef08a',
-        roughness: 0.5,
-        metalness: 0.3,
+        color: getLandmarkWallColor(theme),
+        ...getBuildingFinish(theme, 'wall', 'landmark'),
       })
     );
 
@@ -4459,15 +4457,13 @@ export class GeometryBuilder {
           wall: resourceManager.registerMaterial(
             new THREE.MeshStandardMaterial({
               color: colors.wall,
-              roughness: 0.58,
-              metalness: 0.2,
+              ...getBuildingFinish(theme, 'wall', 'archetype'),
             })
           ),
           roof: resourceManager.registerMaterial(
             new THREE.MeshStandardMaterial({
               color: colors.roof,
-              roughness: 0.38,
-              metalness: 0.28,
+              ...getBuildingFinish(theme, 'roof', 'archetype'),
             })
           ),
         });
@@ -4860,15 +4856,20 @@ export class GeometryBuilder {
       });
 
       wallMat.color.set(newTheme.buildingWallColor);
+      Object.assign(wallMat, getBuildingFinish(newTheme, 'wall'));
       roofMat.color.set(newTheme.buildingRoofColor);
-      landmarkWallMat.color.set(newTheme.id === 'tactical' ? '#f59e0b' : '#fef08a');
+      Object.assign(roofMat, getBuildingFinish(newTheme, 'roof'));
+      landmarkWallMat.color.set(getLandmarkWallColor(newTheme));
+      Object.assign(landmarkWallMat, getBuildingFinish(newTheme, 'wall', 'landmark'));
 
       if (newTheme.buildingArchetypeColors) {
         archetypeMaterials.forEach((mats, archKey) => {
           const c = (newTheme.buildingArchetypeColors as any)[archKey];
           if (c) {
             mats.wall.color.set(c.wall);
+            Object.assign(mats.wall, getBuildingFinish(newTheme, 'wall', 'archetype'));
             mats.roof.color.set(c.roof);
+            Object.assign(mats.roof, getBuildingFinish(newTheme, 'roof', 'archetype'));
           }
         });
       }

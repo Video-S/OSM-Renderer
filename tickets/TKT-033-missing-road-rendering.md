@@ -33,7 +33,7 @@ Do **not** assume an individual shard boundary is responsible. Do **not** classi
   - `way/546666718` (residential), E 352326.079 / N 5794816, and nearby `way/38892898` (cycleway), E 352329.339 / N 5794816.
 - The v3 report and precise feature/tile coordinates are preserved under TKT-032's investigation. Source ID presence in a tile is **not** proof of geometry at a seam, while a source-ID absence is **not** proof that no road surface exists under another identity.
 
-## Suggested investigation when reopened
+## Investigation approach
 
 1. Reproduce **one verified missing way** using the non-tiled/shared graph-road path if possible, with the same immutable OSM source snapshot. Distinguish a general road pipeline bug from a tile/shard-only bug before implementing fixes.
 2. Trace original OSM highway geometry through ingestion, normalization, graph edge eligibility, chaining/deduplication, surface ownership/subtraction, triangulation, geometry validation, clipping (where applicable), and final scene visibility.
@@ -96,7 +96,7 @@ After initial correction and targeted diagnostic tests:
 - **Pre-existing failures (not caused by TKT-033):** the four assertions in `JunctionAndTopology.test.ts` (provenance count, bow-tie clipping diagnostics, portal-gap validation and explicit-node junction count) fail on **both** the parent branch at commit `953249342cbb39205232b13ac3cdc255be33b36b` (GitHub Actions run `45030566400`) and the TKT-033 PR #9 branch (run `45032070443`) with matching expected/actual outcomes. These are separate existing test issues; do not silently claim a fully green CI suite or expand the missing-road fix to unrelated behavior.
 - **Not run in CI:** the canonical `overijssel-261114-8ae28196.sqlite` analysis, because the source index lives on the owner's machine, not in the repo. This prevents asserting that the fix restores specific Twente ways without follow-up evidence.
 
-## Acceptance criteria (when work resumes)
+## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.
 - [ ] Root cause isolated to a concrete stage; whether it is shard-specific or shared is established.
@@ -107,6 +107,6 @@ After initial correction and targeted diagnostic tests:
 
 ## Explicit non-goals
 
-**No work now.** No further global seam-audit iterations, no blanket changes to clipping tolerances or OSM layers, no all-region rebake, no unrelated renderer refactor, no gameplay or LOD work.
+No further global seam-audit iterations, no blanket changes to clipping tolerances or OSM layers, no all-region rebake, no unrelated renderer refactor, no gameplay or LOD work. Restrict current work to the shared road correctness issue and source-backed regression diagnosis.
 
 TKT-032 remains a separate regional continuity investigation. This ticket isolates the possible **shared, pre-tiling missing-road defect** for future prioritization.

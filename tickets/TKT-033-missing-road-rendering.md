@@ -2,7 +2,7 @@
 id: TKT-033
 title: Missing Road Geometry in Shared Road Renderer
 type: correctness
-status: deferred
+status: implementation_in_progress
 priority: backlog
 created: 2026-11-22
 updated: 2026-11-22
@@ -15,7 +15,7 @@ related_tickets:
 
 ## Status and decision
 
-**Deferred by owner (2026-11-22). No implementation work currently authorized.**
+**Reopened by owner (2026-11-22).** Investigate and fix demonstrated shared road-renderer defects. Preserve the canonical bake while validating.
 
 The owner visually checked the suspicious crossings identified during TKT-032 and confirmed that expected roads do **not** render at the inspected locations in the Twente regional viewer. The owner also recalls seeing roads disappear **before the tiled renderer existed**. This history points toward a possible shared road-generation problem, but does **not yet prove** these specific failures have the same cause as the older behavior.
 

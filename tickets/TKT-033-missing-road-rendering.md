@@ -298,6 +298,21 @@ Owner ran `npm run osm:verify-remaining-missing-roads` using snapshot `overijsse
 
 **Next targeted step:** inspect the existing `west-south-pair-2x2.sqlite` without rebaking: sample a dense north/south cross-section around `way/14119316`, compute physical nearest source/any-road triangle distance and compare against exact canonical OSM centerline orientation (crossing vs endpoint/tangent). If an actual gap remains on both sides along the *real source centerline*, build a focused regression. No province or regional bake.
 
+### Cycleway seam cross-section: targeted no-rebake diagnostic ready
+
+Added `scripts/inspect-cycleway-seam.ts` and `npm run osm:inspect-cycleway-seam` to resolve whether the remaining `way/14119316` is an OSM line **endpoint/tangency** or has an actual local mesh opening. The script reads the **already baked** `benchmarks/results/tkt033-remaining/first-pass/west-south-pair-2x2.sqlite` and immutable canonical OSM index **read-only**; it never runs the offline baker and cannot modify the Twente pack.
+
+The report measures physical source-identified and any-road coverage at **17 north/south offsets from −4m to +4m** at E 352312.35 and additionally at points **along the actual closest OSM way segment**, when that segment spans the requested sample distances. It reports nearest actual road-triangle distances (not merely source metadata or presence of any mesh) in each relevant decoded tile. The source geometry analysis lists closest OSM segment, actual seam intersections and whether the way **properly crosses, ends at, or follows** the seam. That distinction is important because a source line that ends/touches a boundary could legitimately lack roads 25cm on either side.
+
+**Owner action on TKT-033 branch:**
+
+```powershell
+git pull --ff-only
+npm run osm:inspect-cycleway-seam
+```
+
+Upload only `benchmarks/results/tkt033-remaining/first-pass/way-14119316-cross-section-v1.json`. If the cycleway truly crosses the seam and uncovered samples lie **along** its centerline, investigate geometric clipping/ownership and build a source-backed regression. If its line only touches or ends on the seam and correctly visible triangles exist along the actual line, classify the original 25cm samples as false negatives; never alter clipping tolerances based solely on those probes. `way/38892898` remains a separate probable surface-ownership case.
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

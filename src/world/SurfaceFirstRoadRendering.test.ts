@@ -24,7 +24,7 @@ import {
   SurfaceFirstBufferInstrumentation,
 } from './infrastructure/roads/SurfaceFirstRoadFootprints';
 import { validateRoadNetworkGeometry } from './ZFightingValidator';
-import { buildGraphAtGradeRoadGeometries, validateAndPruneHorizontalGeometry } from './infrastructure/roads/GraphRoadGeometryBuilder';
+import { buildGraphAtGradeRoadGeometries, inspectRoadTriangleFaces, validateAndPruneHorizontalGeometry } from './infrastructure/roads/GraphRoadGeometryBuilder';
 import { SceneResourceManager } from './SceneResourceManager';
 import { ELEVATION_POLICY } from './ElevationPolicy';
 import { ProcessedMapData, RoadClass, RoadFeature } from '../types/MapFeature';
@@ -508,6 +508,29 @@ describe('TKT-033: precision-limited earcut sliver regression from Boerrichterka
     ]; // area 12.5m², normalY=-1
     const geo = makeGeometry([...validFace, ...visibleInversion]);
     try {
+      assert.equal(validateAndPruneHorizontalGeometry(geo), false);
+    } finally {
+      geo.dispose();
+    }
+  });
+
+  it('reports the actual fatal face after a pruned sliver, rather than the first inverted face', () => {
+    const resolvedInversion = [
+      0, 0.05, 0,
+      5, 0.05, 0,
+      0, 0.05, 5,
+    ];
+    const geo = makeGeometry([...validFace, ...sourceFace19, ...resolvedInversion]);
+    try {
+      const audit = inspectRoadTriangleFaces(geo);
+      assert.equal(audit.totalFaces, 3);
+      assert.equal(audit.upwardFaces, 1);
+      assert.equal(audit.prunableFloat32SliverFaces, 1);
+      assert.equal(audit.fatalFaces, 1);
+      assert.equal(audit.firstFatal?.faceIndex, 2,
+        'The trace must not misidentify a precision-pruned face as the real rejection');
+      assert.deepEqual(audit.problemFaces.map(f => f.disposition),
+        ['pruned-float32-sliver', 'fatal-non-upward']);
       assert.equal(validateAndPruneHorizontalGeometry(geo), false);
     } finally {
       geo.dispose();

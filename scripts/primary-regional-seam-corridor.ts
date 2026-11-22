@@ -145,3 +145,37 @@ export function planPrimaryRoadCorridor(input: {
     points,
   };
 }
+
+/**
+ * Physical widths sampled perpendicular to the nearest OSM centerline.
+ * Offset signs follow line vertex order. Do not substitute these samples
+ * for full polygon or runtime visual equivalence.
+ */
+export function roadPerpendicularSample(
+  lines: readonly (readonly UTM[])[],
+  point: UTM,
+  lateralMeters: number
+): UTM | null {
+  let best: { squared: number; tangent: UTM } | null = null;
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const d2 = dx * dx + dy * dy;
+      if (!(d2 > 1e-10)) continue;
+      const t = Math.max(0, Math.min(1,
+        ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / d2));
+      const x = a[0] + t * dx, y = a[1] + t * dy;
+      const dist2 = (point[0] - x) ** 2 + (point[1] - y) ** 2;
+      if (!best || dist2 < best.squared) {
+        const length = Math.sqrt(d2);
+        best = { squared: dist2, tangent: [dx / length, dy / length] };
+      }
+    }
+  }
+  if (!best || best.squared > 0.25 || !Number.isFinite(lateralMeters)) return null;
+  return [
+    point[0] - lateralMeters * best.tangent[1],
+    point[1] + lateralMeters * best.tangent[0],
+  ];
+}

@@ -753,6 +753,71 @@ suspect stretch at physical width, move to actual viewer mesh visibility,
 loading/streaming, material and overlapping occluders; do not rebake
 the canonical regional data. No LLM visual QA.
 
+## R2 candidate width tests and runtime-pack-selection gate (2026-11-22)
+
+Owner uploaded the **actual** paired-road candidate reports
+`tkt033-paired-candidate-corridor-way-140066819-v1.json` and
+`tkt033-paired-candidate-corridor-way-140066831-v1.json`,
+using pinned `twente-pilot-1024m-tkt033-candidate/mosaic.json`.
+The results from the original 4×4 regional candidate shard packs:
+
+- `way/140066819` (`highway=primary`, Hengelosestraat): **39/39**
+  source-owned centerline samples covered, 19/19 north, 20/20 south;
+  **16/16** source-owned surfaces at **each** lateral sample offset
+  -2, -1, -0.5, 0, +0.5, +1, +2m (112/112 total).
+  All reported source hits at elevation **+0.05m**. Wider side
+  offsets intentionally reach neighboring busway or gaps and are
+  not missing primary-road evidence.
+- `way/140066831` (`highway=busway`, Hengelosebaan):
+  **40/40** centerline samples covered, 20 north and 20 south.
+  **16/16** source-owned surfaces at each of -1, -0.5, 0, +0.5,
+  +1m (80/80 total). ±2m is beyond its sampled busway surface
+  and may be another road or non-road; expected. Source hits at
+  **+0.05m**.
+- Both had **16** along-source cross-section locations, each sampling
+  11 lateral offsets, with the same source coverage profile across
+  the seam at the inspected locations. Sample evidence is not a
+  complete physical topology proof, but strongly contradicts the
+  hypothesis of a *missing baked R2 source corridor*.
+
+**Critical runtime configuration issue discovered from repo:**
+`server.ts`'s `createRegionalMosaicHttpHandler` defaults to
+**`data/osm/twente-pilot-1024m/mosaic.json`**, NOT the new
+`-tkt033-candidate` directory. The full candidate bake / verification
+and all offline coverage audits used the latter. Merely creating a
+candidate does not switch the running viewer's dataset. A regional
+viewer URL (`?region=twente-pilot`) requests
+`/api/tiles-region`, but that route can still point at **the old
+mosaic**. The manifest API returns `packPath`. Verify the actual
+running pack before diagnosing viewer occlusion, streaming, or
+mesh problems. **Do not assert it is the wrong pack without
+checking the live server; it may already have the override.**
+
+Owner runtime check:
+
+```powershell
+(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath
+```
+
+To explicitly run the candidate: stop the existing server, then in
+**the same PowerShell session as startup**, from repo root:
+
+```powershell
+$env:OVERIJSSEL_REGIONAL_MOSAIC_PATH = (Resolve-Path "data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json").Path
+npm run dev
+```
+
+Open `http://localhost:3000/?region=twente-pilot` and verify
+`packPath` now ends in the candidate `mosaic.json`. The handler
+caches the selected index after its initial load; restart is
+important. Then human-recheck the R2 discontinuity **on the verified
+candidate**. If still visually missing, capture actual loaded tile
+keys, mesh visibility, material/depth and streaming; do not
+rebake the unchanged candidate. If it looks correct, document that
+visual result separately, then continue other TKT-029 gates before
+promotion. No LLM visual QA.
+
+
 ## Acceptance criteria
 
 - [ ] At least one confirmed missing road reproduced deterministically with source-to-render evidence.

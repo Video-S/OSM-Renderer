@@ -61,7 +61,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       data-testid="workspace-nav-sidebar"
       data-nav-mode={mode}
       aria-label="Workspace tools navigation"
-      className={`shrink-0 h-full bg-slate-950 border-r border-slate-800 flex flex-col justify-between select-none transition-[width] duration-150 ${
+      className={`shrink-0 h-full bg-slate-950 border-r border-slate-800 flex flex-col justify-between select-none ${
         isCompact ? 'w-12' : 'w-[200px]'
       }`}
     >

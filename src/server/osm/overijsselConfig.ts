@@ -15,6 +15,7 @@ export const OVERIJSSEL_OSM_TIMESTAMP_ISO = '2026-11-14T21:20:41.000Z';
 export const OVERIJSSEL_ATTRIBUTION =
   '© OpenStreetMap contributors (ODbL 1.0) via Geofabrik Overijssel extract';
 export const OVERIJSSEL_INDEX_SCHEMA_VERSION = '1.0.0';
+export const OVERIJSSEL_SEARCH_INDEX_SCHEMA_VERSION = '1.0.0';
 
 /**
  * Historical snapshot identity recorded in benchmarks/datasets/hengelo-scaling/manifest.json (TKT-019)
@@ -53,6 +54,27 @@ export function resolveOverijsselIndexPath(repoRoot: string = process.cwd()): st
     return path.resolve(repoRoot, custom);
   }
   return path.join(resolveOverijsselDataDir(repoRoot), OVERIJSSEL_INDEX_FILENAME);
+}
+
+/**
+ * Resolves the derived SQLite FTS5 search index path corresponding to a spatial
+ * Overijssel index file (defaults to `<indexBase>.search.sqlite`).
+ */
+export function resolveOverijsselSearchIndexPath(
+  spatialIndexPath?: string,
+  repoRoot: string = process.cwd()
+): string {
+  const custom = process.env.OVERIJSSEL_SEARCH_INDEX_PATH?.trim();
+  if (custom) {
+    return path.resolve(repoRoot, custom);
+  }
+  const baseIndex = spatialIndexPath
+    ? path.resolve(spatialIndexPath)
+    : resolveOverijsselIndexPath(repoRoot);
+  if (/\.sqlite$/i.test(baseIndex)) {
+    return baseIndex.replace(/\.sqlite$/i, '.search.sqlite');
+  }
+  return `${baseIndex}.search.sqlite`;
 }
 
 const TRUTHY_FLAGS = new Set(['1', 'true', 'yes', 'on']);

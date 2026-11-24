@@ -20,9 +20,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000/**. The regional pilot shortcut is:
-
-- **http://localhost:3000/?m2a=1&region=twente-pilot&devtools=1**
+Open **http://localhost:3000/**. The application boots directly into the baked regional map workspace (`/api/tiles-region/manifest`) with collapsible tool navigation (`Search`, `Layers`, `Appearance`, `Inspector`, `Performance`, `Diagnostics`, `World`) and a floating viewport camera toolbar. Local search runs offline against a derived SQLite FTS5 index (`npm run osm:build-search-index`) with zero external geocoding calls.
 
 The regional server defaults to `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`. This is a **local generated artifact**, not a guaranteed repository download. If it is missing, the regional manifest returns an error rather than silently substituting the old bake. The Overijssel PBF and its SQLite index are also local/generated data; see [offline dataset setup](docs/architecture/offline-overijssel-osm-dataset.md). Initial setup or large baking jobs can consume substantial disk space and time.
 
@@ -33,7 +31,7 @@ $env:OVERIJSSEL_REGIONAL_MOSAIC_PATH = "data/osm/twente-full-1024m/mosaic.json"
 npm run dev
 ```
 
-The URL `region=twente-full` is only a viewer alias; **it does not select the dataset on the server**. Check `(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath` or Developer Tools for the actual loaded mosaic. Restart after changing the environment variable. Only select `twente-full-1024m` on machines where that mosaic has been generated and verified with `verify-regional-mosaic.ts`.
+The URL `region=twente-full` is only a viewer alias; **it does not select the dataset on the server**. Check `(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath` or the **World** workspace panel for the actual loaded mosaic. Restart after changing the environment variable. Only select `twente-full-1024m` on machines where that mosaic has been generated and verified with `verify-regional-mosaic.ts`.
 
 The default regional zoom-out floor is `0.15`. Developers can explicitly use `?regionalMinZoom=0.015` for a costly full-region LOD0 overview; this is **not** a replacement for future overview LODs.
 

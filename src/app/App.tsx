@@ -1,32 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import {
-  Compass,
-  RotateCcw,
-  RotateCw,
-  Layers,
-  ChevronDown,
-  ChevronUp,
-  Info,
-  Building2,
-  Navigation,
-  Waves,
-  Trees,
-  Cpu,
-  Palette,
-  Search,
-  Download,
-  Upload,
-  Train,
-  LandPlot,
-  Maximize2,
-  Fence,
-  TreePine,
-  MousePointerClick,
-  X,
-  Wrench,
-} from 'lucide-react';
+import { Info, MousePointerClick, PanelLeft, X } from 'lucide-react';
 import { LocalGeoJsonProvider } from '../world/LocalGeoJsonProvider';
 import { OsmApiProvider } from '../world/OsmApiProvider';
 import {
@@ -48,8 +23,6 @@ import { MAP_THEMES } from '../styles/mapThemes';
 import { MapScene } from '../scene/MapScene';
 import { Fallback2DMap } from '../scene/Fallback2DMap';
 import { CameraController } from '../scene/CameraController';
-import { AddressSearchModal, GeocodeResult } from '../components/AddressSearchModal';
-import { DevToolsPanel } from '../components/DevToolsPanel';
 import { DeveloperReproductionPackage } from '../world/dev/ReproductionReport';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { detectWebGLSupport } from '../utils/webglCheck';
@@ -97,6 +70,7 @@ import {
   createErrorMosaicIdentity,
   createMosaicIdentityFromDiagnostics,
   type ActiveMosaicIdentity,
+  type TileManifestCoverageSummary,
   type TileStreamDiagnosticsSnapshot,
 } from '../world/tiling/TileStreamManager';
 import {
@@ -106,41 +80,173 @@ import {
   resolveCameraZoomPolicy,
 } from '../scene/cameraZoomPolicy';
 import { utm32NToGeo } from '../world/tiling/RegionalProjection';
+import { NavigationSidebar } from '../components/workspace/NavigationSidebar';
+import { ContextSidebar } from '../components/workspace/ContextSidebar';
+import { CameraToolbar } from '../components/workspace/CameraToolbar';
+import { SearchPanel } from '../components/workspace/panels/SearchPanel';
+import { LayersPanel } from '../components/workspace/panels/LayersPanel';
+import { AppearancePanel } from '../components/workspace/panels/AppearancePanel';
+import { InspectorPanel } from '../components/workspace/panels/InspectorPanel';
+import { PerformancePanel } from '../components/workspace/panels/PerformancePanel';
+import { DiagnosticsPanel } from '../components/workspace/panels/DiagnosticsPanel';
+import { WorldPanel } from '../components/workspace/panels/WorldPanel';
+import {
+  INITIAL_REPRO_FORM_STATE,
+  INITIAL_SEARCH_SESSION_STATE,
+  loadWorkspacePreferences,
+  mapLegacyTabToPanelId,
+  saveWorkspacePreferences,
+  togglePanelSelection,
+  type NavSidebarMode,
+  type ReproFormSessionState,
+  type SearchPanelSessionState,
+  type WorkspacePanelId,
+  type WorkspacePreferences,
+} from '../components/workspace/workspaceTypes';
 
 const CAMERA_TARGET: [number, number, number] = [0, 0, 0];
 
-export interface LivePresetLocation {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  radius: number;
-}
-
-export const LIVE_PRESET_LOCATIONS: LivePresetLocation[] = [
-  { id: 'hengelo', name: 'Station Hengelo (Overijssel)', lat: 52.2625, lon: 6.7935, radius: 400 },
-  { id: 'amsterdam', name: 'Amsterdam Centraal (Railways & Canals)', lat: 52.3791, lon: 4.9003, radius: 420 },
-  { id: 'eiffel', name: 'Eiffel Tower & Seine (Paris)', lat: 48.8584, lon: 2.2945, radius: 400 },
-  { id: 'colosseum', name: 'Colosseum (Rome)', lat: 41.8902, lon: 12.4922, radius: 360 },
-  { id: 'towerbridge', name: 'Tower Bridge & Thames (London)', lat: 51.5055, lon: -0.0754, radius: 380 },
-  { id: 'brandenburg', name: 'Brandenburg Gate (Berlin)', lat: 52.5163, lon: 13.3777, radius: 380 },
-  { id: 'sydney', name: 'Sydney Opera House (Sydney)', lat: -33.8568, lon: 151.2153, radius: 380 },
-];
+const DEFAULT_REGIONAL_MOSAIC_OPTIONS = {
+  apiBaseUrl: '/api/tiles-region',
+  preloadMarginTiles: 0.5,
+  retainMarginTiles: 1,
+} as const;
 
 export default function App() {
+  const urlSearchParams = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search)
+        : new URLSearchParams(),
+    []
+  );
+
+  const isBenchmarkMode = useMemo(() => {
+    const fixtureParam = urlSearchParams.get('fixture');
+    const benchParam = urlSearchParams.get('benchmark');
+    return benchParam === '1' || benchParam === 'true' || fixtureParam === 'benchmark';
+  }, [urlSearchParams]);
+
+  const initialWorkspaceState = useMemo<WorkspacePreferences>(() => {
+    const stored = loadWorkspacePreferences();
+    if (isBenchmarkMode) {
+      return {
+        navMode: 'hidden',
+        activePanel: null,
+        hideCameraToolbar: true,
+      };
+    }
+
+    let navMode = stored.navMode;
+    let activePanel = stored.activePanel;
+    const hideCameraToolbar = stored.hideCameraToolbar;
+
+    if (urlSearchParams.get('dock') === 'collapsed') {
+      navMode = 'hidden';
+      activePanel = null;
+    }
+
+    const tabParam = urlSearchParams.get('tab');
+    if (
+      tabParam === 'layers' ||
+      tabParam === 'inspector' ||
+      tabParam === 'style' ||
+      tabParam === 'stats' ||
+      tabParam === 'info'
+    ) {
+      activePanel = mapLegacyTabToPanelId(tabParam);
+    } else if (
+      urlSearchParams.get('devtools') === 'true' ||
+      urlSearchParams.get('devtools') === '1'
+    ) {
+      activePanel = 'diagnostics';
+    }
+
+    return { navMode, activePanel, hideCameraToolbar };
+  }, [isBenchmarkMode, urlSearchParams]);
+
+  const [navMode, setNavMode] = useState<NavSidebarMode>(initialWorkspaceState.navMode);
+  const [activePanel, setActivePanel] = useState<WorkspacePanelId | null>(
+    initialWorkspaceState.activePanel
+  );
+  const [hideCameraToolbar, setHideCameraToolbar] = useState<boolean>(
+    initialWorkspaceState.hideCameraToolbar
+  );
+
+  const persistWorkspacePrefs = (next: WorkspacePreferences) => {
+    saveWorkspacePreferences(next);
+  };
+
+  const handleSelectPanel = (panelId: WorkspacePanelId | null) => {
+    const nextPanel =
+      panelId === null ? null : togglePanelSelection(activePanel, panelId);
+    setActivePanel(nextPanel);
+    persistWorkspacePrefs({
+      navMode,
+      activePanel: nextPanel,
+      hideCameraToolbar,
+    });
+  };
+
+  const handleChangeNavMode = (nextMode: NavSidebarMode) => {
+    setNavMode(nextMode);
+    persistWorkspacePrefs({
+      navMode: nextMode,
+      activePanel,
+      hideCameraToolbar,
+    });
+  };
+
+  const handleToggleCameraToolbar = () => {
+    const nextHide = !hideCameraToolbar;
+    setHideCameraToolbar(nextHide);
+    persistWorkspacePrefs({
+      navMode,
+      activePanel,
+      hideCameraToolbar: nextHide,
+    });
+  };
+
+  const handleEnterImmersiveMode = () => {
+    setNavMode('hidden');
+    setActivePanel(null);
+    setHideCameraToolbar(true);
+    persistWorkspacePrefs({
+      navMode: 'hidden',
+      activePanel: null,
+      hideCameraToolbar: true,
+    });
+  };
+
+  const handleRestoreWorkspaceUi = () => {
+    setNavMode('expanded');
+    setHideCameraToolbar(false);
+    persistWorkspacePrefs({
+      navMode: 'expanded',
+      activePanel,
+      hideCameraToolbar: false,
+    });
+  };
+
+  // Lifted panel session state so inputs/results survive switching or closing panels
+  const [searchSession, setSearchSession] = useState<SearchPanelSessionState>(
+    INITIAL_SEARCH_SESSION_STATE
+  );
+  const [reproForm, setReproForm] = useState<ReproFormSessionState>(
+    INITIAL_REPRO_FORM_STATE
+  );
+
   // Map data state
   const [mapData, setMapData] = useState<ProcessedMapData | null>(null);
-  const [activeLocationId, setActiveLocationId] = useState<string>('hengelo');
+  const [activeLocationId, setActiveLocationId] = useState<string>('hengelo_m2a_tiles');
   const [loading, setLoading] = useState(true);
-  const [statusMessage, setStatusMessage] = useState('Fetching live OpenStreetMap data...');
+  const [statusMessage, setStatusMessage] = useState(
+    'Initializing baked regional mosaic (/api/tiles-region/manifest)...'
+  );
   const [error, setError] = useState<string | null>(null);
-
-  // Address search & GeoJSON export
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [currentRawGeoJson, setCurrentRawGeoJson] = useState<any>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  //Styling & configuration
+  // Styling & configuration
   const [selectedThemeId, setSelectedThemeId] = useState<string>('tactical');
   const [heightMultiplier, setHeightMultiplier] = useState<number>(1.0);
   const [roadWidthMultiplier, setRoadWidthMultiplier] = useState<number>(1.0);
@@ -149,7 +255,11 @@ export default function App() {
 
   const [activePrototypeZone, setActivePrototypeZone] =
     useState<RailwayPrototypeZoneId>('overview');
-  const currentCameraZoomRef = useRef<number>(1.0);
+  const currentCameraZoomRef = useRef<number>(1.2);
+  const [cameraOrientation, setCameraOrientation] = useState<{
+    zoom: number;
+    azimuthDeg: number;
+  }>({ zoom: 1.2, azimuthDeg: 45 });
   const latestTelemetryRef = useRef<LiveWebGLTelemetrySnapshot | null>(null);
 
   // Permanent production infrastructure configuration (E2+ surface-first roads + E3-B R+ railways)
@@ -162,7 +272,10 @@ export default function App() {
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
-  const pendingTransitionMetaRef = useRef<Omit<SceneRevisionConfigMeta, 'webglFramesRendered'> | null>(null);
+  const pendingTransitionMetaRef = useRef<Omit<
+    SceneRevisionConfigMeta,
+    'webglFramesRendered'
+  > | null>(null);
   const latestRenderedMetaRef = useRef<SceneRevisionConfigMeta | null>(null);
   const imperativePoseSetterRef = useRef<
     ((target: [number, number, number], zoom: number, azimuthDeg?: number) => void) | null
@@ -205,14 +318,16 @@ export default function App() {
   const [resetCount, setResetCount] = useState<number>(0);
   const [frameRegionCount, setFrameRegionCount] = useState<number>(0);
   const [rotateStepCount, setRotateStepCount] = useState<number>(0);
+  const [zoomStepCount, setZoomStepCount] = useState<number>(0);
   const [explicitPose, setExplicitPose] = useState<{
     target: [number, number, number];
     zoom: number;
     azimuthRad?: number;
     signal: number;
+    animate?: boolean;
   }>({
     target: [0, 0, 0],
-    zoom: 1.0,
+    zoom: 1.2,
     signal: 0,
   });
 
@@ -223,12 +338,7 @@ export default function App() {
   const [selectedFeatures, setSelectedFeatures] = useState<InspectableFeatureInfo[]>([]);
   const [focusedFeatureId, setFocusedFeatureId] = useState<string | null>(null);
 
-  // Developer Tools Interface State
-  const [isDevToolsOpen, setIsDevToolsOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const p = new URLSearchParams(window.location.search);
-    return p.get('devtools') === 'true' || p.get('devtools') === '1';
-  });
+  // Spatial selection & overlay state
   const [showGraphOverlay, setShowGraphOverlay] = useState<boolean>(false);
   const [isSpatialSelectActive, setIsSpatialSelectActive] = useState<boolean>(false);
   const [selectedBoxMeters, setSelectedBoxMeters] = useState<{
@@ -238,9 +348,6 @@ export default function App() {
     maxZ: number;
   } | null>(null);
 
-  const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'layers' | 'inspector' | 'style' | 'stats' | 'info'>('layers');
-
   // Performance stats & M2.1 telemetry
   const [fps, setFps] = useState<number>(60);
   const [cpuBuildTimeMs, setCpuBuildTimeMs] = useState<number>(0);
@@ -248,13 +355,15 @@ export default function App() {
   const latestPreviewTimeMsRef = useRef<number>(0);
   const [liveTelemetry, setLiveTelemetry] = useState<LiveWebGLTelemetrySnapshot | null>(null);
   const lastUiTelemetryTimeRef = useRef<number>(0);
-  const [webglSupported, setWebglSupported] = useState<boolean>(() => detectWebGLSupport().supported);
+  const [webglSupported, setWebglSupported] = useState<boolean>(
+    () => detectWebGLSupport().supported
+  );
 
-  // Provider instances for data loading abstraction
+  // Internal provider instances (for test/benchmark fixtures & repro import only)
   const osmApiProvider = useMemo(() => new OsmApiProvider(), []);
   const localProvider = useMemo(() => new LocalGeoJsonProvider(), []);
 
-  // TKT-021: End-to-end map loading diagnostics (diagnostic instrumentation only)
+  // TKT-021: End-to-end map loading diagnostics
   const mapLoadTrackerRef = useRef<MapLoadTimelineTracker>(new MapLoadTimelineTracker(10));
   const mapDataRequestIdRef = useRef<WeakMap<ProcessedMapData, number>>(new WeakMap());
   const initialMountLoadStartedRef = useRef<boolean>(false);
@@ -313,9 +422,11 @@ export default function App() {
 
   // TKT-028 M2-A Runtime Baked Tile Streaming State
   const [isM2aStreamingActive, setIsM2aStreamingActive] = useState<boolean>(false);
-  const [showM2aTileBoundaries, setShowM2aTileBoundaries] = useState<boolean>(true);
+  const [showM2aTileBoundaries, setShowM2aTileBoundaries] = useState<boolean>(false);
   const [m2aStreamDiagnostics, setM2aStreamDiagnostics] =
     useState<TileStreamDiagnosticsSnapshot | null>(null);
+  const [manifestCoverage, setManifestCoverage] =
+    useState<TileManifestCoverageSummary | null>(null);
   const [activeMosaicIdentity, setActiveMosaicIdentity] = useState<ActiveMosaicIdentity>(
     INACTIVE_MOSAIC_IDENTITY
   );
@@ -389,6 +500,7 @@ export default function App() {
       tileStreamManagerRef.current = null;
     }
     setM2aStreamDiagnostics(null);
+    setManifestCoverage(null);
     if (resetIdentity) {
       setActiveMosaicIdentity(INACTIVE_MOSAIC_IDENTITY);
       setProgrammaticRegionalMinZoom(null);
@@ -481,7 +593,9 @@ export default function App() {
     activeLocationIdRef.current = 'hengelo_m1a';
     setActiveLocationId('hengelo_m1a');
     clearM2aStreamingOnDatasetSwitch();
-    setStatusMessage('Fetching canonical Hengelo M1a 4×4 km study GeoJSON from local Overijssel SQLite store...');
+    setStatusMessage(
+      'Fetching canonical Hengelo M1a 4×4 km study GeoJSON from local Overijssel SQLite store...'
+    );
 
     try {
       if (extraOptions?.themeId && MAP_THEMES[extraOptions.themeId]) {
@@ -504,7 +618,6 @@ export default function App() {
       const rawGeoJson = await res.json();
       const fetchElapsedMs = performance.now() - tFetch0;
 
-      // Let the UI render the next status message before synchronous tiled synthesis
       setStatusMessage(
         `Synthesizing canonical M1a single-scene reference & ${grid.tiles.length}-tile (${grid.cols}×${grid.rows} · ${grid.tileSizeMeters} m) geometry...`
       );
@@ -620,7 +733,6 @@ export default function App() {
       setLoading(false);
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
 
-      // Frame the full 4,096 × 4,096 m 8×8 tile grid by default
       setExplicitPose((prev) => ({
         target: extraOptions?.target ?? [0, 0, 0],
         zoom: overrideZoom ?? 0.22,
@@ -718,7 +830,7 @@ export default function App() {
     }
 
     setStatusMessage(
-      `Initializing M2-A TileStreamManager from baked SQLite tile pack (${targetApiBaseUrl}/manifest)...`
+      `Initializing tile stream from baked mosaic (${targetApiBaseUrl}/manifest)...`
     );
 
     try {
@@ -727,7 +839,7 @@ export default function App() {
         setSelectedThemeId(extraOptions.themeId);
       }
 
-      const initialZoomRequested = overrideZoom ?? 1.8;
+      const initialZoomRequested = overrideZoom ?? 1.2;
       const provisionalZoomPolicy = resolveCameraZoomPolicy({
         isRegionalStreaming: isRegionalPilot,
         urlOverride: urlRegionalMinZoomOverride,
@@ -759,10 +871,7 @@ export default function App() {
             return;
           }
           const now = performance.now();
-          if (
-            diag.loadingTiles === 0 ||
-            now - lastM2aDiagUiTimeRef.current >= 80
-          ) {
+          if (diag.loadingTiles === 0 || now - lastM2aDiagUiTimeRef.current >= 80) {
             lastM2aDiagUiTimeRef.current = now;
             setM2aStreamDiagnostics(diag);
           }
@@ -785,6 +894,7 @@ export default function App() {
       }
 
       const loadedDiagnostics = manager.getDiagnostics();
+      const coverageSummary = manager.getManifestCoverageSummary();
       const resolvedIsRegional =
         isRegionalPilot || loadedDiagnostics.totalGridTiles > REGIONAL_MIN_ZOOM_TILE_THRESHOLD;
       const resolvedZoomPolicy = resolveCameraZoomPolicy({
@@ -828,7 +938,7 @@ export default function App() {
         : 'Hengelo';
       const emptyEnvelopeData = localProvider.parseGeoJson(
         { type: 'FeatureCollection', features: [] },
-        `${activeRegionalLabel} M2-A Baked Tile Pack (${packMeta.snapshotId} · ${packMeta.gridCols}×${packMeta.gridRows} / ${totalPackTiles} Tiles)`,
+        `${activeRegionalLabel} (${packMeta.snapshotId} · ${packMeta.gridCols}×${packMeta.gridRows} / ${totalPackTiles} Tiles)`,
         centerLonLat,
         Math.max(halfWidthM, halfDepthM)
       );
@@ -867,6 +977,7 @@ export default function App() {
 
       isM2aStreamingActiveRef.current = true;
       setIsM2aStreamingActive(true);
+      setManifestCoverage(coverageSummary);
       setActiveMosaicIdentity(
         createMosaicIdentityFromDiagnostics(loadedDiagnostics, resolvedIsRegional)
       );
@@ -917,15 +1028,15 @@ export default function App() {
       setActiveMosaicIdentity(
         createErrorMosaicIdentity(
           isRegionalPilot,
-          err?.message || 'Failed to initialize M2-A Runtime Tile Streaming'
+          err?.message || 'Failed to initialize baked regional tile streaming'
         )
       );
-      setError(`M2-A Tile Streaming Error: ${err?.message || String(err)}`);
+      setError(`Regional Mosaic Unavailable: ${err?.message || String(err)}`);
       setLoading(false);
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
       const failed = mapLoadTrackerRef.current.markLoadFailed(
         requestId,
-        err?.message || 'Failed to initialize M2-A Runtime Tile Streaming'
+        err?.message || 'Failed to initialize baked regional tile streaming'
       );
       if (failed) setLastMapLoadDiagnostics(failed);
       throw err;
@@ -982,8 +1093,6 @@ export default function App() {
     }));
   };
 
-  // Tiny source-grounded E2 repro: three cycleways at southern node/6387677253.
-  // No background network call, railway prototype scene, or separate renderer.
   const loadPrinsHendrikkadeForkFixture = (
     overrideZoom?: number,
     overrideAzimuthDeg?: number,
@@ -1054,11 +1163,19 @@ export default function App() {
     isInitialStartupLoad: boolean = false
   ) => {
     setActiveLocationId('hengelo');
-    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0], {
-      locationId: 'hengelo',
-      sourceType: 'preset_live_osm',
-      isInitialStartupLoad,
-    });
+    await fetchLiveOsmLocation(
+      {
+        name: 'Station Hengelo (Overijssel)',
+        lat: 52.2625,
+        lon: 6.7935,
+        radius: 400,
+      },
+      {
+        locationId: 'hengelo',
+        sourceType: 'preset_live_osm',
+        isInitialStartupLoad,
+      }
+    );
     setExplicitPose((prev) => ({
       target,
       zoom,
@@ -1074,11 +1191,19 @@ export default function App() {
     isInitialStartupLoad: boolean = false
   ) => {
     setActiveLocationId('amsterdam');
-    await fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[1], {
-      locationId: 'amsterdam',
-      sourceType: 'preset_live_osm',
-      isInitialStartupLoad,
-    });
+    await fetchLiveOsmLocation(
+      {
+        name: 'Amsterdam Centraal (Railways & Canals)',
+        lat: 52.3791,
+        lon: 4.9003,
+        radius: 420,
+      },
+      {
+        locationId: 'amsterdam',
+        sourceType: 'preset_live_osm',
+        isInitialStartupLoad,
+      }
+    );
     setExplicitPose((prev) => ({
       target,
       zoom,
@@ -1161,7 +1286,6 @@ export default function App() {
         }));
       }
 
-      // Restore spatial area bounding box
       if (pkg.selectedArea?.spatialBoxMeters) {
         setSelectedBoxMeters(pkg.selectedArea.spatialBoxMeters);
       } else if ((pkg as any).selectedBoxMeters) {
@@ -1170,7 +1294,6 @@ export default function App() {
         setSelectedBoxMeters(null);
       }
 
-      // Restore selected objects
       if (Array.isArray(pkg.selectedObjects) && pkg.selectedObjects.length > 0) {
         const restored: InspectableFeatureInfo[] = pkg.selectedObjects.map((obj) => ({
           id: obj.id,
@@ -1186,13 +1309,6 @@ export default function App() {
           isBridge: obj.isBridge,
           isTunnel: obj.isTunnel,
           osmTags: obj.osmTags || {},
-          portalConnections: obj.incidentOsmIds?.map((osmId) => ({
-            roadFeatureId: osmId,
-            sourceFeatureId: osmId,
-            endpoint: 'start' as const,
-            left: [0, 0] as [number, number],
-            right: [0, 0] as [number, number],
-          })),
         }));
         setSelectedFeatures(restored);
         const focusId = pkg.focusedFeatureId || restored[0].id;
@@ -1226,7 +1342,7 @@ export default function App() {
         setSelectedFeature(null);
       }
 
-      setIsDevToolsOpen(true);
+      setActivePanel('diagnostics');
       setStatusMessage(`Loaded reproduction: ${pkg.report?.title || 'Imported Scenario'}`);
     } catch (err: any) {
       console.error('Failed to import reproduction package:', err);
@@ -1241,7 +1357,6 @@ export default function App() {
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
     }
   };
-
 
   const resolvePrototypeZonePreset = (zoneId: string) => {
     const aliasMap: Record<string, RailwayPrototypeZoneId> = {
@@ -1272,7 +1387,6 @@ export default function App() {
     }));
   };
 
-  // Function to load any real-world coordinates through MapDataProvider abstraction
   const fetchLiveOsmLocation = async (
     loc: { name: string; lat: number; lon: number; radius: number },
     options?: {
@@ -1299,7 +1413,7 @@ export default function App() {
     setHoveredFeature(null);
     setSelectedFeature(null);
     clearM2aStreamingOnDatasetSwitch();
-    setStatusMessage(`Retrieving real OpenStreetMap data for ${loc.name}...`);
+    setStatusMessage(`Retrieving OpenStreetMap fixture data for ${loc.name}...`);
     try {
       const parsedData = await osmApiProvider.loadRegion({
         centerLat: loc.lat,
@@ -1322,38 +1436,8 @@ export default function App() {
       setLoading(false);
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
       setResetCount((c) => c + 1);
-
-      // Log development-only diagnostics to console
-      if (parsedData.diagnostics) {
-        const tConsole0 = performance.now();
-        console.group(`🗺️ OpenStreetMap Diagnostics [${loc.name}]`);
-        console.table({
-          'Source Features Received': parsedData.diagnostics.sourceFeaturesReceived,
-          'Features Classified': parsedData.diagnostics.sourceFeaturesClassified,
-          'Valid Features Parsed': parsedData.diagnostics.totalFeaturesParsed,
-          'Geometry Parts Generated': parsedData.diagnostics.geometryPartsGenerated.total,
-          'Features Rendered': parsedData.diagnostics.sourceFeaturesRendered,
-          'Scene Meshes Built': parsedData.diagnostics.constructedMeshesCount,
-          'Buildings': parsedData.diagnostics.parsedByCategory.buildings,
-          'Roads': parsedData.diagnostics.parsedByCategory.roads,
-          'Railways': parsedData.diagnostics.parsedByCategory.railways,
-          'Water Bodies': parsedData.diagnostics.parsedByCategory.waterBodies,
-          'Linear Waterways': parsedData.diagnostics.parsedByCategory.linearWaterways,
-          'Parks & Nature': parsedData.diagnostics.parsedByCategory.parks,
-          'Landuse & Civic': parsedData.diagnostics.parsedByCategory.landuse,
-          'Barriers & Walls': parsedData.diagnostics.parsedByCategory.barriers || 0,
-          '3D Landmarks & Trees': parsedData.diagnostics.parsedByCategory.landmarks || 0,
-          'Skipped (Unsupported)': parsedData.diagnostics.skippedUnsupported.total,
-          'Rejected (Invalid)': parsedData.diagnostics.rejectedInvalid.total,
-        });
-        console.groupEnd();
-        mapLoadTrackerRef.current.recordConsoleDiagnosticsMs(
-          requestId,
-          performance.now() - tConsole0
-        );
-      }
     } catch (err: any) {
-      console.error('Failed to load real OSM region:', err);
+      console.error('Failed to load OSM region:', err);
       if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) {
         return;
       }
@@ -1362,19 +1446,21 @@ export default function App() {
       mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
       const failed = mapLoadTrackerRef.current.markLoadFailed(
         requestId,
-        err?.message || 'Failed to load real OSM region'
+        err?.message || 'Failed to load OSM region'
       );
       if (failed) setLastMapLoadDiagnostics(failed);
     }
   };
 
-  // Initial load: Check URL query parameters for M2.1 Prototype Lab or fetch Station Hengelo
+  // Initial startup: boot directly into configured regional mosaic (/api/tiles-region) unless URL harness flags override
   useEffect(() => {
     if (initialMountLoadStartedRef.current) return;
     initialMountLoadStartedRef.current = true;
 
-    const params = new URLSearchParams(window.location.search);
-    const initialRenderOpts = parseInfrastructureRenderOptionsFromSearch(window.location.search);
+    const params = urlSearchParams;
+    const initialRenderOpts = parseInfrastructureRenderOptionsFromSearch(
+      window.location.search
+    );
     infrastructureRenderOptionsRef.current = initialRenderOpts;
     setInfrastructureRenderOptions(initialRenderOpts);
 
@@ -1382,20 +1468,6 @@ export default function App() {
     if (themeParam && MAP_THEMES[themeParam]) {
       selectedThemeIdRef.current = themeParam;
       setSelectedThemeId(themeParam);
-    }
-    const tabParam = params.get('tab');
-    if (
-      tabParam === 'layers' ||
-      tabParam === 'inspector' ||
-      tabParam === 'style' ||
-      tabParam === 'stats' ||
-      tabParam === 'info'
-    ) {
-      setActiveTab(tabParam);
-    }
-    const dockParam = params.get('dock');
-    if (dockParam === 'collapsed') {
-      setIsDockCollapsed(true);
     }
 
     const fixtureParam = params.get('fixture');
@@ -1410,8 +1482,6 @@ export default function App() {
       rawAzParam !== null && rawAzParam.trim() !== '' ? Number(rawAzParam.trim()) : NaN;
     const azParam = Number.isFinite(parsedAzParam) ? parsedAzParam : undefined;
 
-    const isBenchmarkMode =
-      params.get('benchmark') === '1' || params.get('benchmark') === 'true' || fixtureParam === 'benchmark';
     const regionParam = params.get('region');
     const isRegionalPilotUrl =
       regionParam === 'twente-pilot' ||
@@ -1440,12 +1510,9 @@ export default function App() {
       : undefined;
     const is1024ExperimentUrl =
       parsedTileSizeParam === 1024 || params.get('pack') === '1024m';
-    // Developer-only visual parity mode: same physical preload/retain distances as
-    // TKT-028-F1 hardware benchmarks, without altering normal streamer defaults.
     const matchedMarginsParam = params.get('matchPhysicalMargins');
     const matchPhysicalMargins =
       matchedMarginsParam === '1' || matchedMarginsParam === 'true';
-    // Explicit TKT-031 A/B flags; normal rendering remains unchanged by default.
     const experimentSkipUnchangedViewport = params.get('perfViewportGate') === '1';
     const experimentSkipUnchangedZoom = params.get('perfZoomGate') === '1';
     const visualStreamingOptions = {
@@ -1465,7 +1532,6 @@ export default function App() {
     };
 
     if (isBenchmarkMode) {
-      setIsDockCollapsed(true);
       setActiveLocationId('benchmark_idle');
       const emptyData = localProvider.parseGeoJson(
         { type: 'FeatureCollection', features: [] },
@@ -1481,8 +1547,11 @@ export default function App() {
         zoomParam,
         azParam,
         true,
-        isRegionalPilotUrl || is1024ExperimentUrl || matchPhysicalMargins ||
-        experimentSkipUnchangedViewport || experimentSkipUnchangedZoom
+        isRegionalPilotUrl ||
+          is1024ExperimentUrl ||
+          matchPhysicalMargins ||
+          experimentSkipUnchangedViewport ||
+          experimentSkipUnchangedZoom
           ? visualStreamingOptions
           : undefined
       );
@@ -1499,15 +1568,18 @@ export default function App() {
     } else if (fixtureParam === 'prins-fork') {
       loadPrinsHendrikkadeForkFixture(zoomParam, azParam, true);
     } else if (fixtureParam === 'amsterdam') {
-      loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
+      void loadLiveAmsterdamPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
     } else if (fixtureParam === 'hengelo') {
-      loadLiveHengeloPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
+      void loadLiveHengeloPreset([0, 0, 0], zoomParam ?? 1.0, azParam ?? 45, true);
     } else {
-      fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0], {
-        locationId: LIVE_PRESET_LOCATIONS[0].id,
-        sourceType: 'preset_live_osm',
-        isInitialStartupLoad: true,
-      });
+      void loadHengeloM2aTileStreaming(
+        zoomParam ?? 1.2,
+        azParam ?? 45,
+        true,
+        {
+          ...DEFAULT_REGIONAL_MOSAIC_OPTIONS,
+        }
+      );
     }
   }, []);
 
@@ -1515,7 +1587,6 @@ export default function App() {
     return MAP_THEMES[selectedThemeId] || MAP_THEMES.tactical;
   }, [selectedThemeId]);
 
-  // Build one shared InfrastructureGraph + render descriptor bundle per dataset.
   const infrastructureRenderPreview = useMemo(() => {
     if (isM1aHarnessActive && m1aIngestedRef.current) {
       const ing = m1aIngestedRef.current;
@@ -1557,8 +1628,6 @@ export default function App() {
     return preview;
   }, [mapData, isM1aHarnessActive, infrastructureRenderOptions.roads, infrastructureRenderOptions.railways]);
 
-  // Generate 3D Scene Geometries when geometric parameters or railway mode change.
-  // When M1a Visual Acceptance Harness or M2-A Runtime Tile Streaming is active, those scenes are managed directly.
   useEffect(() => {
     if (
       !mapData ||
@@ -1573,7 +1642,10 @@ export default function App() {
     const tEffectStart = performance.now();
     const requestId = mapDataRequestIdRef.current.get(mapData);
 
-    if (typeof window !== 'undefined' && typeof (window as any).__BENCHMARK_RESET_GPU_TIMERS__ === 'function') {
+    if (
+      typeof window !== 'undefined' &&
+      typeof (window as any).__BENCHMARK_RESET_GPU_TIMERS__ === 'function'
+    ) {
       (window as any).__BENCHMARK_RESET_GPU_TIMERS__();
     }
 
@@ -1663,7 +1735,6 @@ export default function App() {
     infrastructureRenderPreview,
   ]);
 
-  // Separate material theme updates from geometry regeneration (zero GPU re-allocations)
   useEffect(() => {
     if (isM1aHarnessActive) {
       m1aTiledSceneRef.current?.updateTheme(currentTheme);
@@ -1685,7 +1756,6 @@ export default function App() {
     }
   }, [wireframe, isM2aStreamingActive]);
 
-  // Clean unmount disposal
   useEffect(() => {
     return () => {
       disposeM1aHarnessScenes();
@@ -1697,7 +1767,6 @@ export default function App() {
     };
   }, []);
 
-  // Helper reading live refs directly so benchmark snapshots are never poisoned by stale React closures
   const buildLiveHarnessSnapshot = (): BenchmarkHarnessSnapshot & Record<string, any> => {
     const liveScene = activeSceneRef.current;
     const liveRenderOpts = infrastructureRenderOptionsRef.current;
@@ -1919,9 +1988,12 @@ export default function App() {
         selectedThemeIdRef.current = themeId;
         setSelectedThemeId(themeId);
       },
-      setDockCollapsed: (collapsed: boolean) => setIsDockCollapsed(collapsed),
+      setDockCollapsed: (collapsed: boolean) => {
+        setNavMode(collapsed ? 'hidden' : 'expanded');
+        if (collapsed) setActivePanel(null);
+      },
       setActiveTab: (tab: 'layers' | 'inspector' | 'style' | 'stats' | 'info') =>
-        setActiveTab(tab),
+        setActivePanel(mapLegacyTabToPanelId(tab)),
       loadSwitchyard: (
         zone: RailwayPrototypeZoneId = 'overview',
         zoom?: number,
@@ -2004,7 +2076,6 @@ export default function App() {
         const frustumTriSamples: number[] = [];
         const canvas = document.querySelector('canvas');
 
-        // Warm up 1 frame after pose/mode change
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
         for (let i = 0; i < steps; i++) {
@@ -2064,9 +2135,7 @@ export default function App() {
             }
           }
 
-          // Tick 1: allow React to commit explicitPose and CameraController useEffect to update ortho.zoom & position
           await new Promise<void>((r) => requestAnimationFrame(() => r()));
-          // Tick 2: measure actual rendered frame interval for the updated camera pose
           const tStart = performance.now();
           await new Promise<void>((r) =>
             requestAnimationFrame(() => {
@@ -2132,15 +2201,19 @@ export default function App() {
           platform: {
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
             devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : 1,
-            hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : null,
+            hardwareConcurrency:
+              typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : null,
             gpuVendor: snap?.liveWebGL?.gpuVendor ?? 'Unknown',
-            gpuRenderer: snap?.liveWebGL?.gpuRenderer ?? 'Software GL / WebGL2 (SwiftShader)',
+            gpuRenderer:
+              snap?.liveWebGL?.gpuRenderer ?? 'Software GL / WebGL2 (SwiftShader)',
             canvasWidth: snap?.liveWebGL?.canvasWidth ?? window.innerWidth,
             canvasHeight: snap?.liveWebGL?.canvasHeight ?? window.innerHeight,
           },
           ...snap,
         };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: 'application/json',
+        });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -2162,10 +2235,8 @@ export default function App() {
       ) =>
         new Promise<string | null>((resolve) => {
           setSelectedThemeId(themeId);
-          setIsDockCollapsed(dockCollapsed);
-          if (!dockCollapsed) {
-            setActiveTab('stats');
-          }
+          setNavMode(dockCollapsed ? 'hidden' : 'expanded');
+          setActivePanel(dockCollapsed ? null : 'performance');
           jumpToPrototypeZone(zone, zoom);
           setTimeout(() => {
             const canvas = document.querySelector('canvas');
@@ -2563,124 +2634,6 @@ export default function App() {
     setResetCount((c) => c + 1);
   };
 
-  const handlePresetSelect = (preset: LivePresetLocation) => {
-    setActiveLocationId(preset.id);
-    fetchLiveOsmLocation(preset, {
-      locationId: preset.id,
-      sourceType: 'preset_live_osm',
-    });
-  };
-
-  const handleSelectAddress = async (location: GeocodeResult, radiusMeters: number) => {
-    setActiveLocationId('custom');
-    await fetchLiveOsmLocation(
-      {
-        name: location.name,
-        lat: location.lat,
-        lon: location.lon,
-        radius: radiusMeters,
-      },
-      {
-        locationId: 'custom',
-        sourceType: 'address_search',
-      }
-    );
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const requestId = mapLoadTrackerRef.current.startLoad({
-      locationId: 'custom',
-      locationName: file.name,
-      radiusMeters: null,
-      sourceType: 'geojson_upload',
-      rendererConfig: {
-        roadsMode: infrastructureRenderOptionsRef.current.roads,
-        railwaysMode: infrastructureRenderOptionsRef.current.railways,
-        railwayPrototypeMode: 'production',
-        themeId: selectedThemeIdRef.current,
-      },
-    });
-    const tReadStart = performance.now();
-
-    setLoading(true);
-    setError(null);
-    clearM2aStreamingOnDatasetSwitch();
-    setStatusMessage(`Parsing uploaded GeoJSON file ${file.name}...`);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) return;
-      try {
-        const tReadEnd = performance.now();
-        const text = event.target?.result as string;
-        const tJson0 = performance.now();
-        const json = JSON.parse(text);
-        const tJson1 = performance.now();
-        setCurrentRawGeoJson(json);
-
-        const tParse0 = performance.now();
-        const data = localProvider.parseGeoJson(json, file.name);
-        const tParse1 = performance.now();
-
-        mapLoadTrackerRef.current.recordLocalTransferAndParse(requestId, {
-          responseTransferMs: tReadEnd - tReadStart,
-          jsonDecodeMs: tJson1 - tJson0,
-          dataTransferAndDecodeMs: tJson1 - tReadStart,
-          geoJsonProcessingMs: tParse1 - tParse0,
-          geoJsonSubTimingsMs: localProvider.getLastParseSubTimings(),
-          payloadBytes:
-            typeof TextEncoder !== 'undefined'
-              ? new TextEncoder().encode(text).byteLength
-              : text.length,
-          featureCount: Array.isArray(json?.features) ? json.features.length : null,
-        });
-
-        commitMapDataForRequest(requestId, data);
-        setActiveLocationId('custom');
-        setLoading(false);
-        mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
-        setResetCount((c) => c + 1);
-      } catch (err: any) {
-        console.error('Failed to parse uploaded GeoJSON:', err);
-        setError(`Failed to parse uploaded GeoJSON: ${err.message}`);
-        setLoading(false);
-        mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
-        const failed = mapLoadTrackerRef.current.markLoadFailed(
-          requestId,
-          err?.message || 'Failed to parse uploaded GeoJSON'
-        );
-        if (failed) setLastMapLoadDiagnostics(failed);
-      }
-    };
-    reader.onerror = () => {
-      if (!mapLoadTrackerRef.current.isRequestCurrent(requestId)) return;
-      setError('Failed to read selected file');
-      setLoading(false);
-      mapLoadTrackerRef.current.markLoadingIndicatorHidden(requestId);
-      const failed = mapLoadTrackerRef.current.markLoadFailed(
-        requestId,
-        'Failed to read selected file'
-      );
-      if (failed) setLastMapLoadDiagnostics(failed);
-    };
-    reader.readAsText(file);
-  };
-
-  const handleDownloadCurrentGeoJson = () => {
-    if (!currentRawGeoJson) return;
-    const blob = new Blob([JSON.stringify(currentRawGeoJson, null, 2)], {
-      type: 'application/geo+json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(currentRawGeoJson.name || mapData?.regionName || 'osm-map-region').toLowerCase().replace(/[^a-z0-9]/g, '-')}.geojson`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleHoverFeature = (
     info: InspectableFeatureInfo | null,
     pos?: { x: number; y: number }
@@ -2691,6 +2644,7 @@ export default function App() {
     }
   };
 
+  // Selecting a feature in the 3D viewport updates selection state WITHOUT altering open sidebars
   const handleSelectFeature = (info: InspectableFeatureInfo | null) => {
     if (!info) {
       setSelectedFeature(null);
@@ -2707,8 +2661,6 @@ export default function App() {
       }
       return [...prev, info];
     });
-    setActiveTab('inspector');
-    setIsDockCollapsed(false);
   };
 
   const handleRemoveSelectedFeature = (id: string) => {
@@ -2737,7 +2689,17 @@ export default function App() {
     }
   };
 
-  // Clamp floating cursor tooltip inside viewport bounds
+  const handleShowAllLayers = () => {
+    setShowBuildings(true);
+    setShowRoads(true);
+    setShowRailways(true);
+    setShowWater(true);
+    setShowParks(true);
+    setShowLanduse(true);
+    setShowBarriers(true);
+    setShowFoliage(true);
+  };
+
   const tooltipStyle = useMemo(() => {
     const maxW = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const maxH = typeof window !== 'undefined' ? window.innerHeight : 800;
@@ -2748,42 +2710,74 @@ export default function App() {
     };
   }, [hoverPos]);
 
+  const showRestoreWorkspaceControl =
+    navMode === 'hidden' && !activePanel && !isBenchmarkMode;
+
   return (
     <div
-      className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none"
+      data-testid="workspace-root"
+      className="flex w-screen h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* 3D WebGL Viewport */}
-      <div
-        className="absolute inset-0"
+      {/* 1. LEFT NAVIGATION SIDEBAR */}
+      <NavigationSidebar
+        mode={navMode}
+        activePanel={activePanel}
+        selectedFeatureCount={selectedFeatures.length}
+        hideCameraToolbar={hideCameraToolbar}
+        onSelectPanel={handleSelectPanel}
+        onChangeMode={handleChangeNavMode}
+        onToggleImmersiveMode={handleEnterImmersiveMode}
+        onToggleCameraToolbar={handleToggleCameraToolbar}
+      />
+
+      {/* 2. CENTRAL 3D MAP VIEWPORT */}
+      <main
+        className="relative flex-1 min-w-0 h-full overflow-hidden"
         data-testid="webgl-viewport"
         onContextMenu={(e) => e.preventDefault()}
       >
         {loading && (
           <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-            <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin mb-4" />
-            <h2 className="text-xl font-semibold tracking-wide text-slate-100">
-              Generating 3D City Geometry...
+            <div className="w-10 h-10 border-4 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin mb-3" />
+            <h2 className="text-base font-semibold tracking-wide text-slate-100">
+              Loading Regional World...
             </h2>
-            <p className="text-sm text-slate-400 mt-1 font-mono">
+            <p className="text-xs text-slate-400 mt-1 font-mono max-w-md text-center px-4">
               {statusMessage}
             </p>
           </div>
         )}
 
         {error && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center">
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 mb-3">
-              <Info className="w-8 h-8" />
+          <div
+            data-testid="viewport-error-overlay"
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center"
+          >
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 mb-3">
+              <Info className="w-7 h-7" />
             </div>
-            <h2 className="text-lg font-semibold text-red-300">Map Ingestion Error</h2>
-            <p className="text-sm text-slate-400 max-w-md mt-1">{error}</p>
+            <h2 className="text-base font-semibold text-rose-300">
+              Regional Mosaic Unavailable
+            </h2>
+            <p className="text-xs text-slate-300 max-w-md mt-1.5 break-words">
+              {error}
+            </p>
+            <p className="text-[11px] font-mono text-slate-400 max-w-md mt-2">
+              Verify <code className="text-slate-200">OVERIJSSEL_REGIONAL_MOSAIC_PATH</code> or bake the regional pilot with{' '}
+              <code className="text-slate-200">npm run osm:bake-regional-pilot</code>.
+            </p>
             <button
               type="button"
-              onClick={() => fetchLiveOsmLocation(LIVE_PRESET_LOCATIONS[0])}
-              className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 cursor-pointer"
+              data-testid="btn-retry-regional-mosaic"
+              onClick={() =>
+                void loadHengeloM2aTileStreaming(1.2, 45, false, {
+                  ...DEFAULT_REGIONAL_MOSAIC_OPTIONS,
+                })
+              }
+              className="mt-4 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 text-xs font-semibold rounded-md border border-cyan-500/40 cursor-pointer"
             >
-              Retry Default Location
+              Retry Regional Mosaic
             </button>
           </div>
         )}
@@ -2842,6 +2836,8 @@ export default function App() {
                   resetSignal={resetCount}
                   frameRegionSignal={frameRegionCount}
                   rotateStepSignal={rotateStepCount}
+                  zoomStepSignal={zoomStepCount}
+                  onCameraOrientationChange={setCameraOrientation}
                   target={CAMERA_TARGET}
                   minZoom={cameraZoomPolicy.minZoom}
                   maxZoom={cameraZoomPolicy.maxZoom}
@@ -2878,7 +2874,8 @@ export default function App() {
                   showBarriers={showBarriers}
                   showFoliage={showFoliage}
                   wireframe={wireframe}
-                  trackFps={activeTab === 'stats'}
+                  trackFps={activePanel === 'performance'}
+                  trackTelemetry={activePanel === 'performance' || isBenchmarkMode}
                   onFpsUpdate={setFps}
                   onHoverFeature={handleHoverFeature}
                   onSelectFeature={handleSelectFeature}
@@ -2909,1272 +2906,353 @@ export default function App() {
             </ErrorBoundary>
           )
         )}
-      </div>
 
-      {/* Hidden file input for custom GeoJSON */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileUpload}
-        accept=".geojson,.json"
-        className="hidden"
-        aria-label="Upload custom GeoJSON file"
-      />
-
-      {/* TOP HEADER: Dynamic Live Location Title, Search, and Controls */}
-      <header className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-3 bg-slate-900/90 border border-slate-800/80 px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md">
-          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold shrink-0">
-            <Compass className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-tight text-slate-100">
-                Real-World 3D Map Viewer
-              </h1>
-              <span className="text-[10px] font-mono text-emerald-400">
-                · Live OSM Carto
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 font-medium">
-              {mapData?.regionName || 'Loading location...'}
-              {mapData && (
-                <span className="font-mono tabular-nums text-[10px] text-slate-500 ml-1.5">
-                  ({mapData.centerLonLat[1].toFixed(4)}°, {mapData.centerLonLat[0].toFixed(4)}°)
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Global Search, Preset Switcher & Navigation Actions */}
-        <div className="pointer-events-auto flex items-center gap-2">
-          {/* Search by Address Modal Trigger */}
+        {/* Restore Workspace UI Button when Sidebar is Hidden / Immersive Mode Active */}
+        {showRestoreWorkspaceControl && (
           <button
             type="button"
-            onClick={() => setIsSearchOpen(true)}
-            title="Search any real-world address or landmark worldwide"
-            className="flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-cyan-950/40 transition active:scale-95 cursor-pointer"
+            data-testid="btn-restore-workspace-ui"
+            onClick={handleRestoreWorkspaceUi}
+            onPointerDown={(e) => e.stopPropagation()}
+            title={
+              hideCameraToolbar
+                ? 'Restore workspace navigation and camera toolbar'
+                : 'Restore workspace navigation sidebar'
+            }
+            className="absolute top-3 left-3 z-20 pointer-events-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-950/90 hover:bg-slate-900 border border-slate-800 text-xs font-medium text-slate-200 shadow-xl backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 cursor-pointer"
           >
-            <Search className="w-3.5 h-3.5" />
-            <span>Search Address</span>
+            <PanelLeft className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{hideCameraToolbar ? 'Show UI' : 'Show Sidebar'}</span>
           </button>
+        )}
 
-          {/* Quick Real OSM Destinations + M2.1 Switchyard Lab */}
-          <div className="hidden lg:flex items-center bg-slate-900/90 border border-slate-800/80 p-1 rounded-xl shadow-xl backdrop-blur-md gap-1">
-            {LIVE_PRESET_LOCATIONS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => handlePresetSelect(preset)}
-                className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  activeLocationId === preset.id
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                {preset.name.split('(')[0].trim()}
-              </button>
-            ))}
+        {/* Non-Intrusive Selected Feature Floating Bar (when Inspector panel is not active) */}
+        {selectedFeature && activePanel !== 'inspector' && !isBenchmarkMode && (
+          <div
+            data-testid="viewport-selection-chip"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-16 left-3 z-20 pointer-events-auto flex items-center gap-2 bg-slate-950/92 border border-slate-800 rounded-md px-2.5 py-1.5 shadow-xl backdrop-blur-md text-xs max-w-[320px]"
+          >
+            <MousePointerClick className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="truncate text-slate-200">
+              {selectedFeature.name || selectedFeature.cartoLabel || selectedFeature.id}
+            </span>
             <button
               type="button"
-              data-testid="btn-m2a-tile-stream"
-              onClick={() => loadHengeloM2aTileStreaming()}
-              className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                activeLocationId === 'hengelo_m2a_tiles'
-                  ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/50'
-                  : 'text-emerald-300 hover:text-emerald-100 hover:bg-emerald-950/50'
-              }`}
-              title="Stream baked OSMTILE1 512m tiles for Hengelo from local SQLite tile pack"
+              data-testid="btn-open-selection-inspector"
+              onClick={() => handleSelectPanel('inspector')}
+              className="px-2 py-0.5 rounded bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 text-[11px] font-medium shrink-0 cursor-pointer"
             >
-              M2-A Tile Stream
+              Inspect
             </button>
             <button
               type="button"
-              data-testid="btn-m21-switchyard"
-              onClick={() => loadSwitchyardFixture('overview')}
-              className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                activeLocationId === 'm21_switchyard'
-                  ? 'bg-purple-500/25 text-purple-200 border border-purple-400/50'
-                  : 'text-purple-300 hover:text-purple-100 hover:bg-purple-950/50'
-              }`}
-              title="Load M2.1 Railway Switchyard & Station Throat Prototype Benchmark"
+              aria-label="Clear selected feature"
+              onClick={handleClearAllSelectedFeatures}
+              className="p-0.5 text-slate-400 hover:text-slate-100 cursor-pointer shrink-0"
             >
-              M2.1 Switchyard Lab
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
+        )}
 
-          {/* Upload GeoJSON file */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            title="Upload any OpenStreetMap GeoJSON file from your computer"
-            className="flex items-center gap-1.5 px-2.5 py-2 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 text-slate-300 text-xs font-medium rounded-xl shadow-lg transition active:scale-95 cursor-pointer"
+        {/* Developer-Only M1a A/B Study Harness Floating Bar (?m1a=1) */}
+        {isM1aHarnessActive && m1aHarnessMetrics && (
+          <div
+            data-testid="m1a-visual-harness-bar"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[calc(100%-2rem)] max-w-[960px] bg-slate-950/95 border border-cyan-500/40 rounded-lg shadow-2xl px-3.5 py-2 backdrop-blur-md flex flex-wrap items-center justify-between gap-2 text-xs"
           >
-            <Upload className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">Upload GeoJSON</span>
-          </button>
-
-          {/* Export Current GeoJSON */}
-          {currentRawGeoJson && (
-            <button
-              type="button"
-              onClick={handleDownloadCurrentGeoJson}
-              title="Export and download current region as GeoJSON"
-              className="flex items-center gap-1.5 px-2.5 py-2 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 text-slate-200 text-xs font-medium rounded-xl shadow-lg transition active:scale-95 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Export GeoJSON</span>
-            </button>
-          )}
-
-          {/* Camera Rotation & Reset Controls */}
-          <div className="flex items-center bg-slate-900/90 border border-slate-800/80 p-1 rounded-xl shadow-xl backdrop-blur-md gap-1">
-            <button
-              type="button"
-              onClick={() => setRotateStepCount((c) => c - 1)}
-              aria-label="Rotate view counter-clockwise 45 degrees"
-              title="Rotate Left 45°"
-              className="p-1.5 text-slate-300 hover:text-cyan-400 hover:bg-slate-800/80 rounded-lg transition active:scale-95 cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRotateStepCount((c) => c + 1)}
-              aria-label="Rotate view clockwise 45 degrees"
-              title="Rotate Right 45°"
-              className="p-1.5 text-slate-300 hover:text-cyan-400 hover:bg-slate-800/80 rounded-lg transition active:scale-95 cursor-pointer"
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
-
-            <div className="w-px h-4 bg-slate-800 mx-0.5" />
-
-            <button
-              type="button"
-              onClick={() => setFrameRegionCount((c) => c + 1)}
-              aria-label="Frame the entire loaded region in view"
-              title="Fit View to Region Bounds"
-              className="flex items-center gap-1 px-2 py-1 text-slate-200 hover:text-cyan-300 hover:bg-slate-800/80 text-xs font-medium rounded-lg transition active:scale-95 cursor-pointer"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Frame Region</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleResetCamera}
-              aria-label="Reset camera view to initial position"
-              title="Reset View to Center"
-              className="flex items-center gap-1 px-2 py-1 text-slate-200 hover:text-cyan-300 hover:bg-slate-800/80 text-xs font-medium rounded-lg transition active:scale-95 cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Reset</span>
-            </button>
-          </div>
-
-          {/* Dev Tools Toggle Button */}
-          <button
-            type="button"
-            data-testid="btn-toggle-devtools"
-            onClick={() => setIsDevToolsOpen((v) => !v)}
-            title="Open Developer Tools (Rendering controls, geometry inspection, issue reporting & fixtures)"
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl shadow-lg transition active:scale-95 cursor-pointer ${
-              isDevToolsOpen
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border border-amber-300'
-                : 'bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-amber-300'
-            }`}
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            <span>Dev Tools</span>
-            {showGraphOverlay && (
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-        </div>
-      </header>
-
-      {/* DEVELOPER-ONLY M1a VISUAL ACCEPTANCE HARNESS FLOATING TOOLBAR */}
-      {isM1aHarnessActive && m1aHarnessMetrics && (
-        <div
-          data-testid="m1a-visual-harness-bar"
-          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[96vw] max-w-[1040px] bg-slate-900/95 border border-cyan-500/40 rounded-xl shadow-2xl px-4 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
-        >
-          {/* Left: Title & Active Geometry Mode Switcher */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-mono text-[10px] font-bold uppercase tracking-wider">
-                M1a Visual Harness
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-mono text-[10px] font-bold uppercase">
+                M1a Harness
               </span>
-              <span className="text-slate-300 font-semibold">
-                Hengelo {m1aHarnessMetrics.gridCols}×{m1aHarnessMetrics.gridRows} Grid ({m1aHarnessMetrics.tileCount} Tiles · {m1aHarnessMetrics.tileSizeMeters} m · EPSG:25832)
+              <span className="text-slate-300 font-medium">
+                {m1aHarnessMetrics.gridCols}×{m1aHarnessMetrics.gridRows} ({m1aHarnessMetrics.tileCount} Tiles · {m1aHarnessMetrics.tileSizeMeters}m)
               </span>
-            </div>
-
-            <div
-              className="flex items-center bg-slate-950 border border-slate-800 p-0.5 rounded-lg"
-              role="group"
-              aria-label="M1a geometry comparison mode"
-            >
-              <button
-                type="button"
-                data-testid="btn-m1a-mode-tiled"
-                onClick={() => switchM1aVisualMode('tiled')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                  m1aViewMode === 'tiled'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                M1a Tiled Geometry ({m1aHarnessMetrics.tileCount} Tiles)
-              </button>
-              <button
-                type="button"
-                data-testid="btn-m1a-mode-reference"
-                onClick={() => switchM1aVisualMode('reference')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                  m1aViewMode === 'reference'
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Single-Scene Reference (A)
-              </button>
-            </div>
-          </div>
-
-          {/* Center: Tile Boundaries Toggle + Camera Seam Jump Presets */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              data-testid="btn-m1a-toggle-boundaries"
-              onClick={() => setShowM1aTileBoundaries((v) => !v)}
-              aria-pressed={showM1aTileBoundaries}
-              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer ${
-                showM1aTileBoundaries
-                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {m1aHarnessMetrics.tileSizeMeters}m Tile Boundaries ({m1aHarnessMetrics.internalSeamCount} Seams):{' '}
-              <span className="font-mono">{showM1aTileBoundaries ? 'ON' : 'OFF'}</span>
-            </button>
-
-            <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded-lg">
-              <span className="text-[10px] text-slate-500 font-mono mr-1">Views:</span>
-              <button
-                type="button"
-                onClick={() =>
-                  setExplicitPose((prev) => ({
-                    target: [0, 0, 0],
-                    zoom: 0.22,
-                    azimuthRad: Math.PI / 4,
-                    signal: prev.signal + 1,
-                  }))
-                }
-                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
-                title="View entire 4,096 × 4,096 m 64-tile study region"
-              >
-                4×4km Overview
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setExplicitPose((prev) => ({
-                    target: [0, 0, 0],
-                    zoom: 2.2,
-                    azimuthRad: Math.PI / 4,
-                    signal: prev.signal + 1,
-                  }))
-                }
-                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
-                title="Inspect central 4-tile corner seam at (0, 0) near Station Hengelo"
-              >
-                Center Seam (0,0)
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setExplicitPose((prev) => ({
-                    target: [0, 0, 0],
-                    zoom: 7.5,
-                    azimuthRad: Math.PI / 4,
-                    signal: prev.signal + 1,
-                  }))
-                }
-                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
-                title="Close-up inspection (>4.5 px/m) across central seam for 3D railway sleepers & road surfaces"
-              >
-                Close 3D Sleepers (7.5x)
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setExplicitPose((prev) => ({
-                    target: [-512, 0, 0],
-                    zoom: 3.0,
-                    azimuthRad: Math.PI / 4,
-                    signal: prev.signal + 1,
-                  }))
-                }
-                className="px-1.5 py-0.5 text-[11px] font-mono rounded hover:bg-slate-800 text-slate-300 cursor-pointer"
-                title="Inspect West-512m vertical seam crossing railway corridor and roads"
-              >
-                West Seam (-512m)
-              </button>
-            </div>
-          </div>
-
-          {/* Right: Live Parity Readout */}
-          <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
-            <span>
-              Tris:{' '}
-              <strong className="text-slate-200">
-                {(m1aViewMode === 'tiled'
-                  ? m1aHarnessMetrics.tiledTriangles
-                  : m1aHarnessMetrics.referenceTriangles
-                ).toLocaleString()}
-              </strong>
-            </span>
-            <span>
-              Meshes:{' '}
-              <strong className="text-slate-200">
-                {m1aViewMode === 'tiled'
-                  ? m1aHarnessMetrics.tiledDrawCalls
-                  : m1aHarnessMetrics.referenceDrawCalls}
-              </strong>
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* DEVELOPER-ONLY M2-A RUNTIME TILE STREAMING DIAGNOSTICS BAR */}
-      {isM2aStreamingActive && m2aStreamDiagnostics && (
-        <div
-          data-testid="m2a-tile-streaming-bar"
-          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[96vw] max-w-[1120px] bg-slate-900/95 border border-emerald-500/40 rounded-xl shadow-2xl px-4 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold uppercase tracking-wider">
-              M2-A Tile Streaming
-            </span>
-            {m2aStreamDiagnostics.activeMosaicName && (
-              <span
-                data-testid="m2a-bar-active-mosaic"
-                title={m2aStreamDiagnostics.packPath ?? undefined}
-                className="px-2 py-0.5 rounded bg-slate-950 border border-emerald-500/30 text-emerald-200 font-mono text-[11px] font-semibold"
-              >
-                {m2aStreamDiagnostics.activeMosaicName}
-              </span>
-            )}
-            <span className="font-mono text-[11px] text-slate-300">
-              {m2aStreamDiagnostics.snapshotId} · v{m2aStreamDiagnostics.bakeSchemaVersion} · {m2aStreamDiagnostics.tileSizeMeters}m · minZoom {cameraZoomPolicy.minZoom} · preload/retain {m2aStreamDiagnostics.preloadMarginTiles * m2aStreamDiagnostics.tileSizeMeters}/{m2aStreamDiagnostics.retainMarginTiles * m2aStreamDiagnostics.tileSizeMeters}m
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-300">
-            <span>
-              Vis: <strong className="text-cyan-300">{m2aStreamDiagnostics.visibleTiles}</strong>
-            </span>
-            <span>
-              Loaded: <strong className="text-emerald-300">{m2aStreamDiagnostics.loadedTiles}/{m2aStreamDiagnostics.totalGridTiles}</strong>
-            </span>
-            <span>
-              Loading: <strong className="text-amber-300">{m2aStreamDiagnostics.loadingTiles}</strong>
-            </span>
-            <span>
-              Evicted: <strong className="text-slate-200">{m2aStreamDiagnostics.evictedTilesTotal}</strong>
-            </span>
-            <span>
-              Cancelled: <strong className="text-slate-200">{m2aStreamDiagnostics.cancelledRequestsTotal}</strong>
-            </span>
-            <span>
-              Meshes: <strong className="text-slate-200">{m2aStreamDiagnostics.loadedMeshCount}</strong>
-            </span>
-            <span>
-              Calls: <strong className="text-amber-300">{liveTelemetry?.renderCalls ?? 0}</strong>
-            </span>
-            <span>
-              Tris: <strong className="text-cyan-300">{(liveTelemetry?.renderTriangles ?? m2aStreamDiagnostics.loadedTriangles).toLocaleString()}</strong>
-            </span>
-            <span>
-              Tile Mem: <strong className="text-purple-300">{((m2aStreamDiagnostics.tileCpuGeometryBytes + m2aStreamDiagnostics.tileBvhBytes) / (1024 * 1024)).toFixed(2)} MB</strong>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              data-testid="btn-m2a-toggle-boundaries"
-              onClick={() => setShowM2aTileBoundaries((v) => !v)}
-              aria-pressed={showM2aTileBoundaries}
-              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer ${
-                showM2aTileBoundaries
-                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {m2aStreamDiagnostics.tileSizeMeters}m Grid:{' '}
-              <span className="font-mono">{showM2aTileBoundaries ? 'ON' : 'OFF'}</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* FLOATING CURSOR TOOLTIP FOR ANY HOVERED OSM FEATURE */}
-      {hoveredFeature && (
-        <div
-          data-testid="osm-hover-tooltip"
-          style={tooltipStyle}
-          className="fixed top-0 left-0 z-30 pointer-events-none bg-slate-950/92 border border-slate-700/80 px-3.5 py-2.5 rounded-lg shadow-2xl backdrop-blur-md max-w-[290px]"
-        >
-          <div className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 truncate">
-            {hoveredFeature.cartoLabel} · {hoveredFeature.primaryTag}
-          </div>
-          <div className="text-xs font-semibold text-slate-100 truncate mt-0.5">
-            {hoveredFeature.name}
-          </div>
-          <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-1.5">
-            <span>{hoveredFeature.category}</span>
-            <span>·</span>
-            <span>{hoveredFeature.subtype}</span>
-            {typeof hoveredFeature.height === 'number' && (
-              <>
-                <span>·</span>
-                <span>{hoveredFeature.height.toFixed(1)}m H</span>
-              </>
-            )}
-            {typeof hoveredFeature.width === 'number' && (
-              <>
-                <span>·</span>
-                <span>{hoveredFeature.width.toFixed(1)}m W</span>
-              </>
-            )}
-            {hoveredFeature.levels && (
-              <>
-                <span>·</span>
-                <span>{hoveredFeature.levels} fl</span>
-              </>
-            )}
-            {hoveredFeature.isBridge && (
-              <>
-                <span>·</span>
-                <span className="text-amber-300">Bridge</span>
-              </>
-            )}
-            {hoveredFeature.isTunnel && (
-              <>
-                <span>·</span>
-                <span className="text-indigo-300">Tunnel</span>
-              </>
-            )}
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">
-            Click to inspect all {Object.keys(hoveredFeature.osmTags || {}).length} OSM tags
-          </div>
-        </div>
-      )}
-
-      {/* BOTTOM CONTROL DOCK */}
-      <footer className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-[95vw] max-w-[960px] pointer-events-none">
-        <div className="flex flex-col items-center">
-          {/* Collapse / Expand Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setIsDockCollapsed((c) => !c)}
-            aria-label={isDockCollapsed ? 'Expand control dock' : 'Collapse control dock'}
-            className="pointer-events-auto mb-1.5 px-3 py-1 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 rounded-full text-slate-300 text-xs font-medium flex items-center gap-1.5 shadow-xl transition cursor-pointer"
-          >
-            {isDockCollapsed ? (
-              <>
-                <ChevronUp className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Show Controls</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Hide Controls</span>
-              </>
-            )}
-          </button>
-
-          {/* Main Control Surface */}
-          {!isDockCollapsed && (
-            <div className="pointer-events-auto w-full bg-slate-900/95 border border-slate-800 rounded-2xl shadow-2xl p-4 backdrop-blur-md">
-              {/* Tabs Navigation */}
-              <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-3 mb-3 gap-2">
-                <nav className="flex flex-wrap items-center gap-1" aria-label="Control dock tabs">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('layers')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      activeTab === 'layers'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Map Layers</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('inspector')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      activeTab === 'inspector'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <MousePointerClick className="w-3.5 h-3.5" />
-                    <span>
-                      Feature Inspector
-                      {selectedFeature ? ` · ${selectedFeature.cartoLabel}` : ''}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('style')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      activeTab === 'style'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Palette className="w-3.5 h-3.5" />
-                    <span>Styling & Scale</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('stats')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      activeTab === 'stats'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Cpu className="w-3.5 h-3.5" />
-                    <span>Performance ({fps} FPS)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('info')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      activeTab === 'info'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                    <span>OSM Diagnostics</span>
-                  </button>
-                </nav>
-
-                {/* Navigation Hints */}
-                <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                  <span>Hover: Tooltip</span>
-                  <span>·</span>
-                  <span>Click: Inspect</span>
-                  <span>·</span>
-                  <span>Pan: Left-Drag</span>
-                  <span>·</span>
-                  <span>Orbit: Right-Drag</span>
-                </div>
+              <div className="flex items-center bg-slate-900 border border-slate-800 p-0.5 rounded-md">
+                <button
+                  type="button"
+                  data-testid="btn-m1a-mode-tiled"
+                  onClick={() => switchM1aVisualMode('tiled')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
+                    m1aViewMode === 'tiled'
+                      ? 'bg-cyan-500 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Tiled
+                </button>
+                <button
+                  type="button"
+                  data-testid="btn-m1a-mode-reference"
+                  onClick={() => switchM1aVisualMode('reference')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
+                    m1aViewMode === 'reference'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Reference
+                </button>
               </div>
+            </div>
 
-              {/* Tab 1: Map Layers */}
-              {activeTab === 'layers' && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowBuildings((v) => !v)}
-                    aria-pressed={showBuildings}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showBuildings
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Building2 className={`w-3.5 h-3.5 shrink-0 ${showBuildings ? 'text-amber-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Buildings</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalBuildings || 0}
-                    </span>
-                  </button>
+            <div className="flex items-center gap-2 font-mono tabular-nums text-[11px] text-slate-400">
+              <button
+                type="button"
+                data-testid="btn-m1a-toggle-boundaries"
+                onClick={() => setShowM1aTileBoundaries((v) => !v)}
+                className="px-2 py-0.5 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer"
+              >
+                Grid: {showM1aTileBoundaries ? 'ON' : 'OFF'}
+              </button>
+              <span>
+                Tris:{' '}
+                <strong className="text-slate-200">
+                  {(m1aViewMode === 'tiled'
+                    ? m1aHarnessMetrics.tiledTriangles
+                    : m1aHarnessMetrics.referenceTriangles
+                  ).toLocaleString()}
+                </strong>
+              </span>
+            </div>
+          </div>
+        )}
 
-                  <button
-                    type="button"
-                    onClick={() => setShowRoads((v) => !v)}
-                    aria-pressed={showRoads}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showRoads
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Navigation className={`w-3.5 h-3.5 shrink-0 ${showRoads ? 'text-sky-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Roads</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalRoads || 0}
-                    </span>
-                  </button>
+        {/* Floating Viewport Camera Toolbar */}
+        <CameraToolbar
+          visible={!hideCameraToolbar && !isBenchmarkMode}
+          currentZoom={cameraOrientation.zoom}
+          minZoom={cameraZoomPolicy.minZoom}
+          maxZoom={cameraZoomPolicy.maxZoom}
+          azimuthDeg={cameraOrientation.azimuthDeg}
+          onRotateLeft={() => setRotateStepCount((c) => c - 1)}
+          onRotateRight={() => setRotateStepCount((c) => c + 1)}
+          onZoomIn={() => setZoomStepCount((c) => c + 1)}
+          onZoomOut={() => setZoomStepCount((c) => c - 1)}
+          onResetCamera={handleResetCamera}
+          onFrameWorld={() => setFrameRegionCount((c) => c + 1)}
+          onHideToolbar={handleToggleCameraToolbar}
+        />
 
-                  <button
-                    type="button"
-                    onClick={() => setShowRailways((v) => !v)}
-                    aria-pressed={showRailways}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showRailways
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Train className={`w-3.5 h-3.5 shrink-0 ${showRailways ? 'text-purple-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Railways</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalRailways || 0}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowWater((v) => !v)}
-                    aria-pressed={showWater}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showWater
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Waves className={`w-3.5 h-3.5 shrink-0 ${showWater ? 'text-cyan-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Water</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {(mapData?.stats.totalWaterPolygons || 0) + (mapData?.stats.totalLinearWaterways || 0)}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowParks((v) => !v)}
-                    aria-pressed={showParks}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showParks
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Trees className={`w-3.5 h-3.5 shrink-0 ${showParks ? 'text-emerald-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Parks</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalParkPolygons || 0}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowLanduse((v) => !v)}
-                    aria-pressed={showLanduse}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showLanduse
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <LandPlot className={`w-3.5 h-3.5 shrink-0 ${showLanduse ? 'text-indigo-400' : 'text-slate-600'}`} />
-                      <span className="truncate">Landuse</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalLandusePolygons || 0}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowFoliage((v) => !v)}
-                    aria-pressed={showFoliage}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showFoliage
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <TreePine className={`w-3.5 h-3.5 shrink-0 ${showFoliage ? 'text-lime-400' : 'text-slate-600'}`} />
-                      <span className="truncate">3D Forests</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {(builtGeometry?.stats.forestTreesCount || 0) + (mapData?.stats.totalLandmarks || 0)}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowBarriers((v) => !v)}
-                    aria-pressed={showBarriers}
-                    className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition cursor-pointer ${
-                      showBarriers
-                        ? 'bg-slate-800/90 border-cyan-500/40 text-slate-100'
-                        : 'bg-slate-900/50 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <Fence className={`w-3.5 h-3.5 shrink-0 ${showBarriers ? 'text-amber-300' : 'text-slate-600'}`} />
-                      <span className="truncate">Barriers</span>
-                    </div>
-                    <span className="text-[10px] font-mono tabular-nums opacity-70 ml-1">
-                      {mapData?.stats.totalBarriers || 0}
-                    </span>
-                  </button>
-                </div>
+        {/* Floating Cursor Hover Tooltip */}
+        {hoveredFeature && (
+          <div
+            data-testid="osm-hover-tooltip"
+            style={tooltipStyle}
+            className="fixed top-0 left-0 z-30 pointer-events-none bg-slate-950/92 border border-slate-700/80 px-3 py-2 rounded-md shadow-2xl backdrop-blur-md max-w-[290px]"
+          >
+            <div className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 truncate">
+              {hoveredFeature.cartoLabel} · {hoveredFeature.primaryTag}
+            </div>
+            <div className="text-xs font-semibold text-slate-100 truncate mt-0.5">
+              {hoveredFeature.name}
+            </div>
+            <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-1.5">
+              <span>{hoveredFeature.category}</span>
+              <span>·</span>
+              <span>{hoveredFeature.subtype}</span>
+              {typeof hoveredFeature.height === 'number' && (
+                <>
+                  <span>·</span>
+                  <span>{hoveredFeature.height.toFixed(1)}m H</span>
+                </>
               )}
-
-              {/* Tab 2: Universal OSM Feature Inspector */}
-              {activeTab === 'inspector' && (
-                <div className="text-xs">
-                  {!selectedFeature ? (
-                    <div className="py-6 text-center text-slate-400">
-                      <p className="font-medium text-slate-300">
-                        No map feature selected
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Hover over any building, road, railway, waterway, forest, park, landuse polygon, barrier, or 3D tree in the scene to see its live Carto tooltip, or click to inspect all raw OpenStreetMap tags.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
-                      <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-2.5">
-                        <div>
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-cyan-400">
-                            {selectedFeature.cartoLabel} · {selectedFeature.primaryTag} · ID: {selectedFeature.id}
-                          </div>
-                          <h3 className="text-sm font-bold text-slate-100 mt-0.5">
-                            {selectedFeature.name}
-                          </h3>
-                          <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-1 flex flex-wrap items-center gap-x-2">
-                            <span>Category: <strong className="text-slate-200">{selectedFeature.category}</strong></span>
-                            <span>·</span>
-                            <span>Subtype: <strong className="text-slate-200">{selectedFeature.subtype}</strong></span>
-                            {typeof selectedFeature.height === 'number' && (
-                              <>
-                                <span>·</span>
-                                <span>Height: <strong className="text-slate-200">{selectedFeature.height.toFixed(1)}m</strong></span>
-                              </>
-                            )}
-                            {typeof selectedFeature.width === 'number' && (
-                              <>
-                                <span>·</span>
-                                <span>Width: <strong className="text-slate-200">{selectedFeature.width.toFixed(1)}m</strong></span>
-                              </>
-                            )}
-                            {selectedFeature.levels && (
-                              <>
-                                <span>·</span>
-                                <span>Levels: <strong className="text-slate-200">{selectedFeature.levels}</strong></span>
-                              </>
-                            )}
-                            {typeof selectedFeature.layer === 'number' && (
-                              <>
-                                <span>·</span>
-                                <span>Layer: <strong className="text-slate-200">{selectedFeature.layer}</strong></span>
-                              </>
-                            )}
-                            {selectedFeature.isBridge && (
-                              <>
-                                <span>·</span>
-                                <span className="text-amber-300 font-semibold">Bridge</span>
-                              </>
-                            )}
-                            {selectedFeature.isTunnel && (
-                              <>
-                                <span>·</span>
-                                <span className="text-indigo-300 font-semibold">Tunnel / Underground</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFeature(null)}
-                          className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                          title="Clear selection"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Raw OSM Tags Table */}
-                      <div>
-                        <div className="text-[11px] font-semibold text-slate-300 mb-1.5">
-                          OpenStreetMap Tags ({Object.keys(selectedFeature.osmTags || {}).length}):
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 bg-slate-950/60 border border-slate-800/90 rounded-lg p-2.5 font-mono tabular-nums text-[11px]">
-                          {Object.entries(selectedFeature.osmTags || {}).map(([k, v]) => (
-                            <div key={k} className="flex items-baseline justify-between gap-2 border-b border-slate-800/50 py-0.5 truncate">
-                              <span className="text-slate-400 shrink-0">{k}</span>
-                              <span className="text-cyan-300 truncate" title={String(v)}>
-                                {String(v)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {typeof hoveredFeature.width === 'number' && (
+                <>
+                  <span>·</span>
+                  <span>{hoveredFeature.width.toFixed(1)}m W</span>
+                </>
               )}
-
-              {/* Tab 3: Style & Scale + M2.1 Railway Prototype Comparison */}
-              {activeTab === 'style' && (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-400 font-medium">Visual Theme:</span>
-                      <div className="flex items-center gap-1">
-                        {Object.values(MAP_THEMES).map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setSelectedThemeId(t.id)}
-                            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition cursor-pointer ${
-                              selectedThemeId === t.id
-                                ? 'bg-cyan-950 border-cyan-500 text-cyan-300 font-semibold'
-                                : 'bg-slate-800 border-slate-700/60 text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            {t.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={wireframe}
-                          onChange={(e) => setWireframe(e.target.checked)}
-                          className="rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-0"
-                        />
-                        <span>Wireframe Mode</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bevelEnabled}
-                          onChange={(e) => setBevelEnabled(e.target.checked)}
-                          className="rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-0"
-                        />
-                        <span>Beveled Edges</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Switchyard Zone & Zoom Presets */}
-                  <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[11px] text-slate-400 mr-1">Switchyard Zones:</span>
-                        {Object.values(RAILWAY_PROTOTYPE_ZONE_PRESETS).map((zp) => (
-                          <button
-                            key={zp.id}
-                            type="button"
-                            onClick={() => {
-                              if (activeLocationId !== 'm21_switchyard') {
-                                loadSwitchyardFixture(zp.id);
-                              } else {
-                                jumpToPrototypeZone(zp.id);
-                              }
-                            }}
-                            className={`px-2 py-0.5 text-[10px] font-mono rounded border transition cursor-pointer ${
-                              activeLocationId === 'm21_switchyard' && activePrototypeZone === zp.id
-                                ? 'bg-cyan-950 border-cyan-500/70 text-cyan-300'
-                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            {zp.label.split(':')[0]}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] text-slate-400 mr-1">Zoom Presets:</span>
-                        {[
-                          { label: 'Extreme (16.0x)', zoom: 16.0 },
-                          { label: 'Close (8.0x)', zoom: 8.0 },
-                          { label: 'Med (3.0x)', zoom: 3.0 },
-                          { label: 'Far (1.0x)', zoom: 1.0 },
-                        ].map((zp) => (
-                          <button
-                            key={zp.label}
-                            type="button"
-                            onClick={() => jumpToPrototypeZone(activePrototypeZone, zp.zoom)}
-                            className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-900 border border-slate-800 text-slate-300 hover:border-cyan-500/50 cursor-pointer"
-                          >
-                            {zp.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sliders */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 w-28 shrink-0">
-                        Building Height ({heightMultiplier.toFixed(1)}x):
-                      </span>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.5"
-                        step="0.1"
-                        value={heightMultiplier}
-                        onChange={(e) => setHeightMultiplier(parseFloat(e.target.value))}
-                        className="w-full accent-cyan-400 cursor-pointer"
-                        aria-label="Building height multiplier"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 w-28 shrink-0">
-                        Road Width ({roadWidthMultiplier.toFixed(1)}x):
-                      </span>
-                      <input
-                        type="range"
-                        min="0.6"
-                        max="2.0"
-                        step="0.1"
-                        value={roadWidthMultiplier}
-                        onChange={(e) => setRoadWidthMultiplier(parseFloat(e.target.value))}
-                        className="w-full accent-cyan-400 cursor-pointer"
-                        aria-label="Road width multiplier"
-                      />
-                    </div>
-                  </div>
-                </div>
+              {hoveredFeature.isBridge && (
+                <>
+                  <span>·</span>
+                  <span className="text-amber-300">Bridge</span>
+                </>
               )}
-
-              {/* Tab 4: Performance & Geometry Stats (M2.1 7-Metric Telemetry) */}
-              {activeTab === 'stats' && (
-                <div className="space-y-2.5 text-xs">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-                    {/* Metric 1: Frame Cadence */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">1. Frame Interval</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-emerald-400">
-                        {liveTelemetry?.fps ?? fps} FPS ({liveTelemetry?.frameIntervalMs ?? 16.7} ms)
-                      </span>
-                      <span className="text-[9px] text-slate-500 block font-mono truncate">
-                        p50:{liveTelemetry?.medianFrameIntervalMs ?? 16.7} · p95:{liveTelemetry?.p95FrameIntervalMs ?? 16.7}ms
-                      </span>
-                    </div>
-
-                    {/* Metric 2: Offline Scene + Rail Build */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">2. Offline Build</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-cyan-300">
-                        {cpuBuildTimeMs} ms
-                      </span>
-                      <span className="text-[9px] text-slate-500 block">
-                        Raycast: {liveTelemetry?.hoverRaycastTimeMs ?? 0}ms
-                      </span>
-                    </div>
-
-                    {/* Metric 3: GPU Timer Query */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">3. GPU Timer Query</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-slate-300">
-                        {liveTelemetry?.gpuPassTimeMs != null
-                          ? `${liveTelemetry.gpuPassTimeMs} ms`
-                          : 'Not measured'}
-                      </span>
-                      <span
-                        className="text-[9px] text-slate-500 block truncate"
-                        title="EXT_disjoint_timer_query_webgl2"
-                      >
-                        {liveTelemetry?.gpuTimerQuerySupported
-                          ? 'Bracketed EXT timer'
-                          : 'Unmeasured (SwiftShader)'}
-                      </span>
-                    </div>
-
-                    {/* Metric 4: WebGL Draw Calls / Meshes */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">4. WebGL Calls / Meshes</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-amber-300">
-                        {liveTelemetry?.renderCalls ?? builtGeometry?.stats.totalDrawCalls ?? 0} calls
-                      </span>
-                      <span className="text-[9px] text-slate-500 block">
-                        {liveTelemetry?.activeFrustumCulledRailwayMeshes ?? 0}/{liveTelemetry?.activeRailwayMeshes ?? 0} rail meshes vis
-                      </span>
-                    </div>
-
-                    {/* Metric 5: Scene Triangles & Vertices */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">5. Triangles & Vertices</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-cyan-300">
-                        {(builtGeometry?.stats.totalTriangles ?? 0).toLocaleString()} tris
-                      </span>
-                      <span className="text-[9px] text-slate-500 block">
-                        {(liveTelemetry?.activeFrustumVisibleRailwayTriangles ?? 0).toLocaleString()} vis rail tris
-                      </span>
-                    </div>
-
-                    {/* Metric 6: CPU TypedArray Memory */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">6. CPU Buffer Memory</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-purple-300">
-                        {(
-                          ((isM2aStreamingActive && m2aStreamDiagnostics
-                            ? m2aStreamDiagnostics.tileCpuGeometryBytes +
-                              m2aStreamDiagnostics.tileBvhBytes
-                            : 0) +
-                            (builtGeometry?.resources.getCpuBufferMemoryStats().totalBytes ?? 0)) /
-                          (1024 * 1024)
-                        ).toFixed(2)}{' '}
-                        MB
-                      </span>
-                      <span className="text-[9px] text-slate-500 block">
-                        {isM2aStreamingActive && m2aStreamDiagnostics
-                          ? `${m2aStreamDiagnostics.loadedTiles}/${m2aStreamDiagnostics.totalGridTiles} tiles · ${m2aStreamDiagnostics.activeTileBvhs} BVHs`
-                          : 'TypedArray + Instances'}
-                      </span>
-                    </div>
-
-                    {/* Metric 7: Estimated GPU Driver Memory / Geoms */}
-                    <div className="bg-slate-800/60 p-2 rounded-xl border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">7. Driver Geoms / Zoom</span>
-                      <span className="text-xs font-bold font-mono tabular-nums text-lime-300">
-                        {liveTelemetry?.driverGeometries ?? 0} geos · {liveTelemetry?.cameraZoom ?? 1.0}x
-                      </span>
-                      <span className="text-[9px] text-slate-500 block truncate" title={liveTelemetry?.gpuRenderer}>
-                        {liveTelemetry?.gpuRenderer?.includes('SwiftShader')
-                          ? 'SwiftShader Software GL'
-                          : liveTelemetry?.gpuRenderer || 'WebGL2'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/70">
-                    <div className="text-[11px] text-slate-400">
-                      M2.1 Runtime Performance Lab · Spikes &gt;33ms: {liveTelemetry?.spikesOver33msCount ?? 0} · &gt;50ms: {liveTelemetry?.spikesOver50msCount ?? 0} · Max: {liveTelemetry?.maxSpikeDurationMs ?? 0}ms
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => loadLiveAmsterdamPreset([0, 0, 0], 1.0, 45)}
-                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-500/50 text-purple-200 transition cursor-pointer"
-                      >
-                        Load Amsterdam Preset (420m)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => (window as any).__M21_LAB__?.exportBenchmarkJson?.()}
-                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-200 transition cursor-pointer"
-                      >
-                        Export Benchmark JSON
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 5: OpenStreetMap Feature Diagnostics */}
-              {activeTab === 'info' && (
-                <div className="space-y-2.5 text-xs text-slate-400 max-h-48 overflow-y-auto pr-1">
-                  {/* Pipeline Summary Counters */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-                    <div className="bg-slate-800/80 p-2 rounded-lg border border-slate-700/60">
-                      <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Received</span>
-                      <span className="text-sm font-bold font-mono tabular-nums text-slate-100">
-                        {mapData?.diagnostics.sourceFeaturesReceived || mapData?.diagnostics.totalFeaturesReceived || 0}
-                      </span>
-                    </div>
-                    <div className="bg-slate-800/80 p-2 rounded-lg border border-indigo-900/60">
-                      <span className="text-[10px] text-indigo-400 block uppercase tracking-wider">Classified</span>
-                      <span className="text-sm font-bold font-mono tabular-nums text-indigo-300">
-                        {mapData?.diagnostics.sourceFeaturesClassified || 0}
-                      </span>
-                    </div>
-                    <div className="bg-slate-800/80 p-2 rounded-lg border border-emerald-900/60">
-                      <span className="text-[10px] text-emerald-400 block uppercase tracking-wider">Valid Parsed</span>
-                      <span className="text-sm font-bold font-mono tabular-nums text-emerald-300">
-                        {mapData?.diagnostics.totalFeaturesParsed || 0}
-                      </span>
-                    </div>
-                    <div className="bg-slate-800/80 p-2 rounded-lg border border-cyan-900/60">
-                      <span className="text-[10px] text-cyan-400 block uppercase tracking-wider">3D Rendered</span>
-                      <span className="text-sm font-bold font-mono tabular-nums text-cyan-300">
-                        {mapData?.diagnostics.sourceFeaturesRendered || mapData?.diagnostics.totalFeaturesRendered || 0}
-                      </span>
-                    </div>
-                    <div className="bg-slate-800/80 p-2 rounded-lg border border-amber-900/60">
-                      <span className="text-[10px] text-amber-400 block uppercase tracking-wider">Skipped / Inv</span>
-                      <span className="text-sm font-bold font-mono tabular-nums text-amber-300">
-                        {(mapData?.diagnostics.skippedUnsupported.total || 0) + (mapData?.diagnostics.rejectedInvalid.total || 0)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Category Breakdown */}
-                  <div className="bg-slate-800/40 p-2.5 rounded-lg border border-slate-800">
-                    <div className="text-[11px] font-semibold text-slate-300 mb-1">Parsed OSM Carto Categories:</div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono tabular-nums">
-                      <span>Buildings: <strong className="text-slate-100">{mapData?.diagnostics.parsedByCategory.buildings}</strong></span>
-                      <span>Roads & Ways: <strong className="text-slate-100">{mapData?.diagnostics.parsedByCategory.roads}</strong></span>
-                      <span>Railways: <strong className="text-purple-300">{mapData?.diagnostics.parsedByCategory.railways}</strong></span>
-                      <span>Waterways: <strong className="text-cyan-300">{mapData?.diagnostics.parsedByCategory.linearWaterways}</strong></span>
-                      <span>Water Bodies: <strong className="text-cyan-300">{mapData?.diagnostics.parsedByCategory.waterBodies}</strong></span>
-                      <span>Nature & Parks: <strong className="text-emerald-300">{mapData?.diagnostics.parsedByCategory.parks}</strong></span>
-                      <span>Landuse & Civic: <strong className="text-indigo-300">{mapData?.diagnostics.parsedByCategory.landuse}</strong></span>
-                      <span>Barriers & Walls: <strong className="text-amber-300">{mapData?.diagnostics.parsedByCategory.barriers || 0}</strong></span>
-                      <span>3D Landmarks/Trees: <strong className="text-lime-300">{mapData?.diagnostics.parsedByCategory.landmarks || 0}</strong></span>
-                    </div>
-                  </div>
-
-                  {/* OSM Carto Subtype Distribution */}
-                  {mapData?.diagnostics.cartoSubtypesCount &&
-                    Object.keys(mapData.diagnostics.cartoSubtypesCount).length > 0 && (
-                      <div className="bg-slate-800/40 p-2.5 rounded-lg border border-slate-800">
-                        <div className="text-[11px] font-semibold text-cyan-300 mb-1">
-                          Active OSM Carto Subtypes ({Object.keys(mapData.diagnostics.cartoSubtypesCount).length} distinct types):
-                        </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono tabular-nums text-slate-300">
-                          {Object.entries(mapData.diagnostics.cartoSubtypesCount)
-                            .sort((a, b) => b[1] - a[1])
-                            .map(([label, count]) => (
-                              <span key={label}>
-                                {label}: <strong className="text-cyan-400">{count}</strong>
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Skipped Unsupported Tags */}
-                  {mapData?.diagnostics.skippedUnsupported.total! > 0 && (
-                    <div className="bg-slate-800/40 p-2.5 rounded-lg border border-slate-800">
-                      <div className="text-[11px] font-semibold text-amber-400 mb-1">
-                        Skipped Unsupported Tags ({mapData?.diagnostics.skippedUnsupported.total} features):
-                      </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono tabular-nums text-slate-300">
-                        {Object.entries(mapData?.diagnostics.skippedUnsupported.byTag || {}).map(([tag, b]) => (
-                          <span key={tag}>
-                            {tag} <strong className="text-amber-400">({b.count})</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Geometry Breakdown */}
-                  <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 font-mono tabular-nums">
-                    <span>
-                      Geometry: LineString ({mapData?.diagnostics.byGeometryType.LineString}), Polygon ({mapData?.diagnostics.byGeometryType.Polygon}), MultiPolygon ({mapData?.diagnostics.byGeometryType.MultiPolygon}), Point ({mapData?.diagnostics.byGeometryType.Point})
-                    </span>
-                    <span>
-                      Data: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="text-cyan-400 underline">OpenStreetMap</a>
-                    </span>
-                  </div>
-                </div>
+              {hoveredFeature.isTunnel && (
+                <>
+                  <span>·</span>
+                  <span className="text-indigo-300">Tunnel</span>
+                </>
               )}
             </div>
-          )}
-        </div>
-      </footer>
+          </div>
+        )}
+      </main>
 
-      {/* Address Search Modal */}
-      <AddressSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectLocation={handleSelectAddress}
-        currentGeoJson={currentRawGeoJson}
-      />
+      {/* 3. RIGHT CONTEXTUAL TOOL SIDEBAR */}
+      <ContextSidebar
+        activePanel={activePanel}
+        onClose={() => handleSelectPanel(null)}
+      >
+        {activePanel === 'search' && (
+          <SearchPanel
+            session={searchSession}
+            onUpdateSession={setSearchSession}
+            activeMosaicName={activeMosaicIdentity.mosaicName}
+            manifestCoverage={manifestCoverage}
+            currentZoom={cameraOrientation.zoom}
+            onNavigateToResult={({ worldX, worldZ, targetZoom }) => {
+              const clampedZoom = clampCameraZoom(
+                targetZoom,
+                cameraZoomPolicy.minZoom,
+                cameraZoomPolicy.maxZoom
+              );
+              setExplicitPose((prev) => ({
+                target: [worldX, 0, worldZ],
+                zoom: clampedZoom,
+                signal: prev.signal + 1,
+                animate: true,
+              }));
+            }}
+          />
+        )}
 
-      {/* Unified Developer Tools Panel */}
-      <DevToolsPanel
-        isOpen={isDevToolsOpen}
-        onClose={() => setIsDevToolsOpen(false)}
-        infrastructureRenderOptions={infrastructureRenderOptions}
-        onChangeInfrastructureRenderOptions={(opts) =>
-          setInfrastructureRenderOptions((prev) =>
-            normalizeInfrastructureRenderOptions({ ...prev, ...opts })
-          )
-        }
-        wireframe={wireframe}
-        onToggleWireframe={() => setWireframe((v) => !v)}
-        showGraphOverlay={showGraphOverlay}
-        onToggleGraphOverlay={() => setShowGraphOverlay((v) => !v)}
-        selectedFeature={selectedFeature}
-        selectedFeatures={selectedFeatures}
-        focusedFeatureId={focusedFeatureId}
-        onSelectFeature={handleSelectFeature}
-        onFocusFeature={handleFocusFeature}
-        onRemoveSelectedFeature={handleRemoveSelectedFeature}
-        onClearAllSelectedFeatures={handleClearAllSelectedFeatures}
-        isSpatialSelectActive={isSpatialSelectActive}
-        onToggleSpatialSelect={() => setIsSpatialSelectActive((v) => !v)}
-        selectedBoxMeters={selectedBoxMeters}
-        onClearSpatialBox={() => setSelectedBoxMeters(null)}
-        mapData={mapData}
-        currentRawGeoJson={currentRawGeoJson}
-        themeId={selectedThemeId}
-        roadWidthMultiplier={roadWidthMultiplier}
-        heightMultiplier={heightMultiplier}
-        currentCameraPose={{
-          target: explicitPose.target,
-          zoom: currentCameraZoomRef.current || explicitPose.zoom,
-          azimuthDeg: explicitPose.azimuthRad
-            ? Math.round((explicitPose.azimuthRad * 180) / Math.PI)
-            : 45,
-        }}
-        onApplyCameraPose={(pose) => {
-          setExplicitPose((prev) => ({
-            target: pose.target,
-            zoom: pose.zoom,
-            azimuthRad:
-              typeof pose.azimuthDeg === 'number'
-                ? (pose.azimuthDeg * Math.PI) / 180
-                : prev.azimuthRad,
-            signal: prev.signal + 1,
-          }));
-        }}
-        onLoadSwitchyard={(zone) => loadSwitchyardFixture(zone)}
-        onLoadPrinsFork={() => loadPrinsHendrikkadeForkFixture()}
-        onLoadHengelo={() => loadLiveHengeloPreset()}
-        onLoadHengeloM1a={() => loadHengeloM1aVisualHarness('tiled')}
-        onLoadHengeloM2aTiles={() => loadHengeloM2aTileStreaming()}
-        onLoadAmsterdam={() => loadLiveAmsterdamPreset()}
-        onImportReproductionPackage={handleImportReproductionPackage}
-        roadRenderStats={builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null}
-        roadRenderTiming={builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null}
-        infrastructurePreviewTiming={infrastructureRenderPreview?.timing ?? null}
-        cpuBuildTimeMs={cpuBuildTimeMs}
-        lastLoadDiagnostics={
-          lastMapLoadDiagnostics ?? mapLoadTrackerRef.current.getInProgressSnapshot()
-        }
-        loadDiagnosticsHistory={mapLoadTrackerRef.current.getHistory()}
-        liveWebGLSnapshot={liveTelemetry ?? latestTelemetryRef.current}
-        activeMosaicIdentity={activeMosaicIdentity}
-        cameraZoomPolicy={cameraZoomPolicy}
-      />
+        {activePanel === 'layers' && (
+          <LayersPanel
+            isBakedTileMode={isM2aStreamingActive}
+            mapData={mapData}
+            builtGeometry={builtGeometry}
+            showBuildings={showBuildings}
+            showRoads={showRoads}
+            showRailways={showRailways}
+            showWater={showWater}
+            showParks={showParks}
+            showLanduse={showLanduse}
+            showFoliage={showFoliage}
+            showBarriers={showBarriers}
+            onToggleBuildings={() => setShowBuildings((v) => !v)}
+            onToggleRoads={() => setShowRoads((v) => !v)}
+            onToggleRailways={() => setShowRailways((v) => !v)}
+            onToggleWater={() => setShowWater((v) => !v)}
+            onToggleParks={() => setShowParks((v) => !v)}
+            onToggleLanduse={() => setShowLanduse((v) => !v)}
+            onToggleFoliage={() => setShowFoliage((v) => !v)}
+            onToggleBarriers={() => setShowBarriers((v) => !v)}
+            onShowAllLayers={handleShowAllLayers}
+          />
+        )}
+
+        {activePanel === 'appearance' && (
+          <AppearancePanel
+            selectedThemeId={selectedThemeId}
+            onSelectTheme={setSelectedThemeId}
+            isBakedTileMode={isM2aStreamingActive}
+            heightMultiplier={heightMultiplier}
+            roadWidthMultiplier={roadWidthMultiplier}
+            bevelEnabled={bevelEnabled}
+            onChangeHeightMultiplier={setHeightMultiplier}
+            onChangeRoadWidthMultiplier={setRoadWidthMultiplier}
+            onChangeBevelEnabled={setBevelEnabled}
+          />
+        )}
+
+        {activePanel === 'inspector' && (
+          <InspectorPanel
+            selectedFeature={selectedFeature}
+            selectedFeatures={selectedFeatures}
+            focusedFeatureId={focusedFeatureId}
+            isSpatialSelectActive={isSpatialSelectActive}
+            selectedBoxMeters={selectedBoxMeters}
+            onToggleSpatialSelect={() => setIsSpatialSelectActive((v) => !v)}
+            onClearSpatialBox={() => setSelectedBoxMeters(null)}
+            onSelectFeature={handleSelectFeature}
+            onFocusFeature={handleFocusFeature}
+            onRemoveSelectedFeature={handleRemoveSelectedFeature}
+            onClearAllSelectedFeatures={handleClearAllSelectedFeatures}
+          />
+        )}
+
+        {activePanel === 'performance' && (
+          <PerformancePanel
+            fps={fps}
+            cpuBuildTimeMs={cpuBuildTimeMs}
+            liveTelemetry={liveTelemetry}
+            builtGeometry={builtGeometry}
+            isM2aStreamingActive={isM2aStreamingActive}
+            m2aStreamDiagnostics={m2aStreamDiagnostics}
+            onExportBenchmarkJson={() =>
+              (window as any).__M21_LAB__?.exportBenchmarkJson?.()
+            }
+          />
+        )}
+
+        {activePanel === 'diagnostics' && (
+          <DiagnosticsPanel
+            wireframe={wireframe}
+            onToggleWireframe={() => setWireframe((v) => !v)}
+            isBakedTileMode={isM2aStreamingActive}
+            isM1aHarnessActive={isM1aHarnessActive}
+            showM1aTileBoundaries={showM1aTileBoundaries}
+            onToggleM1aTileBoundaries={() => setShowM1aTileBoundaries((v) => !v)}
+            isM2aStreamingActive={isM2aStreamingActive}
+            showM2aTileBoundaries={showM2aTileBoundaries}
+            onToggleM2aTileBoundaries={() => setShowM2aTileBoundaries((v) => !v)}
+            tileSizeMeters={
+              m2aStreamDiagnostics?.tileSizeMeters ??
+              m1aHarnessMetrics?.tileSizeMeters ??
+              null
+            }
+            showGraphOverlay={showGraphOverlay}
+            onToggleGraphOverlay={() => setShowGraphOverlay((v) => !v)}
+            infrastructureRenderOptions={infrastructureRenderOptions}
+            roadRenderStats={
+              builtGeometry?.roadsGroup?.userData?.graphRoadStats ?? null
+            }
+            roadRenderTiming={
+              builtGeometry?.roadsGroup?.userData?.graphRoadTiming ?? null
+            }
+            infrastructurePreviewTiming={infrastructureRenderPreview?.timing ?? null}
+            cpuBuildTimeMs={cpuBuildTimeMs}
+            lastLoadDiagnostics={
+              lastMapLoadDiagnostics ??
+              mapLoadTrackerRef.current.getInProgressSnapshot()
+            }
+            loadDiagnosticsHistory={mapLoadTrackerRef.current.getHistory()}
+            liveWebGLSnapshot={liveTelemetry ?? latestTelemetryRef.current}
+            activeMosaicIdentity={activeMosaicIdentity}
+            cameraZoomPolicy={cameraZoomPolicy}
+            mapData={mapData}
+            currentRawGeoJson={currentRawGeoJson}
+            currentCameraPose={{
+              target: explicitPose.target,
+              zoom: currentCameraZoomRef.current || explicitPose.zoom,
+              azimuthDeg: cameraOrientation.azimuthDeg,
+            }}
+            selectedFeature={selectedFeature}
+            selectedFeatures={selectedFeatures}
+            focusedFeatureId={focusedFeatureId}
+            selectedBoxMeters={selectedBoxMeters}
+            roadWidthMultiplier={roadWidthMultiplier}
+            heightMultiplier={heightMultiplier}
+            themeId={selectedThemeId}
+            reproForm={reproForm}
+            onChangeReproForm={setReproForm}
+            onImportReproductionPackage={handleImportReproductionPackage}
+          />
+        )}
+
+        {activePanel === 'world' && (
+          <WorldPanel
+            activeMosaicIdentity={activeMosaicIdentity}
+            manifestCoverage={manifestCoverage}
+            m2aStreamDiagnostics={m2aStreamDiagnostics}
+            cameraZoomPolicy={cameraZoomPolicy}
+            mapData={mapData}
+            activeLocationId={activeLocationId}
+            isM2aStreamingActive={isM2aStreamingActive}
+            onReloadRegionalMosaic={() =>
+              void loadHengeloM2aTileStreaming(1.2, 45, false, {
+                ...DEFAULT_REGIONAL_MOSAIC_OPTIONS,
+              })
+            }
+          />
+        )}
+      </ContextSidebar>
     </div>
   );
 }

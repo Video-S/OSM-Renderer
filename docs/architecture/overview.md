@@ -48,20 +48,21 @@ The accepted **16 × 16** pilot has 16 independently baked shards (256 tiles). T
 - Server default: `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`, provided it exists.
 - Explicit override: `OVERIJSSEL_REGIONAL_MOSAIC_PATH` set **before restarting the server**; unavailable/mismatched data returns a clear manifest error, not a fallback to an unverified bake.
 - `?region=twente-pilot`, `?region=twente` and `?region=twente-full` are **viewer aliases** to the same regional API. They **do not** override the server mosaic selection.
-- Developer Tools derives the displayed **Active Mosaic** name, `packPath`, snapshot, tile count and schema from the *successfully loaded manifest*. Loading/errors/dataset switches clear stale active-mosaic state.
+- The workspace `World` and `Diagnostics` panels derive the displayed **Active Mosaic** name, `packPath`, snapshot, tile count, populated/empty tile coverage and schema from the *successfully loaded manifest*. Loading/errors/dataset switches clear stale active-mosaic state.
 
-## 4. Runtime streaming, ownership and camera
+## 4. Runtime streaming, ownership, search and workspace UI
 
 | Component | Responsibility |
 | --- | --- |
-| `src/app/App.tsx` | Application mode, dataset lifecycle, active mosaic diagnostics, tile manager disposal/switch token, camera policy and UI state |
-| `src/world/tiling/TileStreamManager.ts` | Manifest/metadata lifecycle; viewport tile selection, fetch, worker decode, load/eviction diagnostics, tile-owned cleanup |
+| `src/app/App.tsx` | Regional-first startup (`/api/tiles-region`), dataset lifecycle, active mosaic diagnostics, tile manager disposal/switch token, camera policy and 3-region workspace state |
+| `src/world/tiling/TileStreamManager.ts` | Manifest/metadata & `TileManifestCoverageSummary` lifecycle; viewport tile selection, fetch, worker decode, load/eviction diagnostics, tile-owned cleanup |
 | `src/world/tiling/TileDecodeClient.ts` | Worker-based compressed tile decode |
 | `src/world/tiling/TileSceneReconstructor.ts` | Reconstructs tile-local scene geometry and provenance from decoded payload |
 | `src/world/tiling/ThemeMaterialRegistry.ts` and `src/world/SceneResourceManager.ts` | Share thematic materials and dispose scene/geometry/BVH allocations |
-| `src/scene/MapScene.tsx` | Three.js/R3F scene presentation and inspection |
-| `src/scene/CameraController.tsx` and `src/scene/cameraZoomPolicy.ts` | Orthographic projection, pan/tilt, projected bounds framing, camera limits and transitions |
-| `src/components/DevToolsPanel.tsx` | Active mosaic/zoom-source readout, performance counters and reproducible diagnostics |
+| `src/scene/MapScene.tsx` | Three.js/R3F scene presentation, gated frame telemetry (`trackTelemetry`) and feature picking |
+| `src/scene/CameraController.tsx` and `src/scene/cameraZoomPolicy.ts` | Orthographic projection, pan/tilt, projected bounds framing, camera limits, compass orientation updates and transitions |
+| `src/components/workspace/` | Three-region workspace shell (`NavigationSidebar`, viewport `CameraToolbar`, `ContextSidebar` across `Search`, `Layers`, `Appearance`, `Inspector`, `Performance`, `Diagnostics`, `World`) |
+| `src/server/osm/OverijsselSearchIndex.ts` & `searchDataHandler.ts` | Offline SQLite FTS5 local search (`*.search.sqlite`, `/api/search*`) over `OverijsselOsmStore` with mosaic tile coverage attribution |
 
 A `TileStreamManager` manifest is reported **loaded only after tile records/overlays initialize successfully**. Errors clear partial tiles and the active identity. The **accepted regional zoom-out floor** is `0.15` for datasets larger than 64 tiles, with an explicit validated `regionalMinZoom` escape hatch; `maxZoom=16.0`. Smaller maps retain standard zoom policy. See [ADR-0013](../decisions/ADR-0013-regional-camera-zoom-policy.md).
 

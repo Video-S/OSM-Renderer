@@ -34,6 +34,7 @@ import {
   deriveActiveMosaicNameFromPackPath,
   type TileManifestLoadStatus,
 } from './ActiveMosaicIdentity';
+import { utm32NToGeo } from './RegionalProjection';
 
 export {
   deriveActiveMosaicNameFromPackPath,
@@ -153,6 +154,37 @@ export interface TilePackManifestPayload {
   dbSizeBytes?: number;
   metadata: TilePackMetadata;
   tiles: TileManifestEntry[];
+}
+
+export interface TileManifestCoverageSummary {
+  totalTiles: number;
+  nonEmptyTiles: number;
+  emptyTiles: number;
+  gridCols: number;
+  gridRows: number;
+  tileSizeMeters: number;
+  studyOriginEasting: number;
+  studyOriginNorthing: number;
+  boundsUtm: {
+    minEasting: number;
+    maxEasting: number;
+    minNorthing: number;
+    maxNorthing: number;
+  } | null;
+  boundsGeo: {
+    minLon: number;
+    maxLon: number;
+    minLat: number;
+    maxLat: number;
+  } | null;
+  minTx: number | null;
+  maxTx: number | null;
+  minTy: number | null;
+  maxTy: number | null;
+  shardCountEstimate: number | null;
+  compression: string;
+  projection: string;
+  createdAt: string;
 }
 
 export interface TileStreamManagerOptions {
@@ -632,6 +664,84 @@ export class TileStreamManager {
 
   get currentManifestStatus(): TileManifestLoadStatus {
     return this.manifestStatus;
+  }
+
+  getManifestCoverageSummary(): TileManifestCoverageSummary | null {
+    if (this.manifestStatus !== 'loaded' || !this.metadata) {
+      return null;
+    }
+    let nonEmptyTiles = 0;
+    let emptyTiles = 0;
+    let minE = Number.POSITIVE_INFINITY;
+    let maxE = Number.NEGATIVE_INFINITY;
+    let minN = Number.POSITIVE_INFINITY;
+    let maxN = Number.NEGATIVE_INFINITY;
+    let minTx = Number.POSITIVE_INFINITY;
+    let maxTx = Number.NEGATIVE_INFINITY;
+    let minTy = Number.POSITIVE_INFINITY;
+    let maxTy = Number.NEGATIVE_INFINITY;
+
+    for (const record of this.tilesByKey.values()) {
+      const m = record.manifest;
+      if (m.isEmpty) {
+        emptyTiles += 1;
+      } else {
+        nonEmptyTiles += 1;
+      }
+      if (m.minEasting < minE) minE = m.minEasting;
+      if (m.maxEasting > maxE) maxE = m.maxEasting;
+      if (m.minNorthing < minN) minN = m.minNorthing;
+      if (m.maxNorthing > maxN) maxN = m.maxNorthing;
+      if (m.tx < minTx) minTx = m.tx;
+      if (m.ty < minTy) minTy = m.ty;
+      if (m.tx > maxTx) maxTx = m.tx;
+      if (m.ty > maxTy) maxTy = m.ty;
+    }
+
+    const hasBounds = Number.isFinite(minE) && Number.isFinite(maxE) && Number.isFinite(minN) && Number.isFinite(maxN);
+    let boundsGeo: TileManifestCoverageSummary['boundsGeo'] = null;
+    if (hasBounds) {
+      const sw = utm32NToGeo(minE, minN);
+      const nw = utm32NToGeo(minE, maxN);
+      const se = utm32NToGeo(maxE, minN);
+      const ne = utm32NToGeo(maxE, maxN);
+      boundsGeo = {
+        minLon: Math.min(sw[0], nw[0], se[0], ne[0]),
+        maxLon: Math.max(sw[0], nw[0], se[0], ne[0]),
+        minLat: Math.min(sw[1], nw[1], se[1], ne[1]),
+        maxLat: Math.max(sw[1], nw[1], se[1], ne[1]),
+      };
+    }
+
+    const cols = this.metadata.gridCols;
+    const rows = this.metadata.gridRows;
+    const shardCountEstimate =
+      cols >= 4 && rows >= 4 && cols % 4 === 0 && rows % 4 === 0
+        ? (cols / 4) * (rows / 4)
+        : null;
+
+    return {
+      totalTiles: this.tilesByKey.size,
+      nonEmptyTiles,
+      emptyTiles,
+      gridCols: cols,
+      gridRows: rows,
+      tileSizeMeters: this.metadata.tileSizeMeters,
+      studyOriginEasting: this.metadata.studyOriginEasting,
+      studyOriginNorthing: this.metadata.studyOriginNorthing,
+      boundsUtm: hasBounds
+        ? { minEasting: minE, maxEasting: maxE, minNorthing: minN, maxNorthing: maxN }
+        : null,
+      boundsGeo,
+      minTx: Number.isFinite(minTx) ? minTx : this.metadata.minTx ?? null,
+      maxTx: Number.isFinite(maxTx) ? maxTx : this.metadata.maxTx ?? null,
+      minTy: Number.isFinite(minTy) ? minTy : this.metadata.minTy ?? null,
+      maxTy: Number.isFinite(maxTy) ? maxTy : this.metadata.maxTy ?? null,
+      shardCountEstimate,
+      compression: this.metadata.compression ?? 'deflate',
+      projection: this.metadata.projectionId,
+      createdAt: this.metadata.createdAtIso,
+    };
   }
 
   setBoundaryOverlayVisible(visible: boolean): void {

@@ -18,6 +18,7 @@ import {
   type OverijsselIndexBuildResult,
 } from '../src/server/osm/OverijsselIndexBuilder';
 import { OverijsselOsmStore } from '../src/server/osm/OverijsselOsmStore';
+import { runBuildOverijsselSearchIndex } from './build-overijssel-search-index';
 
 export async function runBuildOverijsselIndex(options?: {
   pbfPath?: string;
@@ -26,6 +27,7 @@ export async function runBuildOverijsselIndex(options?: {
   expectedSha256?: string;
   allowCustomSnapshot?: boolean;
   force?: boolean;
+  skipSearchIndex?: boolean;
 }): Promise<OverijsselIndexBuildResult | null> {
   const pbfPath = path.resolve(options?.pbfPath ?? resolveOverijsselPbfPath());
   const outIndexPath = path.resolve(options?.outIndexPath ?? resolveOverijsselIndexPath());
@@ -82,6 +84,15 @@ export async function runBuildOverijsselIndex(options?: {
             `${meta.relationCount.toLocaleString()} relations, snapshot=${meta.snapshotId}, ` +
             `sha256=${meta.sourceSha256.slice(0, 12)}...). Pass --force to rebuild.`
         );
+        if (!options?.skipSearchIndex) {
+          runBuildOverijsselSearchIndex({
+            spatialIndexPath: outIndexPath,
+            expectedSha256: pbfDigests.sha256,
+            expectedSnapshotId,
+            allowCustomSnapshot: options?.allowCustomSnapshot,
+            force: false,
+          });
+        }
         return null;
       }
       console.warn(
@@ -111,6 +122,15 @@ export async function runBuildOverijsselIndex(options?: {
       `${result.wayCount.toLocaleString()} ways, ${result.relationCount.toLocaleString()} relations, ` +
       `snapshot=${result.snapshotId}, sha256=${result.pbfSha256.slice(0, 12)}...)`
   );
+  if (!options?.skipSearchIndex) {
+    runBuildOverijsselSearchIndex({
+      spatialIndexPath: result.indexPath,
+      expectedSha256: pbfDigests.sha256,
+      expectedSnapshotId,
+      allowCustomSnapshot: options?.allowCustomSnapshot,
+      force: Boolean(options?.force),
+    });
+  }
   return result;
 }
 

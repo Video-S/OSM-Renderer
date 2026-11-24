@@ -101,3 +101,14 @@ OVERIJSSEL_INDEX_PATH=C:\osm-data\overijssel-261114-8ae28196.sqlite
 ```
 
 Restarting `npm run dev` or `npm start` reuses the existing validated SQLite index immediately with no re-indexing. To disable automatic server startup/request bootstrapping during tests or offline checks, set `DISABLE_OVERIJSSEL_BOOTSTRAP=1` (or `OVERIJSSEL_AUTO_BOOTSTRAP=false` / `--no-overijssel-bootstrap`).
+
+---
+
+## 4. Offline Local Search Index (`*.search.sqlite`, `TKT-035`)
+
+- **Derived Artifact**: `data/osm/overijssel-261114-8ae28196.search.sqlite` (configurable via `OVERIJSSEL_SEARCH_INDEX_PATH`), generated directly from the validated spatial SQLite store without re-reading the PBF archive.
+- **Schema & Tokenization**: SQLite FTS5 (`tokenize='unicode61 remove_diacritics 2'`) over settlements (`place`), streets (`street`), railway stations (`station`), named buildings (`building`), named POIs (`poi`), and genuine tagged addresses (`address`), omitting relation route collections (`route`, `boundary`, etc.).
+- **Provenance & Coverage**: `OverijsselSearchStore` enforces exact `snapshot_id`, `source_sha256`, and `search_schema_version` parity against `OverijsselOsmStore` and evaluates each result against `RegionalMosaicHttpHandler.getCoverageSnapshot()` (`covered`, `empty_tile`, `outside_mosaic`, or `unknown`).
+- **CLI & Endpoints**:
+  - `npm run osm:build-search-index` (also chained automatically at the end of `scripts/build-overijssel-index.ts` and auto-ensured at server startup when bootstrap is enabled).
+  - `GET /api/search?q=...&category=...&limit=...`, `GET /api/search/status`, and `POST /api/search/build` (zero external network / Photon / Overpass geocoding fallback).

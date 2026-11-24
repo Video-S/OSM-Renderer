@@ -16,6 +16,8 @@ import {
   type TilePackManifestHttpResponse,
 } from './tilePackHttpHandler';
 import { TilePackSqliteStore } from './TilePackSqliteStore';
+import { deriveActiveMosaicNameFromPackPath } from '../../world/tiling/ActiveMosaicIdentity';
+import type { ActiveMosaicCoverageContext } from '../osm/OverijsselSearchIndex';
 
 /**
  * The TKT-033 candidate is the owner-accepted Twente pilot for visual regression
@@ -62,6 +64,7 @@ export function createRegionalMosaicHttpHandler(options: {
   manifestHandler: (req: Request, res: Response) => Promise<void>;
   tilePayloadHandler: (req: Request, res: Response) => Promise<void>;
   getOpenShardHandleCount: () => number;
+  getCoverageSnapshot: () => ActiveMosaicCoverageContext | null;
   close: () => void;
 } {
   const indexPath = path.resolve(options.indexPath);
@@ -246,5 +249,25 @@ export function createRegionalMosaicHttpHandler(options: {
     }
   };
 
-  return { manifestHandler, tilePayloadHandler, getOpenShardHandleCount, close };
+  const getCoverageSnapshot = (): ActiveMosaicCoverageContext | null => {
+    try {
+      const state = load();
+      return {
+        mosaicName: deriveActiveMosaicNameFromPackPath(state.manifest.packPath),
+        packPath: state.manifest.packPath ?? null,
+        metadata: state.manifest.metadata,
+        tiles: state.manifest.tiles,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  return {
+    manifestHandler,
+    tilePayloadHandler,
+    getOpenShardHandleCount,
+    getCoverageSnapshot,
+    close,
+  };
 }

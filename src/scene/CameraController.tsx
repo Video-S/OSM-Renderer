@@ -31,7 +31,9 @@ export interface CameraControllerProps {
   resetSignal?: number;
   frameRegionSignal?: number;
   rotateStepSignal?: number; // +/- 1 for 45 deg rotation step
+  zoomStepSignal?: number; // +/- 1 for discrete toolbar zoom in/out step
   onResetComplete?: () => void;
+  onCameraOrientationChange?: (orientation: { zoom: number; azimuthDeg: number }) => void;
   target?: [number, number, number];
   fixedTiltAngle?: number; // radians from vertical Y axis, default ~55 deg
   minZoom?: number;
@@ -42,6 +44,7 @@ export interface CameraControllerProps {
     zoom: number;
     azimuthRad?: number;
     signal: number;
+    animate?: boolean;
   };
   onRegisterImperativePoseSetter?: (
     setter:
@@ -211,7 +214,9 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   resetSignal = 0,
   frameRegionSignal = 0,
   rotateStepSignal = 0,
+  zoomStepSignal = 0,
   onResetComplete,
+  onCameraOrientationChange,
   target = DEFAULT_CAMERA_TARGET,
   fixedTiltAngle = DEFAULT_TILT_ANGLE,
   minZoom = STANDARD_MIN_ZOOM,
@@ -239,8 +244,13 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   const lastResetSignal = useRef(resetSignal);
   const lastFrameRegionSignal = useRef(frameRegionSignal);
   const lastRotateStepSignal = useRef(rotateStepSignal);
+  const lastZoomStepSignal = useRef(zoomStepSignal);
   const lastExplicitPoseSignal = useRef(0);
   const lastBoundsKey = useRef<string>('');
+  const lastReportedZoomRef = useRef<number>(-1);
+  const lastReportedAzimuthRef = useRef<number>(-999);
+  const onOrientationChangeRef = useRef(onCameraOrientationChange);
+  onOrientationChangeRef.current = onCameraOrientationChange;
 
   // Animation state for smooth camera transitions
   const isResetting = useRef(false);
@@ -456,7 +466,29 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     }
   }, [rotateStepSignal, camera, invalidate]);
 
-  // 5. Handle explicit camera pose jump (for railway prototype zone & zoom inspection)
+  // 4b. Handle discrete zoom in/out toolbar buttons clamped by active zoom policy
+  useEffect(() => {
+    if (zoomStepSignal !== lastZoomStepSignal.current && controlsRef.current) {
+      const step = zoomStepSignal > lastZoomStepSignal.current ? 1 : -1;
+      lastZoomStepSignal.current = zoomStepSignal;
+      if ('zoom' in camera) {
+        const ortho = camera as THREE.OrthographicCamera;
+        const factor = step > 0 ? 1.35 : 1 / 1.35;
+        const nextZoom = clampCameraZoom(ortho.zoom * factor, safeMinZoom, safeMaxZoom);
+        if (isResetting.current) {
+          destZoom.current = nextZoom;
+        }
+        ortho.zoom = nextZoom;
+        ortho.updateProjectionMatrix();
+        controlsRef.current.update();
+        invalidate();
+      }
+    } else {
+      lastZoomStepSignal.current = zoomStepSignal;
+    }
+  }, [zoomStepSignal, safeMinZoom, safeMaxZoom, camera, invalidate]);
+
+  // 5. Handle explicit camera pose jump or smooth search fly-to
   useEffect(() => {
     if (
       explicitPose &&
@@ -464,24 +496,51 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       controlsRef.current
     ) {
       lastExplicitPoseSignal.current = explicitPose.signal;
-      isResetting.current = false;
 
       const [tx, ty, tz] = explicitPose.target;
-      const az = explicitPose.azimuthRad ?? DEFAULT_AZIMUTH;
+      const curTarget = controlsRef.current.target;
+      const curAz = Math.atan2(
+        camera.position.x - curTarget.x,
+        camera.position.z - curTarget.z
+      );
+      const az =
+        explicitPose.azimuthRad ??
+        (Number.isFinite(curAz) ? curAz : DEFAULT_AZIMUTH);
       const dist = 600;
       const camX = tx + dist * Math.sin(fixedTiltAngle) * Math.sin(az);
       const camY = ty + dist * Math.cos(fixedTiltAngle);
       const camZ = tz + dist * Math.sin(fixedTiltAngle) * Math.cos(az);
+      const targetZoom = clampCameraZoom(
+        explicitPose.zoom,
+        safeMinZoom,
+        safeMaxZoom
+      );
 
+      if (explicitPose.animate) {
+        isResetting.current = true;
+        resetProgress.current = 0;
+        startPos.current.copy(camera.position);
+        startTarget.current.copy(controlsRef.current.target);
+        if ('zoom' in camera) {
+          startZoom.current = clampCameraZoom(
+            (camera as THREE.OrthographicCamera).zoom,
+            safeMinZoom,
+            safeMaxZoom
+          );
+        }
+        destPos.current.set(camX, camY, camZ);
+        destTarget.current.set(tx, ty, tz);
+        destZoom.current = targetZoom;
+        invalidate();
+        return;
+      }
+
+      isResetting.current = false;
       camera.position.set(camX, camY, camZ);
       controlsRef.current.target.set(tx, ty, tz);
       if ('zoom' in camera) {
         const ortho = camera as THREE.OrthographicCamera;
-        ortho.zoom = clampCameraZoom(
-          explicitPose.zoom,
-          safeMinZoom,
-          safeMaxZoom
-        );
+        ortho.zoom = targetZoom;
         ortho.updateProjectionMatrix();
       }
       camera.lookAt(tx, ty, tz);
@@ -610,6 +669,21 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       }
       if (projectionDirty) {
         ortho.updateProjectionMatrix();
+      }
+      if (onOrientationChangeRef.current) {
+        const dx = ortho.position.x - t.x;
+        const dz = ortho.position.z - t.z;
+        const rawDeg = (Math.atan2(dx, dz) * 180) / Math.PI;
+        const normDeg = ((Math.round(rawDeg) % 360) + 360) % 360;
+        const roundedZoom = Number(ortho.zoom.toFixed(2));
+        if (
+          Math.abs(roundedZoom - lastReportedZoomRef.current) >= 0.01 ||
+          normDeg !== lastReportedAzimuthRef.current
+        ) {
+          lastReportedZoomRef.current = roundedZoom;
+          lastReportedAzimuthRef.current = normDeg;
+          onOrientationChangeRef.current({ zoom: roundedZoom, azimuthDeg: normDeg });
+        }
       }
     }
   });

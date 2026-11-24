@@ -40,6 +40,7 @@ export interface MapSceneProps {
   showFoliage?: boolean;
   wireframe?: boolean;
   trackFps?: boolean;
+  trackTelemetry?: boolean;
   onFpsUpdate?: (fps: number) => void;
   onHoverBuilding?: (buildingData: Record<string, unknown> | null) => void;
   onClickBuilding?: (buildingData: Record<string, unknown> | null) => void;
@@ -112,6 +113,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
   showFoliage = true,
   wireframe = false,
   trackFps = false,
+  trackTelemetry = false,
   onFpsUpdate,
   onHoverBuilding,
   onClickBuilding,
@@ -799,6 +801,11 @@ export const MapScene: React.FC<MapSceneProps> = ({
       return;
     }
 
+    // Skip per-frame telemetry sorting and railway sampling when the Performance panel is closed.
+    if (!trackTelemetry && !trackFps) {
+      return;
+    }
+
     if (frameDt > 0 && frameDt < 5000) {
       const ring = frameIntervalsRingRef.current;
       ring.push(frameDt);
@@ -818,7 +825,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
       lastFpsTimeRef.current = now;
     }
 
-    if (onTelemetryUpdate) {
+    if (trackTelemetry && onTelemetryUpdate) {
       const frameIntervalMs = Number(frameDt.toFixed(2));
       const ring = frameIntervalsRingRef.current;
       const sorted = [...ring].sort((a, b) => a - b);

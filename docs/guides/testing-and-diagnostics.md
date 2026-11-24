@@ -262,16 +262,13 @@ To eliminate error-prone manual URL parameter editing and page reloads, a centra
      - Selected feature diagnostics and developer notes.
    - Click **Import Reproduction Package** or drop a `.json` file to instantly load the scenario, set the camera pose, apply the exact rendering engine, and reproduce the defect without manual URL configuration.
 
-4. **Fixture Library**:
-   - 1-click loading for canonical test fixtures: `Prins Hendrikkade South Fork (M2.3-E2)`, `Railway Switchyard & Throat (M2.1)`, `Station Hengelo Live`, and `Amsterdam Centraal Live`.
-
-5. **Active Mosaic & Regional Camera Diagnostics**:
-   - During M2-A baked tile / regional mosaic streaming, the top of the **Rendering** tab displays an **Active Mosaic** diagnostic card (`data-testid="active-mosaic-diagnostics"`) derived strictly from the manifest loaded by `TileStreamManager` (`/api/tiles-region/manifest` or `/api/tiles/manifest`, reusing `packPath` without reading environment variables or guessing from URLs):
-     - **Active Mosaic Name**: Distinguishes datasets such as `twente-pilot-1024m` vs. `twente-pilot-1024m-tkt033-candidate`.
+5. **Active Mosaic, Regional Camera & Workspace Diagnostics (`TKT-033`, `TKT-035`)**:
+   - The three-region workspace exposes **Active Mosaic** identity, populated vs. empty tile coverage, UTM/Geo footprint bounds, and the effective **Camera Zoom Policy** (`minZoom`, `maxZoom`, override source) inside the **World** panel (`data-testid="active-mosaic-diagnostics"`, `data-testid="world-grid-footprint"`), plus summary telemetry inside **Diagnostics**. Both derive strictly from the manifest loaded by `TileStreamManager` (`/api/tiles-region/manifest`, reusing `packPath` without guessing from URLs):
+     - **Active Mosaic Name**: Distinguishes datasets such as `twente-pilot-1024m` vs. `twente-pilot-1024m-tkt033-candidate` vs. `twente-full-1024m`.
      - **Source Snapshot ID**, **Tile Count**, and **Bake Schema Version** (plus a collapsible **Full Manifest Path** disclosure for the full `packPath`).
      - **Effective Zoom-Out Limit (`minZoom`)**: Displays the active `CameraZoomPolicy` value (`0.15` conservative regional default, validated `regionalMinZoom` URL override, programmatic benchmark opt-in, or fallback warning when an invalid override is rejected).
      - **Loading & Unavailable States**: Switching datasets or failing a manifest request clears stale identity immediately (`Loading manifest...` / `Unavailable`) so a previously loaded mosaic is never reported as active.
-   - Automated regression coverage resides in `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`.
+   - Automated regression coverage resides in `src/world/RegionalMosaicIdentityAndZoomPolicy.test.ts`, `src/world/OverijsselSearchIndex.test.ts`, and `src/world/WorkspaceUiAndSearch.test.ts` (which includes a headless Playwright SwiftShader E2E test against a temporary baked `OSMTILE1` mosaic and temporary FTS5 search DB).
 
    - **Default served dataset (2026-11-22):** The regional server now selects
      `data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json` by default.

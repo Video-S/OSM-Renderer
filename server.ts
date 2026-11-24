@@ -4,7 +4,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { BoundedCache, createOsmDataHandler } from './src/server/osm/osmDataHandler';
+import { createOsmDataHandler } from './src/server/osm/osmDataHandler';
+import { createSearchDataHandler } from './src/server/osm/searchDataHandler';
 import {
   isOverijsselAutoBootstrapDisabled,
   resolveOverijsselIndexPath,
@@ -75,7 +76,6 @@ export function ensureOverijsselReady(options?: EnsureOverijsselReadyOptions): P
   return overijsselBootstrapPromise;
 }
 
-const geocodeCache = new BoundedCache<string, any>(200, 30 * 60 * 1000);
 const osmDataController = createOsmDataHandler({
   ensureOverijsselReady: isOverijsselAutoBootstrapDisabled() ? undefined : ensureOverijsselReady,
 });
@@ -83,66 +83,21 @@ const tilePackController = createTilePackHttpHandler();
 const tilePack1024Controller = createTilePackHttpHandler({
   packPath: resolveTilePackPathForTileSize(1024),
 });
-// Lazily opened, isolated 16km pilot; missing mosaic index returns a clear 503.
+// Lazily opened, isolated regional mosaic; missing mosaic index returns a clear 503.
 const regionalMosaicController = createRegionalMosaicHttpHandler({
   indexPath: resolveRegionalMosaicIndexPath(),
 });
-
-// 1. Geocoding endpoint using Photon (Komoot OpenStreetMap geocoder)
-app.get('/api/geocode', async (req, res) => {
-  const query = req.query.q as string;
-  if (!query || typeof query !== 'string' || query.trim().length === 0) {
-    return res.status(400).json({ error: 'Query parameter "q" is required' });
-  }
-
-  const trimmed = query.trim();
-  const cached = geocodeCache.get(trimmed.toLowerCase());
-  if (cached) {
-    return res.json(cached);
-  }
-
-  try {
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=5`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'RealWorld3DMapViewer/1.0',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Photon API responded with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    const results = (data.features || []).map((f: any) => {
-      const [lon, lat] = f.geometry?.coordinates || [0, 0];
-      const p = f.properties || {};
-      const parts = [
-        p.name,
-        p.street ? `${p.housenumber ? p.housenumber + ' ' : ''}${p.street}` : null,
-        p.city || p.town || p.district,
-        p.state,
-        p.country,
-      ].filter(Boolean);
-
-      return {
-        name: p.name || parts[0] || 'Unknown location',
-        displayName: parts.join(', '),
-        lat,
-        lon,
-        type: p.type || p.osm_value || 'place',
-      };
-    });
-
-    geocodeCache.set(trimmed.toLowerCase(), results);
-    return res.json(results);
-  } catch (err: any) {
-    console.error('Geocoding error:', err);
-    return res.status(500).json({ error: `Geocoding failed: ${err.message}` });
-  }
+// Local offline SQLite FTS5 search over Overijssel spatial store with mosaic coverage evaluation.
+const searchController = createSearchDataHandler({
+  getMosaicCoverage: regionalMosaicController.getCoverageSnapshot,
 });
 
-// 2. Fetch and convert real OpenStreetMap data around (lat, lon) to GeoJSON
+// 1. Offline local SQLite FTS5 search endpoints (zero external network fallback)
+app.get('/api/search', searchController.searchHandler);
+app.get('/api/search/status', searchController.statusHandler);
+app.post('/api/search/build', searchController.buildHandler);
+
+// 2. Local Overijssel GeoJSON API (used by benchmarks and explicit developer study fixtures)
 app.get('/api/osm-data', osmDataController.handler);
 
 // 3. M2-A Offline Baked Tile Pack API (OSMTILE1)
@@ -153,9 +108,8 @@ app.get(
   tilePackController.tilePayloadHandler
 );
 
-// 3b. Reversible 1,024 m Tile-Size Experiment Baked Pack API (lazy-opened on request)
+// 3b. Reversible 1,024 m Tile-Size Experiment & Regional Mosaic API (lazy-opened on request)
 app.get('/api/tiles-1024m/manifest', tilePack1024Controller.manifestHandler);
-// TKT-029 bounded regional pilot: same OSMTILE1 codec, same streaming client.
 app.get('/api/tiles-region/manifest', regionalMosaicController.manifestHandler);
 app.get('/api/tiles-region/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
 app.get('/api/tiles-region/:snapshotId/:schemaVersion/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
@@ -192,6 +146,14 @@ async function startServer() {
     console.log(
       `Overijssel offline spatial store ready (${overijsselStatus.snapshotId}) at ${overijsselStatus.indexPath}`
     );
+    if (!isOverijsselAutoBootstrapDisabled()) {
+      const searchStatus = searchController.getStatus();
+      if (!searchStatus.available) {
+        searchController.ensureReady().catch((err) => {
+          console.error('Automatic Overijssel search index bootstrap failed:', err?.message ?? err);
+        });
+      }
+    }
   } else if (isOverijsselAutoBootstrapDisabled()) {
     console.info(
       `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
@@ -202,13 +164,16 @@ async function startServer() {
       `Overijssel offline spatial store not ready (${overijsselStatus.error}) at ${overijsselStatus.indexPath}. ` +
         `Starting automatic background setup...`
     );
-    ensureOverijsselReady().catch((err) => {
-      console.error('Automatic Overijssel spatial index bootstrap failed:', err?.message ?? err);
-    });
+    ensureOverijsselReady()
+      .then(() => searchController.ensureReady())
+      .catch((err) => {
+        console.error('Automatic Overijssel spatial index bootstrap failed:', err?.message ?? err);
+      });
   }
 
   const shutdown = () => {
     osmDataController.close();
+    searchController.close();
     tilePackController.close();
     tilePack1024Controller.close();
     regionalMosaicController.close();

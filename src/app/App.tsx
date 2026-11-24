@@ -2817,7 +2817,7 @@ export default function App() {
               )}
             >
               <Canvas
-                shadows
+                shadows={false}
                 gl={{
                   antialias: true,
                   stencil: true,

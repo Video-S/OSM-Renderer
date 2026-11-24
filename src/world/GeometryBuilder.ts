@@ -2745,8 +2745,14 @@ export class GeometryBuilder {
           }
         }
 
-        // Populate procedural 3D trees inside forest/woodland polygons
-        if (item.has3DFoliage && treePlacements.length < MAX_SCENE_TREES) {
+        // Keep the original sampling grid, but only populate ground still owned
+        // by this forest after semantic surface resolution (including holes).
+        const foliagePolygons = resolved?.resolvedMultiPolygon;
+        if (
+          item.has3DFoliage &&
+          treePlacements.length < MAX_SCENE_TREES &&
+          (foliagePolygons === undefined || foliagePolygons.length > 0)
+        ) {
           const outer = item.polygon[0];
           let pMinX = Infinity, pMaxX = -Infinity, pMinZ = Infinity, pMaxZ = -Infinity;
           for (const pt of outer) {
@@ -2771,7 +2777,9 @@ export class GeometryBuilder {
 
               if (
                 (!tileClipBounds || pointInHalfOpenBox(tx, tz, tileClipBounds)) &&
-                isPointInPolygonRings(tx, tz, item.polygon)
+                isPointInPolygonRings(tx, tz, item.polygon) &&
+                (foliagePolygons === undefined ||
+                  foliagePolygons.some((rings) => isPointInPolygonRings(tx, tz, rings)))
               ) {
                 const frac = h1 - Math.floor(h1);
                 const rawLt = item.leafType || 'broadleaved';

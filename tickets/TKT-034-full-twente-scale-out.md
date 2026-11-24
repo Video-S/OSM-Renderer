@@ -5,7 +5,7 @@ type: feature
 status: in_progress
 priority: high
 created: 2026-11-22
-updated: 2026-11-22
+updated: 2026-11-24
 ---
 
 # TKT-034 — Full Twente Scale-Out
@@ -14,7 +14,7 @@ updated: 2026-11-22
 
 Expand the owner-accepted 16 km Twente pilot (`data/osm/twente-pilot-1024m-tkt033-candidate/mosaic.json`, 16 shards / 256 tiles) into a complete Twente regional dataset (`data/osm/twente-full-1024m/`, 120 shards / 1,920 tiles) by reusing the existing offline, resumable, shard-based baker and fixing concrete scale blockers discovered at 120-shard scale.
 
-This ticket remains **`in_progress`** pending the **full resumable bake**, complete shard/tile integrity verification, targeted seam checks, and human visual inspection. The owner has already completed and verified a 2-shard experimental bake (2026-11-22) on the local Overijssel OSM SQLite dataset.
+**Milestone update (2026-11-24):** The owner completed the full 120-shard / 1,920-tile bake, verified structural integrity across all 120 shards, and confirmed initial viewer navigation around Hengelo, Almelo, Rijssen, and beyond. See the authoritative baseline record in [`docs/reports/tkt034-full-twente-baseline.md`](../docs/reports/tkt034-full-twente-baseline.md). This ticket remains **`in_progress`** pending formal cross-shard seam checks (`TKT-032`), runtime performance characterization, and complete human visual acceptance.
 
 ---
 
@@ -154,6 +154,14 @@ Open:
 
 ## 6. Verification Record
 
+### Owner's local Windows full-Twente baseline — 2026-11-24 (Stages 3–4 & initial viewer exploration passed; visual/seam/performance QA open)
+
+- **Full bake (`npx tsx scripts/bake-regional-pilot.ts --preset=twente-full`):** Completed in **1,754.4 s** (`120` shards / `1,920` tiles covering `49.15 × 40.96 km`; **118 baked, 2 reused, 0 recovered**), total **648.28 MiB**, peak RSS **1,744.29 MiB**.
+- **Full verifier (`npx tsx scripts/verify-regional-mosaic.ts --index=data/osm/twente-full-1024m/mosaic.json`):** `[regional:verify] OK: 120 shards, 1920 tiles (1609 non-empty), 642.22 MiB compressed` — all `120 / 120` shards individually passed integrity checks.
+- **Initial owner runtime navigation:** Loaded `data/osm/twente-full-1024m/mosaic.json` in the viewer and confirmed navigable exploration around **Hengelo, Almelo, Rijssen, and beyond**.
+- Full recorded outputs, source/format provenance, and non-destructive reproduction instructions live in [`docs/reports/tkt034-full-twente-baseline.md`](../docs/reports/tkt034-full-twente-baseline.md).
+- **Remaining open gates (`status: in_progress`):** Targeted `audit-regional-seams.ts` checks / `TKT-032` cross-shard geometry parity, regional hardware performance measurement, and complete human visual acceptance across bridges, tunnels, railways, and shard interfaces.
+
 ### Owner's local Windows evidence — 2026-11-22 (experimental Stage 1–2 accepted)
 
 The first PowerShell invocation **without quoting** `--shards=r05-c07,r05-c08` was split by PowerShell into one invalid combined shard ID and failed **before baking**. Use the **quoted** forms in the commands above.
@@ -166,9 +174,7 @@ The owner reran the quoted command and reported:
 | `r05-c08` | 22.0 s | 1,257,474 | 6.12 MiB | 1,320.48 MiB |
 | **Subtotal** | **92.7 s** | **2,507,658** | **34.50 MiB** | **Peak RSS 1,422.11 MiB** |
 
-`verify-regional-mosaic.ts --shards-dir=... --preset=twente-full '--shards=r05-c07,r05-c08'` reported **PARTIAL / EXPERIMENTAL OK**, **2/120 shards**, **32/32 tiles** (32 non-empty), **34.37 MiB compressed** and **34.50 MiB** SQLite on disk.
-
-**Gate conclusion:** Stage 1–2 experimental integrity checks passed, and the owner authorized/proceeded with Stage 3. These numbers are not a full-region size/time forecast. **No final 120-shard completion, full verifier, seam audit or owner visual acceptance is recorded yet.** Ticket remains `in_progress`.
+`verify-regional-mosaic.ts --shards-dir=... --preset=twente-full '--shards=r05-c07,r05-c08'` reported **PARTIAL / EXPERIMENTAL OK**, **2/120 shards**, **32/32 tiles** (32 non-empty), **34.37 MiB compressed** and **34.50 MiB** SQLite on disk. Those two verified shards were subsequently reused (`reused 2`) during the 2026-11-24 full-region completion run.
 
 ### Original implementation environment checks
 

@@ -1,6 +1,6 @@
 # Current Project Status
 
-> **Updated: 2026-11-22.** This page is the living summary of *current implementation and verified outcomes*. Ticket records retain their own statuses and acceptance gates. Historical milestone-by-milestone status text is preserved in [the 2026-11-22 status archive](history/status-before-regional-reconciliation-2026-11-22.md); earlier plans are not live status declarations.
+> **Updated: 2026-11-24.** This page is the living summary of *current implementation and verified outcomes*. Ticket records retain their own statuses and acceptance gates. Historical milestone-by-milestone status text is preserved in [the 2026-11-22 status archive](history/status-before-regional-reconciliation-2026-11-22.md); earlier plans are not live status declarations.
 
 ## Product and current priorities
 
@@ -22,11 +22,16 @@ Source: [architecture](architecture/overview.md), [ADRs 0011–0013](decisions/R
 
 ## In progress: Full Twente (TKT-034)
 
-- **Planned rectangular footprint:** 48 × 40 tiles at 1,024 m = **49.152 × 40.960 km**, **1,920 tiles**, **120 shards**. The full grid is not an exact Twente administrative boundary.
-- **Source coverage limitation:** 422 planned tiles fall entirely outside the **Overijssel-only extract**; 137 intersect its border. These will not contain complete German/Gelderland surroundings. See [TKT-034](../tickets/TKT-034-full-twente-scale-out.md) for the footprint audit.
-- **Owner's measured partial bake (2026-11-22):** `r05-c07` and `r05-c08`, both 4 × 4 shards, finished in **70.6 s + 22.0 s**, total **92.7 s**; observed peak process **RSS 1,422.11 MiB**, combined SQLite **34.50 MiB**. Partial verifier confirmed **2/120 shards and 32/32 tiles** (all 32 non-empty), **34.37 MiB** compressed. These are measurements, **not extrapolated full-Twente results**.
-- **Full bake status:** owner initiated/approved proceeding with the resumable full bake; **no completed 120-shard result or full verification has been supplied at the time of this update**. Do not claim full Twente is rendered, seamless or accepted until full verification, targeted seams, camera navigation and owner visual inspection.
-- Current experimental CLI supports `--preset=twente-full`, `--shards=...`, `--dry-run` and `--recover-corrupt`. Complete bake and verification instructions live in [TKT-034](../tickets/TKT-034-full-twente-scale-out.md).
+- **Footprint & dataset identity:** `twente-full-1024m`, **48 × 40** LOD0 tiles at **1,024 m** = **49.152 × 40.960 km**, **1,920 tiles**, **120 shards**, aligned `1:1` with the 16-shard pilot (`overijssel-261114-8ae28196`). The full grid is not an exact Twente administrative boundary; **422** planned tiles fall outside the Overijssel-only extract and **137** straddle its border (`311` baked tiles are empty). See [TKT-034](../tickets/TKT-034-full-twente-scale-out.md) and the [full-Twente baseline report](reports/tkt034-full-twente-baseline.md).
+- **Completed:**
+  - Owner executed the full resumable bake (`--preset=twente-full`), producing **120 shards / 1,920 tiles** (`118` baked + `2` reused from the `2026-11-22` `r05-c07`/`r05-c08` run), **648.28 MiB** SQLite disk footprint, **1,744.29 MiB** peak RSS in **1,754.4 s**.
+  - Owner executed full integrity verification (`verify-regional-mosaic.ts`), passing **120 / 120 shards** and **1,920 / 1,920 tiles** (`1,609` non-empty, **642.22 MiB** compressed `OSMTILE1` payloads).
+  - Owner loaded `data/osm/twente-full-1024m/mosaic.json` in the viewer and confirmed navigable exploration around **Hengelo, Almelo, Rijssen, and beyond**.
+- **Still outstanding (keeps `TKT-034` `in_progress`):**
+  - Formal cross-shard semantic/geometric continuity validation across the **218** shard interfaces and **99** junctions (`TKT-032` / `scripts/audit-regional-seams.ts`).
+  - Comprehensive visual QA of roads, bridges, tunnels, railways, sleeper/ribbon phases, multipolygons, and coplanar decals across the full extent.
+  - Hardware runtime performance, server startup latency, and LRU handle-pool characterization at 120-shard scale.
+- Authoritative metrics, provenance boundaries, and safe non-destructive reproduction steps live in the [full-Twente baseline report](reports/tkt034-full-twente-baseline.md).
 
 ## Open questions and known risks
 
@@ -45,12 +50,12 @@ These are **ticket file statuses as currently recorded**, which may lag owner de
 - `TKT-030`: `audit_executed_pending_report_review`; `TKT-031`: `implementation_in_progress`.
 - `TKT-032`: **blocked**, broader cross-shard gate unfinished.
 - `TKT-033`: `implementation_in_progress`, although owner accepted the corrected candidate at previously affected locations.
-- `TKT-034`: **in_progress**, awaiting full bake/QA.
+- `TKT-034`: **in_progress**, full 120-shard bake & structural verifier passed + initial owner exploration; seams, performance, and full visual acceptance remain open.
 
 Historic benchmarks, acceptance snapshots, proposals and investigation detail are retained in [the archived status](history/status-before-regional-reconciliation-2026-11-22.md), [regional proposal](plans/regional-tiling-streaming-lod-proposal.md) and [tickets](../tickets/). **Do not treat historical proposal wording as current runtime behavior.**
 
 ## Verification policy
 
-Automated checks are valuable but separate from owner visual QA. The TKT-034 implementation handoff reported **32 focused tests passed, TypeScript/lint passed and Vite build passed** in Gemini's environment. The owner's independent local **two-shard bake + verifier passed** with the results above. This documentation-only reconciliation **does not claim that test/build commands were re-run**.
+Automated checks are valuable but separate from owner visual QA. The TKT-034 implementation handoff reported **32 focused tests passed, TypeScript/lint passed and Vite build passed** in the sandbox environment. The owner subsequently executed the **full 120-shard bake + full integrity verifier + initial live-viewer navigation** recorded in [the full-Twente baseline report](reports/tkt034-full-twente-baseline.md). This documentation-only baseline reconciliation **does not claim that application test/build commands were re-run**.
 
 For code changes run `npm test`, `npm run lint`, `npm run build`; run `npm run docs:api` when exported TypeScript API documentation changes. See [testing and diagnostics](guides/testing-and-diagnostics.md).

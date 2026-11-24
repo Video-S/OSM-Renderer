@@ -44,13 +44,13 @@ That did **not** prove that every road, railway, or surface is continuous across
 
 [Regional mosaics](decisions/ADR-0012-bounded-regional-mosaics.md) · [Missing-road investigation](../tickets/TKT-033-missing-road-rendering.md)
 
-### 5. Expanding to Twente (22 November onward)
+### 5. Expanding to Twente (22–24 November onward)
 
-The next target is a **49.2 × 41.0 km** rectangular map: **1,920 tiles** in **120 independently baked groups**. The first two groups—**32 tiles**—were successfully baked and integrity-verified on the owner's computer.
+After validating the first two **32-tile** groups on 22 November, the project owner completed the full **49.2 × 41.0 km** rectangular bake: **1,920 tiles** across **120 independently baked groups** (`648.28 MiB` on disk). All 120 groups passed integrity verification (`1,609` non-empty tiles), and initial owner exploration in the viewer confirmed navigable rendering across Hengelo, Almelo, Rijssen, and beyond.
 
-At the time of this record, the full bake, cross-boundary checks, performance assessment, and human visual acceptance are **not yet complete**. The source also covers Overijssel, not every area beyond its border.
+Formal cross-boundary seam validation (`TKT-032`), runtime performance measurement at 120-shard scale, and complete human visual acceptance remain **open**. Empty exterior tiles reflect the boundary of the Overijssel-only OSM extract rather than renderer failure.
 
-[Full-Twente plan and validation](../tickets/TKT-034-full-twente-scale-out.md)
+[Full-Twente baseline report](reports/tkt034-full-twente-baseline.md) · [Full-Twente plan and validation](../tickets/TKT-034-full-twente-scale-out.md)
 
 ## Where this is going
 

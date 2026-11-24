@@ -1,6 +1,6 @@
 # System Architecture — Current Implementation
 
-> **Reconciled: 2026-11-22.** This describes the **implemented** renderer. The older [regional LOD proposal](../plans/regional-tiling-streaming-lod-proposal.md) is retained as an architectural docs/research/roadmap document, **not** a list of already delivered capabilities. See [current status](../STATUS.md) and [ADRs](../decisions/README.md).
+> **Reconciled: 2026-11-24.** This describes the **implemented** renderer. The older [regional LOD proposal](../plans/regional-tiling-streaming-lod-proposal.md) is retained as an architectural docs/research/roadmap document, **not** a list of already delivered capabilities. See [current status](../STATUS.md) and [ADRs](../decisions/README.md).
 
 ## 1. Product and execution paths
 
@@ -40,7 +40,7 @@ Canonical overijssel-261114-8ae28196 OSM snapshot
 
 The region is a **single logical mosaic**, not a single in-memory geometry scene. Shard builds use a 1,024 m OSM query context margin and a 64 m tile collar. These are **local mitigations** and are not equivalent to a globally computed infrastructure graph. Full cross-shard semantic/geometry parity remains an explicit validation gate (TKT-032).
 
-The accepted **16 × 16** pilot has 16 independently baked shards (256 tiles). The **48 × 40** full-Twente plan has 120 shards (1,920 tiles). The new scale-out implementation scans shard metadata sequentially when creating the manifest and uses an LRU pool of at most **16 open SQLite shard handles** for payload requests; it supports resumable baking and partial verification. The full output is **still awaiting completion and owner acceptance** (TKT-034).
+The accepted **16 × 16** pilot has 16 independently baked shards (256 tiles). The **48 × 40** full-Twente mosaic has 120 shards (1,920 tiles). The scale-out implementation scans shard metadata sequentially when creating the manifest and uses an LRU pool of at most **16 open SQLite shard handles** for payload requests; it supports resumable baking and partial verification. The full 120-shard bake, full structural integrity check, and initial owner navigation are recorded in the [TKT-034 baseline report](../reports/tkt034-full-twente-baseline.md), while formal cross-shard seam checks (`TKT-032`), runtime performance profiling, and complete visual acceptance remain open.
 
 ### Dataset selection and truth
 

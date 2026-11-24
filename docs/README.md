@@ -27,7 +27,7 @@ Active work and verification gates are tracked in the [repository ticket system]
 
 **Code and tests** describe actual runtime behavior. [STATUS.md](./STATUS.md) summarizes verified progress and gaps; [architecture/](./architecture/README.md) documents implemented structure; [decisions/](./decisions/README.md) explains why it exists. An old proposal or report is **not** proof that a feature has shipped. Visual acceptance belongs to the project owner.
 
-The accepted regional pilot contains 256 detailed tiles. The 1,920-tile full-Twente bake requires separate verification before it may be described as complete. For reproducible steps use [TKT-034](../tickets/TKT-034-full-twente-scale-out.md).
+The accepted regional pilot contains 256 detailed tiles. The 1,920-tile full-Twente bake and structural integrity baseline are recorded in [the TKT-034 baseline report](./reports/tkt034-full-twente-baseline.md), while cross-shard continuity, performance, and full visual acceptance remain pending under [TKT-034](../tickets/TKT-034-full-twente-scale-out.md).
 
 ## Maintaining the documentation
 

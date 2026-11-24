@@ -2,11 +2,11 @@
 
 A browser-based, isometric **3D OpenStreetMap renderer** built with React, TypeScript, Three.js, React Three Fiber and a Node/Express development server. The current product is a **map renderer and camera/navigation system**, not a game. A future large-scale game is a possible downstream use, not an implemented feature.
 
-## Current state (22 November 2026)
+## Current state (24 November 2026)
 
 - **Production infrastructure geometry:** E2+ surface-first roads and R+ surface-first railways, with bridges, tunnels, buildings, terrain/land use and feature inspection.
 - **Accepted regional pilot:** 16 × 16 tiles at 1,024 m (16.384 km per side), assembled from 16 independently baked 4 × 4 SQLite shards. The owner-accepted TKT-033 candidate is the **server default** when present.
-- **Full Twente expansion, TKT-034:** a planned 48 × 40 tile rectangular mosaic (1,920 LOD0 tiles, 120 shards, 49.152 × 40.960 km). Two selected shards / 32 tiles have passed the owner's local integrity verification. The *complete* mosaic, regional seams and owner visual QA are **not yet confirmed**.
+- **Full Twente expansion, TKT-034:** a 48 × 40 tile rectangular mosaic (1,920 LOD0 tiles, 120 shards, 49.152 × 40.960 km). The owner has completed the full 120-shard bake, full structural integrity verification (`1,609` non-empty tiles), and initial navigation around Hengelo, Almelo, and Rijssen ([baseline report](docs/reports/tkt034-full-twente-baseline.md)). Formal regional seams, runtime performance, and full visual QA remain **open**.
 - **Not implemented:** multi-resolution LOD1–LOD3, province-wide coverage, gameplay or zombie simulation.
 
 The Twente rectangle overlaps neighboring areas outside the **Overijssel-only** OSM extract; coverage is not the same as an administrative Twente boundary. See [current project status](docs/STATUS.md) for the latest verified state and limitations.
@@ -33,7 +33,7 @@ $env:OVERIJSSEL_REGIONAL_MOSAIC_PATH = "data/osm/twente-full-1024m/mosaic.json"
 npm run dev
 ```
 
-The URL `region=twente-full` is only a viewer alias; **it does not select the dataset on the server**. Check `(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath` or Developer Tools for the actual loaded mosaic. Restart after changing the environment variable. The full-Twente path should only be selected after the complete mosaic exists and passes verification.
+The URL `region=twente-full` is only a viewer alias; **it does not select the dataset on the server**. Check `(Invoke-RestMethod "http://localhost:3000/api/tiles-region/manifest").packPath` or Developer Tools for the actual loaded mosaic. Restart after changing the environment variable. Only select `twente-full-1024m` on machines where that mosaic has been generated and verified with `verify-regional-mosaic.ts`.
 
 The default regional zoom-out floor is `0.15`. Developers can explicitly use `?regionalMinZoom=0.015` for a costly full-region LOD0 overview; this is **not** a replacement for future overview LODs.
 

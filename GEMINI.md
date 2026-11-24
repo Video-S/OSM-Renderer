@@ -8,13 +8,13 @@ This repository contains a **3D OpenStreetMap renderer and camera/navigation sys
 2. **Source of truth:** current source code explains behavior; tests define executable contracts; **`docs/STATUS.md`** describes current accepted and pending milestones; ADRs record architectural rationale; tickets define per-task acceptance. Historical plans, proposed architectures, outdated snapshots and benchmarks must not be mistaken for the current implementation.
 3. Report discrepancies among source, tests, current docs and old tickets explicitly rather than papering over them.
 
-## Current implementation and scope (2026-11-22)
+## Current implementation and scope (2026-11-24)
 
 - **E2+ surface-first roads and R+ surface-first railways are the only production infrastructure renderers** (TKT-026 closed, ADR-0010). Previous legacy and intermediate renderers are retired; do not re-introduce them.
 - **Canonical Overijssel source** `overijssel-261114-8ae28196` with strict identity checks (TKT-027).
 - **Offline tiled LOD0 map rendering is implemented:** UTM `EPSG:25832` grid, `OSMTILE1` SQLite packs, 1,024 m regional tiles, 4 × 4-tile bounded shards, runtime viewport streaming, material sharing, worker decode, eviction and on-demand tile loading (ADRs 0011–0012).
 - The **16 km / 256-tile regional pilot** has an owner-accepted TKT-033 candidate. The server defaults to that local mosaic; `OVERIJSSEL_REGIONAL_MOSAIC_PATH` overrides it. The viewer's `?region=...` parameter **does not select a server dataset**.
-- **TKT-034 48 × 40 / 1,920-tile Twente scale-out is in progress**: two test shards / 32 tiles passed owner verification; whole-region integrity, seams, performance and visual acceptance remain outstanding.
+- **TKT-034 48 × 40 / 1,920-tile Twente scale-out is in progress**: the full 120-shard bake, full structural integrity verifier, and initial owner navigation passed ([baseline report](docs/reports/tkt034-full-twente-baseline.md)); cross-shard seams (`TKT-032`), runtime performance, and full visual acceptance remain outstanding.
 - Orthographic regional **minZoom `0.15`** is the conservative LOD0 safeguard; developer/benchmark override is explicit (ADR-0013).
 - **Not implemented or automatically approved:** LOD1–LOD3, global cross-shard graph plans, whole-Overijssel bake, gameplay, physics, zombies, pathfinding agents or unrelated infrastructure.
 

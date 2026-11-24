@@ -290,6 +290,24 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     safeMaxZoom,
   ]);
 
+  // Orthographic zoom changes the visible ground footprint, not the camera's
+  // distance from its target. Keep explicit navigation at least as far back as
+  // world framing, with clearance for the widest allowed vertical viewport.
+  const framedDistance = boundsFraming
+    ? Math.hypot(
+        boundsFraming.position[0] - boundsFraming.target[0],
+        boundsFraming.position[1] - boundsFraming.target[1],
+        boundsFraming.position[2] - boundsFraming.target[2]
+      )
+    : Math.hypot(...DEFAULT_CAMERA_POS);
+  const widestHalfHeight = (size.height || 800) / (2 * safeMinZoom);
+  const cosTilt = Math.max(Math.cos(fixedTiltAngle), 1e-5);
+  const maxSceneY = Math.max(15, (verticalEnvelope?.maxY ?? 65) + 5);
+  const navigationDistance = Math.max(
+    framedDistance,
+    widestHalfHeight * Math.tan(fixedTiltAngle) + maxSceneY / cosTilt + 4
+  );
+
   // Prevent right-click browser context menu
   useEffect(() => {
     const canvas = gl.domElement;
@@ -506,7 +524,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       const az =
         explicitPose.azimuthRad ??
         (Number.isFinite(curAz) ? curAz : DEFAULT_AZIMUTH);
-      const dist = 600;
+      const dist = navigationDistance;
       const camX = tx + dist * Math.sin(fixedTiltAngle) * Math.sin(az);
       const camY = ty + dist * Math.cos(fixedTiltAngle);
       const camZ = tz + dist * Math.sin(fixedTiltAngle) * Math.cos(az);
@@ -547,7 +565,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       controlsRef.current.update();
       invalidate();
     }
-  }, [explicitPose, fixedTiltAngle, safeMinZoom, safeMaxZoom, camera, invalidate]);
+  }, [explicitPose, fixedTiltAngle, safeMinZoom, safeMaxZoom, navigationDistance, camera, invalidate]);
 
   // 5b. Register imperative pose setter so automated benchmarks do not trigger React re-renders per frame
   useEffect(() => {
@@ -564,7 +582,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       const [tx, ty, tz] = poseTarget;
       const az =
         typeof azimuthDeg === 'number' ? (azimuthDeg * Math.PI) / 180 : DEFAULT_AZIMUTH;
-      const dist = 600;
+      const dist = navigationDistance;
       const camX = tx + dist * Math.sin(fixedTiltAngle) * Math.sin(az);
       const camY = ty + dist * Math.cos(fixedTiltAngle);
       const camZ = tz + dist * Math.sin(fixedTiltAngle) * Math.cos(az);
@@ -605,6 +623,7 @@ export const CameraController: React.FC<CameraControllerProps> = ({
     safeMaxZoom,
     bounds,
     verticalEnvelope,
+    navigationDistance,
     camera,
     invalidate,
   ]);

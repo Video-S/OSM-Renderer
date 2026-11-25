@@ -511,8 +511,11 @@ export const MapScene: React.FC<MapSceneProps> = ({
           { totalMeshes: number; frustumVisibleMeshes: number; visibleFlagMeshes: number }
         > = {};
         let totalMeshes = 0;
+        let totalSceneObjects = 0;
         let frustumVisibleMeshes = 0;
         let visibleFlagMeshes = 0;
+        let residentBufferTriangles = 0;
+        let visibleBufferTriangles = 0;
         // Run only on a benchmark harness snapshot, never in the frame loop.
         const drawWorkByLayer: Record<string, SceneLayerDrawWorkEstimate> = {};
         const drawWorkTotal = emptyLayerDrawWork();
@@ -522,11 +525,25 @@ export const MapScene: React.FC<MapSceneProps> = ({
           let layerFrustumVis = 0;
           let layerVisFlag = 0;
           const drawWork = emptyLayerDrawWork();
+          const isMounted = Boolean(rootObj.parent);
           rootObj.traverse((obj) => {
+            totalSceneObjects += 1;
             if (!(obj as THREE.Mesh).isMesh) return;
             const mesh = obj as THREE.Mesh;
             layerTotal += 1;
-            let ancestorVisible = mesh.visible;
+            const g = mesh.geometry as THREE.BufferGeometry | undefined;
+            const baseTris = g
+              ? g.index
+                ? Math.floor(g.index.count / 3)
+                : Math.floor((g.attributes?.position?.count || 0) / 3)
+              : 0;
+            const instCount = (mesh as THREE.InstancedMesh).isInstancedMesh
+              ? (mesh as THREE.InstancedMesh).count
+              : 1;
+            const meshTris = baseTris * instCount;
+            residentBufferTriangles += meshTris;
+
+            let ancestorVisible = isMounted && mesh.visible;
             let p = mesh.parent;
             while (ancestorVisible && p) {
               ancestorVisible = p.visible;
@@ -536,6 +553,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
               layerVisFlag += 1;
               if (!hasValidFrustum || !mesh.frustumCulled || frustum.intersectsObject(mesh)) {
                 layerFrustumVis += 1;
+                visibleBufferTriangles += meshTris;
                 addLayerDrawWork(drawWork, mesh);
               }
             }
@@ -559,8 +577,13 @@ export const MapScene: React.FC<MapSceneProps> = ({
         return {
           total: {
             totalMeshes,
+            totalSceneObjects,
             visibleFlagMeshes,
             frustumVisibleMeshes,
+            residentBufferTriangles,
+            visibleBufferTriangles,
+            residentGeometries: gl.info.memory.geometries,
+            residentTextures: gl.info.memory.textures,
           },
           byLayer,
           // Estimate of eligible material groups only, NOT measured GL draws.
@@ -570,6 +593,93 @@ export const MapScene: React.FC<MapSceneProps> = ({
             byLayer: drawWorkByLayer,
             caveat: 'Main-camera material-group candidate estimate; excludes shadow passes, renderer filtering and overlays.',
           },
+        };
+      };
+
+      (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__ = (
+        ndcPoints?: Array<[number, number]>
+      ) => {
+        const geo = committedBuiltGeometryRef.current;
+        const cam = cameraRef.current as THREE.OrthographicCamera | null;
+        if (!geo || !cam) return null;
+        cam.updateMatrixWorld(true);
+        cam.updateProjectionMatrix();
+
+        const points: Array<[number, number]> =
+          Array.isArray(ndcPoints) && ndcPoints.length > 0
+            ? ndcPoints
+            : (() => {
+                const grid: Array<[number, number]> = [];
+                for (let row = -2; row <= 2; row++) {
+                  for (let col = -2; col <= 2; col++) {
+                    grid.push([col * 0.25, row * 0.25]);
+                  }
+                }
+                return grid;
+              })();
+
+        const pickRoots: THREE.Object3D[] = [
+          geo.buildingsGroup,
+          geo.roadsGroup,
+          geo.railwaysGroup,
+          geo.waterGroup,
+          geo.parksGroup,
+          geo.landuseGroup,
+          geo.barriersGroup,
+          geo.foliageGroup,
+        ].filter((g) => Boolean(g.parent));
+
+        const raycaster = new THREE.Raycaster();
+        (raycaster as unknown as { firstHitOnly?: boolean }).firstHitOnly = true;
+        const pointer = new THREE.Vector2();
+        const durationsMs: number[] = [];
+        let hitCount = 0;
+        let resolvedFeatureCount = 0;
+        const sampleFeatureIds: string[] = [];
+
+        for (const [nx, ny] of points) {
+          pointer.set(nx, ny);
+          const t0 = performance.now();
+          raycaster.setFromCamera(pointer, cam);
+          const hits = raycaster.intersectObjects(pickRoots, true);
+          let resolvedId: string | null = null;
+          if (hits.length > 0) {
+            hitCount++;
+            const firstHit = hits[0];
+            const info = resolveInspectedFeature(firstHit);
+            if (info) {
+              resolvedFeatureCount++;
+              resolvedId = info.id;
+            }
+          }
+          durationsMs.push(performance.now() - t0);
+          if (resolvedId && sampleFeatureIds.length < 10) {
+            sampleFeatureIds.push(resolvedId);
+          }
+        }
+
+        const sorted = [...durationsMs].sort((a, b) => a - b);
+        const pct = (p: number) => {
+          if (sorted.length === 0) return 0;
+          const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p));
+          return Number(sorted[idx].toFixed(4));
+        };
+        const meanMs =
+          durationsMs.length > 0
+            ? Number(
+                (durationsMs.reduce((s, v) => s + v, 0) / durationsMs.length).toFixed(4)
+              )
+            : 0;
+
+        return {
+          sampleCount: points.length,
+          hitCount,
+          resolvedFeatureCount,
+          medianMs: pct(0.5),
+          p95Ms: pct(0.95),
+          meanMs,
+          maxMs: sorted.length > 0 ? Number(sorted[sorted.length - 1].toFixed(4)) : 0,
+          sampleFeatureIds,
         };
       };
 
@@ -789,6 +899,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         delete (window as any).__BENCHMARK_RESET_GPU_TIMERS__;
         delete (window as any).__BENCHMARK_GET_CAMERA_STATE__;
         delete (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__;
+        delete (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__;
         delete (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__;
       }
       drainPendingQueries(false);

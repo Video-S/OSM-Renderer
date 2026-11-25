@@ -52,6 +52,7 @@
 - [generateParkingStallMarkings](functions/generateParkingStallMarkings.md)
 - [generateProfiledBarrierRibbon3D](functions/generateProfiledBarrierRibbon3D.md)
 - [generateRoadRibbon](functions/generateRoadRibbon.md)
+- [getTriangleCount](functions/getTriangleCount.md)
 - [hasRingSelfIntersection](functions/hasRingSelfIntersection.md)
 - [mergeBuildingItemsByMaterial](functions/mergeBuildingItemsByMaterial.md)
 - [resolveBarrierStructuralContexts](functions/resolveBarrierStructuralContexts.md)

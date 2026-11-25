@@ -11,5 +11,7 @@ Preserved measurement artifacts and their accompanying reports. Read each report
 | [TKT-028 1,024 m tile experiment](./tkt028-1024m-tile-size-experiment.md) | Tile-size comparison |
 | [TKT-028 streaming performance](./tkt028-m2b-streaming-performance-report.md) | Streaming hardware/memory measurements |
 | [TKT-034 full-Twente baseline](./tkt034-full-twente-baseline.md) | Completed 120-shard / 1,920-tile bake & integrity baseline |
+| [TKT-036 runtime foliage LOD](./tkt036-foliage-lod-optimization.md) | Runtime foliage canopy LOD, trunk suppression & frustum culling evaluation |
+| [TKT-037 spatial batching feasibility](./tkt037-spatial-batching-feasibility.md) | Offline `1,024 m → 2,048 m / 4,096 m` tile consolidation & benchmark plan |
 
 Other benchmark datasets and raw harness code remain in the repository's top-level `benchmarks/` directory because they are used by executable tooling. The writers for the M2.1 and M2.2 reports now output to this directory.

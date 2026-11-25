@@ -778,11 +778,11 @@ export function createShapesFromMultiPolygon(mp: MultiPolygonCoords): THREE.Shap
   return shapes;
 }
 
-function getTriangleCount(geom: THREE.BufferGeometry): number {
+export function getTriangleCount(geom: THREE.BufferGeometry): number {
   if (geom.index) {
-    return geom.index.count / 3;
+    return Math.floor(geom.index.count / 3);
   }
-  return (geom.attributes.position?.count || 0) / 3;
+  return Math.floor((geom.attributes.position?.count || 0) / 3);
 }
 
 function mergeWithFaceRanges(
@@ -2180,7 +2180,7 @@ export class GeometryBuilder {
     drawCalls++;
 
     totalVertices += groundGeo.attributes.position.count;
-    totalTriangles += (groundGeo.index?.count || 0) / 3;
+    totalTriangles += getTriangleCount(groundGeo);
 
     // ==========================================================================
     // 2. SEMANTIC SURFACE RESOLUTION & LANDUSE / PARKING AREAS
@@ -2421,7 +2421,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedLanduseGeo.attributes.position.count;
-        totalTriangles += (mergedLanduseGeo.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedLanduseGeo);
       }
     });
 
@@ -2460,7 +2460,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedParkingMarks.attributes.position.count;
-        totalTriangles += (mergedParkingMarks.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedParkingMarks);
       }
     }
 
@@ -2622,7 +2622,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedWaterGeo.attributes.position.count;
-        totalTriangles += (mergedWaterGeo.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedWaterGeo);
       }
     }
 
@@ -2849,7 +2849,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedParkGeo.attributes.position.count;
-        totalTriangles += (mergedParkGeo.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedParkGeo);
       }
     });
 
@@ -2882,7 +2882,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedPitchMarks.attributes.position.count;
-        totalTriangles += (mergedPitchMarks.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedPitchMarks);
       }
     }
 
@@ -3626,7 +3626,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedRoadGeo.attributes.position.count;
-        totalTriangles += (mergedRoadGeo.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedRoadGeo);
       }
     });
 
@@ -4000,7 +4000,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += merged.attributes.position.count;
-        totalTriangles += (merged.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(merged);
       }
     });
 
@@ -4045,7 +4045,7 @@ export class GeometryBuilder {
             (roadGradeTransitionDiagnostics.hiddenUndergroundMeshCount ?? 0) + 1;
         }
         totalVertices += merged.attributes.position.count;
-        totalTriangles += (merged.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(merged);
       }
     }
 
@@ -4200,7 +4200,7 @@ export class GeometryBuilder {
       drawCalls++;
 
       totalVertices += trunkGeo.attributes.position.count * treePlacements.length;
-      totalTriangles += ((trunkGeo.index?.count || 0) / 3) * treePlacements.length;
+      totalTriangles += getTriangleCount(trunkGeo) * treePlacements.length;
 
       // 2. Broadleaved Composite 3-Lobe Canopy Geometry (LOD0: 240 tris, LOD1: 60 tris, LOD2: 20 tris)
       if (broadPlacements.length > 0) {
@@ -4260,7 +4260,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedBroadCanopy.attributes.position.count * broadPlacements.length;
-        totalTriangles += ((mergedBroadCanopy.index?.count || 0) / 3) * broadPlacements.length;
+        totalTriangles += getTriangleCount(mergedBroadCanopy) * broadPlacements.length;
       }
 
       // 3. Needleleaved (Coniferous) Composite 3-Tier Pine Geometry (LOD0: 42 tris, LOD1: 15 tris, LOD2: 5 tris)
@@ -4321,7 +4321,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedNeedleCanopy.attributes.position.count * needlePlacements.length;
-        totalTriangles += ((mergedNeedleCanopy.index?.count || 0) / 3) * needlePlacements.length;
+        totalTriangles += getTriangleCount(mergedNeedleCanopy) * needlePlacements.length;
       }
 
       // Preserve LOD0/visible flags when building clipped tiles for binary baking;
@@ -4396,7 +4396,7 @@ export class GeometryBuilder {
         drawCalls++;
 
         totalVertices += mergedLmGeo.attributes.position.count;
-        totalTriangles += (mergedLmGeo.index?.count || 0) / 3;
+        totalTriangles += getTriangleCount(mergedLmGeo);
       }
     }
 

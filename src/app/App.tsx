@@ -2658,6 +2658,13 @@ export default function App() {
         typeof (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__ === 'function'
           ? (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__()
           : null,
+      setShowFoliage: (visible: boolean) => {
+        setShowFoliage(Boolean(visible));
+      },
+      measureFeaturePickRaycast: (ndcPoints?: Array<[number, number]>) =>
+        typeof (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__ === 'function'
+          ? (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__(ndcPoints)
+          : null,
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [

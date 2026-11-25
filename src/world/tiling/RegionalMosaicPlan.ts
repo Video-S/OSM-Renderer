@@ -13,6 +13,10 @@ export interface RegionalMosaicConfig {
   rows: number;
   tileSizeMeters: number;
   shardDimension: number;
+  /** Optional rectangular shard width in tiles (defaults to shardDimension when omitted). */
+  shardCols?: number;
+  /** Optional rectangular shard height in tiles (defaults to shardDimension when omitted). */
+  shardRows?: number;
   collarMeters: number;
   /** Query context outside each bounded synthesis shard. This is NOT a substitute for global graph parity. */
   contextMarginMeters: number;
@@ -115,12 +119,27 @@ export interface RegionalMosaicPlan {
   shards: RegionalMosaicShard[];
 }
 
+export interface RegionalMosaicConsolidationMetadata {
+  consolidatedFromTileSizeMeters: number;
+  targetTileSizeMeters: number;
+  consolidationFactor: number;
+  sourceMosaicName: string;
+  sourceTileCount: number;
+  sourceNonEmptyTileCount: number;
+  foliageBatchMode: string;
+  sleeperBatchMode: string;
+  consolidatedAtIso: string;
+  toolVersion: string;
+}
+
 export interface RegionalMosaicIndex {
   schemaVersion: 1;
   config: RegionalMosaicConfig;
   snapshotId: string;
   sourceSha256: string;
   shards: Array<{ id: string; file: string }>;
+  /** Present on offline-consolidated mosaics (TKT-037). Preserves source lineage without changing OSMTILE1 format. */
+  consolidation?: RegionalMosaicConsolidationMetadata;
 }
 
 function positiveInt(value: number, name: string): void {
@@ -144,6 +163,10 @@ export function createRegionalMosaicPlan(
   positiveInt(config.rows, 'rows');
   positiveInt(config.tileSizeMeters, 'tileSizeMeters');
   positiveInt(config.shardDimension, 'shardDimension');
+  const shardCols = config.shardCols ?? config.shardDimension;
+  const shardRows = config.shardRows ?? config.shardDimension;
+  positiveInt(shardCols, 'shardCols');
+  positiveInt(shardRows, 'shardRows');
   if (
     !Number.isFinite(config.collarMeters) || config.collarMeters < 0 ||
     !Number.isFinite(config.contextMarginMeters) ||
@@ -151,7 +174,7 @@ export function createRegionalMosaicPlan(
   ) {
     throw new Error('Regional mosaic requires finite contextMarginMeters >= collarMeters >= 0');
   }
-  if (config.cols % config.shardDimension || config.rows % config.shardDimension) {
+  if (config.cols % shardCols || config.rows % shardRows) {
     throw new Error('Regional mosaic rows/cols must be multiples of shardDimension');
   }
   if (config.cols * config.rows > 10000) {
@@ -167,28 +190,27 @@ export function createRegionalMosaicPlan(
     collarMeters: config.collarMeters,
   });
   const shards: RegionalMosaicShard[] = [];
-  const d = config.shardDimension;
-  const shardCountX = config.cols / d;
-  const shardCountZ = config.rows / d;
+  const shardCountX = config.cols / shardCols;
+  const shardCountZ = config.rows / shardRows;
   for (let row = 0; row < shardCountZ; row++) {
     for (let col = 0; col < shardCountX; col++) {
-      const minE = grid.studyUtmBounds.minEasting + col * d * config.tileSizeMeters;
-      const maxN = grid.studyUtmBounds.maxNorthing - row * d * config.tileSizeMeters;
+      const minE = grid.studyUtmBounds.minEasting + col * shardCols * config.tileSizeMeters;
+      const maxN = grid.studyUtmBounds.maxNorthing - row * shardRows * config.tileSizeMeters;
       const [lon, lat] = utm32NToGeo(
-        minE + d * config.tileSizeMeters / 2,
-        maxN - d * config.tileSizeMeters / 2
+        minE + (shardCols * config.tileSizeMeters) / 2,
+        maxN - (shardRows * config.tileSizeMeters) / 2
       );
       const subgrid = createAlignedStudyGrid({
         name: `${config.name}-r${String(row).padStart(2, '0')}-c${String(col).padStart(2, '0')}`,
         centerLonLat: [lon, lat],
-        cols: d,
-        rows: d,
+        cols: shardCols,
+        rows: shardRows,
         tileSizeMeters: config.tileSizeMeters,
         collarMeters: config.collarMeters,
       });
       if (
-        subgrid.minTx !== grid.minTx + col * d ||
-        subgrid.maxTy !== grid.maxTy - row * d
+        subgrid.minTx !== grid.minTx + col * shardCols ||
+        subgrid.maxTy !== grid.maxTy - row * shardRows
       ) {
         throw new Error(`Regional mosaic shard ${row}:${col} lost aligned tile coordinates`);
       }

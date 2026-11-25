@@ -303,7 +303,7 @@ function encodeMeshFlags(obj: THREE.Object3D, hasBvh: boolean): number {
   return flags;
 }
 
-function buildTileLocalBvh(
+export function buildTileLocalBvh(
   positions: Float32Array,
   indices: Uint32Array | Uint16Array | null
 ): TileSerializedBvhRecord | null {
@@ -331,7 +331,7 @@ function buildTileLocalBvh(
   }
 }
 
-function computePositionBBox(
+export function computePositionBBox(
   positions: Float32Array,
   offsetX = 0,
   offsetY = 0,
@@ -770,7 +770,6 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
   const tileCenterZ = (tile.localBounds.minZ + tile.localBounds.maxZ) * 0.5;
   const tileSizeMeters = tile.localBounds.maxX - tile.localBounds.minX;
 
-  const strings = new StringPool();
   const featureInfos: InspectableFeatureInfo[] = [];
   const featureIndexByObj = new WeakMap<InspectableFeatureInfo, number>();
   const featureIndexByKey = new Map<string, number>();
@@ -1105,7 +1104,43 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
     | undefined;
   const sleeper3DBoxCount = railStats?.sleeper3DBoxCount ?? 0;
   const railwayRenderSource = railStats?.railwayRenderSource ?? 'graph-R+';
-  const railwayRenderSourceStrIdx = strings.intern(railwayRenderSource);
+  const adjustedTotalVertices = Math.max(0, scene.stats.totalVertices - totalPrunedVertices);
+  const adjustedTotalTriangles = Math.max(0, scene.stats.totalTriangles - totalPrunedTriangles);
+
+  return encodeDecodedTilePayloadToBinary({
+    formatVersion: OSMTILE1_FORMAT_VERSION,
+    flags: includeBvh ? TILE_PAYLOAD_FLAG_HAS_BVH : 0,
+    lod,
+    tx: tile.tx,
+    ty: tile.ty,
+    byteLength: 0,
+    renderedFeaturesCount: scene.stats.renderedFeaturesCount,
+    forestTreesCount: scene.stats.forestTreesCount ?? 0,
+    sleeper3DBoxCount,
+    totalVertices: adjustedTotalVertices,
+    totalTriangles: adjustedTotalTriangles,
+    totalDrawCalls: scene.stats.totalDrawCalls,
+    tileCenterX,
+    tileCenterZ,
+    tileSizeMeters,
+    overhangBoundsMin: [overMinX, overMinY, overMinZ],
+    overhangBoundsMax: [overMaxX, overMaxY, overMaxZ],
+    railwayRenderSource,
+    featureInfos,
+    meshes: meshRecords,
+    instancedBatches: instancedRecords,
+  });
+}
+
+/**
+ * Serializes a DecodedTilePayload directly into the canonical OSMTILE1 v1 binary
+ * format with CRC32 checksum. Used both by encodeBuiltTileToBinary and by the
+ * standalone offline spatial batching consolidator (TKT-037).
+ */
+export function encodeDecodedTilePayloadToBinary(payload: DecodedTilePayload): Uint8Array {
+  const { featureInfos, meshes: meshRecords, instancedBatches: instancedRecords } = payload;
+  const strings = new StringPool();
+  const railwayRenderSourceStrIdx = strings.intern(payload.railwayRenderSource || 'graph-R+');
 
   // Pre-intern all strings referenced by feature infos, meshes, and instanced batches
   const encodedMeshStrings = meshRecords.map((m) => ({
@@ -1156,34 +1191,39 @@ export function encodeBuiltTileToBinary(options: EncodeTileBinaryOptions): Uint8
     };
   });
 
+  const hasBvh =
+    (payload.flags & TILE_PAYLOAD_FLAG_HAS_BVH) !== 0 ||
+    meshRecords.some((m) => m.bvh !== null);
+  const payloadFlags = hasBvh
+    ? payload.flags | TILE_PAYLOAD_FLAG_HAS_BVH
+    : payload.flags & ~TILE_PAYLOAD_FLAG_HAS_BVH;
+
   const writer = new ByteWriter(32768);
   const magicBytes = textEncoder.encode(OSMTILE1_MAGIC);
   writer.writeRawBytes(magicBytes); // 0..8
   writer.writeUint32(OSMTILE1_FORMAT_VERSION); // 8..12
-  writer.writeUint32(includeBvh ? TILE_PAYLOAD_FLAG_HAS_BVH : 0); // 12..16
-  writer.writeUint32(lod); // 16..20
-  writer.writeInt32(tile.tx); // 20..24
-  writer.writeInt32(tile.ty); // 24..28
+  writer.writeUint32(payloadFlags); // 12..16
+  writer.writeUint32(payload.lod); // 16..20
+  writer.writeInt32(payload.tx); // 20..24
+  writer.writeInt32(payload.ty); // 24..28
   writer.writeUint32(0); // 28..32 CRC32 placeholder
   writer.writeUint32(0); // 32..36 totalByteLength placeholder
-  writer.writeUint32(scene.stats.renderedFeaturesCount); // 36..40
-  writer.writeUint32(scene.stats.forestTreesCount ?? 0); // 40..44
-  writer.writeUint32(sleeper3DBoxCount); // 44..48
-  const adjustedTotalVertices = Math.max(0, scene.stats.totalVertices - totalPrunedVertices);
-  const adjustedTotalTriangles = Math.max(0, scene.stats.totalTriangles - totalPrunedTriangles);
-  writer.writeUint32(adjustedTotalVertices); // 48..52
-  writer.writeUint32(adjustedTotalTriangles); // 52..56
-  writer.writeUint32(scene.stats.totalDrawCalls); // 56..60
+  writer.writeUint32(payload.renderedFeaturesCount); // 36..40
+  writer.writeUint32(payload.forestTreesCount); // 40..44
+  writer.writeUint32(payload.sleeper3DBoxCount); // 44..48
+  writer.writeUint32(payload.totalVertices); // 48..52
+  writer.writeUint32(payload.totalTriangles); // 52..56
+  writer.writeUint32(payload.totalDrawCalls); // 56..60
   writer.writeUint32(meshRecords.length); // 60..64
-  writer.writeFloat64(tileCenterX); // 64..72
-  writer.writeFloat64(tileCenterZ); // 72..80
-  writer.writeFloat64(tileSizeMeters); // 80..88
-  writer.writeFloat32(overMinX); // 88..92
-  writer.writeFloat32(overMinY); // 92..96
-  writer.writeFloat32(overMinZ); // 96..100
-  writer.writeFloat32(overMaxX); // 100..104
-  writer.writeFloat32(overMaxY); // 104..108
-  writer.writeFloat32(overMaxZ); // 108..112
+  writer.writeFloat64(payload.tileCenterX); // 64..72
+  writer.writeFloat64(payload.tileCenterZ); // 72..80
+  writer.writeFloat64(payload.tileSizeMeters); // 80..88
+  writer.writeFloat32(payload.overhangBoundsMin[0]); // 88..92
+  writer.writeFloat32(payload.overhangBoundsMin[1]); // 92..96
+  writer.writeFloat32(payload.overhangBoundsMin[2]); // 96..100
+  writer.writeFloat32(payload.overhangBoundsMax[0]); // 100..104
+  writer.writeFloat32(payload.overhangBoundsMax[1]); // 104..108
+  writer.writeFloat32(payload.overhangBoundsMax[2]); // 108..112
 
   writer.writeUint32(instancedRecords.length);
   writer.writeUint32(railwayRenderSourceStrIdx);

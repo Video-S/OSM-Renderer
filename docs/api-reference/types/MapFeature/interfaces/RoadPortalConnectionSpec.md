@@ -12,7 +12,7 @@ Defined in: types/MapFeature.ts:242
 
 ### endpoint
 
-> **endpoint**: `"end"` \| `"start"`
+> **endpoint**: `"start"` \| `"end"`
 
 Defined in: types/MapFeature.ts:245
 

@@ -23,6 +23,14 @@ import {
   type CachedRailwayIndex,
   evaluateCachedRailwayVisibility,
 } from '../world/prototype/BenchmarkRailwayTelemetry';
+import {
+  computeFoliageTelemetrySnapshot,
+  DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG,
+  resolveFoliageRuntimeState,
+  type FoliageOptimizationConfig,
+  type FoliagePrototypeRegistry,
+  type FoliageRuntimeState,
+} from '../world/FoliageLodSystem';
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
@@ -564,6 +572,45 @@ export const MapScene: React.FC<MapSceneProps> = ({
           },
         };
       };
+
+      (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__ = () => {
+        const geo = committedBuiltGeometryRef.current;
+        const cam = cameraRef.current as THREE.OrthographicCamera | null;
+        if (!geo) return null;
+        const userData = geo.foliageGroup.userData;
+        const config: FoliageOptimizationConfig =
+          typeof userData?.getFoliageOptimizationConfig === 'function'
+            ? userData.getFoliageOptimizationConfig()
+            : { ...DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG };
+        const state: FoliageRuntimeState =
+          typeof userData?.getFoliageRuntimeState === 'function'
+            ? userData.getFoliageRuntimeState()
+            : resolveFoliageRuntimeState(cam?.zoom ?? 1.0, null, config);
+        const registry: FoliagePrototypeRegistry | null =
+          typeof userData?.getFoliagePrototypeRegistry === 'function'
+            ? userData.getFoliagePrototypeRegistry()
+            : null;
+        const snap = computeFoliageTelemetrySnapshot(
+          geo.foliageGroup,
+          cam,
+          state,
+          config,
+          registry
+        );
+        if (!geo.foliageGroup.parent) {
+          return {
+            ...snap,
+            foliageLayerVisible: false,
+            submittedBatches: 0,
+            submittedTreeInstances: 0,
+            submittedTrunkInstances: 0,
+            submittedCanopyInstances: 0,
+            submittedTriangles: 0,
+            frustumCulledBatches: 0,
+          };
+        }
+        return snap;
+      };
     }
 
     const emitPostRenderTelemetry = (
@@ -742,6 +789,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         delete (window as any).__BENCHMARK_RESET_GPU_TIMERS__;
         delete (window as any).__BENCHMARK_GET_CAMERA_STATE__;
         delete (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__;
+        delete (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__;
       }
       drainPendingQueries(false);
     };
@@ -844,6 +892,39 @@ export const MapScene: React.FC<MapSceneProps> = ({
         shouldSample: true,
       });
 
+      const foliageUserData = builtGeometry.foliageGroup.userData;
+      const foliageConfig: FoliageOptimizationConfig =
+        typeof foliageUserData?.getFoliageOptimizationConfig === 'function'
+          ? foliageUserData.getFoliageOptimizationConfig()
+          : { ...DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG };
+      const foliageState: FoliageRuntimeState =
+        typeof foliageUserData?.getFoliageRuntimeState === 'function'
+          ? foliageUserData.getFoliageRuntimeState()
+          : resolveFoliageRuntimeState(cam.zoom || 1, null, foliageConfig);
+      const foliageRegistry: FoliagePrototypeRegistry | null =
+        typeof foliageUserData?.getFoliagePrototypeRegistry === 'function'
+          ? foliageUserData.getFoliagePrototypeRegistry()
+          : null;
+      const rawFoliageTelemetry = computeFoliageTelemetrySnapshot(
+        builtGeometry.foliageGroup,
+        cam,
+        foliageState,
+        foliageConfig,
+        foliageRegistry
+      );
+      const foliageTelemetry = showFoliage
+        ? rawFoliageTelemetry
+        : {
+            ...rawFoliageTelemetry,
+            foliageLayerVisible: false,
+            submittedBatches: 0,
+            submittedTreeInstances: 0,
+            submittedTrunkInstances: 0,
+            submittedCanopyInstances: 0,
+            submittedTriangles: 0,
+            frustumCulledBatches: 0,
+          };
+
       onTelemetryUpdate({
         fps: currentFps,
         frameIntervalMs,
@@ -880,6 +961,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
           width: state.size.width,
           height: state.size.height,
         },
+        foliageTelemetry,
       });
     }
   });

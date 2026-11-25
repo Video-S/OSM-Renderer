@@ -20,7 +20,7 @@ Defined in: world/infrastructure/topology/types.ts:439
 
 ### atGradeEndpoint
 
-> **atGradeEndpoint**: `"end"` \| `"start"`
+> **atGradeEndpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/topology/types.ts:440
 
@@ -60,7 +60,7 @@ Defined in: world/infrastructure/topology/types.ts:442
 
 ### gradeSeparatedEndpoint
 
-> **gradeSeparatedEndpoint**: `"end"` \| `"start"`
+> **gradeSeparatedEndpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/topology/types.ts:443
 

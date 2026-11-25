@@ -8,4 +8,4 @@
 
 > `const` **MAP\_THEMES**: `Record`\<`string`, [`MapStyleTheme`](../../../types/MapFeature/interfaces/MapStyleTheme.md)\>
 
-Defined in: styles/mapThemes.ts:3
+Defined in: styles/mapThemes.ts:227

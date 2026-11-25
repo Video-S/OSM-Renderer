@@ -7,6 +7,7 @@ import {
   RailwayBuildProfile,
   RailwayPrototypeMode,
 } from './RailwayPrototypeBuilder';
+import type { FoliageTelemetrySnapshot } from '../FoliageLodSystem';
 
 export interface GroupGeometryStats {
   meshCount: number;
@@ -80,6 +81,7 @@ export interface LiveWebGLTelemetrySnapshot {
     width: number;
     height: number;
   };
+  foliageTelemetry?: FoliageTelemetrySnapshot;
 }
 
 function isObjectAndAncestorsVisible(obj: THREE.Object3D): boolean {

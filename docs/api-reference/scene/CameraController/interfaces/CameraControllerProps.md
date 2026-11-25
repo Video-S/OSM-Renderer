@@ -22,7 +22,7 @@ Defined in: scene/CameraController.tsx:29
 
 > `optional` **controlsEnabled?**: `boolean`
 
-Defined in: scene/CameraController.tsx:51
+Defined in: scene/CameraController.tsx:54
 
 ***
 
@@ -30,7 +30,11 @@ Defined in: scene/CameraController.tsx:51
 
 > `optional` **explicitPose?**: `object`
 
-Defined in: scene/CameraController.tsx:40
+Defined in: scene/CameraController.tsx:42
+
+#### animate?
+
+> `optional` **animate?**: `boolean`
 
 #### azimuthRad?
 
@@ -54,7 +58,7 @@ Defined in: scene/CameraController.tsx:40
 
 > `optional` **fixedTiltAngle?**: `number`
 
-Defined in: scene/CameraController.tsx:36
+Defined in: scene/CameraController.tsx:38
 
 ***
 
@@ -70,7 +74,7 @@ Defined in: scene/CameraController.tsx:32
 
 > `optional` **initialZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:39
+Defined in: scene/CameraController.tsx:41
 
 ***
 
@@ -78,7 +82,7 @@ Defined in: scene/CameraController.tsx:39
 
 > `optional` **maxZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:38
+Defined in: scene/CameraController.tsx:40
 
 ***
 
@@ -86,7 +90,31 @@ Defined in: scene/CameraController.tsx:38
 
 > `optional` **minZoom?**: `number`
 
-Defined in: scene/CameraController.tsx:37
+Defined in: scene/CameraController.tsx:39
+
+***
+
+### onCameraOrientationChange?
+
+> `optional` **onCameraOrientationChange?**: (`orientation`) => `void`
+
+Defined in: scene/CameraController.tsx:36
+
+#### Parameters
+
+##### orientation
+
+###### azimuthDeg
+
+`number`
+
+###### zoom
+
+`number`
+
+#### Returns
+
+`void`
 
 ***
 
@@ -94,7 +122,7 @@ Defined in: scene/CameraController.tsx:37
 
 > `optional` **onRegisterImperativePoseSetter?**: (`setter`) => `void`
 
-Defined in: scene/CameraController.tsx:46
+Defined in: scene/CameraController.tsx:49
 
 #### Parameters
 
@@ -112,7 +140,7 @@ Defined in: scene/CameraController.tsx:46
 
 > `optional` **onResetComplete?**: () => `void`
 
-Defined in: scene/CameraController.tsx:34
+Defined in: scene/CameraController.tsx:35
 
 #### Returns
 
@@ -140,7 +168,7 @@ Defined in: scene/CameraController.tsx:33
 
 > `optional` **target?**: \[`number`, `number`, `number`\]
 
-Defined in: scene/CameraController.tsx:35
+Defined in: scene/CameraController.tsx:37
 
 ***
 
@@ -149,3 +177,11 @@ Defined in: scene/CameraController.tsx:35
 > `optional` **verticalEnvelope?**: [`VerticalEnvelope`](VerticalEnvelope.md)
 
 Defined in: scene/CameraController.tsx:30
+
+***
+
+### zoomStepSignal?
+
+> `optional` **zoomStepSignal?**: `number`
+
+Defined in: scene/CameraController.tsx:34

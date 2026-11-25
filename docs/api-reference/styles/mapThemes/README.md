@@ -9,3 +9,10 @@
 ## Variables
 
 - [MAP\_THEMES](variables/MAP_THEMES.md)
+
+## Functions
+
+- [getBuildingFinish](functions/getBuildingFinish.md)
+- [getLandmarkWallColor](functions/getLandmarkWallColor.md)
+- [getThemeExposure](functions/getThemeExposure.md)
+- [isNaturalTheme](functions/isNaturalTheme.md)

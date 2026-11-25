@@ -6,7 +6,7 @@
 
 # Interface: GeometryBuilderOptions
 
-Defined in: world/GeometryBuilder.ts:170
+Defined in: world/GeometryBuilder.ts:183
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:170
 
 > `optional` **bevelEnabled?**: `boolean`
 
-Defined in: world/GeometryBuilder.ts:173
+Defined in: world/GeometryBuilder.ts:186
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:173
 
 > `optional` **buildingHeightMultiplier?**: `number`
 
-Defined in: world/GeometryBuilder.ts:171
+Defined in: world/GeometryBuilder.ts:184
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: world/GeometryBuilder.ts:171
 
 > `optional` **infrastructureRenderOptions?**: `Partial`\<[`InfrastructureRenderOptions`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderOptions.md)\>
 
-Defined in: world/GeometryBuilder.ts:175
+Defined in: world/GeometryBuilder.ts:188
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: world/GeometryBuilder.ts:175
 
 > `optional` **infrastructureRenderPreview?**: [`InfrastructureRenderPreviewResult`](../../infrastructure/rendering/InfrastructureRenderAdapter/interfaces/InfrastructureRenderPreviewResult.md)
 
-Defined in: world/GeometryBuilder.ts:176
+Defined in: world/GeometryBuilder.ts:189
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: world/GeometryBuilder.ts:176
 
 > `optional` **initialCameraZoom?**: `number`
 
-Defined in: world/GeometryBuilder.ts:174
+Defined in: world/GeometryBuilder.ts:187
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: world/GeometryBuilder.ts:174
 
 > `optional` **maxSceneTrees?**: `number`
 
-Defined in: world/GeometryBuilder.ts:180
+Defined in: world/GeometryBuilder.ts:193
 
 Optional procedural tree cap override (default 2200 for production single-scene builds).
 
@@ -64,7 +64,7 @@ Optional procedural tree cap override (default 2200 for production single-scene 
 
 > `optional` **precomputedGlobalPlans?**: `object`
 
-Defined in: world/GeometryBuilder.ts:182
+Defined in: world/GeometryBuilder.ts:195
 
 Optional precomputed global plans/phases shared across tiles for exact cross-border continuity.
 
@@ -138,7 +138,7 @@ Optional precomputed global plans/phases shared across tiles for exact cross-bor
 
 > `optional` **roadWidthMultiplier?**: `number`
 
-Defined in: world/GeometryBuilder.ts:172
+Defined in: world/GeometryBuilder.ts:185
 
 ***
 
@@ -146,6 +146,6 @@ Defined in: world/GeometryBuilder.ts:172
 
 > `optional` **tileClipBounds?**: `WorldBox2D`
 
-Defined in: world/GeometryBuilder.ts:178
+Defined in: world/GeometryBuilder.ts:191
 
 Optional XZ tile bounds for regional tiling; clips continuous geometry at boundaries and assigns discrete features by half-open centroid ownership.

@@ -166,6 +166,45 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
             </strong>
           </span>
         </div>
+
+        {liveTelemetry?.foliageTelemetry && (
+          <div
+            data-testid="performance-foliage-telemetry"
+            className="bg-slate-950/80 border border-slate-800 rounded p-2 text-[10px] font-mono tabular-nums text-slate-400 space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Foliage:{' '}
+                <strong className="text-emerald-300 uppercase">
+                  {liveTelemetry.foliageTelemetry.activeLod}
+                </strong>
+                {liveTelemetry.foliageTelemetry.trunksVisible ? ' · trunks' : ' · no trunks'}
+              </span>
+              <span>
+                Batches:{' '}
+                <strong className="text-slate-200">
+                  {liveTelemetry.foliageTelemetry.submittedBatches}/
+                  {liveTelemetry.foliageTelemetry.residentBatches}
+                </strong>
+                {liveTelemetry.foliageTelemetry.frustumCulledBatches > 0
+                  ? ` (${liveTelemetry.foliageTelemetry.frustumCulledBatches} culled)`
+                  : ''}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Sub / Res Tris:{' '}
+                <strong className="text-cyan-300">
+                  {liveTelemetry.foliageTelemetry.submittedTriangles.toLocaleString()}
+                </strong>
+                /{liveTelemetry.foliageTelemetry.residentTriangles.toLocaleString()}
+              </span>
+              <span className="text-emerald-300">
+                -{liveTelemetry.foliageTelemetry.triangleReductionVsLod0Pct}% vs LOD0
+              </span>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 3. CPU & Tile Memory */}

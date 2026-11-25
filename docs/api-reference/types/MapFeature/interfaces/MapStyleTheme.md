@@ -184,7 +184,7 @@ Defined in: types/MapFeature.ts:638
 
 ### id
 
-> **id**: `"tactical"` \| `"daylight"` \| `"dusk"` \| `"blueprint"`
+> **id**: `"tactical"` \| `"daylight"` \| `"dusk"` \| `"blueprint"` \| `"natural_daylight"` \| `"natural_cartographic"` \| `"natural_game"`
 
 Defined in: types/MapFeature.ts:636
 

@@ -5,6 +5,15 @@ import {
   SceneResourceManager,
   type BuiltSceneGeometry,
 } from '../GeometryBuilder';
+import {
+  equalFoliageOptimizationConfig,
+  FoliagePrototypeRegistry,
+  normalizeFoliageOptimizationConfig,
+  resolveFoliageRuntimeState,
+  type FoliageLodLevel,
+  type FoliageOptimizationConfig,
+  type FoliageRuntimeState,
+} from '../FoliageLodSystem';
 import { DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS } from '../infrastructure/rendering/InfrastructureRenderAdapter';
 import {
   createM1aTileBoundaryOverlay,
@@ -146,6 +155,11 @@ export interface TileStreamDiagnosticsSnapshot {
   viewportSelectionSkips: number;
   /** TKT-031 opt-in experiment: unchanged zoom propagation skips. */
   zoomPropagationSkips: number;
+  /** TKT-036 runtime foliage LOD & culling diagnostics. */
+  activeFoliageLod: FoliageLodLevel;
+  foliageTrunksVisible: boolean;
+  foliageFrustumCullingEnabled: boolean;
+  sharedFoliagePrototypeCount: number;
 }
 
 export interface TilePackManifestPayload {
@@ -204,6 +218,10 @@ export interface TileStreamManagerOptions {
   initialCameraZoom?: number;
   /** Optional pre-configured shared `ThemeMaterialRegistry`. */
   materialRegistry?: ThemeMaterialRegistry;
+  /** Optional pre-configured shared `FoliagePrototypeRegistry`. */
+  foliagePrototypeRegistry?: FoliagePrototypeRegistry;
+  /** Optional initial runtime foliage LOD & culling configuration. */
+  foliageOptimizationConfig?: Partial<FoliageOptimizationConfig>;
   /** Optional pre-configured `TileDecodeClient`. */
   decodeClient?: TileDecodeClient;
   /** Optional custom `fetch` implementation for tests. */
@@ -466,6 +484,8 @@ export class TileStreamManager {
   private readonly experimentSkipUnchangedZoom: boolean;
   private readonly materialRegistry: ThemeMaterialRegistry;
   private readonly ownsMaterialRegistry: boolean;
+  private readonly foliagePrototypeRegistry: FoliagePrototypeRegistry;
+  private readonly ownsFoliagePrototypeRegistry: boolean;
   private readonly decodeClient: TileDecodeClient;
   private readonly ownsDecodeClient: boolean;
   private readonly fetchFn: typeof fetch;
@@ -486,6 +506,8 @@ export class TileStreamManager {
   private manifestError: string | null = null;
   private currentTheme: MapStyleTheme;
   private currentCameraZoom: number;
+  private foliageConfig: FoliageOptimizationConfig;
+  private foliageRuntimeState: FoliageRuntimeState;
   private currentWireframe = false;
   private currentViewport: TileViewportGroundBounds | null = null;
   private previousFocus: { x: number; z: number } | null = null;
@@ -538,6 +560,14 @@ export class TileStreamManager {
     this.experimentSkipUnchangedZoom = options.experimentSkipUnchangedZoom === true;
     this.currentTheme = options.initialTheme ?? MAP_THEMES.tactical;
     this.currentCameraZoom = options.initialCameraZoom ?? 1.0;
+    this.foliageConfig = normalizeFoliageOptimizationConfig(
+      options.foliageOptimizationConfig
+    );
+    this.foliageRuntimeState = resolveFoliageRuntimeState(
+      this.currentCameraZoom,
+      null,
+      this.foliageConfig
+    );
 
     if (options.materialRegistry) {
       this.materialRegistry = options.materialRegistry;
@@ -548,6 +578,14 @@ export class TileStreamManager {
         this.currentCameraZoom
       );
       this.ownsMaterialRegistry = true;
+    }
+
+    if (options.foliagePrototypeRegistry) {
+      this.foliagePrototypeRegistry = options.foliagePrototypeRegistry;
+      this.ownsFoliagePrototypeRegistry = false;
+    } else {
+      this.foliagePrototypeRegistry = new FoliagePrototypeRegistry();
+      this.ownsFoliagePrototypeRegistry = true;
     }
 
     if (options.decodeClient) {
@@ -608,6 +646,15 @@ export class TileStreamManager {
     };
     railwaysGroup.userData.updateCameraZoom = (zoom: number) =>
       this.updateCameraZoom(zoom);
+    foliageGroup.userData.getFoliageRuntimeState = () =>
+      this.foliageRuntimeState;
+    foliageGroup.userData.getFoliageOptimizationConfig = () =>
+      this.foliageConfig;
+    foliageGroup.userData.getFoliagePrototypeRegistry = () =>
+      this.foliagePrototypeRegistry;
+    foliageGroup.userData.setFoliageOptimizationConfig = (
+      partial: Partial<FoliageOptimizationConfig>
+    ) => this.setFoliageOptimizationConfig(partial);
 
     this.compositeScene = {
       buildingsGroup,
@@ -648,6 +695,47 @@ export class TileStreamManager {
 
   get sharedMaterialRegistry(): ThemeMaterialRegistry {
     return this.materialRegistry;
+  }
+
+  get sharedFoliagePrototypeRegistry(): FoliagePrototypeRegistry {
+    return this.foliagePrototypeRegistry;
+  }
+
+  getFoliageOptimizationConfig(): FoliageOptimizationConfig {
+    return { ...this.foliageConfig };
+  }
+
+  getFoliageRuntimeState(): FoliageRuntimeState {
+    return { ...this.foliageRuntimeState };
+  }
+
+  setFoliageOptimizationConfig(
+    partial: Partial<FoliageOptimizationConfig>
+  ): FoliageRuntimeState {
+    if (this.isDisposed) {
+      return { ...this.foliageRuntimeState };
+    }
+    const nextConfig = normalizeFoliageOptimizationConfig({
+      ...this.foliageConfig,
+      ...partial,
+    });
+    if (equalFoliageOptimizationConfig(this.foliageConfig, nextConfig)) {
+      return { ...this.foliageRuntimeState };
+    }
+    this.foliageConfig = nextConfig;
+    const nextState = resolveFoliageRuntimeState(
+      this.currentCameraZoom,
+      null,
+      this.foliageConfig
+    );
+    this.foliageRuntimeState = nextState;
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'loaded' && record.reconstructed) {
+        record.reconstructed.applyFoliageRuntimeState(nextState);
+      }
+    }
+    this.emitDiagnostics();
+    return { ...nextState };
   }
 
   get packMetadata(): TilePackMetadata | null {
@@ -1179,6 +1267,8 @@ export class TileStreamManager {
           materialRegistry: this.materialRegistry,
           placementMode: 'study-world-mesh-offset',
           initialCameraZoom: this.currentCameraZoom,
+          foliagePrototypeRegistry: this.foliagePrototypeRegistry,
+          foliageRuntimeState: this.foliageRuntimeState,
         }
       );
       const reconstructMs = performance.now() - t0;
@@ -1249,9 +1339,26 @@ export class TileStreamManager {
     }
     this.currentCameraZoom = zoom;
     this.materialRegistry.setCameraZoom(zoom);
+
+    const prevFoliage = this.foliageRuntimeState;
+    const nextFoliage = resolveFoliageRuntimeState(
+      zoom,
+      prevFoliage,
+      this.foliageConfig
+    );
+    const foliageBehaviorChanged =
+      nextFoliage.activeLod !== prevFoliage.activeLod ||
+      nextFoliage.trunksVisible !== prevFoliage.trunksVisible ||
+      nextFoliage.frustumCullingEnabled !== prevFoliage.frustumCullingEnabled ||
+      nextFoliage.optimizationEnabled !== prevFoliage.optimizationEnabled;
+    this.foliageRuntimeState = nextFoliage;
+
     for (const record of this.tilesByKey.values()) {
       if (record.state === 'loaded' && record.reconstructed) {
         record.reconstructed.scene.updateCameraZoom?.(zoom);
+        if (foliageBehaviorChanged) {
+          record.reconstructed.applyFoliageRuntimeState(nextFoliage);
+        }
       }
     }
   }
@@ -1413,6 +1520,12 @@ export class TileStreamManager {
       viewportSelectionPasses: this.viewportSelectionPasses,
       viewportSelectionSkips: this.viewportSelectionSkips,
       zoomPropagationSkips: this.zoomPropagationSkips,
+      activeFoliageLod: this.foliageRuntimeState.activeLod,
+      foliageTrunksVisible: this.foliageRuntimeState.trunksVisible,
+      foliageFrustumCullingEnabled: this.foliageRuntimeState.frustumCullingEnabled,
+      sharedFoliagePrototypeCount: this.foliagePrototypeRegistry.disposed
+        ? 0
+        : this.foliagePrototypeRegistry.geometryCount,
     };
   }
 
@@ -1498,6 +1611,9 @@ export class TileStreamManager {
     }
     if (this.ownsMaterialRegistry) {
       this.materialRegistry.dispose();
+    }
+    if (this.ownsFoliagePrototypeRegistry) {
+      this.foliagePrototypeRegistry.dispose();
     }
     this.checkIdleWaiters();
   }

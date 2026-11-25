@@ -25,7 +25,7 @@ Defined in: world/infrastructure/topology/types.ts:169
 
 ### endpoint
 
-> **endpoint**: `"end"` \| `"start"`
+> **endpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/topology/types.ts:170
 

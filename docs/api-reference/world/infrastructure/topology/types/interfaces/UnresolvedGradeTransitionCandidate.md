@@ -44,7 +44,7 @@ Defined in: world/infrastructure/topology/types.ts:451
 
 ### gradeSeparatedEndpoint
 
-> **gradeSeparatedEndpoint**: `"end"` \| `"start"`
+> **gradeSeparatedEndpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/topology/types.ts:452
 

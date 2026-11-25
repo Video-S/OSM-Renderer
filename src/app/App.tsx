@@ -15,6 +15,12 @@ import {
   type InfrastructureRenderOptions,
 } from '../world/GeometryBuilder';
 import {
+  DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG,
+  normalizeFoliageOptimizationConfig,
+  parseFoliageOptimizationConfigFromSearch,
+  type FoliageOptimizationConfig,
+} from '../world/FoliageLodSystem';
+import {
   ProcessedMapData,
   MapStyleTheme,
   InspectableFeatureInfo,
@@ -269,6 +275,15 @@ export default function App() {
         ? parseInfrastructureRenderOptionsFromSearch(window.location.search)
         : { ...DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS }
     );
+
+  // TKT-036: Runtime foliage LOD, trunk suppression, and conservative frustum culling config
+  const [foliageConfig, setFoliageConfig] = useState<FoliageOptimizationConfig>(() =>
+    typeof window !== 'undefined'
+      ? parseFoliageOptimizationConfigFromSearch(window.location.search)
+      : { ...DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG }
+  );
+  const foliageConfigRef = useRef<FoliageOptimizationConfig>(foliageConfig);
+  foliageConfigRef.current = foliageConfig;
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
@@ -866,6 +881,7 @@ export default function App() {
         experimentSkipUnchangedZoom: extraOptions?.experimentSkipUnchangedZoom,
         initialTheme: activeTheme,
         initialCameraZoom: provisionalZoom,
+        foliageOptimizationConfig: foliageConfigRef.current,
         onDiagnosticsChange: (diag) => {
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
@@ -2616,6 +2632,32 @@ export default function App() {
         typeof (window as any).__BENCHMARK_GET_CAMERA_STATE__ === 'function'
           ? (window as any).__BENCHMARK_GET_CAMERA_STATE__()
           : null,
+      getFoliageOptimizationConfig: () => ({ ...foliageConfigRef.current }),
+      setFoliageOptimizationConfig: (
+        partial: Partial<FoliageOptimizationConfig>
+      ) => {
+        const next = normalizeFoliageOptimizationConfig({
+          ...foliageConfigRef.current,
+          ...partial,
+        });
+        foliageConfigRef.current = next;
+        setFoliageConfig(next);
+        if (tileStreamManagerRef.current) {
+          return tileStreamManagerRef.current.setFoliageOptimizationConfig(next);
+        }
+        const setSceneFoliage = activeSceneRef.current?.foliageGroup?.userData
+          ?.setFoliageOptimizationConfig as
+          | ((cfg: Partial<FoliageOptimizationConfig>) => unknown)
+          | undefined;
+        if (typeof setSceneFoliage === 'function') {
+          return setSceneFoliage(next);
+        }
+        return null;
+      },
+      getFoliageTelemetry: () =>
+        typeof (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__ === 'function'
+          ? (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__()
+          : null,
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [
@@ -2629,6 +2671,38 @@ export default function App() {
     builtGeometry,
     liveTelemetry,
   ]);
+
+  // Synchronize runtime foliage optimization settings whenever a new scene mounts
+  useEffect(() => {
+    const setSceneFoliage = builtGeometry?.foliageGroup?.userData
+      ?.setFoliageOptimizationConfig as
+      | ((cfg: Partial<FoliageOptimizationConfig>) => void)
+      | undefined;
+    if (typeof setSceneFoliage === 'function') {
+      setSceneFoliage(foliageConfigRef.current);
+    }
+  }, [builtGeometry]);
+
+  const handleChangeFoliageConfig = (
+    partial: Partial<FoliageOptimizationConfig>
+  ) => {
+    const next = normalizeFoliageOptimizationConfig({
+      ...foliageConfigRef.current,
+      ...partial,
+    });
+    foliageConfigRef.current = next;
+    setFoliageConfig(next);
+    if (tileStreamManagerRef.current) {
+      tileStreamManagerRef.current.setFoliageOptimizationConfig(next);
+    }
+    const setSceneFoliage = activeSceneRef.current?.foliageGroup?.userData
+      ?.setFoliageOptimizationConfig as
+      | ((cfg: Partial<FoliageOptimizationConfig>) => void)
+      | undefined;
+    if (typeof setSceneFoliage === 'function') {
+      setSceneFoliage(next);
+    }
+  };
 
   const handleResetCamera = () => {
     setResetCount((c) => c + 1);
@@ -2875,7 +2949,11 @@ export default function App() {
                   showFoliage={showFoliage}
                   wireframe={wireframe}
                   trackFps={activePanel === 'performance'}
-                  trackTelemetry={activePanel === 'performance' || isBenchmarkMode}
+                  trackTelemetry={
+                    activePanel === 'performance' ||
+                    activePanel === 'diagnostics' ||
+                    isBenchmarkMode
+                  }
                   onFpsUpdate={setFps}
                   onHoverFeature={handleHoverFeature}
                   onSelectFeature={handleSelectFeature}
@@ -3233,6 +3311,8 @@ export default function App() {
             reproForm={reproForm}
             onChangeReproForm={setReproForm}
             onImportReproductionPackage={handleImportReproductionPackage}
+            foliageConfig={foliageConfig}
+            onChangeFoliageConfig={handleChangeFoliageConfig}
           />
         )}
 

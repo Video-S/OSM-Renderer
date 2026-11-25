@@ -8,7 +8,7 @@
 
 > **computeProjectedBoundsFraming**(`bounds`, `viewportWidth`, `viewportHeight`, `fixedTiltAngle?`, `azimuthAngle?`, `paddingFactor?`, `minZoom?`, `maxZoom?`): `object`
 
-Defined in: scene/CameraController.tsx:65
+Defined in: scene/CameraController.tsx:68
 
 Computes projected bounds framing for the orthographic camera.
 Projects the 4 ground corners of the bounding box into screen coordinates

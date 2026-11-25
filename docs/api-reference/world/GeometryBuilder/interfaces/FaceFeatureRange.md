@@ -6,7 +6,7 @@
 
 # Interface: FaceFeatureRange
 
-Defined in: world/GeometryBuilder.ts:201
+Defined in: world/GeometryBuilder.ts:214
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: world/GeometryBuilder.ts:201
 
 > **endFace**: `number`
 
-Defined in: world/GeometryBuilder.ts:203
+Defined in: world/GeometryBuilder.ts:216
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: world/GeometryBuilder.ts:203
 
 > **info**: [`InspectableFeatureInfo`](../../../types/MapFeature/interfaces/InspectableFeatureInfo.md)
 
-Defined in: world/GeometryBuilder.ts:204
+Defined in: world/GeometryBuilder.ts:217
 
 ***
 
@@ -30,4 +30,4 @@ Defined in: world/GeometryBuilder.ts:204
 
 > **startFace**: `number`
 
-Defined in: world/GeometryBuilder.ts:202
+Defined in: world/GeometryBuilder.ts:215

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
 import type { InspectableFeatureInfo, MapStyleTheme } from '../../types/MapFeature';
 import {
@@ -7,6 +6,17 @@ import {
   type BuiltSceneGeometry,
   type FaceFeatureRange,
 } from '../GeometryBuilder';
+import {
+  applyFoliageRuntimeStateToBatches,
+  computeConservativeInstancedBounds,
+  FoliagePrototypeRegistry,
+  isFoliagePrototypeKind,
+  normalizeFoliageOptimizationConfig,
+  resolveFoliageRuntimeState,
+  type FoliageBatchTarget,
+  type FoliageOptimizationConfig,
+  type FoliageRuntimeState,
+} from '../FoliageLodSystem';
 import { DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS } from '../infrastructure/rendering/InfrastructureRenderAdapter';
 import {
   RAILWAY_DIMENSION_SPEC,
@@ -25,7 +35,6 @@ import {
   type DecodedTilePayload,
   type TileCoordinatePlacementMode,
   type TileLayerKind,
-  type TilePrototypeKind,
 } from './TilePackContract';
 import { ThemeMaterialRegistry } from './ThemeMaterialRegistry';
 
@@ -33,6 +42,12 @@ export interface ReconstructTileSceneOptions {
   materialRegistry: ThemeMaterialRegistry;
   placementMode?: TileCoordinatePlacementMode;
   initialCameraZoom?: number;
+  /** Optional shared foliage prototype registry owned by TileStreamManager (avoids per-tile prototype allocation). */
+  foliagePrototypeRegistry?: FoliagePrototypeRegistry;
+  /** Optional initial foliage optimization config for standalone tile reconstruction. */
+  foliageOptimizationConfig?: Partial<FoliageOptimizationConfig>;
+  /** Optional externally managed foliage runtime state (pushed uniformly across streamed tiles). */
+  foliageRuntimeState?: FoliageRuntimeState;
 }
 
 export interface ReconstructedTileSceneResult {
@@ -42,42 +57,10 @@ export interface ReconstructedTileSceneResult {
     min: [number, number, number];
     max: [number, number, number];
   };
+  /** Applies a new shared foliage LOD / trunk suppression / frustum culling state in O(foliage batches). */
+  applyFoliageRuntimeState: (state: FoliageRuntimeState) => void;
+  foliageBatchCount: number;
   dispose: () => void;
-}
-
-function buildPrototypeGeometry(kind: Exclude<TilePrototypeKind, 'none'>): THREE.BufferGeometry {
-  if (kind === 'tree_trunk') {
-    const g = new THREE.CylinderGeometry(0.18, 0.32, 2.5, 6);
-    g.translate(0, 1.25, 0);
-    return g;
-  }
-  if (kind === 'tree_broadleaved') {
-    const lobeMain = new THREE.IcosahedronGeometry(1.75, 1);
-    lobeMain.translate(0, 3.8, 0);
-    const lobeLeft = new THREE.IcosahedronGeometry(1.3, 1);
-    lobeLeft.translate(-0.85, 3.25, 0.5);
-    const lobeRight = new THREE.IcosahedronGeometry(1.35, 1);
-    lobeRight.translate(0.8, 3.35, -0.45);
-    const merged = mergeGeometries([lobeMain, lobeLeft, lobeRight], false)!;
-    lobeMain.dispose();
-    lobeLeft.dispose();
-    lobeRight.dispose();
-    return merged;
-  }
-  if (kind === 'tree_needleleaved') {
-    const tierBottom = new THREE.ConeGeometry(1.85, 2.5, 7);
-    tierBottom.translate(0, 3.0, 0);
-    const tierMid = new THREE.ConeGeometry(1.4, 2.2, 7);
-    tierMid.translate(0, 4.3, 0);
-    const tierTop = new THREE.ConeGeometry(0.95, 1.8, 7);
-    tierTop.translate(0, 5.4, 0);
-    const merged = mergeGeometries([tierBottom, tierMid, tierTop], false)!;
-    tierBottom.dispose();
-    tierMid.dispose();
-    tierTop.dispose();
-    return merged;
-  }
-  return buildUnitSleeperBoxGeometry();
 }
 
 export function reconstructTileSceneFromDecoded(
@@ -301,20 +284,54 @@ export function reconstructTileSceneFromDecoded(
   }
 
   // Reconstruct InstancedMesh batches
-  const prototypeCache = new Map<Exclude<TilePrototypeKind, 'none'>, THREE.BufferGeometry>();
+  const externalFoliageRegistry = options.foliagePrototypeRegistry ?? null;
+  let ownedFoliageRegistry: FoliagePrototypeRegistry | null = null;
+  const getFoliageRegistry = (): FoliagePrototypeRegistry => {
+    if (externalFoliageRegistry) return externalFoliageRegistry;
+    if (!ownedFoliageRegistry) {
+      ownedFoliageRegistry = new FoliagePrototypeRegistry();
+    }
+    return ownedFoliageRegistry;
+  };
+
+  const standaloneFoliageConfig = normalizeFoliageOptimizationConfig(
+    options.foliageOptimizationConfig
+  );
+  const externallyManagedFoliage = options.foliageRuntimeState !== undefined;
+  let currentFoliageState: FoliageRuntimeState =
+    options.foliageRuntimeState ??
+    resolveFoliageRuntimeState(initialCameraZoom, null, standaloneFoliageConfig);
+
+  let sleeperProtoGeo: THREE.BufferGeometry | null = null;
   const sleeperChunkParents = new Map<string, THREE.Group>();
+  const foliageTargets: FoliageBatchTarget[] = [];
+  const tileInstancedMeshes: THREE.InstancedMesh[] = [];
 
   for (const b of decoded.instancedBatches) {
-    let protoGeo = prototypeCache.get(b.prototypeKind);
-    if (!protoGeo) {
-      protoGeo = resourceManager.registerGeometry(buildPrototypeGeometry(b.prototypeKind));
-      prototypeCache.set(b.prototypeKind, protoGeo);
+    const foliageKind = isFoliagePrototypeKind(b.prototypeKind) ? b.prototypeKind : null;
+    let protoGeo: THREE.BufferGeometry;
+    if (foliageKind) {
+      const foliageRegistry = getFoliageRegistry();
+      protoGeo = foliageRegistry.getGeometry(
+        foliageKind,
+        currentFoliageState.activeLod
+      );
+    } else {
+      if (!sleeperProtoGeo) {
+        sleeperProtoGeo = resourceManager.registerGeometry(
+          buildUnitSleeperBoxGeometry()
+        );
+      }
+      protoGeo = sleeperProtoGeo;
     }
+
     const mat = materialRegistry.getMaterial(b.materialSlotKey);
     const inst = new THREE.InstancedMesh(protoGeo, mat, b.instanceCount);
+    tileInstancedMeshes.push(inst);
     inst.name = b.name;
     inst.renderOrder = b.renderOrder;
-    inst.visible = (b.flags & TILE_MESH_FLAG_VISIBLE) !== 0;
+    const baseVisible = (b.flags & TILE_MESH_FLAG_VISIBLE) !== 0;
+    inst.visible = baseVisible;
     inst.castShadow = (b.flags & TILE_MESH_FLAG_CAST_SHADOW) !== 0;
     inst.receiveShadow = (b.flags & TILE_MESH_FLAG_RECEIVE_SHADOW) !== 0;
     inst.frustumCulled = (b.flags & TILE_MESH_FLAG_FRUSTUM_CULLED) !== 0;
@@ -330,11 +347,25 @@ export function reconstructTileSceneFromDecoded(
       inst.instanceColor.needsUpdate = true;
     }
 
-    inst.boundingBox = new THREE.Box3(
-      new THREE.Vector3(b.bboxMin[0], b.bboxMin[1], b.bboxMin[2]),
-      new THREE.Vector3(b.bboxMax[0], b.bboxMax[1], b.bboxMax[2])
-    );
-    inst.boundingSphere = inst.boundingBox.getBoundingSphere(new THREE.Sphere());
+    if (foliageKind) {
+      // Compute exact conservative mesh-local bounds across all instance matrices and
+      // union prototype extents across LOD0..LOD2 (+0.25m margin) so frustum culling
+      // works accurately across rotations, scales, canopy overhang, LOD swaps, and tile offsets.
+      const foliageRegistry = getFoliageRegistry();
+      const bounds = computeConservativeInstancedBounds(
+        b.matrices,
+        b.instanceCount,
+        foliageRegistry.getUnionLocalBounds(foliageKind)
+      );
+      inst.boundingBox = bounds.boundingBox;
+      inst.boundingSphere = bounds.boundingSphere;
+    } else {
+      inst.boundingBox = new THREE.Box3(
+        new THREE.Vector3(b.bboxMin[0], b.bboxMin[1], b.bboxMin[2]),
+        new THREE.Vector3(b.bboxMax[0], b.bboxMax[1], b.bboxMax[2])
+      );
+      inst.boundingSphere = inst.boundingBox.getBoundingSphere(new THREE.Sphere());
+    }
 
     const instanceInfos: InspectableFeatureInfo[] = new Array(b.instanceCount);
     for (let i = 0; i < b.instanceCount; i++) {
@@ -346,6 +377,14 @@ export function reconstructTileSceneFromDecoded(
       isInstanced: true,
       instanceInfos,
     };
+    if (foliageKind) {
+      userData.foliagePrototypeKind = foliageKind;
+      foliageTargets.push({
+        mesh: inst,
+        prototypeKind: foliageKind,
+        baseVisible,
+      });
+    }
     if ((b.flags & TILE_MESH_FLAG_STRUCTURAL_3D) !== 0) {
       userData.isStructural3D = true;
     }
@@ -388,6 +427,18 @@ export function reconstructTileSceneFromDecoded(
     }
   }
 
+  const applyFoliageRuntimeState = (nextState: FoliageRuntimeState) => {
+    currentFoliageState = nextState;
+    if (foliageTargets.length === 0) return;
+    const registry = externalFoliageRegistry ?? ownedFoliageRegistry;
+    if (!registry || registry.disposed) return;
+    applyFoliageRuntimeStateToBatches(foliageTargets, nextState, registry);
+  };
+
+  if (foliageTargets.length > 0) {
+    applyFoliageRuntimeState(currentFoliageState);
+  }
+
   // Fallback GroundPlane if decoded tile had none
   if (!groundMesh) {
     const fallbackGeo = resourceManager.registerGeometry(
@@ -410,6 +461,15 @@ export function reconstructTileSceneFromDecoded(
     for (const t of railwayZoomTargets.rails3D) t.visible = show3D;
     for (const t of railwayZoomTargets.sleepersRibbon) t.visible = !show3D;
     for (const t of railwayZoomTargets.railsRibbon) t.visible = !show3D;
+
+    if (!externallyManagedFoliage && foliageTargets.length > 0) {
+      const nextFoliageState = resolveFoliageRuntimeState(
+        zoom,
+        currentFoliageState,
+        standaloneFoliageConfig
+      );
+      applyFoliageRuntimeState(nextFoliageState);
+    }
   };
   updateCameraZoom(initialCameraZoom);
 
@@ -424,6 +484,11 @@ export function reconstructTileSceneFromDecoded(
   };
 
   const dispose = () => {
+    for (let i = 0; i < tileInstancedMeshes.length; i++) {
+      tileInstancedMeshes[i].dispose();
+    }
+    tileInstancedMeshes.length = 0;
+    foliageTargets.length = 0;
     buildingsGroup.clear();
     roadsGroup.clear();
     railwaysGroup.clear();
@@ -432,6 +497,10 @@ export function reconstructTileSceneFromDecoded(
     landuseGroup.clear();
     barriersGroup.clear();
     foliageGroup.clear();
+    if (ownedFoliageRegistry) {
+      ownedFoliageRegistry.dispose();
+      ownedFoliageRegistry = null;
+    }
     resourceManager.dispose();
   };
 
@@ -484,6 +553,8 @@ export function reconstructTileSceneFromDecoded(
         decoded.overhangBoundsMax[2] + shiftZ,
       ],
     },
+    applyFoliageRuntimeState,
+    foliageBatchCount: foliageTargets.length,
     dispose,
   };
 }

@@ -26,6 +26,18 @@ import {
 import polygonClipping from 'polygon-clipping';
 import { SceneResourceManager } from './SceneResourceManager';
 import {
+  applyFoliageRuntimeStateToBatches,
+  computeConservativeInstancedBounds,
+  DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG,
+  equalFoliageOptimizationConfig,
+  FoliagePrototypeRegistry,
+  normalizeFoliageOptimizationConfig,
+  resolveFoliageRuntimeState,
+  type FoliageBatchTarget,
+  type FoliageOptimizationConfig,
+  type FoliageRuntimeState,
+} from './FoliageLodSystem';
+import {
   buildBridgeProfile3D,
   buildTunnelUndergroundProfile3D,
   calculateTunnelPortalGroundCutouts,
@@ -4107,13 +4119,24 @@ export class GeometryBuilder {
     let trunkMat: THREE.MeshStandardMaterial | undefined;
     let broadleafMat: THREE.MeshStandardMaterial | undefined;
     let needleleafMat: THREE.MeshStandardMaterial | undefined;
+    let foliagePrototypeRegistry: FoliagePrototypeRegistry | null = null;
+    const foliageBatchTargets: FoliageBatchTarget[] = [];
+    const foliageInstancedMeshes: THREE.InstancedMesh[] = [];
+    let foliageConfig: FoliageOptimizationConfig = {
+      ...DEFAULT_FOLIAGE_OPTIMIZATION_CONFIG,
+    };
+    let foliageRuntimeState: FoliageRuntimeState = resolveFoliageRuntimeState(
+      this.options.initialCameraZoom,
+      null,
+      foliageConfig
+    );
+    let currentSceneZoom = this.options.initialCameraZoom;
 
     if (treePlacements.length > 0) {
-      // 1. Shared Trunk Geometry (tapered cylinder grounded at y=0)
-      const trunkGeo = resourceManager.registerGeometry(
-        new THREE.CylinderGeometry(0.18, 0.32, 2.5, 6)
-      );
-      trunkGeo.translate(0, 1.25, 0);
+      foliagePrototypeRegistry = new FoliagePrototypeRegistry();
+
+      // 1. Shared Trunk Geometry (tapered cylinder grounded at y=0, 24 tris)
+      const trunkGeo = foliagePrototypeRegistry.getGeometry('tree_trunk', 'lod0');
 
       trunkMat = resourceManager.registerMaterial(
         new THREE.MeshStandardMaterial({
@@ -4128,6 +4151,7 @@ export class GeometryBuilder {
         trunkMat,
         treePlacements.length
       );
+      foliageInstancedMeshes.push(trunkInstanced);
       trunkInstanced.name = 'ProceduralForest_Trunks';
       trunkInstanced.castShadow = true;
       trunkInstanced.receiveShadow = true;
@@ -4155,28 +4179,35 @@ export class GeometryBuilder {
         }
       }
       trunkInstanced.instanceMatrix.needsUpdate = true;
-      trunkInstanced.userData = { isInstanced: true, instanceInfos: trunkInfos };
+      const trunkBounds = computeConservativeInstancedBounds(
+        trunkInstanced.instanceMatrix.array as Float32Array,
+        treePlacements.length,
+        foliagePrototypeRegistry.getUnionLocalBounds('tree_trunk')
+      );
+      trunkInstanced.boundingBox = trunkBounds.boundingBox;
+      trunkInstanced.boundingSphere = trunkBounds.boundingSphere;
+      trunkInstanced.userData = {
+        isInstanced: true,
+        instanceInfos: trunkInfos,
+        foliagePrototypeKind: 'tree_trunk',
+      };
+      foliageBatchTargets.push({
+        mesh: trunkInstanced,
+        prototypeKind: 'tree_trunk',
+        baseVisible: true,
+      });
       foliageGroup.add(trunkInstanced);
       drawCalls++;
 
       totalVertices += trunkGeo.attributes.position.count * treePlacements.length;
       totalTriangles += ((trunkGeo.index?.count || 0) / 3) * treePlacements.length;
 
-      // 2. Broadleaved Composite 3-Lobe Canopy Geometry
+      // 2. Broadleaved Composite 3-Lobe Canopy Geometry (LOD0: 240 tris, LOD1: 60 tris, LOD2: 20 tris)
       if (broadPlacements.length > 0) {
-        const lobeMain = new THREE.IcosahedronGeometry(1.75, 1);
-        lobeMain.translate(0, 3.8, 0);
-        const lobeLeft = new THREE.IcosahedronGeometry(1.3, 1);
-        lobeLeft.translate(-0.85, 3.25, 0.5);
-        const lobeRight = new THREE.IcosahedronGeometry(1.35, 1);
-        lobeRight.translate(0.8, 3.35, -0.45);
-
-        const mergedBroadCanopy = resourceManager.registerGeometry(
-          mergeGeometries([lobeMain, lobeLeft, lobeRight], false)!
+        const mergedBroadCanopy = foliagePrototypeRegistry.getGeometry(
+          'tree_broadleaved',
+          'lod0'
         );
-        lobeMain.dispose();
-        lobeLeft.dispose();
-        lobeRight.dispose();
 
         broadleafMat = resourceManager.registerMaterial(
           new THREE.MeshStandardMaterial({
@@ -4191,6 +4222,7 @@ export class GeometryBuilder {
           broadleafMat,
           broadPlacements.length
         );
+        foliageInstancedMeshes.push(broadInstanced);
         broadInstanced.name = 'ProceduralForest_BroadleavedCanopy';
         broadInstanced.castShadow = true;
         broadInstanced.receiveShadow = true;
@@ -4207,7 +4239,23 @@ export class GeometryBuilder {
           broadInfos.push(tp.info);
         }
         broadInstanced.instanceMatrix.needsUpdate = true;
-        broadInstanced.userData = { isInstanced: true, instanceInfos: broadInfos };
+        const broadBounds = computeConservativeInstancedBounds(
+          broadInstanced.instanceMatrix.array as Float32Array,
+          broadPlacements.length,
+          foliagePrototypeRegistry.getUnionLocalBounds('tree_broadleaved')
+        );
+        broadInstanced.boundingBox = broadBounds.boundingBox;
+        broadInstanced.boundingSphere = broadBounds.boundingSphere;
+        broadInstanced.userData = {
+          isInstanced: true,
+          instanceInfos: broadInfos,
+          foliagePrototypeKind: 'tree_broadleaved',
+        };
+        foliageBatchTargets.push({
+          mesh: broadInstanced,
+          prototypeKind: 'tree_broadleaved',
+          baseVisible: true,
+        });
         foliageGroup.add(broadInstanced);
         drawCalls++;
 
@@ -4215,21 +4263,12 @@ export class GeometryBuilder {
         totalTriangles += ((mergedBroadCanopy.index?.count || 0) / 3) * broadPlacements.length;
       }
 
-      // 3. Needleleaved (Coniferous) Composite 3-Tier Pine Geometry
+      // 3. Needleleaved (Coniferous) Composite 3-Tier Pine Geometry (LOD0: 42 tris, LOD1: 15 tris, LOD2: 5 tris)
       if (needlePlacements.length > 0) {
-        const tierBottom = new THREE.ConeGeometry(1.85, 2.5, 7);
-        tierBottom.translate(0, 3.0, 0);
-        const tierMid = new THREE.ConeGeometry(1.4, 2.2, 7);
-        tierMid.translate(0, 4.3, 0);
-        const tierTop = new THREE.ConeGeometry(0.95, 1.8, 7);
-        tierTop.translate(0, 5.4, 0);
-
-        const mergedNeedleCanopy = resourceManager.registerGeometry(
-          mergeGeometries([tierBottom, tierMid, tierTop], false)!
+        const mergedNeedleCanopy = foliagePrototypeRegistry.getGeometry(
+          'tree_needleleaved',
+          'lod0'
         );
-        tierBottom.dispose();
-        tierMid.dispose();
-        tierTop.dispose();
 
         needleleafMat = resourceManager.registerMaterial(
           new THREE.MeshStandardMaterial({
@@ -4244,6 +4283,7 @@ export class GeometryBuilder {
           needleleafMat,
           needlePlacements.length
         );
+        foliageInstancedMeshes.push(needleInstanced);
         needleInstanced.name = 'ProceduralForest_NeedleleavedCanopy';
         needleInstanced.castShadow = true;
         needleInstanced.receiveShadow = true;
@@ -4260,12 +4300,38 @@ export class GeometryBuilder {
           needleInfos.push(tp.info);
         }
         needleInstanced.instanceMatrix.needsUpdate = true;
-        needleInstanced.userData = { isInstanced: true, instanceInfos: needleInfos };
+        const needleBounds = computeConservativeInstancedBounds(
+          needleInstanced.instanceMatrix.array as Float32Array,
+          needlePlacements.length,
+          foliagePrototypeRegistry.getUnionLocalBounds('tree_needleleaved')
+        );
+        needleInstanced.boundingBox = needleBounds.boundingBox;
+        needleInstanced.boundingSphere = needleBounds.boundingSphere;
+        needleInstanced.userData = {
+          isInstanced: true,
+          instanceInfos: needleInfos,
+          foliagePrototypeKind: 'tree_needleleaved',
+        };
+        foliageBatchTargets.push({
+          mesh: needleInstanced,
+          prototypeKind: 'tree_needleleaved',
+          baseVisible: true,
+        });
         foliageGroup.add(needleInstanced);
         drawCalls++;
 
         totalVertices += mergedNeedleCanopy.attributes.position.count * needlePlacements.length;
         totalTriangles += ((mergedNeedleCanopy.index?.count || 0) / 3) * needlePlacements.length;
+      }
+
+      // Preserve LOD0/visible flags when building clipped tiles for binary baking;
+      // apply runtime foliage LOD & culling immediately for live/standalone scenes.
+      if (!tileClipBounds) {
+        applyFoliageRuntimeStateToBatches(
+          foliageBatchTargets,
+          foliageRuntimeState,
+          foliagePrototypeRegistry
+        );
       }
     }
 
@@ -4762,6 +4828,11 @@ export class GeometryBuilder {
 
     // Safe, idempotent single-pass resource disposal
     const dispose = () => {
+      for (let i = 0; i < foliageInstancedMeshes.length; i++) {
+        foliageInstancedMeshes[i].dispose();
+      }
+      foliageInstancedMeshes.length = 0;
+      foliageBatchTargets.length = 0;
       const allGroups = [
         buildingsGroup,
         roadsGroup,
@@ -4774,6 +4845,10 @@ export class GeometryBuilder {
       ];
       for (const group of allGroups) {
         group.clear();
+      }
+      if (foliagePrototypeRegistry) {
+        foliagePrototypeRegistry.dispose();
+        foliagePrototypeRegistry = null;
       }
       infrastructureRenderPreview = null;
       builtScene.infrastructureRenderPreview = null;
@@ -4883,8 +4958,64 @@ export class GeometryBuilder {
       }
     };
 
+    const setFoliageOptimizationConfig = (
+      partial: Partial<FoliageOptimizationConfig>
+    ): FoliageRuntimeState => {
+      const nextConfig = normalizeFoliageOptimizationConfig({
+        ...foliageConfig,
+        ...partial,
+      });
+      if (equalFoliageOptimizationConfig(foliageConfig, nextConfig)) {
+        return { ...foliageRuntimeState };
+      }
+      foliageConfig = nextConfig;
+      foliageRuntimeState = resolveFoliageRuntimeState(
+        currentSceneZoom,
+        null,
+        foliageConfig
+      );
+      if (foliagePrototypeRegistry && foliageBatchTargets.length > 0) {
+        applyFoliageRuntimeStateToBatches(
+          foliageBatchTargets,
+          foliageRuntimeState,
+          foliagePrototypeRegistry
+        );
+      }
+      return { ...foliageRuntimeState };
+    };
+
+    foliageGroup.userData.getFoliageRuntimeState = () => foliageRuntimeState;
+    foliageGroup.userData.getFoliageOptimizationConfig = () => foliageConfig;
+    foliageGroup.userData.getFoliagePrototypeRegistry = () =>
+      foliagePrototypeRegistry;
+    foliageGroup.userData.setFoliageOptimizationConfig =
+      setFoliageOptimizationConfig;
+
     const updateCameraZoom = (zoom: number) => {
+      currentSceneZoom = zoom;
       railwayInfrastructureResult?.updateCameraZoom(zoom);
+      if (foliagePrototypeRegistry && foliageBatchTargets.length > 0) {
+        const nextFoliageState = resolveFoliageRuntimeState(
+          zoom,
+          foliageRuntimeState,
+          foliageConfig
+        );
+        const changed =
+          nextFoliageState.activeLod !== foliageRuntimeState.activeLod ||
+          nextFoliageState.trunksVisible !== foliageRuntimeState.trunksVisible ||
+          nextFoliageState.frustumCullingEnabled !==
+            foliageRuntimeState.frustumCullingEnabled ||
+          nextFoliageState.optimizationEnabled !==
+            foliageRuntimeState.optimizationEnabled;
+        foliageRuntimeState = nextFoliageState;
+        if (changed) {
+          applyFoliageRuntimeStateToBatches(
+            foliageBatchTargets,
+            nextFoliageState,
+            foliagePrototypeRegistry
+          );
+        }
+      }
     };
 
     const builtScene: BuiltSceneGeometry = {

@@ -18,6 +18,7 @@
     "bench:scaling": "tsx benchmarks/scalingRunner.ts",
     "bench:tiles": "tsx benchmarks/tileStreamingRunner.ts",
     "bench:regional": "tsx benchmarks/regionalFrameCostRunner.ts",
+    "bench:foliage": "tsx benchmarks/foliageOptimizationRunner.ts",
     "osm:fetch-overijssel": "tsx scripts/fetch-overijssel-pbf.ts",
     "osm:build-overijssel-index": "tsx scripts/build-overijssel-index.ts",
     "osm:build-search-index": "tsx scripts/build-overijssel-search-index.ts",

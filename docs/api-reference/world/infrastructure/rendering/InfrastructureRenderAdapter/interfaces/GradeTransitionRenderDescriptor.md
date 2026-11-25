@@ -22,7 +22,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:639
 
 ### atGradeEndpoint
 
-> **atGradeEndpoint**: `"end"` \| `"start"`
+> **atGradeEndpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:640
 
@@ -92,7 +92,7 @@ Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:643
 
 ### gradeSeparatedEndpoint
 
-> **gradeSeparatedEndpoint**: `"end"` \| `"start"`
+> **gradeSeparatedEndpoint**: `"start"` \| `"end"`
 
 Defined in: world/infrastructure/rendering/InfrastructureRenderAdapter.ts:644
 

@@ -8,7 +8,7 @@
 
 > **applyTunnelPortalGroundCutoutsToPlanarLayers**(`data`, `resolvedPlanarById`, `tunnelEntrances`, `roadWidthMultiplier?`): `void`
 
-Defined in: world/GeometryBuilder.ts:1921
+Defined in: world/GeometryBuilder.ts:1934
 
 Applies localized portal entrance cutouts to overlapping landuse/park ground-cover polygons.
 Shared between global study ingestion and single-scene GeometryBuilder builds.

@@ -79,6 +79,9 @@ These ADRs span historic Goalpost 1 decisions and current regional architecture.
 - **[ADR-0013: Regional Orthographic Zoom-Out Safety Policy](ADR-0013-regional-camera-zoom-policy.md)**  
   Accepted LOD0 `minZoom=0.15` guard, validated developer overrides and explicit benchmark overview; not LOD1–LOD3.
 
+- **[ADR-0014: Spatially Accelerated Instanced Feature Picking (Mesh-Local Flat Typed-Array BVH)](ADR-0014-spatially-accelerated-instanced-feature-picking.md)**  
+  Decouples instanced feature picking (`O(log N + k)`) from rendering batch granularity via a mesh-local flat typed-array 3D AABB BVH with union LOD bounds, strict hierarchy visibility rejection, exact narrow-phase `Mesh.raycast`, and deterministic disposal (`TKT-038`).
+
 ## Decision record status convention
 
 An ADR may be accepted for one implemented scope while a broader application remains experimental. Keep historical decisions and dates intact. For a new execution path, cross-reference earlier decisions rather than incorrectly marking them globally superseded.

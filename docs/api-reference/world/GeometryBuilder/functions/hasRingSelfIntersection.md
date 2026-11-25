@@ -8,7 +8,7 @@
 
 > **hasRingSelfIntersection**(`ring`): `boolean`
 
-Defined in: world/GeometryBuilder.ts:1080
+Defined in: world/GeometryBuilder.ts:1084
 
 Checks whether a closed 2D polygon ring `[x, z][]` contains any proper non-adjacent edge self-intersections
 or zero-width fold-back reversals that would corrupt sweep-line Boolean clipping or create overlapping triangles.

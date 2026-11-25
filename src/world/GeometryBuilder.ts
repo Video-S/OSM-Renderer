@@ -38,6 +38,10 @@ import {
   type FoliageRuntimeState,
 } from './FoliageLodSystem';
 import {
+  attachInstancedSpatialIndex,
+  disposeInstancedSpatialIndex,
+} from './InstancedSpatialIndex';
+import {
   buildBridgeProfile3D,
   buildTunnelUndergroundProfile3D,
   calculateTunnelPortalGroundCutouts,
@@ -4191,6 +4195,10 @@ export class GeometryBuilder {
         instanceInfos: trunkInfos,
         foliagePrototypeKind: 'tree_trunk',
       };
+      attachInstancedSpatialIndex(
+        trunkInstanced,
+        foliagePrototypeRegistry.getUnionLocalBounds('tree_trunk')
+      );
       foliageBatchTargets.push({
         mesh: trunkInstanced,
         prototypeKind: 'tree_trunk',
@@ -4251,6 +4259,10 @@ export class GeometryBuilder {
           instanceInfos: broadInfos,
           foliagePrototypeKind: 'tree_broadleaved',
         };
+        attachInstancedSpatialIndex(
+          broadInstanced,
+          foliagePrototypeRegistry.getUnionLocalBounds('tree_broadleaved')
+        );
         foliageBatchTargets.push({
           mesh: broadInstanced,
           prototypeKind: 'tree_broadleaved',
@@ -4312,6 +4324,10 @@ export class GeometryBuilder {
           instanceInfos: needleInfos,
           foliagePrototypeKind: 'tree_needleleaved',
         };
+        attachInstancedSpatialIndex(
+          needleInstanced,
+          foliagePrototypeRegistry.getUnionLocalBounds('tree_needleleaved')
+        );
         foliageBatchTargets.push({
           mesh: needleInstanced,
           prototypeKind: 'tree_needleleaved',
@@ -4829,6 +4845,7 @@ export class GeometryBuilder {
     // Safe, idempotent single-pass resource disposal
     const dispose = () => {
       for (let i = 0; i < foliageInstancedMeshes.length; i++) {
+        disposeInstancedSpatialIndex(foliageInstancedMeshes[i]);
         foliageInstancedMeshes[i].dispose();
       }
       foliageInstancedMeshes.length = 0;

@@ -8,6 +8,11 @@ import {
   RailwayPrototypeMode,
 } from './RailwayPrototypeBuilder';
 import type { FoliageTelemetrySnapshot } from '../FoliageLodSystem';
+import type {
+  InstancedPickingAggregateStats,
+  InstancedPickingMode,
+  InstancedRaycastDiagnostics,
+} from '../InstancedSpatialIndex';
 
 export interface GroupGeometryStats {
   meshCount: number;
@@ -82,6 +87,11 @@ export interface LiveWebGLTelemetrySnapshot {
     height: number;
   };
   foliageTelemetry?: FoliageTelemetrySnapshot;
+  instancedPickingTelemetry?: {
+    mode: InstancedPickingMode;
+    lastRaycast: InstancedRaycastDiagnostics;
+    indexStats: InstancedPickingAggregateStats;
+  };
 }
 
 function isObjectAndAncestorsVisible(obj: THREE.Object3D): boolean {

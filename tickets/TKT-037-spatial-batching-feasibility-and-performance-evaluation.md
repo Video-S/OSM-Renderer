@@ -2,7 +2,7 @@
 id: TKT-037
 title: Spatial Batching Feasibility & Performance Evaluation
 type: investigation
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-25
 updated: 2026-11-25
@@ -72,12 +72,21 @@ The leading hypothesis is that per-object scene traversal, material/state switch
 - [x] End-to-end Playwright WebGL verification of `benchmarks/spatialBatchingRunner.ts` passes on a synthetic 4×4 mosaic set (`1,024 m` → `2,048 m` → `4,096 m`), confirming exact triangle conservation and major draw-call reduction.
 - [x] `npm run lint`, `npm run build`, targeted regression suites, and `npm run docs:api` pass.
 - [x] Feasibility report and exact Windows PowerShell instructions documented in `docs/reports/tkt037-spatial-batching-feasibility.md`.
-- [ ] **Owner local consolidation:** Project owner runs `scripts/consolidate-regional-mosaic.ts` against `data/osm/twente-full-1024m-foliage-fix/mosaic.json` to generate local `2,048 m` and `4,096 m` mosaics and reviews consolidation runtime, peak RSS, and storage size.
-- [ ] **Owner hardware GPU benchmark:** Project owner runs `benchmarks/spatialBatchingRunner.ts` on RTX 4060 Ti comparing `1,024 m`, `2,048 m`, and `4,096 m` (foliage enabled & disabled, stationary + pan + raycast pick).
-- [ ] **Owner visual QA & architectural decision gate:** Project owner inspects `2,048 m` / `4,096 m` interactively for visual parity, streaming feel, and picking responsiveness, then decides whether to adopt larger static batches, proceed to hierarchical multi-LOD streaming, or investigate another bottleneck.
+- [x] **Owner local consolidation:** Project owner consolidated `data/osm/twente-full-1024m-foliage-fix/mosaic.json` into `data/osm/twente-full-foliage-fix-batched-2048m/mosaic.json` and `data/osm/twente-full-foliage-fix-batched-4096m/mosaic.json`.
+- [x] **Owner hardware GPU benchmark:** Project owner executed `benchmarks/spatialBatchingRunner.ts` on the RTX 4060 Ti system across `1,024 m`, `2,048 m`, and `4,096 m` (foliage enabled and disabled). Regional CPU render time dropped from **`36.50 ms` (`1,024 m`) to `4.00 ms` (`4,096 m`)** — validating spatial batching as a decisive regional rendering win.
+- [x] **Owner visual QA & architectural decision gate:** Project owner accepted spatial batching performance results and identified the single remaining picking regression on large foliage batches (median picking duration on RTX 4060 Ti: Street `8.1 ms` / `11.6 ms` / `40.7 ms` with foliage enabled vs. `0.3 ms` / `0.3 ms` / `0.4 ms` disabled; Regional `13.0 ms` / `20.8 ms` / `21.4 ms` enabled vs. `6.6 ms` / `2.2 ms` / `0.9 ms` disabled), authorizing follow-up ticket [`TKT-038`](./TKT-038-spatially-accelerated-instanced-feature-picking.md) to decouple instanced picking granularity from rendering batch granularity.
+
+## Owner hardware decision summary
+
+| Metric (RTX 4060 Ti, full Twente) | 1,024 m | 2,048 m | 4,096 m |
+|---|---:|---:|---:|
+| Regional CPU render time | 36.50 ms | — | 4.00 ms |
+| Street pick median (foliage enabled / disabled) | 8.1 ms / 0.3 ms | 11.6 ms / 0.3 ms | 40.7 ms / 0.4 ms |
+| Regional pick median (foliage enabled / disabled) | 13.0 ms / 6.6 ms | 20.8 ms / 2.2 ms | 21.4 ms / 0.9 ms |
 
 ## References
 
 - Evaluation & methodology report: [`docs/reports/tkt037-spatial-batching-feasibility.md`](../docs/reports/tkt037-spatial-batching-feasibility.md)
+- Follow-up instanced picking acceleration: [`TKT-038`](./TKT-038-spatially-accelerated-instanced-feature-picking.md), [`ADR-0014`](../docs/decisions/ADR-0014-spatially-accelerated-instanced-feature-picking.md)
 - Prior foliage optimization baseline: [`TKT-036`](./TKT-036-runtime-foliage-lod-rendering-optimization.md), [`docs/reports/tkt036-foliage-lod-optimization.md`](../docs/reports/tkt036-foliage-lod-optimization.md)
 - Full-Twente baseline: [`TKT-034`](./TKT-034-full-twente-scale-out.md), [`docs/reports/tkt034-full-twente-baseline.md`](../docs/reports/tkt034-full-twente-baseline.md)

@@ -21,6 +21,12 @@ import {
   type FoliageOptimizationConfig,
 } from '../world/FoliageLodSystem';
 import {
+  getInstancedPickingMode,
+  parseInstancedPickingModeFromSearch,
+  setInstancedPickingMode,
+  type InstancedPickingMode,
+} from '../world/InstancedSpatialIndex';
+import {
   ProcessedMapData,
   MapStyleTheme,
   InspectableFeatureInfo,
@@ -284,6 +290,16 @@ export default function App() {
   );
   const foliageConfigRef = useRef<FoliageOptimizationConfig>(foliageConfig);
   foliageConfigRef.current = foliageConfig;
+
+  // TKT-038: Dev-only switch between accelerated BVH and unaccelerated reference instanced picking
+  const [instancedPickingMode, setInstancedPickingModeState] = useState<InstancedPickingMode>(() => {
+    const initial =
+      typeof window !== 'undefined'
+        ? parseInstancedPickingModeFromSearch(window.location.search)
+        : 'accelerated';
+    setInstancedPickingMode(initial);
+    return initial;
+  });
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
@@ -2661,9 +2677,28 @@ export default function App() {
       setShowFoliage: (visible: boolean) => {
         setShowFoliage(Boolean(visible));
       },
-      measureFeaturePickRaycast: (ndcPoints?: Array<[number, number]>) =>
+      getInstancedPickingMode: () => getInstancedPickingMode(),
+      setInstancedPickingMode: (mode: InstancedPickingMode) => {
+        const applied = setInstancedPickingMode(mode);
+        setInstancedPickingModeState(applied);
+        return applied;
+      },
+      getInstancedPickingStats: () =>
+        typeof (window as any).__BENCHMARK_GET_INSTANCED_PICKING_STATS__ === 'function'
+          ? (window as any).__BENCHMARK_GET_INSTANCED_PICKING_STATS__()
+          : null,
+      measureFeaturePickRaycast: (
+        ndcPoints?: Array<[number, number]>,
+        options?: {
+          mode?: InstancedPickingMode;
+          scope?: 'full_scene' | 'foliage_only';
+          warmupPasses?: number;
+          passes?: number;
+          returnDetails?: boolean;
+        }
+      ) =>
         typeof (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__ === 'function'
-          ? (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__(ndcPoints)
+          ? (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__(ndcPoints, options)
           : null,
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
@@ -2709,6 +2744,11 @@ export default function App() {
     if (typeof setSceneFoliage === 'function') {
       setSceneFoliage(next);
     }
+  };
+
+  const handleChangeInstancedPickingMode = (mode: InstancedPickingMode) => {
+    const applied = setInstancedPickingMode(mode);
+    setInstancedPickingModeState(applied);
   };
 
   const handleResetCamera = () => {
@@ -3320,6 +3360,8 @@ export default function App() {
             onImportReproductionPackage={handleImportReproductionPackage}
             foliageConfig={foliageConfig}
             onChangeFoliageConfig={handleChangeFoliageConfig}
+            instancedPickingMode={instancedPickingMode}
+            onChangeInstancedPickingMode={handleChangeInstancedPickingMode}
           />
         )}
 

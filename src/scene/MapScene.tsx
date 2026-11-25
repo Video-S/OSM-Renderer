@@ -31,6 +31,17 @@ import {
   type FoliagePrototypeRegistry,
   type FoliageRuntimeState,
 } from '../world/FoliageLodSystem';
+import {
+  collectInstancedSpatialIndexStats,
+  getInstancedPickingMode,
+  getLastInstancedRaycastDiagnostics,
+  isObjectHierarchyVisible,
+  resetInstancedRaycastDiagnostics,
+  setRaycasterInstancedPickingMode,
+  type InstancedPickingAggregateStats,
+  type InstancedPickingMode,
+  type InstancedRaycastDiagnostics,
+} from '../world/InstancedSpatialIndex';
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
@@ -151,6 +162,24 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const lastHoverTimeRef = useRef<number>(0);
   const lastHoverRaycastMsRef = useRef<number>(0);
   const lastRaycastIntersectMsRef = useRef<number>(0);
+  const lastInstancedRaycastDiagRef = useRef<InstancedRaycastDiagnostics>(
+    getLastInstancedRaycastDiagnostics()
+  );
+  const cachedInstancedIndexStatsRef = useRef<{
+    rev: number;
+    builtGeo: BuiltSceneGeometry | null;
+    stats: InstancedPickingAggregateStats;
+  }>({
+    rev: -2,
+    builtGeo: null,
+    stats: {
+      indexedBatchCount: 0,
+      totalIndexedInstances: 0,
+      totalIndexNodes: 0,
+      totalIndexMemoryBytes: 0,
+      totalBuildTimeMs: 0,
+    },
+  });
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(performance.now());
   const lastFrameTimestampRef = useRef<number>(performance.now());
@@ -213,6 +242,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         return origIntersectObject(object, recursive, optionalTarget);
       }
       depth++;
+      resetInstancedRaycastDiagnostics(getInstancedPickingMode());
       const t0 = performance.now();
       try {
         return origIntersectObject(object, recursive, optionalTarget);
@@ -221,6 +251,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         if (object.name === 'MapRoot' || elapsed >= lastRaycastIntersectMsRef.current) {
           lastRaycastIntersectMsRef.current = elapsed;
           lastHoverRaycastMsRef.current = Number(elapsed.toFixed(3));
+          lastInstancedRaycastDiagRef.current = getLastInstancedRaycastDiagnostics();
         }
         depth--;
       }
@@ -235,6 +266,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         return origIntersectObjects(objects, recursive, optionalTarget);
       }
       depth++;
+      resetInstancedRaycastDiagnostics(getInstancedPickingMode());
       const t0 = performance.now();
       try {
         return origIntersectObjects(objects, recursive, optionalTarget);
@@ -242,6 +274,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         const elapsed = performance.now() - t0;
         lastRaycastIntersectMsRef.current = elapsed;
         lastHoverRaycastMsRef.current = Number(elapsed.toFixed(3));
+        lastInstancedRaycastDiagRef.current = getLastInstancedRaycastDiagnostics();
         depth--;
       }
     };
@@ -597,7 +630,14 @@ export const MapScene: React.FC<MapSceneProps> = ({
       };
 
       (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__ = (
-        ndcPoints?: Array<[number, number]>
+        ndcPoints?: Array<[number, number]>,
+        options?: {
+          mode?: InstancedPickingMode;
+          scope?: 'full_scene' | 'foliage_only';
+          warmupPasses?: number;
+          passes?: number;
+          returnDetails?: boolean;
+        }
       ) => {
         const geo = committedBuiltGeometryRef.current;
         const cam = cameraRef.current as THREE.OrthographicCamera | null;
@@ -618,68 +658,256 @@ export const MapScene: React.FC<MapSceneProps> = ({
                 return grid;
               })();
 
-        const pickRoots: THREE.Object3D[] = [
-          geo.buildingsGroup,
-          geo.roadsGroup,
-          geo.railwaysGroup,
-          geo.waterGroup,
-          geo.parksGroup,
-          geo.landuseGroup,
-          geo.barriersGroup,
-          geo.foliageGroup,
-        ].filter((g) => Boolean(g.parent));
+        const scope = options?.scope === 'foliage_only' ? 'foliage_only' : 'full_scene';
+        const effectiveMode: InstancedPickingMode =
+          options?.mode === 'accelerated' || options?.mode === 'unaccelerated'
+            ? options.mode
+            : getInstancedPickingMode();
+        const warmupPasses = Math.max(0, Math.floor(options?.warmupPasses ?? 0));
+        const measuredPasses = Math.max(1, Math.floor(options?.passes ?? 1));
+        const returnDetails = options?.returnDetails === true;
 
-        const raycaster = new THREE.Raycaster();
-        (raycaster as unknown as { firstHitOnly?: boolean }).firstHitOnly = true;
+        const pickRoots: THREE.Object3D[] =
+          scope === 'foliage_only'
+            ? [geo.foliageGroup].filter((g) => Boolean(g.parent))
+            : [
+                geo.buildingsGroup,
+                geo.roadsGroup,
+                geo.railwaysGroup,
+                geo.waterGroup,
+                geo.parksGroup,
+                geo.landuseGroup,
+                geo.barriersGroup,
+                geo.foliageGroup,
+              ].filter((g) => Boolean(g.parent));
+
+        const pickRaycaster = new THREE.Raycaster();
+        (pickRaycaster as unknown as { firstHitOnly?: boolean }).firstHitOnly = true;
+        setRaycasterInstancedPickingMode(pickRaycaster, effectiveMode);
         const pointer = new THREE.Vector2();
-        const durationsMs: number[] = [];
-        let hitCount = 0;
-        let resolvedFeatureCount = 0;
-        const sampleFeatureIds: string[] = [];
 
-        for (const [nx, ny] of points) {
-          pointer.set(nx, ny);
-          const t0 = performance.now();
-          raycaster.setFromCamera(pointer, cam);
-          const hits = raycaster.intersectObjects(pickRoots, true);
-          let resolvedId: string | null = null;
-          if (hits.length > 0) {
-            hitCount++;
-            const firstHit = hits[0];
-            const info = resolveInspectedFeature(firstHit);
-            if (info) {
-              resolvedFeatureCount++;
-              resolvedId = info.id;
-            }
-          }
-          durationsMs.push(performance.now() - t0);
-          if (resolvedId && sampleFeatureIds.length < 10) {
-            sampleFeatureIds.push(resolvedId);
+        // Optional warmup passes (unrecorded) to warm JIT and caches
+        for (let w = 0; w < warmupPasses; w++) {
+          for (const [nx, ny] of points) {
+            pointer.set(nx, ny);
+            pickRaycaster.setFromCamera(pointer, cam);
+            pickRaycaster.intersectObjects(pickRoots, true);
           }
         }
 
-        const sorted = [...durationsMs].sort((a, b) => a - b);
-        const pct = (p: number) => {
-          if (sorted.length === 0) return 0;
-          const idx = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p));
-          return Number(sorted[idx].toFixed(4));
+        const durationsMs: number[] = [];
+        const hitDurationsMs: number[] = [];
+        const missDurationsMs: number[] = [];
+        let hitCount = 0;
+        let resolvedFeatureCount = 0;
+        const sampleFeatureIds: string[] = [];
+        const perRayResults: Array<{
+          ndc: [number, number];
+          hit: boolean;
+          distance: number | null;
+          instanceId: number | null;
+          featureId: string | null;
+          sourceFeatureId: string | null;
+          objectName: string | null;
+          objectVisible: boolean;
+          isInstancedHit: boolean;
+          nearestVisible: {
+            distance: number;
+            instanceId: number | null;
+            featureId: string | null;
+            sourceFeatureId: string | null;
+            objectName: string | null;
+            isInstancedHit: boolean;
+          } | null;
+        }> = [];
+
+        let sumBatchesVisited = 0;
+        let sumBatchesSkippedInvisible = 0;
+        let sumBatchesRejectedBroadPhase = 0;
+        let sumBatchesTested = 0;
+        let sumTotalInstancesInQueriedBatches = 0;
+        let sumBvhNodesVisited = 0;
+        let sumCandidateInstances = 0;
+        let sumExactInstanceTests = 0;
+        let sumInstancedDurationMs = 0;
+
+        for (let pass = 0; pass < measuredPasses; pass++) {
+          for (const [nx, ny] of points) {
+            pointer.set(nx, ny);
+            resetInstancedRaycastDiagnostics(effectiveMode);
+            const t0 = performance.now();
+            pickRaycaster.setFromCamera(pointer, cam);
+            const hits = pickRaycaster.intersectObjects(pickRoots, true);
+            let resolvedId: string | null = null;
+            let resolvedSourceId: string | null = null;
+            let firstDistance: number | null = null;
+            let firstInstanceId: number | null = null;
+            let firstObjectName: string | null = null;
+            let firstObjectVisible = true;
+            let isInstancedHit = false;
+
+            if (hits.length > 0) {
+              const firstHit = hits[0];
+              firstDistance = Number(firstHit.distance.toFixed(6));
+              firstInstanceId =
+                typeof firstHit.instanceId === 'number' ? firstHit.instanceId : null;
+              firstObjectName = firstHit.object?.name || null;
+              firstObjectVisible = isObjectHierarchyVisible(firstHit.object);
+              isInstancedHit = Boolean((firstHit.object as THREE.InstancedMesh)?.isInstancedMesh);
+              const info = resolveInspectedFeature(firstHit);
+              if (info) {
+                resolvedId = info.id ?? null;
+                resolvedSourceId = info.sourceFeatureId ?? null;
+              }
+            }
+            const dt = performance.now() - t0;
+            const diag = getLastInstancedRaycastDiagnostics();
+
+            durationsMs.push(dt);
+            if (hits.length > 0) {
+              hitDurationsMs.push(dt);
+            } else {
+              missDurationsMs.push(dt);
+            }
+
+            sumBatchesVisited += diag.batchesVisited;
+            sumBatchesSkippedInvisible += diag.batchesSkippedInvisible;
+            sumBatchesRejectedBroadPhase += diag.batchesRejectedBroadPhase;
+            sumBatchesTested += diag.batchesTested;
+            sumTotalInstancesInQueriedBatches += diag.totalInstancesInQueriedBatches;
+            sumBvhNodesVisited += diag.bvhNodesVisited;
+            sumCandidateInstances += diag.candidateInstances;
+            sumExactInstanceTests += diag.exactInstanceTests;
+            sumInstancedDurationMs += diag.instancedRaycastDurationMs;
+
+            if (pass === 0) {
+              if (hits.length > 0) hitCount++;
+              if (resolvedId) {
+                resolvedFeatureCount++;
+                if (sampleFeatureIds.length < 10) {
+                  sampleFeatureIds.push(resolvedId);
+                }
+              }
+              if (returnDetails) {
+                let nearestVisible: {
+                  distance: number;
+                  instanceId: number | null;
+                  featureId: string | null;
+                  sourceFeatureId: string | null;
+                  objectName: string | null;
+                  isInstancedHit: boolean;
+                } | null = null;
+                for (let hi = 0; hi < hits.length; hi++) {
+                  const candidateHit = hits[hi];
+                  if (!isObjectHierarchyVisible(candidateHit.object)) continue;
+                  const visInfo = resolveInspectedFeature(candidateHit);
+                  nearestVisible = {
+                    distance: Number(candidateHit.distance.toFixed(6)),
+                    instanceId:
+                      typeof candidateHit.instanceId === 'number' ? candidateHit.instanceId : null,
+                    featureId: visInfo?.id ?? null,
+                    sourceFeatureId: visInfo?.sourceFeatureId ?? null,
+                    objectName: candidateHit.object?.name || null,
+                    isInstancedHit: Boolean(
+                      (candidateHit.object as THREE.InstancedMesh)?.isInstancedMesh
+                    ),
+                  };
+                  break;
+                }
+                perRayResults.push({
+                  ndc: [nx, ny],
+                  hit: hits.length > 0,
+                  distance: firstDistance,
+                  instanceId: firstInstanceId,
+                  featureId: resolvedId,
+                  sourceFeatureId: resolvedSourceId,
+                  objectName: firstObjectName,
+                  objectVisible: firstObjectVisible,
+                  isInstancedHit,
+                  nearestVisible,
+                });
+              }
+            }
+          }
+        }
+
+        const totalQueries = durationsMs.length;
+        const summarize = (vals: number[]) => {
+          const s = [...vals].sort((a, b) => a - b);
+          const pct = (p: number) => {
+            if (s.length === 0) return 0;
+            const idx = Math.min(s.length - 1, Math.floor((s.length - 1) * p));
+            return Number(s[idx].toFixed(4));
+          };
+          const mean =
+            s.length > 0
+              ? Number((s.reduce((acc, v) => acc + v, 0) / s.length).toFixed(4))
+              : 0;
+          return {
+            count: s.length,
+            medianMs: pct(0.5),
+            p95Ms: pct(0.95),
+            meanMs: mean,
+            maxMs: s.length > 0 ? Number(s[s.length - 1].toFixed(4)) : 0,
+          };
         };
-        const meanMs =
-          durationsMs.length > 0
-            ? Number(
-                (durationsMs.reduce((s, v) => s + v, 0) / durationsMs.length).toFixed(4)
-              )
-            : 0;
+
+        const overall = summarize(durationsMs);
+        const hitTiming = summarize(hitDurationsMs);
+        const missTiming = summarize(missDurationsMs);
+        const avg = (sum: number) =>
+          totalQueries > 0 ? Number((sum / totalQueries).toFixed(2)) : 0;
+
+        const indexStats = collectInstancedSpatialIndexStats(
+          scope === 'foliage_only' ? [geo.foliageGroup] : [geo.foliageGroup, geo.railwaysGroup]
+        );
 
         return {
+          mode: effectiveMode,
+          scope,
           sampleCount: points.length,
+          passes: measuredPasses,
+          totalQueries,
           hitCount,
           resolvedFeatureCount,
-          medianMs: pct(0.5),
-          p95Ms: pct(0.95),
-          meanMs,
-          maxMs: sorted.length > 0 ? Number(sorted[sorted.length - 1].toFixed(4)) : 0,
+          medianMs: overall.medianMs,
+          p95Ms: overall.p95Ms,
+          meanMs: overall.meanMs,
+          maxMs: overall.maxMs,
+          hitMedianMs: hitTiming.medianMs,
+          missMedianMs: missTiming.medianMs,
           sampleFeatureIds,
+          instancedDiagnostics: {
+            avgBatchesVisited: avg(sumBatchesVisited),
+            avgBatchesSkippedInvisible: avg(sumBatchesSkippedInvisible),
+            avgBatchesRejectedBroadPhase: avg(sumBatchesRejectedBroadPhase),
+            avgBatchesTested: avg(sumBatchesTested),
+            avgTotalInstancesInQueriedBatches: avg(sumTotalInstancesInQueriedBatches),
+            avgBvhNodesVisited: avg(sumBvhNodesVisited),
+            avgCandidateInstances: avg(sumCandidateInstances),
+            avgExactInstanceTests: avg(sumExactInstanceTests),
+            avgInstancedDurationMs:
+              totalQueries > 0 ? Number((sumInstancedDurationMs / totalQueries).toFixed(4)) : 0,
+          },
+          indexStats,
+          ...(returnDetails ? { perRayResults } : {}),
+        };
+      };
+
+      (window as any).__BENCHMARK_GET_INSTANCED_PICKING_STATS__ = () => {
+        const geo = committedBuiltGeometryRef.current;
+        return {
+          mode: getInstancedPickingMode(),
+          lastRaycast: lastInstancedRaycastDiagRef.current,
+          indexStats: geo
+            ? collectInstancedSpatialIndexStats([geo.foliageGroup, geo.railwaysGroup])
+            : {
+                indexedBatchCount: 0,
+                totalIndexedInstances: 0,
+                totalIndexNodes: 0,
+                totalIndexMemoryBytes: 0,
+                totalBuildTimeMs: 0,
+              },
         };
       };
 
@@ -900,6 +1128,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
         delete (window as any).__BENCHMARK_GET_CAMERA_STATE__;
         delete (window as any).__BENCHMARK_GET_SCENE_MESH_COUNTS__;
         delete (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__;
+        delete (window as any).__BENCHMARK_GET_INSTANCED_PICKING_STATS__;
         delete (window as any).__BENCHMARK_GET_FOLIAGE_TELEMETRY__;
       }
       drainPendingQueries(false);
@@ -1036,6 +1265,22 @@ export const MapScene: React.FC<MapSceneProps> = ({
             frustumCulledBatches: 0,
           };
 
+      const rev =
+        typeof builtGeometry.groundMesh.userData?.__compositeRevision === 'number'
+          ? (builtGeometry.groundMesh.userData.__compositeRevision as number)
+          : -1;
+      const cachedIdx = cachedInstancedIndexStatsRef.current;
+      if (cachedIdx.rev !== rev || cachedIdx.builtGeo !== builtGeometry) {
+        cachedInstancedIndexStatsRef.current = {
+          rev,
+          builtGeo: builtGeometry,
+          stats: collectInstancedSpatialIndexStats([
+            builtGeometry.foliageGroup,
+            builtGeometry.railwaysGroup,
+          ]),
+        };
+      }
+
       onTelemetryUpdate({
         fps: currentFps,
         frameIntervalMs,
@@ -1073,6 +1318,11 @@ export const MapScene: React.FC<MapSceneProps> = ({
           height: state.size.height,
         },
         foliageTelemetry,
+        instancedPickingTelemetry: {
+          mode: getInstancedPickingMode(),
+          lastRaycast: lastInstancedRaycastDiagRef.current,
+          indexStats: cachedInstancedIndexStatsRef.current.stats,
+        },
       });
     }
   });

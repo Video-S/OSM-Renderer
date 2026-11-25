@@ -32,6 +32,7 @@ import type {
   FoliageLodMode,
   FoliageOptimizationConfig,
 } from '../../../world/FoliageLodSystem';
+import type { InstancedPickingMode } from '../../../world/InstancedSpatialIndex';
 import type { ReproFormSessionState } from '../workspaceTypes';
 
 export interface DiagnosticsPanelProps {
@@ -72,6 +73,8 @@ export interface DiagnosticsPanelProps {
   onImportReproductionPackage: (pkg: DeveloperReproductionPackage) => void;
   foliageConfig: FoliageOptimizationConfig;
   onChangeFoliageConfig: (partial: Partial<FoliageOptimizationConfig>) => void;
+  instancedPickingMode?: InstancedPickingMode;
+  onChangeInstancedPickingMode?: (mode: InstancedPickingMode) => void;
 }
 
 function formatDiagMs(val: number | null | undefined): string {
@@ -117,6 +120,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   onImportReproductionPackage,
   foliageConfig,
   onChangeFoliageConfig,
+  instancedPickingMode = 'accelerated',
+  onChangeInstancedPickingMode,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -481,6 +486,78 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 -{liveWebGLSnapshot.foliageTelemetry.triangleReductionVsLod0Pct}% vs LOD0
               </span>
             </div>
+          </div>
+        )}
+
+        {onChangeInstancedPickingMode && (
+          <div className="pt-1 border-t border-slate-800/80 space-y-1.5">
+            <button
+              type="button"
+              data-testid="diag-toggle-instanced-picking"
+              aria-pressed={instancedPickingMode === 'accelerated'}
+              onClick={() =>
+                onChangeInstancedPickingMode(
+                  instancedPickingMode === 'accelerated' ? 'unaccelerated' : 'accelerated'
+                )
+              }
+              className={`w-full px-2.5 py-1.5 rounded-md border text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                instancedPickingMode === 'accelerated'
+                  ? 'bg-emerald-500/15 border-emerald-500/45 text-emerald-200'
+                  : 'bg-amber-500/15 border-amber-500/45 text-amber-200'
+              }`}
+            >
+              <span>Instanced Picking BVH</span>
+              <span className="text-[10px] font-mono">
+                {instancedPickingMode === 'accelerated' ? 'BVH (ON)' : 'LINEAR (REF)'}
+              </span>
+            </button>
+
+            {liveWebGLSnapshot?.instancedPickingTelemetry && (
+              <div
+                data-testid="diag-instanced-picking-stats"
+                className="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] font-mono tabular-nums text-slate-400 space-y-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    Index:{' '}
+                    <strong className="text-slate-200">
+                      {(
+                        liveWebGLSnapshot.instancedPickingTelemetry.indexStats
+                          .totalIndexMemoryBytes /
+                        (1024 * 1024)
+                      ).toFixed(2)}{' '}
+                      MB
+                    </strong>{' '}
+                    ({liveWebGLSnapshot.instancedPickingTelemetry.indexStats.indexedBatchCount}{' '}
+                    batches)
+                  </span>
+                  <span>
+                    Build:{' '}
+                    <strong className="text-cyan-300">
+                      {liveWebGLSnapshot.instancedPickingTelemetry.indexStats.totalBuildTimeMs.toFixed(
+                        1
+                      )}
+                      ms
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    Cand / Exact:{' '}
+                    <strong className="text-emerald-300">
+                      {liveWebGLSnapshot.instancedPickingTelemetry.lastRaycast.candidateInstances}/
+                      {liveWebGLSnapshot.instancedPickingTelemetry.lastRaycast.exactInstanceTests}
+                    </strong>
+                  </span>
+                  <span>
+                    Batch Inst:{' '}
+                    <strong className="text-slate-200">
+                      {liveWebGLSnapshot.instancedPickingTelemetry.lastRaycast.totalInstancesInQueriedBatches.toLocaleString()}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>

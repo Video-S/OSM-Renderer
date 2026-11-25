@@ -160,6 +160,11 @@ export interface TileStreamDiagnosticsSnapshot {
   foliageTrunksVisible: boolean;
   foliageFrustumCullingEnabled: boolean;
   sharedFoliagePrototypeCount: number;
+  /** TKT-038 instanced spatial picking index diagnostics across resident loaded tiles. */
+  tileInstancedIndexBytes: number;
+  tileInstancedIndexCount: number;
+  tileInstancedIndexInstances: number;
+  tileInstancedIndexBuildMsTotal: number;
 }
 
 export interface TilePackManifestPayload {
@@ -1394,6 +1399,10 @@ export class TileStreamManager {
     let activeTileBvhs = 0;
     let tileCpuGeometryBytes = 0;
     let tileBvhBytes = 0;
+    let tileInstancedIndexBytes = 0;
+    let tileInstancedIndexCount = 0;
+    let tileInstancedIndexInstances = 0;
+    let tileInstancedIndexBuildMsTotal = 0;
 
     const loadedTileKeys: string[] = [];
     const visibleTileKeys: string[] = [];
@@ -1430,6 +1439,13 @@ export class TileStreamManager {
             record.reconstructed.scene.stats.totalDrawCalls;
           activeTileGeometries +=
             record.reconstructed.scene.resources.ownedGeometriesCount;
+          const pStats = record.reconstructed.instancedPickingStats;
+          if (pStats) {
+            tileInstancedIndexBytes += pStats.totalIndexMemoryBytes;
+            tileInstancedIndexCount += pStats.indexedBatchCount;
+            tileInstancedIndexInstances += pStats.totalIndexedInstances;
+            tileInstancedIndexBuildMsTotal += pStats.totalBuildTimeMs;
+          }
         }
       } else if (record.state === 'queued') {
         queuedTiles += 1;
@@ -1526,6 +1542,10 @@ export class TileStreamManager {
       sharedFoliagePrototypeCount: this.foliagePrototypeRegistry.disposed
         ? 0
         : this.foliagePrototypeRegistry.geometryCount,
+      tileInstancedIndexBytes,
+      tileInstancedIndexCount,
+      tileInstancedIndexInstances,
+      tileInstancedIndexBuildMsTotal: Number(tileInstancedIndexBuildMsTotal.toFixed(3)),
     };
   }
 

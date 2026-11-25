@@ -17,6 +17,11 @@ import {
   type FoliageOptimizationConfig,
   type FoliageRuntimeState,
 } from '../FoliageLodSystem';
+import {
+  attachInstancedSpatialIndex,
+  disposeInstancedSpatialIndex,
+  type InstancedPickingAggregateStats,
+} from '../InstancedSpatialIndex';
 import { DEFAULT_INFRASTRUCTURE_RENDER_OPTIONS } from '../infrastructure/rendering/InfrastructureRenderAdapter';
 import {
   RAILWAY_DIMENSION_SPEC,
@@ -60,6 +65,8 @@ export interface ReconstructedTileSceneResult {
   /** Applies a new shared foliage LOD / trunk suppression / frustum culling state in O(foliage batches). */
   applyFoliageRuntimeState: (state: FoliageRuntimeState) => void;
   foliageBatchCount: number;
+  /** Aggregate spatial picking index memory/build stats for this tile's InstancedMesh batches. */
+  instancedPickingStats: InstancedPickingAggregateStats;
   dispose: () => void;
 }
 
@@ -306,6 +313,13 @@ export function reconstructTileSceneFromDecoded(
   const sleeperChunkParents = new Map<string, THREE.Group>();
   const foliageTargets: FoliageBatchTarget[] = [];
   const tileInstancedMeshes: THREE.InstancedMesh[] = [];
+  const instancedPickingStats: InstancedPickingAggregateStats = {
+    indexedBatchCount: 0,
+    totalIndexedInstances: 0,
+    totalIndexNodes: 0,
+    totalIndexMemoryBytes: 0,
+    totalBuildTimeMs: 0,
+  };
 
   for (const b of decoded.instancedBatches) {
     const foliageKind = isFoliagePrototypeKind(b.prototypeKind) ? b.prototypeKind : null;
@@ -401,6 +415,28 @@ export function reconstructTileSceneFromDecoded(
     }
     inst.userData = userData;
 
+    // Attach mesh-local instance AABB BVH using conservative union prototype bounds
+    // so picking cost scales O(log N) independent of rendering batch size and stays
+    // valid across all zoom-driven foliage LOD geometry swaps without rebuilding.
+    const indexLocalBox = foliageKind
+      ? getFoliageRegistry().getUnionLocalBounds(foliageKind)
+      : (() => {
+          if (!protoGeo.boundingBox) protoGeo.computeBoundingBox();
+          return protoGeo.boundingBox!;
+        })();
+    const spatialIdx = attachInstancedSpatialIndex(inst, indexLocalBox, {
+      matrices: b.matrices,
+      instanceCount: b.instanceCount,
+    });
+    const idxStats = spatialIdx.getStats();
+    instancedPickingStats.indexedBatchCount += 1;
+    instancedPickingStats.totalIndexedInstances += idxStats.instanceCount;
+    instancedPickingStats.totalIndexNodes += idxStats.nodeCount;
+    instancedPickingStats.totalIndexMemoryBytes += idxStats.estimatedMemoryBytes;
+    instancedPickingStats.totalBuildTimeMs = Number(
+      (instancedPickingStats.totalBuildTimeMs + idxStats.buildTimeMs).toFixed(3)
+    );
+
     if (b.layer === 'railways' && b.name.includes('_chunk_')) {
       const baseName = b.name.split('_chunk_')[0];
       let parentGroup = sleeperChunkParents.get(baseName);
@@ -485,6 +521,7 @@ export function reconstructTileSceneFromDecoded(
 
   const dispose = () => {
     for (let i = 0; i < tileInstancedMeshes.length; i++) {
+      disposeInstancedSpatialIndex(tileInstancedMeshes[i]);
       tileInstancedMeshes[i].dispose();
     }
     tileInstancedMeshes.length = 0;
@@ -555,6 +592,7 @@ export function reconstructTileSceneFromDecoded(
     },
     applyFoliageRuntimeState,
     foliageBatchCount: foliageTargets.length,
+    instancedPickingStats,
     dispose,
   };
 }

@@ -7,6 +7,7 @@ These files record **past design intent and possible future work**. Some proposa
 - [Road-rendering roadmap](./road-rendering-roadmap.md): evolution and prior validation strategy for E2+/R+
 - [Railway Stage E3 proposal](./m2-3-e3-railway-rendering-proposal.md): historical design proposal
 
-- [Persistent regional simulation](./persistent-regional-simulation.md): deferred gameplay concept for server-side agents and events outside rendered areas
+- [Persistent regional simulation](./persistent-regional-simulation.md): earlier deferred gameplay concept for server-side agents and events outside rendered areas
+- [Regional colony simulation and A-Life-inspired world](./colony-sim-design-discussion.md): exploratory discussion of the revised game direction, logistics, client/server separation, simulation fidelity and rendering requirements
 
 For what was actually built and accepted, consult [STATUS.md](../STATUS.md), [architecture](../architecture/README.md) and the [ADRs](../decisions/README.md).

@@ -43,6 +43,7 @@ import {
   type InstancedRaycastDiagnostics,
 } from '../world/InstancedSpatialIndex';
 import { getGlobalStreamingProfiler } from '../world/tiling/StreamingProfiler';
+import { GPU_PREP_STAGING_SCENE_FLAG } from '../world/tiling/IncrementalGpuPreparer';
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
@@ -80,6 +81,7 @@ export interface MapSceneProps {
   tileBoundaryOverlayGroup?: THREE.Group | null;
   showTileBoundaryOverlay?: boolean;
   onViewportFrameUpdate?: (camera: THREE.OrthographicCamera) => void;
+  onRendererReady?: (renderer: THREE.WebGLRenderer | null) => void;
 }
 
 function computePercentile(sorted: number[], p: number): number {
@@ -150,9 +152,19 @@ export const MapScene: React.FC<MapSceneProps> = ({
   tileBoundaryOverlayGroup = null,
   showTileBoundaryOverlay = false,
   onViewportFrameUpdate,
+  onRendererReady,
 }) => {
   const { gl, events, camera, raycaster } = useThree();
   const naturalLighting = isNaturalTheme(theme);
+  const onRendererReadyRef = useRef(onRendererReady);
+  onRendererReadyRef.current = onRendererReady;
+
+  useEffect(() => {
+    onRendererReadyRef.current?.(gl);
+    return () => {
+      onRendererReadyRef.current?.(null);
+    };
+  }, [gl]);
 
   useEffect(() => {
     // Apply exposure in place when switching themes; legacy theme exposure is unchanged.
@@ -1078,6 +1090,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
     };
 
     gl.render = (scene: THREE.Object3D, renderCamera: THREE.Camera) => {
+      if ((scene as THREE.Scene)?.userData?.[GPU_PREP_STAGING_SCENE_FLAG] === true) {
+        origRender(scene, renderCamera);
+        return;
+      }
       const prof = getGlobalStreamingProfiler();
       if (prof.enabled) {
         prof.markBeforeGlRender(gl.info.memory.geometries);

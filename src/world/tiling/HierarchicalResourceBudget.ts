@@ -1,20 +1,20 @@
 export interface HierarchicalResourceBudgetConfig {
   /**
-   * Total measured CPU + BVH + instanced-index + queued-payload memory budget across
-   * all resolutions (default: 768 MiB, grounded in Twente regional measurements where
-   * active + pending replacement viewports at 1,024–4,096 m typically need ~160–450 MiB).
+   * Total measured CPU + BVH + instanced-index + queued-payload + pending-disposal
+   * memory budget across all resolutions (provisional desktop default: 1,536 MiB,
+   * configurable via URL/UI/API).
    */
   totalMemoryBudgetBytes: number;
   /**
    * Maximum measured bytes retained in the bounded inactive-resolution tile cache
-   * (default: 25% of totalMemoryBudgetBytes, capped at 192 MiB).
+   * (default: 25% of totalMemoryBudgetBytes, capped at 384 MiB).
    */
   inactiveCacheBudgetBytes: number;
   /** Maximum number of detached inactive tiles retained in LRU cache (default: 48). */
   maxInactiveCachedTiles: number;
   /**
    * Backpressure threshold for uncommitted `ready_to_commit` decoded payloads
-   * (default: 25% of totalMemoryBudgetBytes, capped at 192 MiB).
+   * (default: 25% of totalMemoryBudgetBytes, capped at 256 MiB).
    */
   maxPendingDecodedBytes: number;
   /**
@@ -24,17 +24,16 @@ export interface HierarchicalResourceBudgetConfig {
    */
   transitionReserveRatio: number;
   /**
-   * Time-aware per-frame commit budget in milliseconds (Section 10).
-   * At least one ready tile is always committed per tick so large tiles never starve;
-   * subsequent commits defer to the next frame once elapsed time exceeds this budget.
+   * Time-aware per-frame commit budget in milliseconds (TKT-041 baseline fallback when
+   * the TKT-041-F1 shared workload scheduler is disabled).
    */
   maxCommitBudgetMsPerFrame: number;
 }
 
-export const DEFAULT_TOTAL_MEMORY_BUDGET_BYTES = 768 * 1024 * 1024; // 768 MiB
-export const DEFAULT_INACTIVE_CACHE_BUDGET_BYTES = 192 * 1024 * 1024; // 192 MiB
+export const DEFAULT_TOTAL_MEMORY_BUDGET_BYTES = 1536 * 1024 * 1024; // 1,536 MiB provisional desktop budget
+export const DEFAULT_INACTIVE_CACHE_BUDGET_BYTES = 384 * 1024 * 1024; // 384 MiB
 export const DEFAULT_MAX_INACTIVE_CACHED_TILES = 48;
-export const DEFAULT_MAX_PENDING_DECODED_BYTES = 192 * 1024 * 1024; // 192 MiB
+export const DEFAULT_MAX_PENDING_DECODED_BYTES = 256 * 1024 * 1024; // 256 MiB
 export const DEFAULT_TRANSITION_RESERVE_RATIO = 0.35;
 export const DEFAULT_MAX_COMMIT_BUDGET_MS_PER_FRAME = 4.5;
 
@@ -126,6 +125,8 @@ export interface ResolutionResourceAccounting {
   fetchingTiles: number;
   decodingTiles: number;
   readyToCommitTiles: number;
+  /** Detached tiles currently awaiting paced disposal in DeferredDisposalQueue. */
+  pendingDisposalTiles: number;
   /** Directly measured typed-array geometry bytes (positions/normals/uvs/indices/matrices). */
   measuredCpuGeometryBytes: number;
   /** Directly measured static MeshBVH serialized/buffer bytes. */
@@ -138,7 +139,9 @@ export interface ResolutionResourceAccounting {
   estimatedWorkerBufferBytes: number;
   /** Directly measured bytes of detached reconstructed tiles retained in the inactive cache. */
   measuredRetainedInactiveBytes: number;
-  /** Estimated GPU buffer bytes (vertex/index/instance buffers on reconstructed meshes; NOT driver-queried). */
+  /** Directly measured bytes of detached tiles awaiting disposal in DeferredDisposalQueue. */
+  measuredPendingDisposalBytes: number;
+  /** Estimated GPU buffer bytes (vertex/index/instance buffers on reconstructed + pending-disposal meshes; NOT driver-queried). */
   estimatedGpuBytes: number;
 }
 
@@ -159,9 +162,13 @@ export interface HierarchicalResourceAccountingSnapshot {
   staticBvhBytes: number;
   /** Directly measured bytes of detached tiles retained in the inactive cache. */
   retainedInactiveTilesBytes: number;
-  /** Total directly measured CPU + BVH + instanced-index + queued bytes across all resolutions. */
+  /** Count of detached tiles currently awaiting paced disposal. */
+  pendingDisposalTiles: number;
+  /** Directly measured bytes of detached tiles currently awaiting paced disposal. */
+  pendingDisposalBytes: number;
+  /** Total directly measured CPU + BVH + instanced-index + queued + pending-disposal bytes across all resolutions. */
   totalMeasuredBytes: number;
-  /** Total estimated GPU buffer bytes across all reconstructed tiles (explicitly estimated). */
+  /** Total estimated GPU buffer bytes across all reconstructed + pending-disposal tiles (explicitly estimated). */
   totalEstimatedGpuBytes: number;
   /** True when speculative preload / background caching is suppressed due to budget pressure. */
   speculativeBackpressureActive: boolean;
@@ -183,20 +190,22 @@ export function createEmptyResolutionAccounting(
     fetchingTiles: 0,
     decodingTiles: 0,
     readyToCommitTiles: 0,
+    pendingDisposalTiles: 0,
     measuredCpuGeometryBytes: 0,
     measuredStaticBvhBytes: 0,
     measuredInstancedIndexBytes: 0,
     measuredQueuedDecodedBytes: 0,
     estimatedWorkerBufferBytes: 0,
     measuredRetainedInactiveBytes: 0,
+    measuredPendingDisposalBytes: 0,
     estimatedGpuBytes: 0,
   };
 }
 
 /**
  * Parses optional budget URL overrides:
- * - `?hierarchicalBudgetMb=768`
- * - `?hierarchicalCacheMb=192`
+ * - `?hierarchicalBudgetMb=1536`
+ * - `?hierarchicalCacheMb=384`
  * - `?hierarchicalCommitBudgetMs=4.5`
  */
 export function parseHierarchicalBudgetFromSearch(

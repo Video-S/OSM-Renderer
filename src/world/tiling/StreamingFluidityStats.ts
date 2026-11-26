@@ -120,6 +120,8 @@ export type SpikePrimarySuspect =
   | 'sync_tile_commit_reconstruct'
   | 'instanced_bvh_build'
   | 'worker_delivery_onmessage'
+  | 'gpu_upload_submit'
+  | 'resolution_activation'
   | 'eviction_disposal'
   | 'gl_render_first_use_proxy'
   | 'gl_render_cpu'
@@ -155,6 +157,10 @@ export interface FrameSpikeAttributionRecord {
     sceneAttachMs: number;
     commitRebuildStatsMs: number;
     evictDisposeMs: number;
+    gpuUploadSubmitMs?: number;
+    resolutionActivationMs?: number;
+    boundaryOverlayRebuildMs?: number;
+    deferredDisposeMs?: number;
     pickingRaycasterMs: number;
     reactCommitMs: number;
     workerOnMessageMs: number;
@@ -614,8 +620,13 @@ const SYNC_MAIN_THREAD_EVENTS = new Set<string>([
   'worker_message_received',
   'reconstruct_start',
   'reconstruct_complete',
+  'gpu_upload_batch',
   'attach',
   'first_rendered_use',
+  'resolution_transition_activate',
+  'boundary_overlay_rebuild',
+  'deferred_dispose_enqueue',
+  'deferred_dispose_complete',
   'evict',
   'cancel',
   'fetch_start',
@@ -724,6 +735,10 @@ export function attributeWorstFrames(params: {
         sceneAttachMs: frame.sceneAttachMs,
         commitRebuildStatsMs: frame.commitRebuildStatsMs,
         evictDisposeMs: frame.evictDisposeMs,
+        gpuUploadSubmitMs: frame.gpuUploadSubmitMs ?? 0,
+        resolutionActivationMs: frame.resolutionActivationMs ?? 0,
+        boundaryOverlayRebuildMs: frame.boundaryOverlayRebuildMs ?? 0,
+        deferredDisposeMs: frame.deferredDisposeMs ?? 0,
         pickingRaycasterMs: frame.pickingRaycasterMs,
         reactCommitMs: frame.reactCommitMs,
         workerOnMessageMs: frame.workerOnMessageMs ?? 0,
@@ -769,7 +784,17 @@ function classifyFramePrimarySuspect(
 
   const workerDeliveryTotalMs =
     (frame.workerOnMessageMs ?? 0) + (frame.workerContinuationMs ?? 0);
-  const nonBvhTickMs = Math.max(0, frame.streamTickMs - frame.instancedBvhBuildMs);
+  const gpuUploadSubmitMs = frame.gpuUploadSubmitMs ?? 0;
+  const resolutionActivationMs = frame.resolutionActivationMs ?? 0;
+  const deferredDisposeMs = frame.deferredDisposeMs ?? 0;
+  const nonBvhTickMs = Math.max(
+    0,
+    frame.streamTickMs -
+      frame.instancedBvhBuildMs -
+      gpuUploadSubmitMs -
+      resolutionActivationMs -
+      deferredDisposeMs
+  );
   const candidates: Array<{ key: SpikePrimarySuspect; val: number; note: string }> = [
     {
       key: 'instanced_bvh_build',
@@ -782,14 +807,24 @@ function classifyFramePrimarySuspect(
       note: `Main-thread worker delivery took ${workerDeliveryTotalMs.toFixed(2)} ms across ${frame.workerDeliveriesCount ?? 0} message(s) (onmessage=${(frame.workerOnMessageMs ?? 0).toFixed(2)} ms, continuation=${(frame.workerContinuationMs ?? 0).toFixed(2)} ms, maxDeliveryLatency=${(frame.workerDeliveryLatencyMaxMs ?? 0).toFixed(2)} ms).`,
     },
     {
+      key: 'gpu_upload_submit',
+      val: gpuUploadSubmitMs,
+      note: `Incremental offscreen GPU upload submission took ${gpuUploadSubmitMs.toFixed(2)} ms (${frame.gpuUploadedMeshCount ?? 0} mesh unit(s), ${((frame.gpuUploadedBytes ?? 0) / (1024 * 1024)).toFixed(2)} MiB estimated; CPU submit time only).`,
+    },
+    {
+      key: 'resolution_activation',
+      val: resolutionActivationMs,
+      note: `Atomic resolution activation took ${resolutionActivationMs.toFixed(2)} ms (boundaryOverlayRebuild=${(frame.boundaryOverlayRebuildMs ?? 0).toFixed(2)} ms).`,
+    },
+    {
       key: 'sync_tile_commit_reconstruct',
       val: nonBvhTickMs,
-      note: `Synchronous tile commit/reconstruction (excl. sync instanced BVH) took ${nonBvhTickMs.toFixed(2)} ms (${frame.tilesCommittedCount} tile(s), reconstruct=${frame.reconstructMs.toFixed(2)} ms, bvhAdopt=${(frame.instancedBvhAdoptMs ?? 0).toFixed(2)} ms, attach=${frame.sceneAttachMs.toFixed(2)} ms, stats=${frame.commitRebuildStatsMs.toFixed(2)} ms).`,
+      note: `Synchronous tile commit/reconstruction (excl. sync instanced BVH, GPU prep, activation, deferred dispose) took ${nonBvhTickMs.toFixed(2)} ms (${frame.tilesCommittedCount} tile(s), reconstruct=${frame.reconstructMs.toFixed(2)} ms, bvhAdopt=${(frame.instancedBvhAdoptMs ?? 0).toFixed(2)} ms, attach=${frame.sceneAttachMs.toFixed(2)} ms, stats=${frame.commitRebuildStatsMs.toFixed(2)} ms).`,
     },
     {
       key: 'eviction_disposal',
-      val: frame.evictDisposeMs + frame.evictRebuildStatsMs,
-      note: `Eviction & GPU/BVH resource disposal took ${(frame.evictDisposeMs + frame.evictRebuildStatsMs).toFixed(2)} ms across ${frame.tilesEvictedCount} evicted tile(s).`,
+      val: frame.evictDisposeMs + frame.evictRebuildStatsMs + deferredDisposeMs,
+      note: `Eviction & GPU/BVH resource disposal took ${(frame.evictDisposeMs + frame.evictRebuildStatsMs + deferredDisposeMs).toFixed(2)} ms (syncEvict=${frame.evictDisposeMs.toFixed(2)} ms, deferredDispose=${deferredDisposeMs.toFixed(2)} ms across ${frame.deferredDisposedTilesCount ?? 0} tile(s)).`,
     },
     {
       key:
@@ -872,6 +907,10 @@ export function summarizeStageTimings(
     { stageKey: 'instancedBvhAdoptMs', label: '    InstancedSpatialIndex Worker BVH Adopt (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.instancedBvhAdoptMs ?? 0 },
     { stageKey: 'staticBvhDeserializeMs', label: '    Static MeshBVH Deserialize (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.staticBvhDeserializeMs },
     { stageKey: 'sceneAttachMs', label: '  Composite Scene Attach (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.sceneAttachMs },
+    { stageKey: 'gpuUploadSubmitMs', label: '  Incremental GPU Upload Submit (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.gpuUploadSubmitMs ?? 0 },
+    { stageKey: 'resolutionActivationMs', label: '  Atomic Resolution Activation (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.resolutionActivationMs ?? 0 },
+    { stageKey: 'boundaryOverlayRebuildMs', label: '    Tile Boundary Overlay Rebuild', nestingLevel: 'child_of_tick', pick: (f) => f.boundaryOverlayRebuildMs ?? 0 },
+    { stageKey: 'deferredDisposeMs', label: '  Deferred Resource Disposal (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.deferredDisposeMs ?? 0 },
     { stageKey: 'commitRebuildStatsMs', label: '  Commit rebuildCompositeStats (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.commitRebuildStatsMs },
     { stageKey: 'commitEmitDiagnosticsMs', label: '  Commit emitDiagnostics Callback (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.commitEmitDiagnosticsMs },
     { stageKey: 'viewportUpdateMs', label: 'Viewport Streaming Evaluation', nestingLevel: 'top_level', pick: (f) => f.viewportUpdateMs },
@@ -920,10 +959,12 @@ export function summarizeEventConditionedFrames(
     all.push(f.frameIntervalMs);
     const hasDelivery = (f.workerDeliveriesCount ?? 0) > 0;
     const hasCommit = f.tilesCommittedCount > 0;
-    const hasEvict = f.tilesEvictedCount > 0;
+    const hasEvict = f.tilesEvictedCount > 0 || (f.deferredDisposedTilesCount ?? 0) > 0;
+    const hasGpuPrep = (f.gpuUploadedMeshCount ?? 0) > 0;
+    const hasActivation = (f.resolutionActivationMs ?? 0) > 0;
     if (hasDelivery) workerDelivery.push(f.frameIntervalMs);
     if (hasCommit) tileCommit.push(f.frameIntervalMs);
-    if (hasDelivery || hasCommit || hasEvict) {
+    if (hasDelivery || hasCommit || hasEvict || hasGpuPrep || hasActivation) {
       activeStreamingWork.push(f.frameIntervalMs);
     } else {
       quiet.push(f.frameIntervalMs);
@@ -1120,6 +1161,9 @@ export function verifyFrameStageNesting(
     frame.readyScanAndSortMs +
     frame.reconstructMs +
     frame.sceneAttachMs +
+    (frame.gpuUploadSubmitMs ?? 0) +
+    (frame.resolutionActivationMs ?? 0) +
+    (frame.deferredDisposeMs ?? 0) +
     frame.commitRebuildStatsMs +
     frame.commitEmitDiagnosticsMs;
   if (tickChildren > frame.streamTickMs + epsilonMs) {

@@ -85,6 +85,9 @@ These ADRs span historic Goalpost 1 decisions and current regional architecture.
 - **[ADR-0015: Uniform-Viewport Hierarchical Tile Streaming (1,024 m / 2,048 m / 4,096 m)](ADR-0015-hierarchical-tile-streaming.md)**  
   Zoom-dependent uniform-viewport resolution selection with hysteresis deadbands, lightweight non-duplicating hierarchical mosaic descriptors, shared bounded SQLite LRU handle pooling, off-scene worker preparation, atomic frame-boundary swaps, bounded multi-resolution budgets with `deferred_budget` safeguards, and active-resolution-only picking parity (`TKT-041`).
 
+- **[ADR-0016: Frame-Budgeted Streaming, Offscreen Incremental GPU Preparation, Deferred Disposal, and Transition Critical-Path Prioritization](ADR-0016-frame-budgeted-streaming-and-incremental-gpu-prep.md)**  
+  Provisional `1,536 MiB` desktop CPU budget default, shared priority-ordered per-frame streaming scheduler (`StreamingWorkloadScheduler`), public-API offscreen 1×1 `WebGLRenderTarget` incremental GPU upload (`IncrementalGpuPreparer`), bounded deferred geometry disposal (`DeferredDisposalQueue`), time-based transition debouncing (`150 ms`), destination-over-preload fetch/worker priority, 7-stage transition critical-path attribution, and optional predictive pre-warming (`TKT-041-F1`).
+
 ## Decision record status convention
 
 An ADR may be accepted for one implemented scope while a broader application remains experimental. Keep historical decisions and dates intact. For a new execution path, cross-reference earlier decisions rather than incorrectly marking them globally superseded.

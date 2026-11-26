@@ -65,6 +65,7 @@ import {
 import {
   DEFAULT_HIERARCHICAL_RESOLUTION_POLICY,
   normalizeHierarchicalResolutionPolicy,
+  resolveApproachingResolutionForPrewarm,
   resolveDesiredHierarchicalResolution,
   resolvePhysicalMarginsForResolution,
   type HierarchicalResolutionMode,
@@ -78,6 +79,27 @@ import {
   type HierarchicalResourceBudgetConfig,
   type ResolutionResourceAccounting,
 } from './HierarchicalResourceBudget';
+import {
+  DEFAULT_MANAGER_STREAMING_FRAME_BUDGET_CONFIG,
+  identifyStreamingF1Variant,
+  resolveStreamingFrameBudgetConfig,
+  type StreamingF1VariantId,
+  type StreamingFrameBudgetConfig,
+} from './StreamingSchedulerConfig';
+import {
+  StreamingWorkloadScheduler,
+  type ScheduledWorkUnit,
+  type StreamingSchedulerCumulativeStats,
+} from './StreamingWorkloadScheduler';
+import {
+  IncrementalGpuPreparer,
+  type GpuPrepUploadAdapter,
+  type IncrementalGpuPreparerStats,
+} from './IncrementalGpuPreparer';
+import {
+  DeferredDisposalQueue,
+  type DeferredDisposalAccountingSnapshot,
+} from './DeferredDisposalQueue';
 
 export {
   deriveActiveMosaicNameFromPackPath,
@@ -103,6 +125,7 @@ export type TileStreamLifecycleState =
 
 export type HierarchicalTransitionState =
   | 'idle'
+  | 'debouncing'
   | 'preparing'
   | 'ready_to_activate'
   | 'deferred_budget';
@@ -218,8 +241,137 @@ export interface TileStreamDiagnosticsSnapshot {
   workerBvhAdoptedTotal: number;
   syncBvhFallbackTotal: number;
   pendingReadyTileBytes: number;
+  /** TKT-041-F1 frame-budgeted streaming, GPU prep, deferred disposal, and debounce telemetry. */
+  frameBudget: StreamingFrameBudgetDiagnosticsSnapshot;
   /** TKT-041 hierarchical multi-resolution streaming diagnostics (null for single-resolution packs). */
   hierarchical: HierarchicalStreamingDiagnosticsSnapshot | null;
+}
+
+export interface StreamingFrameBudgetDiagnosticsSnapshot {
+  config: StreamingFrameBudgetConfig;
+  variant: StreamingF1VariantId | 'custom';
+  scheduler: StreamingSchedulerCumulativeStats;
+  gpuPreparer: IncrementalGpuPreparerStats;
+  deferredDisposal: DeferredDisposalAccountingSnapshot;
+  pendingDebounceTargetResolution: number | null;
+  pendingDebounceElapsedMs: number;
+  transitionsDebouncedAvoided: number;
+  destinationPrepReused: number;
+  hasValidViewportCoverage: boolean;
+  boundaryOverlayDirty: boolean;
+  boundaryOverlayRebuildMsTotal: number;
+}
+
+export type TransitionBlockerCategory =
+  | 'none'
+  | 'debounce_waiting'
+  | 'active_coverage_gap'
+  | 'fetch_queue_contention'
+  | 'network_fetching'
+  | 'worker_queue_waiting'
+  | 'worker_decoding'
+  | 'main_thread_reconstruct_waiting'
+  | 'gpu_prep_waiting'
+  | 'memory_backpressure'
+  | 'budget_deferred'
+  | 'error_or_missing';
+
+export interface TransitionOutstandingTileSnapshot {
+  tileKey: string;
+  resolutionMeters: number;
+  state: TileStreamLifecycleState;
+  currentStage:
+    | 'queued'
+    | 'fetching'
+    | 'worker_queue_or_decoding'
+    | 'reconstruct_waiting'
+    | 'gpu_prep_waiting'
+    | 'error'
+    | 'unloaded';
+  ageSinceTransitionStartMs: number;
+  currentStageElapsedMs: number;
+  fetchQueueWaitMs: number;
+  payloadRetrievalMs: number;
+  workerQueueWaitMs: number;
+  workerDecodeAndBvhMs: number;
+  mainThreadReconstructWaitMs: number;
+  reconstructMs: number;
+  gpuPrepWaitMs: number;
+  gpuPrepSubmitMs: number;
+  gpuPrepRemainingUnits: number;
+  payloadCompressedBytes: number | null;
+  payloadRawBytes: number | null;
+  lastError: string | null;
+}
+
+export interface TransitionBlockerSnapshot {
+  active: boolean;
+  blockerCategory: TransitionBlockerCategory;
+  blockerReason: string;
+  fromResolutionMeters: number | null;
+  toResolutionMeters: number | null;
+  transitionGeneration: number;
+  elapsedMs: number;
+  requiredVisibleCount: number;
+  readyCount: number;
+  queuedCount: number;
+  fetchingCount: number;
+  decodingCount: number;
+  reconstructWaitingCount: number;
+  gpuPrepWaitingCount: number;
+  failedCount: number;
+  slowestOutstandingTile: TransitionOutstandingTileSnapshot | null;
+  contention: {
+    activeVisibleInFlightCount: number;
+    activePreloadInFlightCount: number;
+    pendingDestinationVisibleInFlightCount: number;
+    pendingDestinationSpeculativeInFlightCount: number;
+    fetchSlotsUsed: number;
+    fetchSlotsMax: number;
+    workerPendingDecodes: number;
+    workerPoolSize: number;
+    workerBackpressureActive: boolean;
+    speculativeBackpressureActive: boolean;
+    memoryHeadroomBytes: number;
+    pendingDecodedBytes: number;
+    pendingDecodedCapBytes: number;
+    cancellationsDuringTransition: number;
+  };
+}
+
+export interface TransitionCriticalPathRecord {
+  transitionGeneration: number;
+  outcome: 'completed' | 'cancelled' | 'deferred_budget';
+  fromResolutionMeters: number;
+  toResolutionMeters: number;
+  startedAtMs: number;
+  finishedAtMs: number;
+  totalDurationMs: number;
+  debounceWaitMs: number;
+  activationSwapMs: number;
+  requiredTileCount: number;
+  reusedFromCacheCount: number;
+  reusedFromPrewarmCount: number;
+  cancellationsDuringTransition: number;
+  dominantBlockerCategory: TransitionBlockerCategory;
+  criticalPathTileKey: string | null;
+  stagesMs: {
+    fetchQueueWaitMs: number;
+    payloadRetrievalMs: number;
+    workerQueueWaitMs: number;
+    workerInflateAndDecodeMs: number;
+    workerBvhBuildMs: number;
+    workerDecodeAndBvhMs: number;
+    mainThreadReconstructWaitMs: number;
+    reconstructMs: number;
+    gpuPrepWaitMs: number;
+    gpuPrepSubmitMs: number;
+    gpuPrepTotalMs: number;
+    remainingCoverageWaitMs: number;
+    tailTileEnteredLateMs: number;
+    activationSwapMs: number;
+  };
+  cancelOrDeferReason: string | null;
 }
 
 export interface HierarchicalStreamingDiagnosticsSnapshot {
@@ -230,12 +382,14 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
   desiredResolutionMeters: number;
   activeResolutionMeters: number;
   pendingResolutionMeters: number | null;
+  prewarmTargetResolutionMeters: number | null;
   transitionState: HierarchicalTransitionState;
   transitionGeneration: number;
   transitionElapsedMs: number;
   budgetDeferralReason: string | null;
   requiredDestinationTiles: number;
   readyDestinationTiles: number;
+  gpuPreparedDestinationTiles: number;
   activeVisibleTiles: number;
   activeLoadedTiles: number;
   pendingPreparedTiles: number;
@@ -260,6 +414,10 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
     transitionsCompleted: number;
     transitionsCancelled: number;
     transitionsDeferredBudget: number;
+    transitionsDebouncedAvoided: number;
+    destinationPrepReused: number;
+    prewarmTilesPrepared: number;
+    prewarmReusedOnTransition: number;
     cacheHits: number;
     cacheEvictions: number;
   };
@@ -270,6 +428,10 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
     activationSwapMsStats: TileTimingSummaryStats | null;
     transitionDurationMsStats: TileTimingSummaryStats | null;
   };
+  currentTransitionBlocker: TransitionBlockerSnapshot;
+  lastCompletedTransition: TransitionCriticalPathRecord | null;
+  recentTransitions: TransitionCriticalPathRecord[];
+  frameBudget: StreamingFrameBudgetDiagnosticsSnapshot;
 }
 
 export interface TilePackManifestPayload {
@@ -352,6 +514,70 @@ export interface TileStreamManagerOptions {
   hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
   /** TKT-041: Hierarchical memory budget, inactive LRU cache, and time-aware commit limits. */
   hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
+  /** TKT-041-F1: Frame-budgeted streaming scheduler, incremental GPU prep, deferred disposal, and debounce config. */
+  streamingFrameBudget?: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>;
+  /** Optional custom GPU upload adapter (for deterministic headless unit tests). */
+  gpuUploadAdapter?: GpuPrepUploadAdapter | null;
+  /** Optional monotonic clock override (milliseconds) for deterministic debounce/scheduler tests. */
+  nowFn?: () => number;
+}
+
+interface TilePipelineTimings {
+  queuedAtMs: number | null;
+  fetchStartAtMs: number | null;
+  fetchCompleteAtMs: number | null;
+  decodeStartAtMs: number | null;
+  decodeCompleteAtMs: number | null;
+  reconstructStartAtMs: number | null;
+  reconstructCompleteAtMs: number | null;
+  gpuPrepFirstSliceAtMs: number | null;
+  gpuPrepCompleteAtMs: number | null;
+  readyAtMs: number | null;
+  fetchQueueWaitMs: number;
+  payloadRetrievalMs: number;
+  workerClientQueueWaitMs: number;
+  workerThreadQueueWaitMs: number;
+  workerInflateAndDecodeMs: number;
+  workerBvhBuildMs: number;
+  workerPayloadPrepMs: number;
+  workerDeliveryLatencyMs: number;
+  mainThreadReconstructWaitMs: number;
+  reconstructMs: number;
+  gpuPrepWaitMs: number;
+  gpuPrepSubmitMs: number;
+  gpuPrepSliceCount: number;
+  reusedFromCache: boolean;
+  preparedByPrewarm: boolean;
+}
+
+function createEmptyTilePipelineTimings(): TilePipelineTimings {
+  return {
+    queuedAtMs: null,
+    fetchStartAtMs: null,
+    fetchCompleteAtMs: null,
+    decodeStartAtMs: null,
+    decodeCompleteAtMs: null,
+    reconstructStartAtMs: null,
+    reconstructCompleteAtMs: null,
+    gpuPrepFirstSliceAtMs: null,
+    gpuPrepCompleteAtMs: null,
+    readyAtMs: null,
+    fetchQueueWaitMs: 0,
+    payloadRetrievalMs: 0,
+    workerClientQueueWaitMs: 0,
+    workerThreadQueueWaitMs: 0,
+    workerInflateAndDecodeMs: 0,
+    workerBvhBuildMs: 0,
+    workerPayloadPrepMs: 0,
+    workerDeliveryLatencyMs: 0,
+    mainThreadReconstructWaitMs: 0,
+    reconstructMs: 0,
+    gpuPrepWaitMs: 0,
+    gpuPrepSubmitMs: 0,
+    gpuPrepSliceCount: 0,
+    reusedFromCache: false,
+    preparedByPrewarm: false,
+  };
 }
 
 interface ManagedTileRecord {
@@ -389,6 +615,8 @@ interface ManagedTileRecord {
   lastCompressedBytes?: number | null;
   /** Monotonic timestamp for LRU eviction in `cached_inactive`. */
   lastUsedAtMs: number;
+  /** TKT-041-F1 Section 12 per-tile pipeline stage timings. */
+  pipeline: TilePipelineTimings;
 }
 
 interface ResolutionLevelState {
@@ -689,6 +917,32 @@ export class TileStreamManager {
   private speculativeBackpressureActive = false;
   private workerBackpressureActive = false;
 
+  // TKT-041-F1 subsystems & debounce/overlay state
+  private readonly nowFn: () => number;
+  private streamingFrameBudget: StreamingFrameBudgetConfig;
+  private readonly workloadScheduler: StreamingWorkloadScheduler;
+  private readonly gpuPreparer: IncrementalGpuPreparer;
+  private readonly deferredDisposalQueue: DeferredDisposalQueue;
+  private pendingDebounceTargetResolution: number | null = null;
+  private pendingDebounceStartedAtMs: number | null = null;
+  private transitionsDebouncedAvoidedTotal = 0;
+  private destinationPrepReusedTotal = 0;
+  private boundaryOverlayVisible = false;
+  private boundaryOverlayDirty = false;
+  private boundaryOverlayRebuildMsTotal = 0;
+  private lastActivationBoundaryOverlayRebuildMs = 0;
+
+  // Section 12: Transition critical-path instrumentation & predictive pre-warming
+  private prewarmTargetResolutionMeters: number | null = null;
+  private previousCameraZoomForTrend: number | null = null;
+  private zoomTrend: 'zooming_out' | 'zooming_in' | 'steady' = 'steady';
+  private currentTransitionDebounceWaitMs = 0;
+  private currentTransitionCancellations = 0;
+  private prewarmTilesPreparedTotal = 0;
+  private prewarmReusedOnTransitionTotal = 0;
+  private readonly recentTransitions: TransitionCriticalPathRecord[] = [];
+  private lastCompletedTransition: TransitionCriticalPathRecord | null = null;
+
   // Hierarchical telemetry counters & timings
   private transitionsStartedTotal = 0;
   private transitionsCompletedTotal = 0;
@@ -782,6 +1036,17 @@ export class TileStreamManager {
     this.hierarchicalBudget = normalizeHierarchicalResourceBudget(
       options.hierarchicalBudget
     );
+    this.nowFn = options.nowFn ?? (() => performance.now());
+    this.streamingFrameBudget = resolveStreamingFrameBudgetConfig(
+      options.streamingFrameBudget,
+      DEFAULT_MANAGER_STREAMING_FRAME_BUDGET_CONFIG
+    );
+    this.workloadScheduler = new StreamingWorkloadScheduler(this.nowFn);
+    this.gpuPreparer = new IncrementalGpuPreparer({
+      adapter: options.gpuUploadAdapter ?? null,
+      nowFn: this.nowFn,
+    });
+    this.deferredDisposalQueue = new DeferredDisposalQueue(this.nowFn);
 
     if (options.materialRegistry) {
       this.materialRegistry = options.materialRegistry;
@@ -1056,6 +1321,80 @@ export class TileStreamManager {
     return this.getDiagnostics().hierarchical;
   }
 
+  getStreamingFrameBudgetConfig(): StreamingFrameBudgetConfig {
+    return { ...this.streamingFrameBudget };
+  }
+
+  setStreamingFrameBudgetConfig(
+    input: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>
+  ): StreamingFrameBudgetConfig {
+    if (this.isDisposed) {
+      return { ...this.streamingFrameBudget };
+    }
+    this.streamingFrameBudget = resolveStreamingFrameBudgetConfig(
+      input,
+      this.streamingFrameBudget
+    );
+    if (!this.streamingFrameBudget.deferredDisposalEnabled) {
+      this.deferredDisposalQueue.flushAll();
+    }
+    if (this.streamingFrameBudget.transitionDebounceMs <= 0 && this.pendingDebounceTargetResolution !== null) {
+      this.evaluateDesiredResolutionInternal();
+    }
+    if (this.hierarchy && this.manifestStatus === 'loaded') {
+      this.needsViewportRefresh = true;
+      if (this.currentViewport) {
+        this.updateViewport(this.currentViewport);
+      } else {
+        this.emitDiagnostics();
+      }
+    } else {
+      this.emitDiagnostics();
+    }
+    return { ...this.streamingFrameBudget };
+  }
+
+  attachRenderer(renderer: THREE.WebGLRenderer | null): void {
+    if (this.isDisposed) return;
+    this.gpuPreparer.attachRenderer(renderer);
+  }
+
+  setGpuUploadAdapter(adapter: GpuPrepUploadAdapter | null): void {
+    if (this.isDisposed) return;
+    this.gpuPreparer.setAdapter(adapter);
+  }
+
+  invalidateGpuPrepForContextLoss(lost = false): void {
+    if (this.isDisposed) return;
+    this.gpuPreparer.invalidateAllForContextLoss(lost);
+  }
+
+  setBoundaryOverlayVisible(visible: boolean): void {
+    if (this.isDisposed) return;
+    const next = Boolean(visible);
+    this.boundaryOverlayVisible = next;
+    this.boundaryOverlayResult.group.visible = next;
+    if (next && this.boundaryOverlayDirty && this.metadata) {
+      const activeLevel = this.getActiveLevelState();
+      this.rebuildBoundaryOverlayFromManifest(
+        this.metadata,
+        activeLevel ? activeLevel.tilesByKey : this.tilesByKey
+      );
+    }
+  }
+
+  getDeferredDisposalAccounting(): DeferredDisposalAccountingSnapshot {
+    return this.deferredDisposalQueue.getAccountingSnapshot();
+  }
+
+  getGpuPreparerStats(): IncrementalGpuPreparerStats {
+    return this.gpuPreparer.getStats();
+  }
+
+  getSchedulerStats(): StreamingSchedulerCumulativeStats {
+    return this.workloadScheduler.getStats();
+  }
+
   get tileBoundaryOverlay(): THREE.Group {
     return this.boundaryOverlayResult.group;
   }
@@ -1238,9 +1577,6 @@ export class TileStreamManager {
     };
   }
 
-  setBoundaryOverlayVisible(visible: boolean): void {
-    this.boundaryOverlayResult.group.visible = visible;
-  }
 
   /**
    * Clears any currently loaded tiles and manifest metadata so a reload or
@@ -1270,6 +1606,13 @@ export class TileStreamManager {
     this.activeResolutionMeters = null;
     this.desiredResolutionMeters = null;
     this.pendingResolutionMeters = null;
+    this.prewarmTargetResolutionMeters = null;
+    this.pendingDebounceTargetResolution = null;
+    this.pendingDebounceStartedAtMs = null;
+    this.currentTransitionDebounceWaitMs = 0;
+    this.currentTransitionCancellations = 0;
+    this.recentTransitions.length = 0;
+    this.lastCompletedTransition = null;
     this.transitionState = 'idle';
     this.transitionGeneration += 1;
     this.transitionStartedAtMs = null;
@@ -1279,6 +1622,7 @@ export class TileStreamManager {
     this.lastScaleEval = null;
     this.speculativeBackpressureActive = false;
     this.workerBackpressureActive = false;
+    this.deferredDisposalQueue.flushAll();
     this.metadata = null;
     this.manifestPackPath = null;
     this.currentViewport = null;
@@ -1338,6 +1682,7 @@ export class TileStreamManager {
       lastError: null,
       lastCompressedBytes: null,
       lastUsedAtMs: 0,
+      pipeline: createEmptyTilePipelineTimings(),
     };
   }
 
@@ -1560,7 +1905,8 @@ export class TileStreamManager {
   private rebuildBoundaryOverlayFromManifest(
     metadata: TilePackMetadata,
     levelTiles: Map<string, ManagedTileRecord> = this.tilesByKey
-  ): void {
+  ): number {
+    const t0 = this.nowFn();
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
     let minZ = Number.POSITIVE_INFINITY;
@@ -1614,6 +1960,21 @@ export class TileStreamManager {
       internalSeamCount: nextOverlay.internalSeamCount,
       dispose: nextOverlay.dispose,
     };
+    this.boundaryOverlayDirty = false;
+    const elapsedMs = Math.max(0, this.nowFn() - t0);
+    this.boundaryOverlayRebuildMsTotal += elapsedMs;
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'boundary_overlay_rebuild',
+        tileKey: `overlay:${metadata.tileSizeMeters}`,
+        tileSizeMeters: metadata.tileSizeMeters,
+        lod: 0,
+        durationMs: elapsedMs,
+        queueDepths: this.getQueueDepthSnapshot(),
+      });
+    }
+    return elapsedMs;
   }
 
   /**
@@ -1669,7 +2030,16 @@ export class TileStreamManager {
     if (this.pendingResolutionMeters === null) return;
     const prevPendingRes = this.pendingResolutionMeters;
     const pendingLevel = this.levelsByResolution.get(prevPendingRes);
-    const now = performance.now();
+    const now = this.nowFn();
+    this.recordTransitionCriticalPath({
+      outcome: 'cancelled',
+      fromResolutionMeters: this.activeResolutionMeters ?? prevPendingRes,
+      toResolutionMeters: prevPendingRes,
+      pendingLevel: pendingLevel ?? null,
+      finishedAtMs: now,
+      activationSwapMs: 0,
+      cancelOrDeferReason: reason,
+    });
     if (pendingLevel) {
       for (const record of pendingLevel.tilesByKey.values()) {
         if (
@@ -1680,6 +2050,7 @@ export class TileStreamManager {
         ) {
           this.cancelInFlightTile(record);
         } else if (record.state === 'prepared_inactive') {
+          this.gpuPreparer.cancelTile(record.tileKey, record.reconstructed, false);
           if (
             record.reconstructed &&
             this.hierarchicalBudget.maxInactiveCachedTiles > 0 &&
@@ -1703,6 +2074,10 @@ export class TileStreamManager {
         : 0;
     const prevGen = this.transitionGeneration;
     this.pendingResolutionMeters = null;
+    this.pendingDebounceTargetResolution = null;
+    this.pendingDebounceStartedAtMs = null;
+    this.currentTransitionDebounceWaitMs = 0;
+    this.currentTransitionCancellations = 0;
     this.transitionState = 'idle';
     this.transitionStartedAtMs = null;
     this.budgetDeferralReason = null;
@@ -1733,6 +2108,16 @@ export class TileStreamManager {
     if (this.pendingResolutionMeters === null) return;
     const pendingRes = this.pendingResolutionMeters;
     const pendingLevel = this.levelsByResolution.get(pendingRes);
+    const now = this.nowFn();
+    this.recordTransitionCriticalPath({
+      outcome: 'deferred_budget',
+      fromResolutionMeters: this.activeResolutionMeters ?? pendingRes,
+      toResolutionMeters: pendingRes,
+      pendingLevel: pendingLevel ?? null,
+      finishedAtMs: now,
+      activationSwapMs: 0,
+      cancelOrDeferReason: reason,
+    });
     if (pendingLevel) {
       for (const record of pendingLevel.tilesByKey.values()) {
         if (
@@ -1743,7 +2128,7 @@ export class TileStreamManager {
         ) {
           this.cancelInFlightTile(record);
         } else if (record.state === 'prepared_inactive') {
-          this.disposeReconstructedTile(record, false);
+          this.disposeReconstructedTile(record, false, true);
         }
       }
     }
@@ -1775,9 +2160,11 @@ export class TileStreamManager {
     this.checkIdleWaiters();
   }
 
-  private evaluateDesiredResolutionInternal(): void {
-    if (!this.hierarchy || this.activeResolutionMeters === null) return;
+  private evaluateDesiredResolutionInternal(): boolean {
+    if (!this.hierarchy || this.activeResolutionMeters === null) return false;
 
+    const now = this.nowFn();
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
     const evalBasisRes =
       this.pendingResolutionMeters ?? this.activeResolutionMeters;
     const evalResult = resolveDesiredHierarchicalResolution({
@@ -1792,44 +2179,211 @@ export class TileStreamManager {
     const nextDesired = evalResult.desiredResolutionMeters;
     this.desiredResolutionMeters = nextDesired;
 
+    const debounceMs =
+      this.hierarchicalPolicy.mode === 'auto'
+        ? this.streamingFrameBudget.transitionDebounceMs
+        : 0;
+
     if (nextDesired === this.activeResolutionMeters) {
+      if (this.pendingDebounceTargetResolution !== null) {
+        const avoidedTarget = this.pendingDebounceTargetResolution;
+        const avoidedElapsed =
+          this.pendingDebounceStartedAtMs !== null
+            ? Math.max(0, now - this.pendingDebounceStartedAtMs)
+            : 0;
+        this.pendingDebounceTargetResolution = null;
+        this.pendingDebounceStartedAtMs = null;
+        this.transitionsDebouncedAvoidedTotal += 1;
+        if (this.pendingResolutionMeters === null) {
+          this.transitionState = 'idle';
+        }
+        if (prof) {
+          prof.recordEvent({
+            eventType: 'transition_debounce_avoided',
+            tileKey: `debounce:${this.activeResolutionMeters}->${avoidedTarget}`,
+            tileSizeMeters: avoidedTarget,
+            lod: 0,
+            durationMs: avoidedElapsed,
+            queueDepths: this.getQueueDepthSnapshot(),
+            detail: {
+              reason: 'reverted_before_debounce_elapsed',
+              fromResolutionMeters: this.activeResolutionMeters,
+              toResolutionMeters: avoidedTarget,
+            },
+          });
+        }
+      }
       if (this.pendingResolutionMeters !== null) {
         this.cancelPendingTransition('zoom_reversed_to_active');
+        this.updatePredictivePrewarmTarget();
+        return true;
       }
+      this.updatePredictivePrewarmTarget();
+      return false;
+    }
+
+    if (this.pendingResolutionMeters === nextDesired) {
+      // Returned to already-pending destination during a transient dip
+      if (this.pendingDebounceTargetResolution !== null) {
+        this.pendingDebounceTargetResolution = null;
+        this.pendingDebounceStartedAtMs = null;
+        this.transitionsDebouncedAvoidedTotal += 1;
+      }
+      this.prewarmTargetResolutionMeters = null;
+      return false;
+    }
+
+    // Apply short configurable debounce for automatic zoom-band transitions so transient
+    // crossings do not immediately trigger expensive replacement workloads.
+    // Never requires camera movement to stop: elapsed time advances during continuous panning/zooming.
+    let debounceElapsedMs = 0;
+    if (debounceMs > 0) {
+      if (this.pendingDebounceTargetResolution !== nextDesired) {
+        this.pendingDebounceTargetResolution = nextDesired;
+        this.pendingDebounceStartedAtMs = now;
+        if (this.pendingResolutionMeters === null) {
+          this.transitionState = 'debouncing';
+        }
+        if (prof) {
+          prof.recordEvent({
+            eventType: 'transition_debounce_start',
+            tileKey: `debounce:${this.activeResolutionMeters}->${nextDesired}`,
+            tileSizeMeters: nextDesired,
+            lod: 0,
+            queueDepths: this.getQueueDepthSnapshot(),
+            detail: {
+              reason: `debounceMs=${debounceMs}`,
+              fromResolutionMeters: this.activeResolutionMeters,
+              toResolutionMeters: nextDesired,
+            },
+          });
+        }
+        return false;
+      }
+      debounceElapsedMs =
+        this.pendingDebounceStartedAtMs !== null
+          ? Math.max(0, now - this.pendingDebounceStartedAtMs)
+          : 0;
+      if (debounceElapsedMs < debounceMs) {
+        if (this.pendingResolutionMeters === null) {
+          this.transitionState = 'debouncing';
+        }
+        return false;
+      }
+    }
+
+    // Debounce elapsed (or disabled / forced mode): start the transition!
+    this.pendingDebounceTargetResolution = null;
+    this.pendingDebounceStartedAtMs = null;
+    this.prewarmTargetResolutionMeters = null;
+
+    if (this.pendingResolutionMeters !== null) {
+      this.cancelPendingTransition('retargeted_to_new_resolution');
+    }
+    this.pendingResolutionMeters = nextDesired;
+    this.transitionGeneration += 1;
+    this.transitionStartedAtMs = now;
+    this.currentTransitionDebounceWaitMs = debounceElapsedMs;
+    this.currentTransitionCancellations = 0;
+    this.transitionState = 'preparing';
+    this.budgetDeferralReason = null;
+    this.lastDeferredViewportSignature = null;
+    this.lastDeferredBudgetBytes = null;
+    this.transitionsStartedTotal += 1;
+    this.needsViewportRefresh = true;
+
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'resolution_transition_start',
+        tileKey: `transition:${this.activeResolutionMeters}->${nextDesired}`,
+        tileSizeMeters: nextDesired,
+        lod: 0,
+        queueDepths: this.getQueueDepthSnapshot(),
+        detail: {
+          reason: evalResult.reason,
+          fromResolutionMeters: this.activeResolutionMeters,
+          toResolutionMeters: nextDesired,
+          transitionGeneration: this.transitionGeneration,
+        },
+      });
+    }
+    return true;
+  }
+
+  private getPrewarmLevelState(): ResolutionLevelState | null {
+    if (
+      !this.hierarchy ||
+      this.prewarmTargetResolutionMeters === null ||
+      this.pendingResolutionMeters !== null
+    ) {
+      return null;
+    }
+    return this.levelsByResolution.get(this.prewarmTargetResolutionMeters) ?? null;
+  }
+
+  private updatePredictivePrewarmTarget(): void {
+    if (
+      !this.hierarchy ||
+      this.activeResolutionMeters === null ||
+      this.pendingResolutionMeters !== null ||
+      !this.streamingFrameBudget.predictivePrewarmEnabled ||
+      this.hierarchicalPolicy.mode !== 'auto'
+    ) {
+      this.prewarmTargetResolutionMeters = null;
       return;
     }
 
-    if (this.pendingResolutionMeters !== nextDesired) {
-      if (this.pendingResolutionMeters !== null) {
-        this.cancelPendingTransition('retargeted_to_new_resolution');
-      }
-      this.pendingResolutionMeters = nextDesired;
-      this.transitionGeneration += 1;
-      this.transitionStartedAtMs = performance.now();
-      this.transitionState = 'preparing';
-      this.budgetDeferralReason = null;
-      this.lastDeferredViewportSignature = null;
-      this.lastDeferredBudgetBytes = null;
-      this.transitionsStartedTotal += 1;
-      this.needsViewportRefresh = true;
+    // Never prewarm when active viewport has missing visible coverage or tight memory headroom
+    if (this.hasActiveVisibleCoverageGap() || this.speculativeBackpressureActive) {
+      this.prewarmTargetResolutionMeters = null;
+      return;
+    }
 
-      const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
-      if (prof) {
-        prof.recordEvent({
-          eventType: 'resolution_transition_start',
-          tileKey: `transition:${this.activeResolutionMeters}->${nextDesired}`,
-          tileSizeMeters: nextDesired,
-          lod: 0,
-          queueDepths: this.getQueueDepthSnapshot(),
-          detail: {
-            reason: evalResult.reason,
-            fromResolutionMeters: this.activeResolutionMeters,
-            toResolutionMeters: nextDesired,
-            transitionGeneration: this.transitionGeneration,
-          },
-        });
+    const totalMeasured = this.computeTotalMeasuredMemoryBytes();
+    const headroomRatio =
+      this.hierarchicalBudget.totalMemoryBudgetBytes > 0
+        ? Math.max(
+            0,
+            (this.hierarchicalBudget.totalMemoryBudgetBytes - totalMeasured) /
+              this.hierarchicalBudget.totalMemoryBudgetBytes
+          )
+        : 0;
+    if (headroomRatio < this.streamingFrameBudget.predictivePrewarmMinHeadroomRatio) {
+      this.prewarmTargetResolutionMeters = null;
+      return;
+    }
+
+    const res = resolveApproachingResolutionForPrewarm({
+      availableResolutionsMeters: this.hierarchy.resolutionsMeters,
+      activeResolutionMeters: this.activeResolutionMeters,
+      cameraZoom: this.currentCameraZoom,
+      viewportWidthPx: this.currentViewportWidthPx,
+      policy: this.hierarchicalPolicy,
+      bandFraction: this.streamingFrameBudget.predictivePrewarmBandFraction,
+      zoomTrend: this.zoomTrend,
+    });
+    this.prewarmTargetResolutionMeters = res.targetResolutionMeters;
+  }
+
+  private computeTotalMeasuredMemoryBytes(): number {
+    let total = this.deferredDisposalQueue.totalPendingBytes;
+    for (const record of this.tilesByKey.values()) {
+      total += this.computeRecordFootprintBreakdown(record).totalMeasuredBytes;
+    }
+    return total;
+  }
+
+  private hasActiveVisibleCoverageGap(): boolean {
+    const activeLevel = this.getActiveLevelState();
+    const records = activeLevel ? activeLevel.tilesByKey : this.tilesByKey;
+    for (const record of records.values()) {
+      if (!record.isVisibleInViewport) continue;
+      if (record.manifest.isEmpty) continue;
+      if (record.state !== 'loaded' || record.reconstructed === null) {
+        return true;
       }
     }
+    return false;
   }
 
   private evaluateLevelForViewport(
@@ -1838,7 +2392,8 @@ export class TileStreamManager {
     isPendingDestination: boolean,
     leadFocusX: number,
     leadFocusZ: number,
-    prof: StreamingProfiler | null
+    prof: StreamingProfiler | null,
+    isPredictivePrewarm = false
   ): {
     anyEvictedOrCancelled: boolean;
     anyAttachedFromCache: boolean;
@@ -1850,7 +2405,11 @@ export class TileStreamManager {
     const tileSize = level.tileSizeMeters;
     let fetchMarginMeters: number;
     let keepMarginMeters: number;
-    if (this.hierarchy) {
+    if (isPredictivePrewarm) {
+      // Predictive pre-warming prepares ONLY currently visible tiles of the approaching resolution
+      fetchMarginMeters = 0;
+      keepMarginMeters = Math.min(tileSize, this.hierarchicalPolicy.retainMarginMeters);
+    } else if (this.hierarchy) {
       const margins = resolvePhysicalMarginsForResolution(
         tileSize,
         this.hierarchicalPolicy
@@ -1878,7 +2437,7 @@ export class TileStreamManager {
     let evictDisposeMs = 0;
     let tilesEvictedCount = 0;
     let tilesCancelledCount = 0;
-    const now = performance.now();
+    const now = this.nowFn();
 
     for (const record of level.tilesByKey.values()) {
       const wb = record.worldBounds;
@@ -1894,18 +2453,19 @@ export class TileStreamManager {
         viewport.minZ,
         viewport.maxZ
       );
-      const isInFetch =
-        isVisible ||
-        aabbIntersects2D(
-          wb.minX,
-          wb.maxX,
-          wb.minZ,
-          wb.maxZ,
-          fetchMinX,
-          fetchMaxX,
-          fetchMinZ,
-          fetchMaxZ
-        );
+      const isInFetch = isPredictivePrewarm
+        ? isVisible
+        : isVisible ||
+          aabbIntersects2D(
+            wb.minX,
+            wb.maxX,
+            wb.minZ,
+            wb.maxZ,
+            fetchMinX,
+            fetchMaxX,
+            fetchMinZ,
+            fetchMaxZ
+          );
       const isInKeep =
         isInFetch ||
         aabbIntersects2D(
@@ -1929,18 +2489,21 @@ export class TileStreamManager {
       );
 
       if (this.hierarchy) {
-        // 4-tier priority queue:
+        // 5-tier priority queue:
         // 1. Active visible (-4M)
         // 2. Pending required destination (-3M)
         // 3. Active preload (-2M)
         // 4. Pending speculative preload (-1M)
-        const tierOffset = isPendingDestination
-          ? isVisible
-            ? -3_000_000
-            : -1_000_000
-          : isVisible
-            ? -4_000_000
-            : -2_000_000;
+        // 5. Predictive pre-warm (-500k)
+        const tierOffset = isPredictivePrewarm
+          ? -500_000
+          : isPendingDestination
+            ? isVisible
+              ? -3_000_000
+              : -1_000_000
+            : isVisible
+              ? -4_000_000
+              : -2_000_000;
         record.priorityScore = tierOffset + distToFocus;
       } else {
         // Visible tiles get a -1,000,000 priority boost so they always load before preload margin tiles
@@ -1970,6 +2533,10 @@ export class TileStreamManager {
             this.hierarchicalBudget.maxInactiveCachedTiles > 0 &&
             this.hierarchicalBudget.inactiveCacheBudgetBytes > 0
           ) {
+            this.gpuPreparer.markTilePreparedByMainRender(
+              record.tileKey,
+              record.reconstructed
+            );
             this.detachTileFromCompositeScene(record);
             record.state = 'cached_inactive';
             record.lastUsedAtMs = now;
@@ -1982,6 +2549,7 @@ export class TileStreamManager {
           }
           anyEvictedOrCancelled = true;
         } else if (record.state === 'prepared_inactive') {
+          this.gpuPreparer.cancelTile(record.tileKey, record.reconstructed, false);
           if (
             record.reconstructed &&
             this.hierarchicalBudget.maxInactiveCachedTiles > 0 &&
@@ -2010,9 +2578,22 @@ export class TileStreamManager {
         if (record.state === 'cached_inactive' && record.reconstructed) {
           this.cacheHitsTotal += 1;
           record.lastUsedAtMs = now;
-          if (isPendingDestination) {
+          record.pipeline.reusedFromCache = true;
+          if (isPendingDestination || isPredictivePrewarm) {
             // Keep detached until atomic frame-boundary activation!
             record.state = 'prepared_inactive';
+            if (
+              !this.isIncrementalGpuPrepActive() ||
+              this.gpuPreparer.isTilePrepared(record.reconstructed)
+            ) {
+              record.pipeline.readyAtMs = now;
+            }
+            if (isPendingDestination && this.streamingFrameBudget.reuseDestinationPreparation) {
+              this.destinationPrepReusedTotal += 1;
+            }
+            if (isPendingDestination && record.pipeline.preparedByPrewarm) {
+              this.prewarmReusedOnTransitionTotal += 1;
+            }
           } else {
             record.reconstructed.scene.updateCameraZoom?.(this.currentCameraZoom);
             record.reconstructed.applyFoliageRuntimeState(this.foliageRuntimeState);
@@ -2030,9 +2611,32 @@ export class TileStreamManager {
               detail: {
                 reason: isPendingDestination
                   ? 'pending_destination_cache_hit'
-                  : 'active_reentry_cache_hit',
+                  : isPredictivePrewarm
+                    ? 'prewarm_cache_hit'
+                    : 'active_reentry_cache_hit',
               },
             });
+          }
+        } else if (
+          isPendingDestination &&
+          record.state === 'prepared_inactive' &&
+          record.reconstructed &&
+          this.streamingFrameBudget.reuseDestinationPreparation
+        ) {
+          // Reuse already-reconstructed (and possibly already GPU-prepared / prewarmed) destination work
+          record.lastUsedAtMs = now;
+          if (isVisible) {
+            this.destinationPrepReusedTotal += 1;
+            if (record.pipeline.preparedByPrewarm) {
+              this.prewarmReusedOnTransitionTotal += 1;
+            }
+          }
+          if (
+            record.pipeline.readyAtMs === null &&
+            (!this.isIncrementalGpuPrepActive() ||
+              this.gpuPreparer.isTilePrepared(record.reconstructed))
+          ) {
+            record.pipeline.readyAtMs = now;
           }
         } else if (record.state === 'unloaded' || record.state === 'error') {
           if (
@@ -2041,14 +2645,15 @@ export class TileStreamManager {
           ) {
             // Do not re-queue pending tiles while deferred due to budget limits.
           } else if (
-            isPendingDestination &&
-            !isVisible &&
-            this.speculativeBackpressureActive
+            (isPendingDestination && !isVisible && this.speculativeBackpressureActive) ||
+            (isPredictivePrewarm && this.speculativeBackpressureActive)
           ) {
-            // Suppress speculative pending preload when budget reserve is tight.
+            // Suppress speculative pending preload / prewarm when budget reserve is tight.
           } else {
             record.state = 'queued';
             record.lastError = null;
+            record.pipeline = createEmptyTilePipelineTimings();
+            record.pipeline.queuedAtMs = now;
           }
         } else if (
           record.state === 'fetching' ||
@@ -2168,7 +2773,8 @@ export class TileStreamManager {
           true,
           leadFocusX,
           leadFocusZ,
-          prof
+          prof,
+          false
         );
         anyEvictedOrCancelled =
           anyEvictedOrCancelled || pendingRes.anyEvictedOrCancelled;
@@ -2178,11 +2784,31 @@ export class TileStreamManager {
         tilesCancelledCount += pendingRes.tilesCancelledCount;
       }
 
-      // Ensure idle non-active, non-pending levels have no stale in-flight work.
+      const prewarmLevel = this.getPrewarmLevelState();
+      if (prewarmLevel) {
+        const prewarmRes = this.evaluateLevelForViewport(
+          prewarmLevel,
+          viewport,
+          false,
+          leadFocusX,
+          leadFocusZ,
+          prof,
+          true
+        );
+        anyEvictedOrCancelled =
+          anyEvictedOrCancelled || prewarmRes.anyEvictedOrCancelled;
+        cancelInFlightMs += prewarmRes.cancelInFlightMs;
+        evictDisposeMs += prewarmRes.evictDisposeMs;
+        tilesEvictedCount += prewarmRes.tilesEvictedCount;
+        tilesCancelledCount += prewarmRes.tilesCancelledCount;
+      }
+
+      // Ensure idle non-active, non-pending, non-prewarm levels have no stale in-flight work.
       for (const [resMeters, level] of this.levelsByResolution.entries()) {
         if (
           resMeters === this.activeResolutionMeters ||
-          resMeters === this.pendingResolutionMeters
+          resMeters === this.pendingResolutionMeters ||
+          resMeters === this.prewarmTargetResolutionMeters
         ) {
           continue;
         }
@@ -2197,7 +2823,7 @@ export class TileStreamManager {
             anyEvictedOrCancelled = true;
           } else if (record.state === 'prepared_inactive') {
             record.state = 'cached_inactive';
-            record.lastUsedAtMs = performance.now();
+            record.lastUsedAtMs = this.nowFn();
           }
           record.isVisibleInViewport = false;
           record.isInFetchSet = false;
@@ -2257,51 +2883,76 @@ export class TileStreamManager {
     }
   }
 
+  private isIncrementalGpuPrepActive(): boolean {
+    return (
+      this.streamingFrameBudget.incrementalGpuPrepEnabled &&
+      this.gpuPreparer.hasAdapter &&
+      !this.gpuPreparer.isContextLost
+    );
+  }
+
   private checkDestinationReadiness(pendingLevel: ResolutionLevelState): {
     requiredCount: number;
     readyCount: number;
+    gpuPreparedCount: number;
     allReady: boolean;
   } {
+    const requireGpuPrep = this.isIncrementalGpuPrepActive();
     let requiredCount = 0;
     let readyCount = 0;
+    let gpuPreparedCount = 0;
     for (const record of pendingLevel.tilesByKey.values()) {
       if (!record.isVisibleInViewport) continue;
       requiredCount += 1;
       // Only fully reconstructed tiles (`prepared_inactive`, `cached_inactive`, `loaded` with reconstructed scene)
-      // or explicitly empty manifest tiles satisfy destination readiness.
-      // Never treat `fetching`, `decoding`, `ready_to_commit`, or `error` as ready!
-      const isTileReady =
-        record.manifest.isEmpty ||
-        ((record.state === 'prepared_inactive' ||
+      // or explicitly empty manifest tiles satisfy CPU destination readiness.
+      if (record.manifest.isEmpty) {
+        readyCount += 1;
+        gpuPreparedCount += 1;
+        continue;
+      }
+      const isCpuReady =
+        (record.state === 'prepared_inactive' ||
           record.state === 'cached_inactive' ||
           record.state === 'loaded') &&
-          record.reconstructed !== null);
-      if (isTileReady) {
+        record.reconstructed !== null;
+      if (!isCpuReady) continue;
+
+      const isGpuReady =
+        !requireGpuPrep || this.gpuPreparer.isTilePrepared(record.reconstructed!);
+      if (isGpuReady) {
+        gpuPreparedCount += 1;
         readyCount += 1;
       }
     }
     return {
       requiredCount,
       readyCount,
+      gpuPreparedCount,
       allReady: readyCount === requiredCount,
     };
   }
 
-  private activatePendingResolutionAtomic(): void {
+  private activatePendingResolutionAtomic(): {
+    swapMs: number;
+    boundaryOverlayRebuildMs: number;
+  } {
     if (
       !this.hierarchy ||
       this.activeResolutionMeters === null ||
       this.pendingResolutionMeters === null
     ) {
-      return;
+      return { swapMs: 0, boundaryOverlayRebuildMs: 0 };
     }
     const oldRes = this.activeResolutionMeters;
     const newRes = this.pendingResolutionMeters;
     const oldLevel = this.levelsByResolution.get(oldRes);
     const newLevel = this.levelsByResolution.get(newRes);
-    if (!oldLevel || !newLevel) return;
+    if (!oldLevel || !newLevel) {
+      return { swapMs: 0, boundaryOverlayRebuildMs: 0 };
+    }
 
-    const tAct0 = performance.now();
+    const tAct0 = this.nowFn();
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
 
     // 1. Detach every tile of the outgoing active resolution (zero simultaneous overlap!)
@@ -2314,6 +2965,12 @@ export class TileStreamManager {
       ) {
         this.cancelInFlightTile(record);
       } else if (record.state === 'loaded') {
+        if (record.reconstructed) {
+          this.gpuPreparer.markTilePreparedByMainRender(
+            record.tileKey,
+            record.reconstructed
+          );
+        }
         this.detachTileFromCompositeScene(record);
         if (
           record.reconstructed &&
@@ -2347,7 +3004,7 @@ export class TileStreamManager {
           if (prof) {
             const fp = record.decodedFootprint;
             const rawBytes = fp ? fp.cpuGeometryBytes + fp.bvhBytes : null;
-            const attachNowMs = performance.now();
+            const attachNowMs = this.nowFn();
             prof.recordEvent({
               eventType: 'attach',
               tileKey: record.tileKey,
@@ -2384,11 +3041,13 @@ export class TileStreamManager {
     // 3. Commit new active resolution state, metadata, and tile boundary overlay
     const elapsedTotalMs =
       this.transitionStartedAtMs !== null
-        ? Math.max(0, performance.now() - this.transitionStartedAtMs)
+        ? Math.max(0, this.nowFn() - this.transitionStartedAtMs)
         : 0;
     const completedGen = this.transitionGeneration;
     this.activeResolutionMeters = newRes;
     this.pendingResolutionMeters = null;
+    this.pendingDebounceTargetResolution = null;
+    this.pendingDebounceStartedAtMs = null;
     this.transitionState = 'idle';
     this.transitionStartedAtMs = null;
     this.budgetDeferralReason = null;
@@ -2396,10 +3055,20 @@ export class TileStreamManager {
     this.lastDeferredBudgetBytes = null;
     this.metadata = newLevel.metadata;
 
-    this.rebuildBoundaryOverlayFromManifest(
-      newLevel.metadata,
-      newLevel.tilesByKey
-    );
+    let boundaryOverlayRebuildMs = 0;
+    if (
+      this.streamingFrameBudget.deferHiddenBoundaryOverlayRebuild &&
+      !this.boundaryOverlayVisible
+    ) {
+      this.boundaryOverlayDirty = true;
+    } else {
+      boundaryOverlayRebuildMs = this.rebuildBoundaryOverlayFromManifest(
+        newLevel.metadata,
+        newLevel.tilesByKey
+      );
+    }
+    this.lastActivationBoundaryOverlayRebuildMs = boundaryOverlayRebuildMs;
+
     if (this.currentWireframe) {
       this.materialRegistry.setWireframe(true);
     }
@@ -2408,13 +3077,29 @@ export class TileStreamManager {
     // 4. Enforce LRU cache and total memory budgets after swap
     this.enforceResourceBudgets();
 
-    const swapMs = performance.now() - tAct0;
+    const swapMs = Math.max(0, this.nowFn() - tAct0);
+    const finishedAtMs = this.nowFn();
+    this.recordTransitionCriticalPath({
+      outcome: 'completed',
+      fromResolutionMeters: oldRes,
+      toResolutionMeters: newRes,
+      pendingLevel: newLevel,
+      finishedAtMs,
+      activationSwapMs: swapMs,
+      cancelOrDeferReason: null,
+      overrideGeneration: completedGen,
+      overrideStartedAtMs:
+        this.transitionStartedAtMs ?? Math.max(0, finishedAtMs - elapsedTotalMs),
+    });
+
     this.transitionsCompletedTotal += 1;
     this.lastTransitionTotalMs = elapsedTotalMs;
     this.lastActivationSwapMs = swapMs;
     this.maxActivationSwapMs = Math.max(this.maxActivationSwapMs, swapMs);
     pushBoundedSample(this.activationSwapMsRing, swapMs);
     pushBoundedSample(this.transitionDurationMsRing, elapsedTotalMs);
+    this.currentTransitionDebounceWaitMs = 0;
+    this.currentTransitionCancellations = 0;
 
     if (prof) {
       prof.recordEvent({
@@ -2428,6 +3113,7 @@ export class TileStreamManager {
           fromResolutionMeters: oldRes,
           toResolutionMeters: newRes,
           transitionGeneration: completedGen,
+          activationDurationMs: Number(swapMs.toFixed(3)),
           reason: `totalTransitionMs=${elapsedTotalMs.toFixed(2)}`,
         },
       });
@@ -2435,28 +3121,283 @@ export class TileStreamManager {
 
     this.updatePeakTileCounters();
     this.emitDiagnostics();
+    return { swapMs, boundaryOverlayRebuildMs };
+  }
+
+  private commitSingleReadyTile(
+    record: ManagedTileRecord,
+    prof: StreamingProfiler | null,
+    accum: {
+      committed: number;
+      committedActive: number;
+      totalReconMs: number;
+      totalInstancedBvhMs: number;
+      totalInstancedBvhAdoptMs: number;
+      totalWorkerBvhAdopted: number;
+      totalSyncBvhFallback: number;
+      totalStaticBvhMs: number;
+      totalAttachMs: number;
+    }
+  ): boolean {
+    if (record.state !== 'ready_to_commit' || !record.decodedPayload || !record.isInKeepSet) {
+      return false;
+    }
+    const isPendingRecord =
+      this.hierarchy !== null &&
+      record.resolutionMeters === this.pendingResolutionMeters &&
+      record.resolutionMeters !== this.activeResolutionMeters;
+    const isPrewarmRecord =
+      this.hierarchy !== null &&
+      this.pendingResolutionMeters === null &&
+      record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+      record.resolutionMeters !== this.activeResolutionMeters;
+    if (
+      this.hierarchy &&
+      !isPendingRecord &&
+      !isPrewarmRecord &&
+      record.resolutionMeters !== this.activeResolutionMeters
+    ) {
+      record.decodedPayload = null;
+      record.decodedFootprint = null;
+      record.state = 'unloaded';
+      return false;
+    }
+    if (isPendingRecord && this.transitionState === 'deferred_budget') {
+      return false;
+    }
+
+    const footprintSnapshot = record.decodedFootprint;
+    const compressedBytes = record.lastCompressedBytes ?? null;
+    const rawBytes = footprintSnapshot
+      ? footprintSnapshot.cpuGeometryBytes + footprintSnapshot.bvhBytes
+      : null;
+    const tileSizeMeters = record.resolutionMeters;
+
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'reconstruct_start',
+        tileKey: record.tileKey,
+        tileSizeMeters,
+        lod: record.manifest.lod,
+        payloadCompressedBytes: compressedBytes,
+        payloadRawBytes: rawBytes,
+        queueDepths: this.getQueueDepthSnapshot(),
+      });
+    }
+
+    const t0 = this.nowFn();
+    record.pipeline.reconstructStartAtMs = t0;
+    if (record.pipeline.decodeCompleteAtMs !== null) {
+      record.pipeline.mainThreadReconstructWaitMs = Math.max(
+        0,
+        t0 - record.pipeline.decodeCompleteAtMs
+      );
+    }
+    const reconstructed = reconstructTileSceneFromDecoded(
+      record.decodedPayload,
+      {
+        materialRegistry: this.materialRegistry,
+        placementMode: 'study-world-mesh-offset',
+        initialCameraZoom: this.currentCameraZoom,
+        foliagePrototypeRegistry: this.foliagePrototypeRegistry,
+        foliageRuntimeState: this.foliageRuntimeState,
+        collectStageTimings: Boolean(prof),
+        optimizeMainThreadPrep: this.tilePrepOptions.optimizeMainThreadPrep,
+      }
+    );
+    const tReconEnd = this.nowFn();
+    const reconstructMs = Math.max(0, tReconEnd - t0);
+    record.pipeline.reconstructCompleteAtMs = tReconEnd;
+    record.pipeline.reconstructMs = reconstructMs;
+
+    this.totalReconstructMs += reconstructMs;
+    this.reconstructSamples += 1;
+    pushBoundedSample(this.reconstructMsRing, reconstructMs);
+
+    this.workerBvhAdoptedTotal += reconstructed.stageTimings.workerBvhAdoptedCount;
+    this.syncBvhFallbackTotal += reconstructed.stageTimings.syncBvhFallbackCount;
+
+    record.reconstructed = reconstructed;
+    record.decodedPayload = null;
+    record.lastUsedAtMs = tReconEnd;
+    this.completedLoadsTotal += 1;
+
+    if (prof) {
+      accum.totalReconMs += reconstructMs;
+      accum.totalInstancedBvhMs += reconstructed.stageTimings.instancedBvhBuildMs;
+      accum.totalInstancedBvhAdoptMs += reconstructed.stageTimings.instancedBvhAdoptMs;
+      accum.totalWorkerBvhAdopted += reconstructed.stageTimings.workerBvhAdoptedCount;
+      accum.totalSyncBvhFallback += reconstructed.stageTimings.syncBvhFallbackCount;
+      accum.totalStaticBvhMs += reconstructed.stageTimings.staticBvhDeserializeMs;
+      prof.recordEvent({
+        eventType: 'reconstruct_complete',
+        tileKey: record.tileKey,
+        tileSizeMeters,
+        lod: record.manifest.lod,
+        payloadCompressedBytes: compressedBytes,
+        payloadRawBytes:
+          rawBytes !== null
+            ? rawBytes + reconstructed.instancedPickingStats.totalIndexMemoryBytes
+            : null,
+        durationMs: reconstructMs,
+        queueDepths: this.getQueueDepthSnapshot(),
+        detail: {
+          instancedBvhBuildMs: reconstructed.stageTimings.instancedBvhBuildMs,
+          instancedBvhAdoptMs: reconstructed.stageTimings.instancedBvhAdoptMs,
+          workerBvhAdoptedCount: reconstructed.stageTimings.workerBvhAdoptedCount,
+          syncBvhFallbackCount: reconstructed.stageTimings.syncBvhFallbackCount,
+          staticBvhDeserializeMs: reconstructed.stageTimings.staticBvhDeserializeMs,
+          instancedBatchCount: reconstructed.instancedPickingStats.indexedBatchCount,
+          indexedInstances: reconstructed.instancedPickingStats.totalIndexedInstances,
+          meshCount: footprintSnapshot?.meshCount,
+          triangleCount: footprintSnapshot?.triangleCount,
+        },
+      });
+    }
+
+    if (isPendingRecord || isPrewarmRecord) {
+      // Reconstructed off-scene; do NOT attach until atomic activation!
+      record.state = 'prepared_inactive';
+      if (isPrewarmRecord) {
+        record.pipeline.preparedByPrewarm = true;
+        this.prewarmTilesPreparedTotal += 1;
+      }
+      if (!this.isIncrementalGpuPrepActive() || record.manifest.isEmpty) {
+        record.pipeline.readyAtMs = tReconEnd;
+      }
+      accum.committed += 1;
+      this.enforceResourceBudgets();
+    } else {
+      record.state = 'loaded';
+      record.pipeline.readyAtMs = tReconEnd;
+      const tAttach0 = prof ? this.nowFn() : 0;
+      this.attachTileToCompositeScene(record);
+      const attachMs = prof ? Math.max(0, this.nowFn() - tAttach0) : 0;
+      if (prof) {
+        accum.totalAttachMs += attachMs;
+        const attachNowMs = this.nowFn();
+        prof.recordEvent({
+          eventType: 'attach',
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          timestampMs: attachNowMs,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes: rawBytes,
+          durationMs: attachMs,
+          queueDepths: this.getQueueDepthSnapshot(),
+          detail: {
+            meshCount: footprintSnapshot?.meshCount,
+            triangleCount: footprintSnapshot?.triangleCount,
+          },
+        });
+        prof.markTilePendingFirstRender({
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          triangles: reconstructed.scene.stats.totalTriangles,
+          meshes: footprintSnapshot?.meshCount ?? 0,
+          compressedBytes,
+          rawBytes,
+          attachTimestampMs: attachNowMs,
+        });
+      }
+      accum.committed += 1;
+      accum.committedActive += 1;
+    }
+    return true;
+  }
+
+  private collectPendingGpuPrepRecords(pendingLevel: ResolutionLevelState): ManagedTileRecord[] {
+    const list: ManagedTileRecord[] = [];
+    for (const record of pendingLevel.tilesByKey.values()) {
+      if (
+        (record.state === 'prepared_inactive' || record.state === 'cached_inactive') &&
+        record.isInKeepSet &&
+        record.reconstructed !== null &&
+        !record.manifest.isEmpty &&
+        !this.gpuPreparer.isTilePrepared(record.reconstructed)
+      ) {
+        list.push(record);
+      }
+    }
+    list.sort((a, b) => a.priorityScore - b.priorityScore);
+    return list;
+  }
+
+  private runDeferredDisposalSlice(
+    maxTiles: number,
+    maxTimeMs: number,
+    accelerated: boolean,
+    prof: StreamingProfiler | null
+  ): { disposedTiles: number; durationMs: number } {
+    if (this.deferredDisposalQueue.size === 0) {
+      return { disposedTiles: 0, durationMs: 0 };
+    }
+    const step = this.deferredDisposalQueue.drainSlice({
+      maxTiles,
+      maxTimeMs,
+      accelerated,
+    });
+    if (prof && step.disposedEntries.length > 0) {
+      const depths = this.getQueueDepthSnapshot();
+      for (const entry of step.disposedEntries) {
+        prof.recordEvent({
+          eventType: 'deferred_dispose_complete',
+          tileKey: entry.tileKey,
+          tileSizeMeters: entry.resolutionMeters,
+          lod: entry.lod,
+          payloadRawBytes: entry.measuredBytes,
+          durationMs: entry.durationMs,
+          queueDepths: depths,
+          detail: {
+            deferredDisposePendingTiles: this.deferredDisposalQueue.size,
+            deferredDisposePendingBytes: this.deferredDisposalQueue.totalPendingBytes,
+          },
+        });
+      }
+    }
+    return {
+      disposedTiles: step.disposedTiles,
+      durationMs: step.durationMs,
+    };
   }
 
   /**
-   * Commits up to `maxCommits` decoded tiles (`ready_to_commit`) into the Three.js
-   * composite scene graph on the main thread (time-aware in hierarchical mode),
-   * and executes atomic frame-boundary resolution activation when all required
-   * destination tiles are prepared.
+   * Commits decoded tiles (`ready_to_commit`), prepares destination GPU buffers
+   * incrementally, drains deferred disposals, and executes atomic frame-boundary
+   * resolution activation within the configured per-frame streaming budget.
    */
   tick(maxCommits = this.maxCommitsPerFrame): number {
     if (this.isDisposed) return 0;
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
-    const tTick0 = prof ? performance.now() : 0;
+    const tTick0 = this.nowFn();
+    const isUnboundedFlush = maxCommits === Number.MAX_SAFE_INTEGER;
+
+    // Advance transition debounce timer even if viewport bounds did not change this frame
+    if (
+      this.hierarchy &&
+      this.manifestStatus === 'loaded' &&
+      this.pendingDebounceTargetResolution !== null
+    ) {
+      const promoted = this.evaluateDesiredResolutionInternal();
+      if (promoted && this.currentViewport) {
+        this.updateViewport(this.currentViewport);
+      }
+    }
 
     this.pumpFetchQueue();
 
-    const tReady0 = prof ? performance.now() : 0;
-    const readyRecords: ManagedTileRecord[] = [];
+    const tReady0 = prof ? this.nowFn() : 0;
+    const activeReadyRecords: ManagedTileRecord[] = [];
+    const pendingReadyRecords: ManagedTileRecord[] = [];
+    const prewarmReadyRecords: ManagedTileRecord[] = [];
+
     const activeLevel = this.getActiveLevelState();
     if (activeLevel) {
       for (const record of activeLevel.tilesByKey.values()) {
         if (record.state === 'ready_to_commit' && record.isInKeepSet) {
-          readyRecords.push(record);
+          activeReadyRecords.push(record);
         }
       }
     }
@@ -2467,253 +3408,568 @@ export class TileStreamManager {
     if (pendingLevel) {
       for (const record of pendingLevel.tilesByKey.values()) {
         if (record.state === 'ready_to_commit' && record.isInKeepSet) {
-          readyRecords.push(record);
+          pendingReadyRecords.push(record);
+        }
+      }
+    }
+    const prewarmLevel =
+      this.hierarchy &&
+      this.pendingResolutionMeters === null &&
+      this.streamingFrameBudget.predictivePrewarmEnabled
+        ? this.getPrewarmLevelState()
+        : null;
+    if (prewarmLevel) {
+      for (const record of prewarmLevel.tilesByKey.values()) {
+        if (record.state === 'ready_to_commit' && record.isInKeepSet) {
+          prewarmReadyRecords.push(record);
         }
       }
     }
 
-    if (readyRecords.length === 0) {
-      // Even with zero new commits, check if a pending transition is already ready (e.g. 100% cache hit!)
+    activeReadyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
+    pendingReadyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
+    prewarmReadyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
+    const readyScanAndSortMs = prof ? Math.max(0, this.nowFn() - tReady0) : 0;
+
+    const accum = {
+      committed: 0,
+      committedActive: 0,
+      totalReconMs: 0,
+      totalInstancedBvhMs: 0,
+      totalInstancedBvhAdoptMs: 0,
+      totalWorkerBvhAdopted: 0,
+      totalSyncBvhFallback: 0,
+      totalStaticBvhMs: 0,
+      totalAttachMs: 0,
+    };
+
+    let gpuUploadSubmitMs = 0;
+    let gpuUploadedBytes = 0;
+    let gpuUploadedMeshCount = 0;
+    let resolutionActivationMs = 0;
+    let boundaryOverlayRebuildMs = 0;
+    let deferredDisposeMs = 0;
+    let deferredDisposedTilesCount = 0;
+    let schedulerBudgetMs = 0;
+    let schedulerUsedMs = 0;
+    let schedulerOverrunMs = 0;
+    let indivisibleOverrunCount = 0;
+
+    const tBatch0 = this.nowFn();
+    const cfg = this.streamingFrameBudget;
+    const gpuPrepActive = this.isIncrementalGpuPrepActive();
+    const coverageGap = this.hasActiveVisibleCoverageGap();
+
+    if (isUnboundedFlush) {
+      // Unbounded flush path used by waitForIdle()
+      const allReady = [
+        ...activeReadyRecords,
+        ...pendingReadyRecords,
+        ...prewarmReadyRecords,
+      ].sort((a, b) => a.priorityScore - b.priorityScore);
+      for (const rec of allReady) {
+        this.commitSingleReadyTile(rec, prof, accum);
+      }
+
+      if (gpuPrepActive && pendingLevel && this.pendingResolutionMeters !== null) {
+        const toUpload = this.collectPendingGpuPrepRecords(pendingLevel);
+        for (const rec of toUpload) {
+          if (!rec.reconstructed) continue;
+          const tSliceStart = this.nowFn();
+          const step = this.gpuPreparer.prepareTileSlice(
+            rec.tileKey,
+            rec.reconstructed,
+            {
+              maxUnits: Number.MAX_SAFE_INTEGER,
+              maxBytes: Number.MAX_SAFE_INTEGER,
+              maxTimeMs: Number.POSITIVE_INFINITY,
+            }
+          );
+          this.recordGpuPrepStepOnTile(rec, step, tSliceStart);
+          gpuUploadSubmitMs += step.uploadSubmitMs;
+          gpuUploadedBytes += step.uploadedEstimatedBytes;
+          gpuUploadedMeshCount += step.uploadedUnits;
+        }
+      }
+
+      if (gpuPrepActive && prewarmLevel && this.prewarmTargetResolutionMeters !== null) {
+        const toUpload = this.collectPendingGpuPrepRecords(prewarmLevel);
+        for (const rec of toUpload) {
+          if (!rec.reconstructed) continue;
+          const tSliceStart = this.nowFn();
+          const step = this.gpuPreparer.prepareTileSlice(
+            rec.tileKey,
+            rec.reconstructed,
+            {
+              maxUnits: Number.MAX_SAFE_INTEGER,
+              maxBytes: Number.MAX_SAFE_INTEGER,
+              maxTimeMs: Number.POSITIVE_INFINITY,
+            }
+          );
+          this.recordGpuPrepStepOnTile(rec, step, tSliceStart);
+          gpuUploadSubmitMs += step.uploadSubmitMs;
+          gpuUploadedBytes += step.uploadedEstimatedBytes;
+          gpuUploadedMeshCount += step.uploadedUnits;
+        }
+      }
+
       if (
         this.hierarchy &&
-        pendingLevel &&
         this.pendingResolutionMeters !== null &&
         this.transitionState !== 'deferred_budget'
       ) {
-        const readiness = this.checkDestinationReadiness(pendingLevel);
-        if (readiness.allReady) {
-          this.activatePendingResolutionAtomic();
+        const curPending = this.getPendingLevelState();
+        if (curPending) {
+          const readiness = this.checkDestinationReadiness(curPending);
+          if (readiness.allReady) {
+            const act = this.activatePendingResolutionAtomic();
+            resolutionActivationMs += act.swapMs;
+            boundaryOverlayRebuildMs += act.boundaryOverlayRebuildMs;
+          }
         }
       }
-      this.checkIdleWaiters();
-      if (prof) {
-        const tickTotal = performance.now() - tTick0;
-        prof.recordStreamTick({
-          totalMs: tickTotal,
-          readyScanAndSortMs: performance.now() - tReady0,
-          reconstructMs: 0,
-          instancedBvhBuildMs: 0,
-          staticBvhDeserializeMs: 0,
-          sceneAttachMs: 0,
-          commitRebuildStatsMs: 0,
-          commitEmitDiagnosticsMs: 0,
-          tilesCommittedCount: 0,
-        });
+
+      if (this.deferredDisposalQueue.size > 0) {
+        const step = this.runDeferredDisposalSlice(
+          Number.MAX_SAFE_INTEGER,
+          Number.POSITIVE_INFINITY,
+          true,
+          prof
+        );
+        deferredDisposeMs += step.durationMs;
+        deferredDisposedTilesCount += step.disposedTiles;
       }
-      return 0;
-    }
+    } else if (cfg.sharedSchedulerEnabled) {
+      // TKT-041-F1 Shared Time-Aware Streaming Workload Scheduler
+      const units: ScheduledWorkUnit[] = [];
+      let committedThisTick = 0;
+      let gpuUnitsLeft = cfg.maxGpuUploadUnitsPerFrame;
+      let gpuBytesLeft = cfg.maxGpuUploadBytesPerFrame;
+      let gpuAnyUploadedThisFrame = false;
 
-    readyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
-    const readyScanAndSortMs = prof ? performance.now() - tReady0 : 0;
-
-    const limit = Math.min(maxCommits, readyRecords.length);
-    const maxCommitBudgetMs =
-      this.hierarchy && maxCommits !== Number.MAX_SAFE_INTEGER
-        ? this.hierarchicalBudget.maxCommitBudgetMsPerFrame
-        : Number.POSITIVE_INFINITY;
-
-    let committed = 0;
-    let committedActive = 0;
-    let totalReconMs = 0;
-    let totalInstancedBvhMs = 0;
-    let totalInstancedBvhAdoptMs = 0;
-    let totalWorkerBvhAdopted = 0;
-    let totalSyncBvhFallback = 0;
-    let totalStaticBvhMs = 0;
-    let totalAttachMs = 0;
-    const tBatch0 = performance.now();
-
-    for (let i = 0; i < limit; i++) {
-      // Time-aware budget: always commit at least 1 tile so large tiles never starve.
-      if (i > 0 && performance.now() - tBatch0 >= maxCommitBudgetMs) {
-        break;
-      }
-
-      const record = readyRecords[i];
-      if (!record.decodedPayload) continue;
-      const isPendingRecord =
-        this.hierarchy !== null &&
-        record.resolutionMeters === this.pendingResolutionMeters &&
-        record.resolutionMeters !== this.activeResolutionMeters;
-      if (
-        this.hierarchy &&
-        !isPendingRecord &&
-        record.resolutionMeters !== this.activeResolutionMeters
-      ) {
-        // Stale record from an inactive level; discard cleanly
-        record.decodedPayload = null;
-        record.decodedFootprint = null;
-        record.state = 'unloaded';
-        continue;
-      }
-      if (isPendingRecord && this.transitionState === 'deferred_budget') {
-        continue;
-      }
-
-      const footprintSnapshot = record.decodedFootprint;
-      const compressedBytes = record.lastCompressedBytes ?? null;
-      const rawBytes = footprintSnapshot
-        ? footprintSnapshot.cpuGeometryBytes + footprintSnapshot.bvhBytes
-        : null;
-      const tileSizeMeters = record.resolutionMeters;
-
-      if (prof) {
-        prof.recordEvent({
-          eventType: 'reconstruct_start',
-          tileKey: record.tileKey,
-          tileSizeMeters,
-          lod: record.manifest.lod,
-          payloadCompressedBytes: compressedBytes,
-          payloadRawBytes: rawBytes,
-          queueDepths: this.getQueueDepthSnapshot(),
-        });
-      }
-
-      const t0 = performance.now();
-      const reconstructed = reconstructTileSceneFromDecoded(
-        record.decodedPayload,
-        {
-          materialRegistry: this.materialRegistry,
-          placementMode: 'study-world-mesh-offset',
-          initialCameraZoom: this.currentCameraZoom,
-          foliagePrototypeRegistry: this.foliagePrototypeRegistry,
-          foliageRuntimeState: this.foliageRuntimeState,
-          collectStageTimings: Boolean(prof),
-          optimizeMainThreadPrep: this.tilePrepOptions.optimizeMainThreadPrep,
+      // 1 & 7: Active level ready_to_commit tiles
+      for (const rec of activeReadyRecords) {
+        if (
+          !rec.isVisibleInViewport &&
+          cfg.suppressSpeculativeDuringActiveCoverageGap &&
+          coverageGap
+        ) {
+          continue;
         }
-      );
-      const reconstructMs = performance.now() - t0;
-
-      this.totalReconstructMs += reconstructMs;
-      this.reconstructSamples += 1;
-      pushBoundedSample(this.reconstructMsRing, reconstructMs);
-
-      this.workerBvhAdoptedTotal += reconstructed.stageTimings.workerBvhAdoptedCount;
-      this.syncBvhFallbackTotal += reconstructed.stageTimings.syncBvhFallbackCount;
-
-      record.reconstructed = reconstructed;
-      record.decodedPayload = null;
-      record.lastUsedAtMs = performance.now();
-      this.completedLoadsTotal += 1;
-
-      if (prof) {
-        totalReconMs += reconstructMs;
-        totalInstancedBvhMs += reconstructed.stageTimings.instancedBvhBuildMs;
-        totalInstancedBvhAdoptMs += reconstructed.stageTimings.instancedBvhAdoptMs;
-        totalWorkerBvhAdopted += reconstructed.stageTimings.workerBvhAdoptedCount;
-        totalSyncBvhFallback += reconstructed.stageTimings.syncBvhFallbackCount;
-        totalStaticBvhMs += reconstructed.stageTimings.staticBvhDeserializeMs;
-        prof.recordEvent({
-          eventType: 'reconstruct_complete',
-          tileKey: record.tileKey,
-          tileSizeMeters,
-          lod: record.manifest.lod,
-          payloadCompressedBytes: compressedBytes,
-          payloadRawBytes:
-            rawBytes !== null
-              ? rawBytes + reconstructed.instancedPickingStats.totalIndexMemoryBytes
-              : null,
-          durationMs: reconstructMs,
-          queueDepths: this.getQueueDepthSnapshot(),
-          detail: {
-            instancedBvhBuildMs: reconstructed.stageTimings.instancedBvhBuildMs,
-            instancedBvhAdoptMs: reconstructed.stageTimings.instancedBvhAdoptMs,
-            workerBvhAdoptedCount: reconstructed.stageTimings.workerBvhAdoptedCount,
-            syncBvhFallbackCount: reconstructed.stageTimings.syncBvhFallbackCount,
-            staticBvhDeserializeMs: reconstructed.stageTimings.staticBvhDeserializeMs,
-            instancedBatchCount: reconstructed.instancedPickingStats.indexedBatchCount,
-            indexedInstances: reconstructed.instancedPickingStats.totalIndexedInstances,
-            meshCount: footprintSnapshot?.meshCount,
-            triangleCount: footprintSnapshot?.triangleCount,
+        units.push({
+          id: `commit_active:${rec.tileKey}`,
+          priority: rec.isVisibleInViewport
+            ? 'missing_active_visible'
+            : 'active_preload',
+          tieBreaker: rec.priorityScore,
+          isObsolete: () =>
+            rec.state !== 'ready_to_commit' ||
+            !rec.isInKeepSet ||
+            rec.resolutionMeters !== this.activeResolutionMeters ||
+            committedThisTick >= maxCommits,
+          execute: () => {
+            if (committedThisTick >= maxCommits) return false;
+            const did = this.commitSingleReadyTile(rec, prof, accum);
+            if (did) committedThisTick += 1;
+            return did;
           },
         });
       }
 
-      if (isPendingRecord) {
-        // Reconstructed off-scene; do NOT attach until atomic activation!
-        record.state = 'prepared_inactive';
-        committed += 1;
-        this.enforceResourceBudgets();
-      } else {
-        record.state = 'loaded';
-        const tAttach0 = prof ? performance.now() : 0;
-        this.attachTileToCompositeScene(record);
-        const attachMs = prof ? performance.now() - tAttach0 : 0;
-        if (prof) {
-          totalAttachMs += attachMs;
-          const attachNowMs = performance.now();
-          prof.recordEvent({
-            eventType: 'attach',
-            tileKey: record.tileKey,
-            tileSizeMeters,
-            lod: record.manifest.lod,
-            timestampMs: attachNowMs,
-            payloadCompressedBytes: compressedBytes,
-            payloadRawBytes: rawBytes,
-            durationMs: attachMs,
-            queueDepths: this.getQueueDepthSnapshot(),
-            detail: {
-              meshCount: footprintSnapshot?.meshCount,
-              triangleCount: footprintSnapshot?.triangleCount,
+      // 2: Urgent memory-pressure disposal
+      const urgentDisposal =
+        cfg.deferredDisposalEnabled &&
+        this.deferredDisposalQueue.size > 0 &&
+        this.deferredDisposalQueue.totalPendingBytes > cfg.maxPendingDisposalBytes;
+      if (urgentDisposal) {
+        units.push({
+          id: 'dispose_urgent',
+          priority: 'urgent_memory_disposal',
+          tieBreaker: 0,
+          isObsolete: () => this.deferredDisposalQueue.size === 0,
+          execute: (remMs) => {
+            const step = this.runDeferredDisposalSlice(
+              Math.max(2, cfg.maxDeferredDisposeTilesPerFrame * 2),
+              Math.max(0.5, remMs),
+              true,
+              prof
+            );
+            deferredDisposeMs += step.durationMs;
+            deferredDisposedTilesCount += step.disposedTiles;
+            return step.disposedTiles > 0;
+          },
+        });
+      }
+
+      // 3 & 8: Pending destination ready_to_commit tiles
+      if (pendingLevel && this.pendingResolutionMeters !== null) {
+        for (const rec of pendingReadyRecords) {
+          if (
+            !rec.isVisibleInViewport &&
+            cfg.suppressSpeculativeDuringActiveCoverageGap &&
+            coverageGap
+          ) {
+            continue;
+          }
+          units.push({
+            id: `commit_pending:${rec.tileKey}`,
+            priority: rec.isVisibleInViewport
+              ? 'pending_destination_visible'
+              : 'speculative_destination',
+            tieBreaker: rec.priorityScore,
+            isObsolete: () =>
+              rec.state !== 'ready_to_commit' ||
+              !rec.isInKeepSet ||
+              rec.resolutionMeters !== this.pendingResolutionMeters ||
+              this.transitionState === 'deferred_budget' ||
+              committedThisTick >= maxCommits,
+            execute: () => {
+              if (committedThisTick >= maxCommits) return false;
+              const did = this.commitSingleReadyTile(rec, prof, accum);
+              if (did) committedThisTick += 1;
+              return did;
             },
           });
-          prof.markTilePendingFirstRender({
-            tileKey: record.tileKey,
-            tileSizeMeters,
-            lod: record.manifest.lod,
-            triangles: reconstructed.scene.stats.totalTriangles,
-            meshes: footprintSnapshot?.meshCount ?? 0,
-            compressedBytes,
-            rawBytes,
-            attachTimestampMs: attachNowMs,
+        }
+
+        // 4: Incremental offscreen GPU upload slices for prepared destination tiles
+        if (gpuPrepActive) {
+          const toUpload = this.collectPendingGpuPrepRecords(pendingLevel);
+          for (const rec of toUpload) {
+            units.push({
+              id: `gpu_prep:${rec.tileKey}`,
+              priority: rec.isVisibleInViewport
+                ? 'gpu_prep_destination'
+                : 'speculative_destination',
+              tieBreaker: rec.priorityScore,
+              isObsolete: () =>
+                !rec.reconstructed ||
+                !rec.isInKeepSet ||
+                rec.resolutionMeters !== this.pendingResolutionMeters ||
+                this.transitionState === 'deferred_budget' ||
+                this.gpuPreparer.isTilePrepared(rec.reconstructed) ||
+                (gpuAnyUploadedThisFrame && (gpuUnitsLeft <= 0 || gpuBytesLeft <= 0)),
+              execute: (remMs) => {
+                if (!rec.reconstructed) return false;
+                const tSliceStart = this.nowFn();
+                const step = this.gpuPreparer.prepareTileSlice(
+                  rec.tileKey,
+                  rec.reconstructed,
+                  {
+                    maxUnits: Math.max(1, gpuUnitsLeft),
+                    maxBytes: Math.max(1, gpuBytesLeft),
+                    maxTimeMs: Math.max(0.25, remMs),
+                  }
+                );
+                this.recordGpuPrepStepOnTile(rec, step, tSliceStart);
+                if (step.uploadedUnits > 0) {
+                  gpuAnyUploadedThisFrame = true;
+                  gpuUnitsLeft = Math.max(0, gpuUnitsLeft - step.uploadedUnits);
+                  gpuBytesLeft = Math.max(
+                    0,
+                    gpuBytesLeft - step.uploadedEstimatedBytes
+                  );
+                  gpuUploadSubmitMs += step.uploadSubmitMs;
+                  gpuUploadedBytes += step.uploadedEstimatedBytes;
+                  gpuUploadedMeshCount += step.uploadedUnits;
+                  if (prof) {
+                    prof.recordEvent({
+                      eventType: 'gpu_upload_batch',
+                      tileKey: rec.tileKey,
+                      tileSizeMeters: rec.resolutionMeters,
+                      lod: rec.manifest.lod,
+                      durationMs: step.uploadSubmitMs,
+                      queueDepths: this.getQueueDepthSnapshot(),
+                      detail: {
+                        gpuUploadedUnits: step.uploadedUnits,
+                        gpuUploadedBytes: step.uploadedEstimatedBytes,
+                        reason: step.tileCompleted
+                          ? 'tile_gpu_prep_complete'
+                          : 'tile_gpu_prep_slice',
+                      },
+                    });
+                  }
+                  return true;
+                }
+                return false;
+              },
+            });
+          }
+        }
+
+        // 5: Atomic resolution activation (if destination readiness reaches 100%)
+        units.push({
+          id: `activate:${this.pendingResolutionMeters}`,
+          priority: 'resolution_activation',
+          tieBreaker: 0,
+          isObsolete: () => {
+            if (
+              this.pendingResolutionMeters === null ||
+              this.transitionState === 'deferred_budget'
+            ) {
+              return true;
+            }
+            const curPending = this.getPendingLevelState();
+            if (!curPending) return true;
+            return !this.checkDestinationReadiness(curPending).allReady;
+          },
+          execute: () => {
+            const act = this.activatePendingResolutionAtomic();
+            resolutionActivationMs += act.swapMs;
+            boundaryOverlayRebuildMs += act.boundaryOverlayRebuildMs;
+            return act.swapMs > 0 || resolutionActivationMs >= 0;
+          },
+        });
+      }
+
+      // 6: Normal deferred resource disposal slice
+      if (cfg.deferredDisposalEnabled && this.deferredDisposalQueue.size > 0 && !urgentDisposal) {
+        units.push({
+          id: 'dispose_deferred',
+          priority: 'deferred_disposal',
+          tieBreaker: 0,
+          isObsolete: () => this.deferredDisposalQueue.size === 0,
+          execute: (remMs) => {
+            const step = this.runDeferredDisposalSlice(
+              cfg.maxDeferredDisposeTilesPerFrame,
+              Math.max(0.25, remMs),
+              false,
+              prof
+            );
+            deferredDisposeMs += step.durationMs;
+            deferredDisposedTilesCount += step.disposedTiles;
+            return step.disposedTiles > 0;
+          },
+        });
+      }
+
+      // 8b: Opportunistic predictive pre-warm commits & GPU uploads (strictly lowest priority,
+      // only when idle with no active coverage gap and healthy memory headroom)
+      if (prewarmLevel && !coverageGap && !this.speculativeBackpressureActive) {
+        for (const rec of prewarmReadyRecords) {
+          units.push({
+            id: `commit_prewarm:${rec.tileKey}`,
+            priority: 'speculative_destination',
+            tieBreaker: rec.priorityScore,
+            isObsolete: () =>
+              rec.state !== 'ready_to_commit' ||
+              !rec.isInKeepSet ||
+              this.pendingResolutionMeters !== null ||
+              rec.resolutionMeters !== this.prewarmTargetResolutionMeters ||
+              this.speculativeBackpressureActive ||
+              committedThisTick >= maxCommits,
+            execute: () => {
+              if (committedThisTick >= maxCommits) return false;
+              const did = this.commitSingleReadyTile(rec, prof, accum);
+              if (did) committedThisTick += 1;
+              return did;
+            },
           });
         }
-        committed += 1;
-        committedActive += 1;
+        if (gpuPrepActive) {
+          const prewarmGpu = this.collectPendingGpuPrepRecords(prewarmLevel);
+          for (const rec of prewarmGpu) {
+            units.push({
+              id: `gpu_prep_prewarm:${rec.tileKey}`,
+              priority: 'speculative_destination',
+              tieBreaker: rec.priorityScore + 100_000,
+              isObsolete: () =>
+                !rec.reconstructed ||
+                !rec.isInKeepSet ||
+                this.pendingResolutionMeters !== null ||
+                rec.resolutionMeters !== this.prewarmTargetResolutionMeters ||
+                this.gpuPreparer.isTilePrepared(rec.reconstructed) ||
+                (gpuAnyUploadedThisFrame && (gpuUnitsLeft <= 0 || gpuBytesLeft <= 0)),
+              execute: (remMs) => {
+                if (!rec.reconstructed) return false;
+                const tSliceStart = this.nowFn();
+                const step = this.gpuPreparer.prepareTileSlice(
+                  rec.tileKey,
+                  rec.reconstructed,
+                  {
+                    maxUnits: Math.max(1, gpuUnitsLeft),
+                    maxBytes: Math.max(1, gpuBytesLeft),
+                    maxTimeMs: Math.max(0.25, remMs),
+                  }
+                );
+                this.recordGpuPrepStepOnTile(rec, step, tSliceStart);
+                if (step.uploadedUnits > 0) {
+                  gpuAnyUploadedThisFrame = true;
+                  gpuUnitsLeft = Math.max(0, gpuUnitsLeft - step.uploadedUnits);
+                  gpuBytesLeft = Math.max(0, gpuBytesLeft - step.uploadedEstimatedBytes);
+                  gpuUploadSubmitMs += step.uploadSubmitMs;
+                  gpuUploadedBytes += step.uploadedEstimatedBytes;
+                  gpuUploadedMeshCount += step.uploadedUnits;
+                  return true;
+                }
+                return false;
+              },
+            });
+          }
+        }
+      }
+
+      const scheduleSummary = this.workloadScheduler.runFrame(
+        units,
+        cfg.frameStreamingBudgetMs,
+        {
+          alreadyUsedMs: readyScanAndSortMs,
+          allowStarvationEscape: true,
+        }
+      );
+      schedulerBudgetMs = scheduleSummary.budgetMs;
+      schedulerUsedMs = scheduleSummary.usedMs;
+      schedulerOverrunMs = scheduleSummary.overrunMs;
+      indivisibleOverrunCount = scheduleSummary.indivisibleOverrunCount;
+
+      // Update transitionState if pending level is still preparing
+      if (
+        this.hierarchy &&
+        this.pendingResolutionMeters !== null &&
+        this.transitionState !== 'deferred_budget'
+      ) {
+        const curPending = this.getPendingLevelState();
+        if (curPending) {
+          const readiness = this.checkDestinationReadiness(curPending);
+          this.transitionState = readiness.allReady
+            ? 'ready_to_activate'
+            : 'preparing';
+        }
+      }
+    } else {
+      // Separable non-scheduler path (for tkt041_baseline, incremental_gpu_only,
+      // deferred_disposal_only, debounce_reuse_only A/B evaluations)
+      const allReady = [...activeReadyRecords, ...pendingReadyRecords].sort(
+        (a, b) => a.priorityScore - b.priorityScore
+      );
+      const limit = Math.min(maxCommits, allReady.length);
+      const maxCommitBudgetMs = this.hierarchy
+        ? this.hierarchicalBudget.maxCommitBudgetMsPerFrame
+        : Number.POSITIVE_INFINITY;
+
+      for (let i = 0; i < limit; i++) {
+        if (i > 0 && this.nowFn() - tBatch0 >= maxCommitBudgetMs) {
+          break;
+        }
+        this.commitSingleReadyTile(allReady[i], prof, accum);
+      }
+
+      if (
+        gpuPrepActive &&
+        pendingLevel &&
+        this.pendingResolutionMeters !== null &&
+        this.transitionState !== 'deferred_budget'
+      ) {
+        const toUpload = this.collectPendingGpuPrepRecords(pendingLevel);
+        let unitsLeft = cfg.maxGpuUploadUnitsPerFrame;
+        let bytesLeft = cfg.maxGpuUploadBytesPerFrame;
+        const tGpu0 = this.nowFn();
+        for (const rec of toUpload) {
+          if (!rec.reconstructed) continue;
+          if (
+            gpuUploadedMeshCount > 0 &&
+            (unitsLeft <= 0 ||
+              bytesLeft <= 0 ||
+              this.nowFn() - tGpu0 >= cfg.frameStreamingBudgetMs)
+          ) {
+            break;
+          }
+          const tSliceStart = this.nowFn();
+          const step = this.gpuPreparer.prepareTileSlice(
+            rec.tileKey,
+            rec.reconstructed,
+            {
+              maxUnits: Math.max(1, unitsLeft),
+              maxBytes: Math.max(1, bytesLeft),
+              maxTimeMs: cfg.frameStreamingBudgetMs,
+            }
+          );
+          this.recordGpuPrepStepOnTile(rec, step, tSliceStart);
+          if (step.uploadedUnits > 0) {
+            unitsLeft = Math.max(0, unitsLeft - step.uploadedUnits);
+            bytesLeft = Math.max(0, bytesLeft - step.uploadedEstimatedBytes);
+            gpuUploadSubmitMs += step.uploadSubmitMs;
+            gpuUploadedBytes += step.uploadedEstimatedBytes;
+            gpuUploadedMeshCount += step.uploadedUnits;
+            if (prof) {
+              prof.recordEvent({
+                eventType: 'gpu_upload_batch',
+                tileKey: rec.tileKey,
+                tileSizeMeters: rec.resolutionMeters,
+                lod: rec.manifest.lod,
+                durationMs: step.uploadSubmitMs,
+                queueDepths: this.getQueueDepthSnapshot(),
+                detail: {
+                  gpuUploadedUnits: step.uploadedUnits,
+                  gpuUploadedBytes: step.uploadedEstimatedBytes,
+                  reason: step.tileCompleted
+                    ? 'tile_gpu_prep_complete'
+                    : 'tile_gpu_prep_slice',
+                },
+              });
+            }
+          }
+        }
+      }
+
+      if (
+        this.hierarchy &&
+        this.pendingResolutionMeters !== null &&
+        this.transitionState !== 'deferred_budget'
+      ) {
+        const curPending = this.getPendingLevelState();
+        if (curPending) {
+          const readiness = this.checkDestinationReadiness(curPending);
+          if (readiness.allReady) {
+            const act = this.activatePendingResolutionAtomic();
+            resolutionActivationMs += act.swapMs;
+            boundaryOverlayRebuildMs += act.boundaryOverlayRebuildMs;
+          } else {
+            this.transitionState = 'preparing';
+          }
+        }
+      }
+
+      if (cfg.deferredDisposalEnabled && this.deferredDisposalQueue.size > 0) {
+        const accelerated =
+          this.deferredDisposalQueue.totalPendingBytes > cfg.maxPendingDisposalBytes;
+        const step = this.runDeferredDisposalSlice(
+          accelerated
+            ? Math.max(2, cfg.maxDeferredDisposeTilesPerFrame * 2)
+            : cfg.maxDeferredDisposeTilesPerFrame,
+          cfg.frameStreamingBudgetMs,
+          accelerated,
+          prof
+        );
+        deferredDisposeMs += step.durationMs;
+        deferredDisposedTilesCount += step.disposedTiles;
       }
     }
 
     let commitRebuildStatsMs = 0;
     let commitEmitDiagnosticsMs = 0;
-    if (committed > 0) {
-      const batchCommitMs = performance.now() - tBatch0;
+    if (accum.committed > 0) {
+      const batchCommitMs = Math.max(0, this.nowFn() - tBatch0);
       this.lastCommitMs = batchCommitMs;
       this.maxCommitMs = Math.max(this.maxCommitMs, batchCommitMs);
       pushBoundedSample(this.commitMsRing, batchCommitMs);
 
-      if (committedActive > 0) {
+      if (accum.committedActive > 0) {
         if (this.currentWireframe) {
           this.materialRegistry.setWireframe(true);
         }
-        const tStats0 = prof ? performance.now() : 0;
+        const tStats0 = prof ? this.nowFn() : 0;
         this.rebuildCompositeStats();
-        if (prof) commitRebuildStatsMs = performance.now() - tStats0;
+        if (prof) commitRebuildStatsMs = Math.max(0, this.nowFn() - tStats0);
       }
 
       if (this.hierarchy) {
         this.enforceResourceBudgets();
       }
 
-      const tDiag0 = prof ? performance.now() : 0;
+      const tDiag0 = prof ? this.nowFn() : 0;
       this.emitDiagnostics();
-      if (prof) commitEmitDiagnosticsMs = performance.now() - tDiag0;
-    }
-
-    // Atomic frame-boundary resolution activation check
-    if (
-      this.hierarchy &&
-      this.pendingResolutionMeters !== null &&
-      this.transitionState !== 'deferred_budget'
-    ) {
-      const currentPendingLevel = this.getPendingLevelState();
-      if (currentPendingLevel) {
-        const readiness = this.checkDestinationReadiness(currentPendingLevel);
-        if (readiness.allReady) {
-          this.activatePendingResolutionAtomic();
-        } else {
-          this.transitionState = 'preparing';
-        }
-      }
+      if (prof) commitEmitDiagnosticsMs = Math.max(0, this.nowFn() - tDiag0);
     }
 
     // Re-pump fetch queue in case draining `ready_to_commit` relieved worker backpressure
@@ -2721,32 +3977,59 @@ export class TileStreamManager {
     this.checkIdleWaiters();
     if (prof) {
       prof.recordStreamTick({
-        totalMs: performance.now() - tTick0,
+        totalMs: Math.max(0, this.nowFn() - tTick0),
         readyScanAndSortMs,
-        reconstructMs: totalReconMs,
-        instancedBvhBuildMs: totalInstancedBvhMs,
-        instancedBvhAdoptMs: totalInstancedBvhAdoptMs,
-        workerBvhAdoptedCount: totalWorkerBvhAdopted,
-        syncBvhFallbackCount: totalSyncBvhFallback,
-        staticBvhDeserializeMs: totalStaticBvhMs,
-        sceneAttachMs: totalAttachMs,
+        reconstructMs: accum.totalReconMs,
+        instancedBvhBuildMs: accum.totalInstancedBvhMs,
+        instancedBvhAdoptMs: accum.totalInstancedBvhAdoptMs,
+        workerBvhAdoptedCount: accum.totalWorkerBvhAdopted,
+        syncBvhFallbackCount: accum.totalSyncBvhFallback,
+        staticBvhDeserializeMs: accum.totalStaticBvhMs,
+        sceneAttachMs: accum.totalAttachMs,
         commitRebuildStatsMs,
         commitEmitDiagnosticsMs,
-        tilesCommittedCount: committed,
+        tilesCommittedCount: accum.committed,
+        gpuUploadSubmitMs,
+        gpuUploadedBytes,
+        gpuUploadedMeshCount,
+        resolutionActivationMs,
+        boundaryOverlayRebuildMs,
+        deferredDisposeMs,
+        deferredDisposedTilesCount,
+        schedulerBudgetMs,
+        schedulerUsedMs,
+        schedulerOverrunMs,
+        indivisibleOverrunCount,
+        hasValidViewportCoverage: !this.hasActiveVisibleCoverageGap(),
       });
     }
-    return committed;
+    return accum.committed;
   }
 
   /**
    * Waits until all tiles in the current `fetchSet` (and any non-deferred pending
-   * hierarchical resolution transition) have finished fetching, decoding, and committing.
+   * hierarchical resolution transition or debounce) have finished fetching, decoding,
+   * GPU-preparing, committing, and draining deferred disposals.
    */
   async waitForIdle(): Promise<void> {
     while (!this.isDisposed) {
       this.tick(Number.MAX_SAFE_INTEGER);
       if (this.isCurrentlyIdle()) {
         return;
+      }
+      if (!this.hasPendingAsyncWork()) {
+        if (this.pendingDebounceTargetResolution !== null) {
+          const elapsed =
+            this.pendingDebounceStartedAtMs !== null
+              ? Math.max(0, this.nowFn() - this.pendingDebounceStartedAtMs)
+              : 0;
+          const remaining = Math.max(
+            5,
+            this.streamingFrameBudget.transitionDebounceMs - elapsed + 2
+          );
+          await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+        }
+        continue;
       }
       await new Promise<void>((resolve) => {
         this.idleWaiters.push(resolve);
@@ -2771,6 +4054,15 @@ export class TileStreamManager {
       this.zoomPropagationSkips++;
       return false;
     }
+    if (
+      this.previousCameraZoomForTrend !== null &&
+      Number.isFinite(zoom) &&
+      Math.abs(zoom - this.previousCameraZoomForTrend) > 1e-4
+    ) {
+      this.zoomTrend =
+        zoom < this.previousCameraZoomForTrend ? 'zooming_out' : 'zooming_in';
+    }
+    this.previousCameraZoomForTrend = zoom;
     this.currentCameraZoom = zoom;
     this.materialRegistry.setCameraZoom(zoom);
 
@@ -2913,6 +4205,488 @@ export class TileStreamManager {
     };
   }
 
+  private recordGpuPrepStepOnTile(
+    record: ManagedTileRecord,
+    step: {
+      uploadedUnits: number;
+      uploadedEstimatedBytes: number;
+      uploadSubmitMs: number;
+      tileCompleted: boolean;
+      reusedAlreadyPrepared: boolean;
+    },
+    sliceStartMs: number
+  ): void {
+    const p = record.pipeline;
+    if (p.gpuPrepFirstSliceAtMs === null) {
+      p.gpuPrepFirstSliceAtMs = sliceStartMs;
+    }
+    p.gpuPrepSubmitMs += step.uploadSubmitMs;
+    if (step.uploadedUnits > 0) {
+      p.gpuPrepSliceCount += 1;
+    }
+    if (step.tileCompleted) {
+      const doneMs = this.nowFn();
+      p.gpuPrepCompleteAtMs = doneMs;
+      const startRef = p.reconstructCompleteAtMs ?? p.gpuPrepFirstSliceAtMs ?? doneMs;
+      const totalGpuSpan = Math.max(0, doneMs - startRef);
+      p.gpuPrepWaitMs = Math.max(0, totalGpuSpan - p.gpuPrepSubmitMs);
+      p.readyAtMs = doneMs;
+    }
+  }
+
+  private computeCurrentTransitionBlockerSnapshot(
+    resources: HierarchicalResourceAccountingSnapshot
+  ): TransitionBlockerSnapshot {
+    const now = this.nowFn();
+    let activeVisibleInFlightCount = 0;
+    let activePreloadInFlightCount = 0;
+    let pendingDestinationVisibleInFlightCount = 0;
+    let pendingDestinationSpeculativeInFlightCount = 0;
+    let pendingDecodedBytes = 0;
+
+    for (const record of this.tilesByKey.values()) {
+      const inFlight =
+        record.state === 'queued' ||
+        record.state === 'fetching' ||
+        record.state === 'decoding' ||
+        record.state === 'ready_to_commit';
+      if (record.state === 'ready_to_commit' && record.decodedFootprint) {
+        pendingDecodedBytes +=
+          record.decodedFootprint.cpuGeometryBytes + record.decodedFootprint.bvhBytes;
+      }
+      if (!inFlight) continue;
+      if (record.resolutionMeters === this.activeResolutionMeters) {
+        if (record.isVisibleInViewport) activeVisibleInFlightCount += 1;
+        else activePreloadInFlightCount += 1;
+      } else if (record.resolutionMeters === this.pendingResolutionMeters) {
+        if (record.isVisibleInViewport) pendingDestinationVisibleInFlightCount += 1;
+        else pendingDestinationSpeculativeInFlightCount += 1;
+      }
+    }
+
+    const memoryHeadroomBytes = Math.max(
+      0,
+      this.hierarchicalBudget.totalMemoryBudgetBytes - resources.totalMeasuredBytes
+    );
+    const contention = {
+      activeVisibleInFlightCount,
+      activePreloadInFlightCount,
+      pendingDestinationVisibleInFlightCount,
+      pendingDestinationSpeculativeInFlightCount,
+      fetchSlotsUsed: this.activeFetchCount,
+      fetchSlotsMax: this.maxConcurrentFetches,
+      workerPendingDecodes: this.decodeClient.getPendingDecodeCount(),
+      workerPoolSize: this.decodeClient.getActiveWorkerCount(),
+      workerBackpressureActive: this.workerBackpressureActive,
+      speculativeBackpressureActive: this.speculativeBackpressureActive,
+      memoryHeadroomBytes,
+      pendingDecodedBytes,
+      pendingDecodedCapBytes: this.hierarchicalBudget.maxPendingDecodedBytes,
+      cancellationsDuringTransition: this.currentTransitionCancellations,
+    };
+
+    if (
+      this.pendingResolutionMeters === null &&
+      this.pendingDebounceTargetResolution !== null
+    ) {
+      const elapsedMs =
+        this.pendingDebounceStartedAtMs !== null
+          ? Math.max(0, now - this.pendingDebounceStartedAtMs)
+          : 0;
+      return {
+        active: true,
+        blockerCategory: 'debounce_waiting',
+        blockerReason: `Debouncing transition ${this.activeResolutionMeters ?? '?'}m -> ${this.pendingDebounceTargetResolution}m (${elapsedMs.toFixed(0)}/${this.streamingFrameBudget.transitionDebounceMs} ms)`,
+        fromResolutionMeters: this.activeResolutionMeters,
+        toResolutionMeters: this.pendingDebounceTargetResolution,
+        transitionGeneration: this.transitionGeneration,
+        elapsedMs: Number(elapsedMs.toFixed(2)),
+        requiredVisibleCount: 0,
+        readyCount: 0,
+        queuedCount: 0,
+        fetchingCount: 0,
+        decodingCount: 0,
+        reconstructWaitingCount: 0,
+        gpuPrepWaitingCount: 0,
+        failedCount: 0,
+        slowestOutstandingTile: null,
+        contention,
+      };
+    }
+
+    if (this.pendingResolutionMeters === null) {
+      return {
+        active: false,
+        blockerCategory: 'none',
+        blockerReason: 'No transition in progress.',
+        fromResolutionMeters: this.activeResolutionMeters,
+        toResolutionMeters: null,
+        transitionGeneration: this.transitionGeneration,
+        elapsedMs: 0,
+        requiredVisibleCount: 0,
+        readyCount: 0,
+        queuedCount: 0,
+        fetchingCount: 0,
+        decodingCount: 0,
+        reconstructWaitingCount: 0,
+        gpuPrepWaitingCount: 0,
+        failedCount: 0,
+        slowestOutstandingTile: null,
+        contention,
+      };
+    }
+
+    const elapsedMs =
+      this.transitionStartedAtMs !== null
+        ? Math.max(0, now - this.transitionStartedAtMs)
+        : 0;
+
+    if (this.transitionState === 'deferred_budget') {
+      return {
+        active: true,
+        blockerCategory: 'budget_deferred',
+        blockerReason:
+          this.budgetDeferralReason ?? 'Transition deferred due to memory budget.',
+        fromResolutionMeters: this.activeResolutionMeters,
+        toResolutionMeters: this.pendingResolutionMeters,
+        transitionGeneration: this.transitionGeneration,
+        elapsedMs: Number(elapsedMs.toFixed(2)),
+        requiredVisibleCount: 0,
+        readyCount: 0,
+        queuedCount: 0,
+        fetchingCount: 0,
+        decodingCount: 0,
+        reconstructWaitingCount: 0,
+        gpuPrepWaitingCount: 0,
+        failedCount: 0,
+        slowestOutstandingTile: null,
+        contention,
+      };
+    }
+
+    const pendingLevel = this.getPendingLevelState();
+    const requireGpuPrep = this.isIncrementalGpuPrepActive();
+    let requiredVisibleCount = 0;
+    let readyCount = 0;
+    let queuedCount = 0;
+    let fetchingCount = 0;
+    let decodingCount = 0;
+    let reconstructWaitingCount = 0;
+    let gpuPrepWaitingCount = 0;
+    let failedCount = 0;
+    let slowestTile: TransitionOutstandingTileSnapshot | null = null;
+
+    if (pendingLevel) {
+      for (const record of pendingLevel.tilesByKey.values()) {
+        if (!record.isVisibleInViewport) continue;
+        requiredVisibleCount += 1;
+        if (record.manifest.isEmpty) {
+          readyCount += 1;
+          continue;
+        }
+        const isCpuReady =
+          (record.state === 'prepared_inactive' ||
+            record.state === 'cached_inactive' ||
+            record.state === 'loaded') &&
+          record.reconstructed !== null;
+        const isGpuReady =
+          isCpuReady &&
+          (!requireGpuPrep || this.gpuPreparer.isTilePrepared(record.reconstructed!));
+        if (isGpuReady) {
+          readyCount += 1;
+          continue;
+        }
+
+        let currentStage: TransitionOutstandingTileSnapshot['currentStage'] = 'unloaded';
+        let stageStartMs = this.transitionStartedAtMs ?? now;
+        let gpuPrepRemainingUnits = 0;
+        const p = record.pipeline;
+        if (record.state === 'queued') {
+          queuedCount += 1;
+          currentStage = 'queued';
+          stageStartMs = p.queuedAtMs ?? stageStartMs;
+        } else if (record.state === 'fetching') {
+          fetchingCount += 1;
+          currentStage = 'fetching';
+          stageStartMs = p.fetchStartAtMs ?? stageStartMs;
+        } else if (record.state === 'decoding') {
+          decodingCount += 1;
+          currentStage = 'worker_queue_or_decoding';
+          stageStartMs = p.decodeStartAtMs ?? stageStartMs;
+        } else if (record.state === 'ready_to_commit') {
+          reconstructWaitingCount += 1;
+          currentStage = 'reconstruct_waiting';
+          stageStartMs = p.decodeCompleteAtMs ?? stageStartMs;
+        } else if (isCpuReady && !isGpuReady) {
+          gpuPrepWaitingCount += 1;
+          currentStage = 'gpu_prep_waiting';
+          stageStartMs = p.reconstructCompleteAtMs ?? stageStartMs;
+          gpuPrepRemainingUnits = this.gpuPreparer.getRemainingUnits(record.reconstructed!);
+        } else if (record.state === 'error') {
+          failedCount += 1;
+          currentStage = 'error';
+        }
+
+        const stageElapsedMs = Math.max(0, now - stageStartMs);
+        const liveFetchQueueWaitMs =
+          record.state === 'queued' && p.queuedAtMs !== null
+            ? Math.max(0, now - p.queuedAtMs)
+            : p.fetchQueueWaitMs;
+        const livePayloadRetrievalMs =
+          record.state === 'fetching' && p.fetchStartAtMs !== null
+            ? Math.max(0, now - p.fetchStartAtMs)
+            : p.payloadRetrievalMs;
+        const liveReconstructWaitMs =
+          record.state === 'ready_to_commit' && p.decodeCompleteAtMs !== null
+            ? Math.max(0, now - p.decodeCompleteAtMs)
+            : p.mainThreadReconstructWaitMs;
+        const liveGpuPrepWaitMs =
+          isCpuReady && !isGpuReady && p.reconstructCompleteAtMs !== null
+            ? Math.max(0, now - p.reconstructCompleteAtMs - p.gpuPrepSubmitMs)
+            : p.gpuPrepWaitMs;
+        const rawBytes = record.decodedFootprint
+          ? record.decodedFootprint.cpuGeometryBytes + record.decodedFootprint.bvhBytes
+          : null;
+
+        const candidate: TransitionOutstandingTileSnapshot = {
+          tileKey: record.tileKey,
+          resolutionMeters: record.resolutionMeters,
+          state: record.state,
+          currentStage,
+          ageSinceTransitionStartMs: Number(elapsedMs.toFixed(2)),
+          currentStageElapsedMs: Number(stageElapsedMs.toFixed(2)),
+          fetchQueueWaitMs: Number(liveFetchQueueWaitMs.toFixed(2)),
+          payloadRetrievalMs: Number(livePayloadRetrievalMs.toFixed(2)),
+          workerQueueWaitMs: Number(
+            (p.workerClientQueueWaitMs + p.workerThreadQueueWaitMs).toFixed(2)
+          ),
+          workerDecodeAndBvhMs: Number(
+            (
+              p.workerInflateAndDecodeMs +
+              p.workerBvhBuildMs +
+              p.workerPayloadPrepMs
+            ).toFixed(2)
+          ),
+          mainThreadReconstructWaitMs: Number(liveReconstructWaitMs.toFixed(2)),
+          reconstructMs: Number(p.reconstructMs.toFixed(2)),
+          gpuPrepWaitMs: Number(liveGpuPrepWaitMs.toFixed(2)),
+          gpuPrepSubmitMs: Number(p.gpuPrepSubmitMs.toFixed(2)),
+          gpuPrepRemainingUnits,
+          payloadCompressedBytes: record.lastCompressedBytes ?? null,
+          payloadRawBytes: rawBytes,
+          lastError: record.lastError,
+        };
+
+        if (
+          slowestTile === null ||
+          candidate.currentStageElapsedMs > slowestTile.currentStageElapsedMs
+        ) {
+          slowestTile = candidate;
+        }
+      }
+    }
+
+    let blockerCategory: TransitionBlockerCategory = 'none';
+    let blockerReason = 'Ready for atomic frame-boundary activation.';
+    if (failedCount > 0) {
+      blockerCategory = 'error_or_missing';
+      blockerReason = `${failedCount} required ${this.pendingResolutionMeters}m tile(s) failed to load.`;
+    } else if (this.workerBackpressureActive && queuedCount > 0) {
+      blockerCategory = 'memory_backpressure';
+      blockerReason = `Worker backpressure active (${(pendingDecodedBytes / (1024 * 1024)).toFixed(1)}/${(this.hierarchicalBudget.maxPendingDecodedBytes / (1024 * 1024)).toFixed(1)} MiB pending decoded) blocking ${queuedCount} queued tile(s).`;
+    } else if (this.hasActiveVisibleCoverageGap() && (queuedCount > 0 || reconstructWaitingCount > 0 || gpuPrepWaitingCount > 0)) {
+      blockerCategory = 'active_coverage_gap';
+      blockerReason = `Active ${this.activeResolutionMeters}m visible coverage gap taking priority over ${requiredVisibleCount - readyCount} pending destination tile(s).`;
+    } else if (slowestTile) {
+      switch (slowestTile.currentStage) {
+        case 'queued':
+          blockerCategory = 'fetch_queue_contention';
+          blockerReason = `${queuedCount} destination tile(s) queued waiting for fetch slots (${this.activeFetchCount}/${this.maxConcurrentFetches} used, ${activePreloadInFlightCount} active-preload in flight).`;
+          break;
+        case 'fetching':
+          blockerCategory = 'network_fetching';
+          blockerReason = `Fetching ${fetchingCount} destination tile(s); slowest ${slowestTile.tileKey} (${slowestTile.payloadRetrievalMs.toFixed(0)} ms).`;
+          break;
+        case 'worker_queue_or_decoding':
+          blockerCategory =
+            this.decodeClient.getPendingDecodeCount() >
+            Math.max(1, this.decodeClient.getActiveWorkerCount())
+              ? 'worker_queue_waiting'
+              : 'worker_decoding';
+          blockerReason = `Decoding ${decodingCount} destination tile(s) (${this.decodeClient.getPendingDecodeCount()} worker jobs across ${this.decodeClient.getActiveWorkerCount()} workers); slowest ${slowestTile.tileKey} (${slowestTile.currentStageElapsedMs.toFixed(0)} ms).`;
+          break;
+        case 'reconstruct_waiting':
+          blockerCategory = 'main_thread_reconstruct_waiting';
+          blockerReason = `${reconstructWaitingCount} decoded destination tile(s) awaiting frame-budgeted reconstruction; slowest ${slowestTile.tileKey} (${slowestTile.mainThreadReconstructWaitMs.toFixed(0)} ms).`;
+          break;
+        case 'gpu_prep_waiting':
+          blockerCategory = 'gpu_prep_waiting';
+          blockerReason = `${gpuPrepWaitingCount} destination tile(s) awaiting incremental GPU upload; slowest ${slowestTile.tileKey} (${slowestTile.gpuPrepRemainingUnits} units left, ${slowestTile.gpuPrepWaitMs.toFixed(0)} ms wait).`;
+          break;
+        default:
+          blockerCategory = 'error_or_missing';
+          blockerReason = `Waiting for ${requiredVisibleCount - readyCount}/${requiredVisibleCount} required ${this.pendingResolutionMeters}m tile(s).`;
+          break;
+      }
+    }
+
+    return {
+      active: true,
+      blockerCategory,
+      blockerReason,
+      fromResolutionMeters: this.activeResolutionMeters,
+      toResolutionMeters: this.pendingResolutionMeters,
+      transitionGeneration: this.transitionGeneration,
+      elapsedMs: Number(elapsedMs.toFixed(2)),
+      requiredVisibleCount,
+      readyCount,
+      queuedCount,
+      fetchingCount,
+      decodingCount,
+      reconstructWaitingCount,
+      gpuPrepWaitingCount,
+      failedCount,
+      slowestOutstandingTile: slowestTile,
+      contention,
+    };
+  }
+
+  private recordTransitionCriticalPath(params: {
+    outcome: 'completed' | 'cancelled' | 'deferred_budget';
+    fromResolutionMeters: number;
+    toResolutionMeters: number;
+    pendingLevel: ResolutionLevelState | null;
+    finishedAtMs: number;
+    activationSwapMs: number;
+    cancelOrDeferReason: string | null;
+    overrideGeneration?: number;
+    overrideStartedAtMs?: number;
+  }): void {
+    const startedAtMs =
+      params.overrideStartedAtMs ?? this.transitionStartedAtMs ?? params.finishedAtMs;
+    const totalDurationMs = Math.max(0, params.finishedAtMs - startedAtMs);
+
+    let requiredTileCount = 0;
+    let reusedFromCacheCount = 0;
+    let reusedFromPrewarmCount = 0;
+    let earliestReadyAtMs = Number.POSITIVE_INFINITY;
+    let latestReadyAtMs = 0;
+    let criticalRecord: ManagedTileRecord | null = null;
+    let criticalScore = -1;
+
+    if (params.pendingLevel) {
+      for (const rec of params.pendingLevel.tilesByKey.values()) {
+        if (!rec.isVisibleInViewport) continue;
+        requiredTileCount += 1;
+        if (rec.pipeline.reusedFromCache) reusedFromCacheCount += 1;
+        if (rec.pipeline.preparedByPrewarm) reusedFromPrewarmCount += 1;
+        if (rec.pipeline.readyAtMs !== null) {
+          earliestReadyAtMs = Math.min(earliestReadyAtMs, rec.pipeline.readyAtMs);
+          latestReadyAtMs = Math.max(latestReadyAtMs, rec.pipeline.readyAtMs);
+        }
+        const tileEndMs = rec.pipeline.readyAtMs ?? params.finishedAtMs;
+        const tilePipeSum =
+          rec.pipeline.fetchQueueWaitMs +
+          rec.pipeline.payloadRetrievalMs +
+          rec.pipeline.workerClientQueueWaitMs +
+          rec.pipeline.workerThreadQueueWaitMs +
+          rec.pipeline.workerInflateAndDecodeMs +
+          rec.pipeline.workerBvhBuildMs +
+          rec.pipeline.workerPayloadPrepMs +
+          rec.pipeline.mainThreadReconstructWaitMs +
+          rec.pipeline.reconstructMs +
+          rec.pipeline.gpuPrepWaitMs +
+          rec.pipeline.gpuPrepSubmitMs;
+        const score =
+          params.outcome === 'completed'
+            ? tileEndMs - startedAtMs + tilePipeSum * 0.001
+            : tilePipeSum + (rec.pipeline.readyAtMs === null ? 10_000 : 0);
+        if (score > criticalScore) {
+          criticalScore = score;
+          criticalRecord = rec;
+        }
+      }
+    }
+
+    const cp = criticalRecord?.pipeline ?? createEmptyTilePipelineTimings();
+    const workerQueueWaitMs = cp.workerClientQueueWaitMs + cp.workerThreadQueueWaitMs;
+    const workerDecodeAndBvhMs =
+      cp.workerInflateAndDecodeMs + cp.workerBvhBuildMs + cp.workerPayloadPrepMs;
+    const gpuPrepTotalMs = cp.gpuPrepWaitMs + cp.gpuPrepSubmitMs;
+    const remainingCoverageWaitMs =
+      Number.isFinite(earliestReadyAtMs) && latestReadyAtMs >= earliestReadyAtMs
+        ? Math.max(0, latestReadyAtMs - earliestReadyAtMs)
+        : 0;
+    const tailTileEnteredLateMs =
+      cp.queuedAtMs !== null && cp.queuedAtMs > startedAtMs
+        ? Math.max(0, cp.queuedAtMs - startedAtMs)
+        : 0;
+
+    let dominantBlockerCategory: TransitionBlockerCategory = 'none';
+    if (params.outcome === 'deferred_budget') {
+      dominantBlockerCategory = 'budget_deferred';
+    } else {
+      const stagePairs: Array<[TransitionBlockerCategory, number]> = [
+        ['fetch_queue_contention', cp.fetchQueueWaitMs],
+        ['network_fetching', cp.payloadRetrievalMs],
+        ['worker_queue_waiting', workerQueueWaitMs],
+        ['worker_decoding', workerDecodeAndBvhMs],
+        ['main_thread_reconstruct_waiting', cp.mainThreadReconstructWaitMs + cp.reconstructMs],
+        ['gpu_prep_waiting', gpuPrepTotalMs],
+      ];
+      let maxVal = 0;
+      for (const [cat, val] of stagePairs) {
+        if (val > maxVal) {
+          maxVal = val;
+          dominantBlockerCategory = cat;
+        }
+      }
+    }
+
+    const record: TransitionCriticalPathRecord = {
+      transitionGeneration: params.overrideGeneration ?? this.transitionGeneration,
+      outcome: params.outcome,
+      fromResolutionMeters: params.fromResolutionMeters,
+      toResolutionMeters: params.toResolutionMeters,
+      startedAtMs: Number(startedAtMs.toFixed(2)),
+      finishedAtMs: Number(params.finishedAtMs.toFixed(2)),
+      totalDurationMs: Number(totalDurationMs.toFixed(3)),
+      debounceWaitMs: Number(this.currentTransitionDebounceWaitMs.toFixed(3)),
+      activationSwapMs: Number(params.activationSwapMs.toFixed(3)),
+      requiredTileCount,
+      reusedFromCacheCount,
+      reusedFromPrewarmCount,
+      cancellationsDuringTransition: this.currentTransitionCancellations,
+      dominantBlockerCategory,
+      criticalPathTileKey: criticalRecord?.tileKey ?? null,
+      stagesMs: {
+        fetchQueueWaitMs: Number(cp.fetchQueueWaitMs.toFixed(3)),
+        payloadRetrievalMs: Number(cp.payloadRetrievalMs.toFixed(3)),
+        workerQueueWaitMs: Number(workerQueueWaitMs.toFixed(3)),
+        workerInflateAndDecodeMs: Number(cp.workerInflateAndDecodeMs.toFixed(3)),
+        workerBvhBuildMs: Number(cp.workerBvhBuildMs.toFixed(3)),
+        workerDecodeAndBvhMs: Number(workerDecodeAndBvhMs.toFixed(3)),
+        mainThreadReconstructWaitMs: Number(cp.mainThreadReconstructWaitMs.toFixed(3)),
+        reconstructMs: Number(cp.reconstructMs.toFixed(3)),
+        gpuPrepWaitMs: Number(cp.gpuPrepWaitMs.toFixed(3)),
+        gpuPrepSubmitMs: Number(cp.gpuPrepSubmitMs.toFixed(3)),
+        gpuPrepTotalMs: Number(gpuPrepTotalMs.toFixed(3)),
+        remainingCoverageWaitMs: Number(remainingCoverageWaitMs.toFixed(3)),
+        tailTileEnteredLateMs: Number(tailTileEnteredLateMs.toFixed(3)),
+        activationSwapMs: Number(params.activationSwapMs.toFixed(3)),
+      },
+      cancelOrDeferReason: params.cancelOrDeferReason,
+    };
+
+    this.recentTransitions.push(record);
+    if (this.recentTransitions.length > 64) {
+      this.recentTransitions.shift();
+    }
+    if (params.outcome === 'completed') {
+      this.lastCompletedTransition = record;
+    }
+  }
+
   private computeHierarchicalResourceAccounting(): HierarchicalResourceAccountingSnapshot {
     const byResolution: ResolutionResourceAccounting[] = [];
     let activeGeometryBytes = 0;
@@ -2925,6 +4699,7 @@ export class TileStreamManager {
     let totalMeasuredBytes = 0;
     let totalEstimatedGpuBytes = 0;
 
+    const disposalAccounting = this.deferredDisposalQueue.getAccountingSnapshot();
     const sortedResolutions = [...this.levelsByResolution.keys()].sort(
       (a, b) => a - b
     );
@@ -2969,8 +4744,17 @@ export class TileStreamManager {
         totalMeasuredBytes += b.totalMeasuredBytes;
         totalEstimatedGpuBytes += b.estimatedGpuBytes;
       }
+
+      const resPending = disposalAccounting.byResolution[resMeters];
+      if (resPending) {
+        acc.pendingDisposalTiles = resPending.tiles;
+        acc.measuredPendingDisposalBytes = resPending.bytes;
+      }
       byResolution.push(acc);
     }
+
+    totalMeasuredBytes += disposalAccounting.pendingBytes;
+    totalEstimatedGpuBytes += disposalAccounting.pendingEstimatedGpuBytes;
 
     return {
       budget: { ...this.hierarchicalBudget },
@@ -2981,6 +4765,8 @@ export class TileStreamManager {
       instancedSpatialIndexBytes,
       staticBvhBytes,
       retainedInactiveTilesBytes,
+      pendingDisposalTiles: disposalAccounting.pendingTiles,
+      pendingDisposalBytes: disposalAccounting.pendingBytes,
       totalMeasuredBytes,
       totalEstimatedGpuBytes,
       speculativeBackpressureActive: this.speculativeBackpressureActive,
@@ -2991,18 +4777,18 @@ export class TileStreamManager {
 
   private disposeReconstructedTile(
     record: ManagedTileRecord,
-    isCacheEviction: boolean
+    isCacheEviction: boolean,
+    forceImmediate = false
   ): void {
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
-    const t0 = prof ? performance.now() : 0;
+    const t0 = prof ? this.nowFn() : 0;
     const fp = record.decodedFootprint;
+    const breakdown = this.computeRecordFootprintBreakdown(record);
     if (record.state === 'loaded') {
       this.detachTileFromCompositeScene(record);
     }
-    if (record.reconstructed) {
-      record.reconstructed.dispose();
-      record.reconstructed = null;
-    }
+    const reconstructed = record.reconstructed;
+    record.reconstructed = null;
     record.decodedPayload = null;
     record.decodedFootprint = null;
     record.state = 'unloaded';
@@ -3010,6 +4796,40 @@ export class TileStreamManager {
     if (isCacheEviction) {
       this.cacheEvictionsTotal += 1;
     }
+
+    if (reconstructed) {
+      this.gpuPreparer.cancelTile(record.tileKey, reconstructed, true);
+      if (this.streamingFrameBudget.deferredDisposalEnabled && !forceImmediate) {
+        this.deferredDisposalQueue.enqueue({
+          tileKey: record.tileKey,
+          resolutionMeters: record.resolutionMeters,
+          lod: record.manifest.lod,
+          reconstructed,
+          measuredBytes: breakdown.totalMeasuredBytes,
+          estimatedGpuBytes: breakdown.estimatedGpuBytes,
+          isCacheEviction,
+        });
+        if (prof) {
+          prof.recordEvent({
+            eventType: 'deferred_dispose_enqueue',
+            tileKey: record.tileKey,
+            tileSizeMeters: record.resolutionMeters,
+            lod: record.manifest.lod,
+            payloadCompressedBytes: record.lastCompressedBytes ?? null,
+            payloadRawBytes: breakdown.totalMeasuredBytes,
+            durationMs: Math.max(0, this.nowFn() - t0),
+            queueDepths: this.getQueueDepthSnapshot(),
+            detail: {
+              deferredDisposePendingTiles: this.deferredDisposalQueue.size,
+              deferredDisposePendingBytes: this.deferredDisposalQueue.totalPendingBytes,
+            },
+          });
+        }
+        return;
+      }
+      reconstructed.dispose();
+    }
+
     if (prof) {
       prof.recordEvent({
         eventType: isCacheEviction ? 'cache_evict' : 'evict',
@@ -3018,7 +4838,7 @@ export class TileStreamManager {
         lod: record.manifest.lod,
         payloadCompressedBytes: record.lastCompressedBytes ?? null,
         payloadRawBytes: fp ? fp.cpuGeometryBytes + fp.bvhBytes : null,
-        durationMs: performance.now() - t0,
+        durationMs: Math.max(0, this.nowFn() - t0),
         queueDepths: this.getQueueDepthSnapshot(),
       });
     }
@@ -3050,20 +4870,61 @@ export class TileStreamManager {
       cachedBytesTotal = Math.max(0, cachedBytesTotal - oldest.bytes);
     }
 
-    // 2. Enforce total measured memory budget across all resolutions
-    let totalMeasured = 0;
-    for (const record of this.tilesByKey.values()) {
-      totalMeasured += this.computeRecordFootprintBreakdown(record).totalMeasuredBytes;
+    // 2. Enforce total measured memory budget across all resolutions (including pending disposals!)
+    let totalMeasured = this.computeTotalMeasuredMemoryBytes();
+
+    // 2-pre: If pending deferred disposals exceed cap or push total over budget, accelerate draining FIRST
+    if (
+      this.deferredDisposalQueue.size > 0 &&
+      (totalMeasured > budget.totalMemoryBudgetBytes ||
+        this.deferredDisposalQueue.totalPendingBytes >
+          this.streamingFrameBudget.maxPendingDisposalBytes)
+    ) {
+      const excessOverBudget = Math.max(
+        0,
+        totalMeasured - budget.totalMemoryBudgetBytes
+      );
+      const targetPendingBytes = Math.min(
+        this.streamingFrameBudget.maxPendingDisposalBytes,
+        Math.max(0, this.deferredDisposalQueue.totalPendingBytes - excessOverBudget)
+      );
+      const drained = this.deferredDisposalQueue.drainToTargetBytes(targetPendingBytes);
+      totalMeasured = Math.max(0, totalMeasured - drained.disposedBytes);
+    }
+
+    // 2-prewarm: Cancel/dispose opportunistic predictive prewarm tiles before touching cached or active tiles
+    if (totalMeasured > budget.totalMemoryBudgetBytes && this.prewarmTargetResolutionMeters !== null) {
+      const prewarmLevel = this.getPrewarmLevelState();
+      if (prewarmLevel) {
+        for (const record of prewarmLevel.tilesByKey.values()) {
+          if (totalMeasured <= budget.totalMemoryBudgetBytes) break;
+          if (
+            record.state === 'queued' ||
+            record.state === 'fetching' ||
+            record.state === 'decoding' ||
+            record.state === 'ready_to_commit'
+          ) {
+            const bytes = this.computeRecordFootprintBreakdown(record).totalMeasuredBytes;
+            this.cancelInFlightTile(record);
+            totalMeasured = Math.max(0, totalMeasured - bytes);
+          } else if (record.state === 'prepared_inactive') {
+            const bytes = this.computeRecordFootprintBreakdown(record).totalMeasuredBytes;
+            this.disposeReconstructedTile(record, false, true);
+            totalMeasured = Math.max(0, totalMeasured - bytes);
+          }
+        }
+      }
+      this.prewarmTargetResolutionMeters = null;
     }
 
     if (totalMeasured > budget.totalMemoryBudgetBytes) {
-      // 2a. Evict remaining LRU cached_inactive tiles first
+      // 2a. Evict remaining LRU cached_inactive tiles first (forceImmediate under active pressure so bytes reclaim now)
       while (
         totalMeasured > budget.totalMemoryBudgetBytes &&
         cachedRecords.length > 0
       ) {
         const oldest = cachedRecords.shift()!;
-        this.disposeReconstructedTile(oldest.record, true);
+        this.disposeReconstructedTile(oldest.record, true, true);
         totalMeasured = Math.max(0, totalMeasured - oldest.bytes);
       }
     }
@@ -3090,7 +4951,7 @@ export class TileStreamManager {
           if (item.record.state === 'ready_to_commit') {
             this.cancelInFlightTile(item.record);
           } else {
-            this.disposeReconstructedTile(item.record, false);
+            this.disposeReconstructedTile(item.record, false, true);
           }
           totalMeasured = Math.max(0, totalMeasured - item.bytes);
         }
@@ -3119,7 +4980,7 @@ export class TileStreamManager {
           if (item.record.state === 'ready_to_commit') {
             this.cancelInFlightTile(item.record);
           } else {
-            this.evictLoadedTile(item.record);
+            this.evictLoadedTile(item.record, true);
             evictedAnyActive = true;
           }
           totalMeasured = Math.max(0, totalMeasured - item.bytes);
@@ -3138,15 +4999,17 @@ export class TileStreamManager {
       this.pendingResolutionMeters !== null &&
       this.transitionState !== 'deferred_budget'
     ) {
-      const measuredMb = (totalMeasured / (1024 * 1024)).toFixed(2);
-      const budgetMb = (budget.totalMemoryBudgetBytes / (1024 * 1024)).toFixed(2);
-      this.deferPendingTransitionForBudget(
-        `Transition to ${this.pendingResolutionMeters} m deferred: active visible + replacement coverage (${measuredMb} MiB) exceeds total memory budget (${budgetMb} MiB).`
-      );
-      totalMeasured = 0;
-      for (const record of this.tilesByKey.values()) {
-        totalMeasured +=
-          this.computeRecordFootprintBreakdown(record).totalMeasuredBytes;
+      if (this.deferredDisposalQueue.size > 0) {
+        const drained = this.deferredDisposalQueue.flushAll();
+        totalMeasured = Math.max(0, totalMeasured - drained.disposedBytes);
+      }
+      if (totalMeasured > budget.totalMemoryBudgetBytes) {
+        const measuredMb = (totalMeasured / (1024 * 1024)).toFixed(2);
+        const budgetMb = (budget.totalMemoryBudgetBytes / (1024 * 1024)).toFixed(2);
+        this.deferPendingTransitionForBudget(
+          `Transition to ${this.pendingResolutionMeters} m deferred: active visible + replacement coverage (${measuredMb} MiB) exceeds total memory budget (${budgetMb} MiB).`
+        );
+        totalMeasured = this.computeTotalMeasuredMemoryBytes();
       }
     }
 
@@ -3279,12 +5142,30 @@ export class TileStreamManager {
     const isLoaded = this.manifestStatus === 'loaded' && this.metadata !== null;
     const loadedPackPath = isLoaded ? this.manifestPackPath : null;
 
+    const frameBudgetDiag: StreamingFrameBudgetDiagnosticsSnapshot = {
+      config: { ...this.streamingFrameBudget },
+      variant: identifyStreamingF1Variant(this.streamingFrameBudget),
+      scheduler: this.workloadScheduler.getStats(),
+      gpuPreparer: this.gpuPreparer.getStats(),
+      deferredDisposal: this.deferredDisposalQueue.getAccountingSnapshot(),
+      pendingDebounceTargetResolution: this.pendingDebounceTargetResolution,
+      pendingDebounceElapsedMs:
+        this.pendingDebounceStartedAtMs !== null
+          ? Number(Math.max(0, this.nowFn() - this.pendingDebounceStartedAtMs).toFixed(2))
+          : 0,
+      transitionsDebouncedAvoided: this.transitionsDebouncedAvoidedTotal,
+      destinationPrepReused: this.destinationPrepReusedTotal,
+      hasValidViewportCoverage: !this.hasActiveVisibleCoverageGap(),
+      boundaryOverlayDirty: this.boundaryOverlayDirty,
+      boundaryOverlayRebuildMsTotal: Number(this.boundaryOverlayRebuildMsTotal.toFixed(3)),
+    };
+
     let hierarchicalDiag: HierarchicalStreamingDiagnosticsSnapshot | null = null;
     if (this.hierarchy && isLoaded && this.activeResolutionMeters !== null) {
       const pendingLevel = this.getPendingLevelState();
       const readiness = pendingLevel
         ? this.checkDestinationReadiness(pendingLevel)
-        : { requiredCount: 0, readyCount: 0, allReady: true };
+        : { requiredCount: 0, readyCount: 0, gpuPreparedCount: 0, allReady: true };
       const margins = resolvePhysicalMarginsForResolution(
         this.activeResolutionMeters,
         this.hierarchicalPolicy
@@ -3292,8 +5173,10 @@ export class TileStreamManager {
       const resources = this.computeHierarchicalResourceAccounting();
       const transitionElapsedMs =
         this.transitionStartedAtMs !== null
-          ? Math.max(0, performance.now() - this.transitionStartedAtMs)
+          ? Math.max(0, this.nowFn() - this.transitionStartedAtMs)
           : 0;
+      const currentTransitionBlocker =
+        this.computeCurrentTransitionBlockerSnapshot(resources);
 
       hierarchicalDiag = {
         enabled: true,
@@ -3304,12 +5187,14 @@ export class TileStreamManager {
           this.desiredResolutionMeters ?? this.activeResolutionMeters,
         activeResolutionMeters: this.activeResolutionMeters,
         pendingResolutionMeters: this.pendingResolutionMeters,
+        prewarmTargetResolutionMeters: this.prewarmTargetResolutionMeters,
         transitionState: this.transitionState,
         transitionGeneration: this.transitionGeneration,
         transitionElapsedMs: Number(transitionElapsedMs.toFixed(2)),
         budgetDeferralReason: this.budgetDeferralReason,
         requiredDestinationTiles: readiness.requiredCount,
         readyDestinationTiles: readiness.readyCount,
+        gpuPreparedDestinationTiles: readiness.gpuPreparedCount,
         activeVisibleTiles: visibleTiles,
         activeLoadedTiles: loadedTiles,
         pendingPreparedTiles,
@@ -3335,6 +5220,10 @@ export class TileStreamManager {
           transitionsCompleted: this.transitionsCompletedTotal,
           transitionsCancelled: this.transitionsCancelledTotal,
           transitionsDeferredBudget: this.transitionsDeferredBudgetTotal,
+          transitionsDebouncedAvoided: this.transitionsDebouncedAvoidedTotal,
+          destinationPrepReused: this.destinationPrepReusedTotal,
+          prewarmTilesPrepared: this.prewarmTilesPreparedTotal,
+          prewarmReusedOnTransition: this.prewarmReusedOnTransitionTotal,
           cacheHits: this.cacheHitsTotal,
           cacheEvictions: this.cacheEvictionsTotal,
         },
@@ -3347,6 +5236,18 @@ export class TileStreamManager {
             this.transitionDurationMsRing
           ),
         },
+        currentTransitionBlocker,
+        lastCompletedTransition: this.lastCompletedTransition
+          ? {
+              ...this.lastCompletedTransition,
+              stagesMs: { ...this.lastCompletedTransition.stagesMs },
+            }
+          : null,
+        recentTransitions: this.recentTransitions.map((t) => ({
+          ...t,
+          stagesMs: { ...t.stagesMs },
+        })),
+        frameBudget: frameBudgetDiag,
       };
     }
 
@@ -3430,6 +5331,7 @@ export class TileStreamManager {
       workerBvhAdoptedTotal: this.workerBvhAdoptedTotal,
       syncBvhFallbackTotal: this.syncBvhFallbackTotal,
       pendingReadyTileBytes,
+      frameBudget: frameBudgetDiag,
       hierarchical: hierarchicalDiag,
     };
   }
@@ -3485,11 +5387,24 @@ export class TileStreamManager {
     this.maxActivationSwapMs = 0;
     this.activationSwapMsRing.length = 0;
     this.transitionDurationMsRing.length = 0;
+    this.transitionsDebouncedAvoidedTotal = 0;
+    this.destinationPrepReusedTotal = 0;
+    this.prewarmTilesPreparedTotal = 0;
+    this.prewarmReusedOnTransitionTotal = 0;
+    this.boundaryOverlayRebuildMsTotal = 0;
+    this.recentTransitions.length = 0;
+    this.lastCompletedTransition = null;
+    this.workloadScheduler.resetStats();
+    this.gpuPreparer.resetStats();
+    this.deferredDisposalQueue.resetStats();
   }
 
   dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
+
+    this.deferredDisposalQueue.flushAll();
+    this.gpuPreparer.dispose();
 
     for (const record of this.tilesByKey.values()) {
       record.requestGeneration = this.requestGenerationCounter++;
@@ -3513,6 +5428,9 @@ export class TileStreamManager {
     this.activeResolutionMeters = null;
     this.desiredResolutionMeters = null;
     this.pendingResolutionMeters = null;
+    this.prewarmTargetResolutionMeters = null;
+    this.pendingDebounceTargetResolution = null;
+    this.pendingDebounceStartedAtMs = null;
     this.transitionState = 'idle';
     this.metadata = null;
     this.manifestPackPath = null;
@@ -3549,13 +5467,49 @@ export class TileStreamManager {
     // Worker backpressure check in hierarchical mode
     if (this.hierarchy) {
       let queuedDecodedBytes = 0;
+      const nonVisibleReadyPreloads: ManagedTileRecord[] = [];
+      let hasQueuedVisibleCritical = false;
+
       for (const record of this.tilesByKey.values()) {
         if (record.state === 'ready_to_commit' && record.decodedFootprint) {
           queuedDecodedBytes +=
             record.decodedFootprint.cpuGeometryBytes +
             record.decodedFootprint.bvhBytes;
+          if (!record.isVisibleInViewport) {
+            nonVisibleReadyPreloads.push(record);
+          }
+        } else if (
+          record.state === 'queued' &&
+          record.isInFetchSet &&
+          record.isVisibleInViewport &&
+          (record.resolutionMeters === this.activeResolutionMeters ||
+            (record.resolutionMeters === this.pendingResolutionMeters &&
+              this.transitionState !== 'deferred_budget'))
+        ) {
+          hasQueuedVisibleCritical = true;
         }
       }
+
+      // Section 12: Never let non-visible preload payloads sitting in `ready_to_commit`
+      // block required visible active or visible destination tiles behind worker backpressure!
+      if (
+        this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
+        hasQueuedVisibleCritical &&
+        queuedDecodedBytes >= this.hierarchicalBudget.maxPendingDecodedBytes &&
+        nonVisibleReadyPreloads.length > 0
+      ) {
+        nonVisibleReadyPreloads.sort((a, b) => b.priorityScore - a.priorityScore);
+        for (const preloadRec of nonVisibleReadyPreloads) {
+          if (queuedDecodedBytes < this.hierarchicalBudget.maxPendingDecodedBytes) {
+            break;
+          }
+          const fp = preloadRec.decodedFootprint;
+          const bytes = fp ? fp.cpuGeometryBytes + fp.bvhBytes : 0;
+          this.cancelInFlightTile(preloadRec);
+          queuedDecodedBytes = Math.max(0, queuedDecodedBytes - bytes);
+        }
+      }
+
       this.workerBackpressureActive =
         queuedDecodedBytes >= this.hierarchicalBudget.maxPendingDecodedBytes;
       if (this.workerBackpressureActive) {
@@ -3568,6 +5522,19 @@ export class TileStreamManager {
     const availableSlots = this.maxConcurrentFetches - this.activeFetchCount;
     if (availableSlots <= 0) return;
 
+    const coverageGap =
+      this.streamingFrameBudget.suppressSpeculativeDuringActiveCoverageGap &&
+      this.hasActiveVisibleCoverageGap();
+    const pendingTransitionNeedsVisible =
+      this.hierarchy !== null &&
+      this.pendingResolutionMeters !== null &&
+      this.transitionState !== 'deferred_budget' &&
+      this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
+      (() => {
+        const pendingLevel = this.getPendingLevelState();
+        return pendingLevel ? !this.checkDestinationReadiness(pendingLevel).allReady : false;
+      })();
+
     const queued: ManagedTileRecord[] = [];
     for (const record of this.tilesByKey.values()) {
       if (record.state !== 'queued' || !record.isInFetchSet) continue;
@@ -3576,11 +5543,25 @@ export class TileStreamManager {
         const isPendingRes =
           record.resolutionMeters === this.pendingResolutionMeters &&
           this.transitionState !== 'deferred_budget';
-        if (!isActiveRes && !isPendingRes) continue;
-        // Suppress non-visible speculative preload when budget reserve is tight
-        if (!record.isVisibleInViewport && this.speculativeBackpressureActive) {
+        const isPrewarmRes =
+          this.pendingResolutionMeters === null &&
+          record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+          this.streamingFrameBudget.predictivePrewarmEnabled;
+        if (!isActiveRes && !isPendingRes && !isPrewarmRes) continue;
+        // Suppress non-visible speculative preload when budget reserve is tight or active viewport has gaps
+        if (
+          (!record.isVisibleInViewport || isPrewarmRes) &&
+          (this.speculativeBackpressureActive || coverageGap)
+        ) {
           continue;
         }
+        // Section 12: While a transition has incomplete required visible destination tiles,
+        // do not let non-visible active preload or speculative destination preload steal fetch slots!
+        if (pendingTransitionNeedsVisible && !record.isVisibleInViewport) {
+          continue;
+        }
+      } else if (coverageGap && !record.isVisibleInViewport) {
+        continue;
       }
       queued.push(record);
     }
@@ -3608,7 +5589,14 @@ export class TileStreamManager {
     const url = this.hierarchy
       ? `${this.apiBaseUrl}/r/${tileSizeMeters}/${lod}/${tx}/${ty}`
       : `${this.apiBaseUrl}/${lod}/${tx}/${ty}`;
-    const fetchStart = performance.now();
+    const fetchStart = this.nowFn();
+    record.pipeline.fetchStartAtMs = fetchStart;
+    if (record.pipeline.queuedAtMs !== null) {
+      record.pipeline.fetchQueueWaitMs = Math.max(
+        0,
+        fetchStart - record.pipeline.queuedAtMs
+      );
+    }
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
 
     if (prof) {
@@ -3642,8 +5630,11 @@ export class TileStreamManager {
         // Capture compressed byteLength BEFORE decodeTile transfers the ArrayBuffer to a Worker
         const compressedPayloadBytes = arrayBuffer.byteLength;
         record.lastCompressedBytes = compressedPayloadBytes;
-        const fetchEnd = performance.now();
-        const fetchMs = fetchEnd - fetchStart;
+        const fetchEnd = this.nowFn();
+        const fetchMs = Math.max(0, fetchEnd - fetchStart);
+        record.pipeline.fetchCompleteAtMs = fetchEnd;
+        record.pipeline.payloadRetrievalMs = fetchMs;
+        record.pipeline.decodeStartAtMs = fetchEnd;
         this.totalFetchMs += fetchMs;
         this.fetchSamples += 1;
         pushBoundedSample(this.fetchMsRing, fetchMs);
@@ -3676,17 +5667,25 @@ export class TileStreamManager {
           });
         }
 
+        const decodePriority = this.streamingFrameBudget
+          .prioritizeDestinationOverActivePreload
+          ? record.priorityScore
+          : 0;
         const decodeResult = await this.decodeClient.decodeTile(
           arrayBuffer,
           tileKey,
-          abortController.signal
+          abortController.signal,
+          decodePriority
         );
-        const tCont0 = performance.now();
+        const tCont0 = this.nowFn();
         const stillValidLevel =
           !this.hierarchy ||
           record.resolutionMeters === this.activeResolutionMeters ||
           (record.resolutionMeters === this.pendingResolutionMeters &&
-            this.transitionState !== 'deferred_budget');
+            this.transitionState !== 'deferred_budget') ||
+          (this.pendingResolutionMeters === null &&
+            record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+            this.streamingFrameBudget.predictivePrewarmEnabled);
         if (
           this.isDisposed ||
           abortController.signal.aborted ||
@@ -3700,6 +5699,22 @@ export class TileStreamManager {
         this.totalDecodeMs += decodeResult.decodeDurationMs;
         this.decodeSamples += 1;
         pushBoundedSample(this.decodeMsRing, decodeResult.decodeDurationMs);
+
+        record.pipeline.decodeCompleteAtMs = tCont0;
+        record.pipeline.workerClientQueueWaitMs =
+          decodeResult.clientQueueWaitMs ?? 0;
+        if (decodeResult.workerTimings) {
+          record.pipeline.workerThreadQueueWaitMs =
+            decodeResult.workerTimings.workerQueueWaitMs;
+          record.pipeline.workerInflateAndDecodeMs =
+            decodeResult.workerTimings.workerInflateAndDecodeMs;
+          record.pipeline.workerBvhBuildMs =
+            decodeResult.workerTimings.workerBvhBuildMs;
+          record.pipeline.workerPayloadPrepMs =
+            decodeResult.workerTimings.workerPayloadPrepMs;
+          record.pipeline.workerDeliveryLatencyMs =
+            decodeResult.workerTimings.messageDeliveryLatencyMs;
+        }
 
         // A regional mosaic reuses immutable shard-local OSMTILE1 payloads.
         // Geometry inside each payload is tile-local; only the decoded center must
@@ -3726,7 +5741,7 @@ export class TileStreamManager {
         record.state = 'ready_to_commit';
         this.updatePeakTileCounters();
 
-        const contDurationMs = Math.max(0, performance.now() - tCont0);
+        const contDurationMs = Math.max(0, this.nowFn() - tCont0);
         if (decodeResult.workerTimings) {
           decodeResult.workerTimings.mainPromiseContinuationMs = Number(
             contDurationMs.toFixed(3)
@@ -3737,7 +5752,7 @@ export class TileStreamManager {
           this.profiler && this.profiler.enabled ? this.profiler : null;
         if (profAtDecodeDone) {
           profAtDecodeDone.recordWorkerContinuation(contDurationMs);
-          const readyNowMs = performance.now();
+          const readyNowMs = this.nowFn();
           const fp = record.decodedFootprint;
           const rawBytes = fp.cpuGeometryBytes + fp.bvhBytes;
           const depths = this.getQueueDepthSnapshot();
@@ -3826,6 +5841,12 @@ export class TileStreamManager {
     record.decodedFootprint = null;
     record.state = 'unloaded';
     this.cancelledRequestsTotal += 1;
+    if (
+      this.pendingResolutionMeters !== null &&
+      record.resolutionMeters === this.pendingResolutionMeters
+    ) {
+      this.currentTransitionCancellations += 1;
+    }
     if (this.profiler && this.profiler.enabled) {
       this.profiler.recordEvent({
         eventType: 'cancel',
@@ -3839,23 +5860,77 @@ export class TileStreamManager {
     }
   }
 
-  private evictLoadedTile(record: ManagedTileRecord): void {
+  private evictLoadedTile(
+    record: ManagedTileRecord,
+    forceImmediate = false
+  ): void {
     if (!record.reconstructed) {
       record.state = 'unloaded';
       return;
     }
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
-    const t0 = prof ? performance.now() : 0;
+    const t0 = prof ? this.nowFn() : 0;
     const fp = record.decodedFootprint;
     const compressedBytes = record.lastCompressedBytes ?? null;
+    const breakdown = this.computeRecordFootprintBreakdown(record);
 
     this.detachTileFromCompositeScene(record);
-    record.reconstructed.dispose();
+    const reconstructed = record.reconstructed;
     record.reconstructed = null;
     record.decodedPayload = null;
     record.decodedFootprint = null;
     record.state = 'unloaded';
     this.evictedTilesTotal += 1;
+
+    this.gpuPreparer.cancelTile(record.tileKey, reconstructed, true);
+    if (this.streamingFrameBudget.deferredDisposalEnabled && !forceImmediate) {
+      this.deferredDisposalQueue.enqueue({
+        tileKey: record.tileKey,
+        resolutionMeters: record.resolutionMeters,
+        lod: record.manifest.lod,
+        reconstructed,
+        measuredBytes: breakdown.totalMeasuredBytes,
+        estimatedGpuBytes: breakdown.estimatedGpuBytes,
+        isCacheEviction: false,
+      });
+      if (prof) {
+        const durMs = Math.max(0, this.nowFn() - t0);
+        const qDepths = this.getQueueDepthSnapshot();
+        prof.recordEvent({
+          eventType: 'evict',
+          tileKey: record.tileKey,
+          tileSizeMeters: record.resolutionMeters,
+          lod: record.manifest.lod,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes: fp ? fp.cpuGeometryBytes + fp.bvhBytes : null,
+          durationMs: durMs,
+          queueDepths: qDepths,
+          detail: fp
+            ? {
+                meshCount: fp.meshCount,
+                triangleCount: fp.triangleCount,
+              }
+            : undefined,
+        });
+        prof.recordEvent({
+          eventType: 'deferred_dispose_enqueue',
+          tileKey: record.tileKey,
+          tileSizeMeters: record.resolutionMeters,
+          lod: record.manifest.lod,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes: breakdown.totalMeasuredBytes,
+          durationMs: durMs,
+          queueDepths: qDepths,
+          detail: {
+            deferredDisposePendingTiles: this.deferredDisposalQueue.size,
+            deferredDisposePendingBytes: this.deferredDisposalQueue.totalPendingBytes,
+          },
+        });
+      }
+      return;
+    }
+
+    reconstructed.dispose();
 
     if (prof) {
       prof.recordEvent({
@@ -3865,7 +5940,7 @@ export class TileStreamManager {
         lod: record.manifest.lod,
         payloadCompressedBytes: compressedBytes,
         payloadRawBytes: fp ? fp.cpuGeometryBytes + fp.bvhBytes : null,
-        durationMs: performance.now() - t0,
+        durationMs: Math.max(0, this.nowFn() - t0),
         queueDepths: this.getQueueDepthSnapshot(),
         detail: fp
           ? {
@@ -3996,21 +6071,49 @@ export class TileStreamManager {
 
   private hasPendingAsyncWork(): boolean {
     if (this.activeFetchCount > 0) return true;
+    const coverageGap =
+      this.streamingFrameBudget.suppressSpeculativeDuringActiveCoverageGap &&
+      this.hasActiveVisibleCoverageGap();
+    const pendingTransitionNeedsVisible =
+      this.hierarchy !== null &&
+      this.pendingResolutionMeters !== null &&
+      this.transitionState !== 'deferred_budget' &&
+      this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
+      (() => {
+        const pendingLevel = this.getPendingLevelState();
+        return pendingLevel ? !this.checkDestinationReadiness(pendingLevel).allReady : false;
+      })();
+
     for (const record of this.tilesByKey.values()) {
       if (record.state === 'fetching' || record.state === 'decoding') {
         return true;
       }
       if (record.state === 'queued' && record.isInFetchSet) {
+        if (this.workerBackpressureActive) {
+          continue;
+        }
         if (this.hierarchy) {
           const isActiveRes =
             record.resolutionMeters === this.activeResolutionMeters;
           const isPendingRes =
             record.resolutionMeters === this.pendingResolutionMeters &&
             this.transitionState !== 'deferred_budget';
-          if (!isActiveRes && !isPendingRes) continue;
-          if (!record.isVisibleInViewport && this.speculativeBackpressureActive) {
+          const isPrewarmRes =
+            this.pendingResolutionMeters === null &&
+            record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+            this.streamingFrameBudget.predictivePrewarmEnabled;
+          if (!isActiveRes && !isPendingRes && !isPrewarmRes) continue;
+          if (
+            (!record.isVisibleInViewport || isPrewarmRes) &&
+            (this.speculativeBackpressureActive || coverageGap)
+          ) {
             continue;
           }
+          if (pendingTransitionNeedsVisible && !record.isVisibleInViewport) {
+            continue;
+          }
+        } else if (coverageGap && !record.isVisibleInViewport) {
+          continue;
         }
         return true;
       }
@@ -4020,6 +6123,8 @@ export class TileStreamManager {
 
   private isCurrentlyIdle(): boolean {
     if (this.hasPendingAsyncWork()) return false;
+    if (this.pendingDebounceTargetResolution !== null) return false;
+    if (this.deferredDisposalQueue.size > 0) return false;
     for (const record of this.tilesByKey.values()) {
       if (record.state === 'ready_to_commit' && record.isInKeepSet) {
         if (
@@ -4035,21 +6140,32 @@ export class TileStreamManager {
     if (
       this.hierarchy &&
       this.pendingResolutionMeters !== null &&
-      this.transitionState === 'ready_to_activate'
+      this.transitionState !== 'deferred_budget'
     ) {
-      return false;
+      if (this.transitionState === 'ready_to_activate') {
+        return false;
+      }
+      if (this.isIncrementalGpuPrepActive()) {
+        const pendingLevel = this.getPendingLevelState();
+        if (
+          pendingLevel &&
+          this.collectPendingGpuPrepRecords(pendingLevel).some(
+            (r) => r.isVisibleInViewport
+          )
+        ) {
+          return false;
+        }
+      }
     }
     return true;
   }
 
   private checkIdleWaiters(): void {
     if (this.idleWaiters.length === 0) return;
-    const needsTickToDrainBackpressure =
-      this.activeFetchCount === 0 && this.workerBackpressureActive;
     if (
       this.isDisposed ||
-      !this.hasPendingAsyncWork() ||
-      needsTickToDrainBackpressure
+      this.activeFetchCount === 0 ||
+      !this.hasPendingAsyncWork()
     ) {
       const waiters = this.idleWaiters.splice(0, this.idleWaiters.length);
       for (const resolve of waiters) {

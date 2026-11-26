@@ -19,6 +19,8 @@ export interface TileDecodeResult {
   decodeDurationMs: number;
   usedWebWorker: boolean;
   workerTimings: WorkerDecodeStageTimings;
+  /** Time spent queued in TileDecodeClient waiting for an idle Web Worker (ms). */
+  clientQueueWaitMs?: number;
 }
 
 export interface WorkerMessageDeliveredInfo {
@@ -33,7 +35,8 @@ export interface TileDecodeClient {
   decodeTile(
     buffer: ArrayBuffer,
     tileKey: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    priority?: number
   ): Promise<TileDecodeResult>;
   getPreparationOptions(): TilePreparationOptions;
   setPreparationOptions(
@@ -59,6 +62,9 @@ interface PendingJob {
   requestId: number;
   tileKey: string;
   buffer: ArrayBuffer;
+  priority: number;
+  enqueuedAtMs: number;
+  clientQueueWaitMs: number;
   signal?: AbortSignal;
   abortHandler?: () => void;
   resolve: (result: TileDecodeResult) => void;
@@ -73,9 +79,9 @@ function createAbortError(tileKey: string): Error {
 
 /**
  * Manages a pool of browser Web Workers that decode `OSMTILE1` binary tile payloads
- * off the main thread, with `AbortSignal` cancellation for queued jobs, TKT-040
- * cross-thread timing instrumentation, and automatic fallback when running in Node.js
- * test environments without browser `Worker`.
+ * off the main thread, with priority-ordered dispatch, `AbortSignal` cancellation for
+ * queued jobs, TKT-040/TKT-041-F1 cross-thread timing instrumentation, and automatic
+ * fallback when running in Node.js test environments without browser `Worker`.
  */
 export function createTileDecodeClient(
   options: TileDecodeClientOptions = {}
@@ -99,6 +105,22 @@ export function createTileDecodeClient(
     typeof Worker !== 'undefined' &&
     typeof window !== 'undefined';
 
+  const popHighestPriorityJob = (): PendingJob | undefined => {
+    if (queuedJobs.length === 0) return undefined;
+    let bestIdx = 0;
+    for (let i = 1; i < queuedJobs.length; i++) {
+      const a = queuedJobs[i];
+      const b = queuedJobs[bestIdx];
+      if (
+        a.priority < b.priority ||
+        (a.priority === b.priority && a.requestId < b.requestId)
+      ) {
+        bestIdx = i;
+      }
+    }
+    return queuedJobs.splice(bestIdx, 1)[0];
+  };
+
   const pumpQueue = (): void => {
     if (disposed || workers.length === 0) return;
 
@@ -106,7 +128,8 @@ export function createTileDecodeClient(
       const idleWorker = workers.find((w) => !busyWorkers.has(w));
       if (!idleWorker) break;
 
-      const job = queuedJobs.shift()!;
+      const job = popHighestPriorityJob();
+      if (!job) break;
       if (job.signal?.aborted) {
         if (job.abortHandler && job.signal) {
           job.signal.removeEventListener('abort', job.abortHandler);
@@ -115,6 +138,7 @@ export function createTileDecodeClient(
         continue;
       }
 
+      job.clientQueueWaitMs = Math.max(0, performance.now() - job.enqueuedAtMs);
       busyWorkers.add(idleWorker);
       activeJobsByRequestId.set(job.requestId, { job, worker: idleWorker });
 
@@ -199,6 +223,7 @@ export function createTileDecodeClient(
               decodeDurationMs: response.decodeDurationMs,
               usedWebWorker: true,
               workerTimings: deliveredTimings,
+              clientQueueWaitMs: Number(job.clientQueueWaitMs.toFixed(3)),
             });
           } else {
             const errResp = response as TileDecodeWorkerErrorResponse;
@@ -314,13 +339,15 @@ export function createTileDecodeClient(
       decodeDurationMs,
       usedWebWorker: false,
       workerTimings: timings,
+      clientQueueWaitMs: 0,
     };
   };
 
   const decodeTile = (
     buffer: ArrayBuffer,
     tileKey: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    priority = 0
   ): Promise<TileDecodeResult> => {
     if (disposed) {
       return Promise.reject(new Error('TileDecodeClient has been disposed.'));
@@ -338,6 +365,9 @@ export function createTileDecodeClient(
         requestId,
         tileKey,
         buffer,
+        priority: Number.isFinite(priority) ? priority : 0,
+        enqueuedAtMs: performance.now(),
+        clientQueueWaitMs: 0,
         signal,
         resolve,
         reject,

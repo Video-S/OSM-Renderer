@@ -439,6 +439,86 @@ export function resolveDesiredHierarchicalResolution(params: {
 }
 
 /**
+ * Evaluates whether the current camera zoom is approaching an adjacent resolution
+ * activation threshold closely enough to pre-warm that resolution's visible tiles
+ * opportunistically (TKT-041-F1 Section 12), without triggering an activation swap.
+ */
+export function resolveApproachingResolutionForPrewarm(params: {
+  availableResolutionsMeters: readonly number[];
+  activeResolutionMeters: number;
+  cameraZoom: number;
+  viewportWidthPx?: number | null;
+  policy: HierarchicalResolutionPolicyConfig;
+  bandFraction: number;
+  zoomTrend?: 'zooming_out' | 'zooming_in' | 'steady';
+}): { targetResolutionMeters: number | null; reason: string } {
+  if (params.policy.mode !== 'auto') {
+    return { targetResolutionMeters: null, reason: 'forced_mode' };
+  }
+  const sorted = [...params.availableResolutionsMeters].sort((a, b) => a - b);
+  const activeIdx = sorted.indexOf(params.activeResolutionMeters);
+  if (sorted.length < 2 || activeIdx === -1) {
+    return { targetResolutionMeters: null, reason: 'single_or_unknown_resolution' };
+  }
+
+  const { effectiveScalePxPerMeter } = computeEffectiveOrthographicScale(
+    params.cameraZoom,
+    params.viewportWidthPx,
+    params.policy
+  );
+  const frac = clamp(params.bandFraction, 0.05, 1.0);
+  const trend = params.zoomTrend ?? 'steady';
+
+  // Check approaching coarser resolution (zooming out toward zoomOutThreshold)
+  if (activeIdx < sorted.length - 1 && trend !== 'zooming_in') {
+    const coarseBand = findBandForBoundary(
+      sorted[activeIdx],
+      sorted[activeIdx + 1],
+      params.policy.bands
+    );
+    const bandWidth = Math.max(
+      coarseBand.zoomInThreshold - coarseBand.zoomOutThreshold,
+      coarseBand.zoomOutThreshold * 0.5
+    );
+    const prewarmCeiling = coarseBand.zoomOutThreshold + bandWidth * frac * 1.5;
+    if (
+      effectiveScalePxPerMeter >= coarseBand.zoomOutThreshold &&
+      effectiveScalePxPerMeter <= prewarmCeiling
+    ) {
+      return {
+        targetResolutionMeters: sorted[activeIdx + 1],
+        reason: `approaching_coarse_${sorted[activeIdx + 1]}m`,
+      };
+    }
+  }
+
+  // Check approaching finer resolution (zooming in toward zoomInThreshold)
+  if (activeIdx > 0 && trend !== 'zooming_out') {
+    const fineBand = findBandForBoundary(
+      sorted[activeIdx - 1],
+      sorted[activeIdx],
+      params.policy.bands
+    );
+    const bandWidth = Math.max(
+      fineBand.zoomInThreshold - fineBand.zoomOutThreshold,
+      fineBand.zoomInThreshold * 0.25
+    );
+    const prewarmFloor = Math.max(0, fineBand.zoomInThreshold - bandWidth * frac * 1.5);
+    if (
+      effectiveScalePxPerMeter <= fineBand.zoomInThreshold &&
+      effectiveScalePxPerMeter >= prewarmFloor
+    ) {
+      return {
+        targetResolutionMeters: sorted[activeIdx - 1],
+        reason: `approaching_fine_${sorted[activeIdx - 1]}m`,
+      };
+    }
+  }
+
+  return { targetResolutionMeters: null, reason: 'outside_prewarm_band' };
+}
+
+/**
  * Computes effective physical preload and retention margins (in meters) for a given
  * resolution level, preventing oversized retention zones on 4,096 m tiles while
  * preserving smooth lookahead at 1,024 m.

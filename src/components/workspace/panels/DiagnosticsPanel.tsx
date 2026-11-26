@@ -34,12 +34,20 @@ import type {
 } from '../../../world/FoliageLodSystem';
 import type { InstancedPickingMode } from '../../../world/InstancedSpatialIndex';
 import type { TilePreparationVariantId } from '../../../world/tiling/TilePreparationConfig';
-import type { HierarchicalStreamingDiagnosticsSnapshot } from '../../../world/tiling/TileStreamManager';
+import type {
+  HierarchicalStreamingDiagnosticsSnapshot,
+  StreamingFrameBudgetDiagnosticsSnapshot,
+} from '../../../world/tiling/TileStreamManager';
 import type {
   HierarchicalResolutionMode,
   HierarchicalResolutionPolicyConfig,
 } from '../../../world/tiling/HierarchicalResolutionPolicy';
 import type { HierarchicalResourceBudgetConfig } from '../../../world/tiling/HierarchicalResourceBudget';
+import {
+  identifyStreamingF1Variant,
+  type StreamingF1VariantId,
+  type StreamingFrameBudgetConfig,
+} from '../../../world/tiling/StreamingSchedulerConfig';
 import type { ReproFormSessionState } from '../workspaceTypes';
 
 export interface DiagnosticsPanelProps {
@@ -107,6 +115,11 @@ export interface DiagnosticsPanelProps {
   onChangeHierarchicalBudget?: (
     partial: Partial<HierarchicalResourceBudgetConfig>
   ) => void;
+  streamingFrameBudget?: StreamingFrameBudgetConfig;
+  frameBudgetDiagnostics?: StreamingFrameBudgetDiagnosticsSnapshot | null;
+  onChangeStreamingFrameBudget?: (
+    input: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>
+  ) => void;
 }
 
 function formatDiagMs(val: number | null | undefined): string {
@@ -171,6 +184,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   hierarchicalBudget,
   onChangeHierarchicalPolicy,
   onChangeHierarchicalBudget,
+  streamingFrameBudget,
+  frameBudgetDiagnostics = null,
+  onChangeStreamingFrameBudget,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -979,20 +995,373 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 >
                   <span>
                     {r.tileSizeMeters}m (A:{r.attachedActiveTiles} P:
-                    {r.preparedPendingTiles} C:{r.cachedInactiveTiles})
+                    {r.preparedPendingTiles} C:{r.cachedInactiveTiles} D:
+                    {r.pendingDisposalTiles})
                   </span>
                   <span>
                     {formatDiagMb(
                       r.measuredCpuGeometryBytes +
                         r.measuredStaticBvhBytes +
                         r.measuredInstancedIndexBytes +
-                        r.measuredQueuedDecodedBytes
+                        r.measuredQueuedDecodedBytes +
+                        r.measuredPendingDisposalBytes
                     )}{' '}
                     / est {formatDiagMb(r.estimatedGpuBytes)}
                   </span>
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* TKT-041-F1: Frame-Budgeted Streaming & Section 12 Transition Diagnostics */}
+          {onChangeStreamingFrameBudget && streamingFrameBudget && (
+            <div
+              data-testid="diag-f1-controls"
+              className="bg-slate-950 border border-slate-800 rounded p-2 space-y-1.5 text-[10px] font-mono text-slate-400"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-300 font-semibold">
+                  Frame-Budget Preset
+                </span>
+                <select
+                  data-testid="diag-f1-variant-select"
+                  value={identifyStreamingF1Variant(streamingFrameBudget)}
+                  onChange={(e) => {
+                    const val = e.target.value as StreamingF1VariantId;
+                    if (val !== ('custom' as unknown)) {
+                      onChangeStreamingFrameBudget(val);
+                    }
+                  }}
+                  className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 cursor-pointer"
+                >
+                  <option value="combined">combined (F1 default)</option>
+                  <option value="combined_prewarm">combined_prewarm</option>
+                  <option value="tkt041_baseline">tkt041_baseline</option>
+                  <option value="scheduler_only">scheduler_only</option>
+                  <option value="incremental_gpu_only">incremental_gpu_only</option>
+                  <option value="deferred_disposal_only">deferred_disposal_only</option>
+                  <option value="debounce_reuse_only">debounce_reuse_only</option>
+                  <option value="custom" disabled>
+                    custom
+                  </option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-1.5">
+                <span>Frame Budget</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 4].map((ms) => {
+                    const active =
+                      streamingFrameBudget.sharedSchedulerEnabled &&
+                      Math.abs(streamingFrameBudget.frameStreamingBudgetMs - ms) < 0.05;
+                    return (
+                      <button
+                        key={ms}
+                        type="button"
+                        data-testid={`diag-f1-budget-${ms}ms`}
+                        onClick={() =>
+                          onChangeStreamingFrameBudget({
+                            sharedSchedulerEnabled: true,
+                            frameStreamingBudgetMs: ms,
+                          })
+                        }
+                        className={`px-1.5 py-0.5 rounded border cursor-pointer ${
+                          active
+                            ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-200'
+                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {ms}ms
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-1.5">
+                <span>Debounce</span>
+                <div className="flex items-center gap-1">
+                  {[0, 100, 150, 250].map((ms) => {
+                    const active = streamingFrameBudget.transitionDebounceMs === ms;
+                    return (
+                      <button
+                        key={ms}
+                        type="button"
+                        data-testid={`diag-f1-debounce-${ms}ms`}
+                        onClick={() =>
+                          onChangeStreamingFrameBudget({
+                            transitionDebounceMs: ms,
+                          })
+                        }
+                        className={`px-1.5 py-0.5 rounded border cursor-pointer ${
+                          active
+                            ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-200'
+                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {ms}ms
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1 pt-0.5">
+                <button
+                  type="button"
+                  data-testid="diag-f1-toggle-gpu-prep"
+                  aria-pressed={streamingFrameBudget.incrementalGpuPrepEnabled}
+                  onClick={() =>
+                    onChangeStreamingFrameBudget({
+                      incrementalGpuPrepEnabled:
+                        !streamingFrameBudget.incrementalGpuPrepEnabled,
+                    })
+                  }
+                  className={`px-1.5 py-1 rounded border text-[9px] cursor-pointer ${
+                    streamingFrameBudget.incrementalGpuPrepEnabled
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-900 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  GPU Prep {streamingFrameBudget.incrementalGpuPrepEnabled ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="diag-f1-toggle-deferred-dispose"
+                  aria-pressed={streamingFrameBudget.deferredDisposalEnabled}
+                  onClick={() =>
+                    onChangeStreamingFrameBudget({
+                      deferredDisposalEnabled:
+                        !streamingFrameBudget.deferredDisposalEnabled,
+                    })
+                  }
+                  className={`px-1.5 py-1 rounded border text-[9px] cursor-pointer ${
+                    streamingFrameBudget.deferredDisposalEnabled
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-900 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  Def Disp {streamingFrameBudget.deferredDisposalEnabled ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="diag-f1-toggle-prewarm"
+                  aria-pressed={streamingFrameBudget.predictivePrewarmEnabled}
+                  onClick={() =>
+                    onChangeStreamingFrameBudget({
+                      predictivePrewarmEnabled:
+                        !streamingFrameBudget.predictivePrewarmEnabled,
+                    })
+                  }
+                  className={`px-1.5 py-1 rounded border text-[9px] cursor-pointer ${
+                    streamingFrameBudget.predictivePrewarmEnabled
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-900 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  Prewarm {streamingFrameBudget.predictivePrewarmEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Live Transition Blocker & Critical Path (TKT-041-F1 Section 12) */}
+          <div
+            data-testid="diag-transition-blocker-section"
+            className="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] font-mono tabular-nums text-slate-400 space-y-1.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-slate-300 font-semibold">
+                Transition Blocker
+              </span>
+              <span
+                data-testid="diag-transition-blocker-category"
+                className={
+                  hierarchicalDiagnostics.currentTransitionBlocker.active
+                    ? 'text-amber-300'
+                    : 'text-emerald-300'
+                }
+              >
+                {hierarchicalDiagnostics.currentTransitionBlocker.blockerCategory}
+              </span>
+            </div>
+
+            {hierarchicalDiagnostics.currentTransitionBlocker.active ? (
+              <div className="space-y-1">
+                <div className="text-[9px] text-amber-200/90 leading-snug">
+                  {hierarchicalDiagnostics.currentTransitionBlocker.blockerReason}
+                </div>
+                <div className="flex items-center justify-between text-[9px]">
+                  <span>
+                    Target:{' '}
+                    <strong className="text-slate-200">
+                      {hierarchicalDiagnostics.currentTransitionBlocker.fromResolutionMeters}m→
+                      {hierarchicalDiagnostics.currentTransitionBlocker.toResolutionMeters}m
+                    </strong>
+                  </span>
+                  <span>
+                    Pending:{' '}
+                    <strong className="text-amber-300">
+                      {formatDiagMs(
+                        hierarchicalDiagnostics.currentTransitionBlocker.elapsedMs
+                      )}
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-slate-400">
+                  <span>
+                    Q/F/D/R/G:{' '}
+                    {hierarchicalDiagnostics.currentTransitionBlocker.queuedCount}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.fetchingCount}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.decodingCount}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.reconstructWaitingCount}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.gpuPrepWaitingCount}
+                  </span>
+                  <span>
+                    Slots:{' '}
+                    {hierarchicalDiagnostics.currentTransitionBlocker.contention.fetchSlotsUsed}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.contention.fetchSlotsMax}{' '}
+                    (pre:{hierarchicalDiagnostics.currentTransitionBlocker.contention.activePreloadInFlightCount})
+                  </span>
+                </div>
+
+                {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile && (
+                  <div
+                    data-testid="diag-transition-slowest-tile"
+                    className="p-1.5 rounded bg-slate-900/90 border border-slate-800 text-[9px] space-y-0.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300 truncate">
+                        Slowest:{' '}
+                        <strong className="text-cyan-300">
+                          {
+                            hierarchicalDiagnostics.currentTransitionBlocker
+                              .slowestOutstandingTile.tileKey
+                          }
+                        </strong>
+                      </span>
+                      <span className="text-amber-300 shrink-0 ml-1">
+                        {
+                          hierarchicalDiagnostics.currentTransitionBlocker
+                            .slowestOutstandingTile.currentStage
+                        }{' '}
+                        (
+                        {formatDiagMs(
+                          hierarchicalDiagnostics.currentTransitionBlocker
+                            .slowestOutstandingTile.currentStageElapsedMs
+                        )}
+                        )
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      fq:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.fetchQueueWaitMs.toFixed(0)}
+                      ms · net:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.payloadRetrievalMs.toFixed(0)}
+                      ms · wq:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.workerQueueWaitMs.toFixed(0)}
+                      ms · dec:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.workerDecodeAndBvhMs.toFixed(0)}
+                      ms · rec:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.mainThreadReconstructWaitMs.toFixed(0)}
+                      ms · gpu:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.gpuPrepWaitMs.toFixed(0)}
+                      ms
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile
+                        .gpuPrepRemainingUnits > 0
+                        ? ` (${hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.gpuPrepRemainingUnits}u left)`
+                        : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-[9px] text-slate-500">
+                No active transition blocker.
+                {hierarchicalDiagnostics.prewarmTargetResolutionMeters
+                  ? ` Pre-warming ${hierarchicalDiagnostics.prewarmTargetResolutionMeters}m.`
+                  : ''}
+              </div>
+            )}
+
+            {hierarchicalDiagnostics.lastCompletedTransition && (
+              <div
+                data-testid="diag-last-transition-critical-path"
+                className="pt-1 border-t border-slate-800/80 text-[9px] space-y-0.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">
+                    Last ({hierarchicalDiagnostics.lastCompletedTransition.fromResolutionMeters}→
+                    {hierarchicalDiagnostics.lastCompletedTransition.toResolutionMeters}m ·{' '}
+                    {hierarchicalDiagnostics.lastCompletedTransition.outcome})
+                  </span>
+                  <strong className="text-cyan-300">
+                    {formatDiagMs(
+                      hierarchicalDiagnostics.lastCompletedTransition.totalDurationMs
+                    )}
+                  </strong>
+                </div>
+                <div className="text-slate-400">
+                  Blocker:{' '}
+                  <strong className="text-slate-200">
+                    {hierarchicalDiagnostics.lastCompletedTransition.dominantBlockerCategory}
+                  </strong>
+                  {hierarchicalDiagnostics.lastCompletedTransition.criticalPathTileKey
+                    ? ` · ${hierarchicalDiagnostics.lastCompletedTransition.criticalPathTileKey}`
+                    : ''}
+                </div>
+                <div className="text-slate-500">
+                  fq:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.fetchQueueWaitMs.toFixed(0)} ·
+                  net:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.payloadRetrievalMs.toFixed(0)} ·
+                  wq:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.workerQueueWaitMs.toFixed(0)} ·
+                  dec:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.workerDecodeAndBvhMs.toFixed(0)} ·
+                  rw:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.mainThreadReconstructWaitMs.toFixed(0)} ·
+                  gpu:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.gpuPrepTotalMs.toFixed(0)} ·
+                  tail:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.remainingCoverageWaitMs.toFixed(0)}ms
+                </div>
+              </div>
+            )}
+
+            {(frameBudgetDiagnostics ?? hierarchicalDiagnostics.frameBudget) && (
+              <div className="pt-1 border-t border-slate-800/80 text-[9px] text-slate-400 space-y-0.5">
+                {(() => {
+                  const fb = frameBudgetDiagnostics ?? hierarchicalDiagnostics.frameBudget;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span>
+                          Def Disp:{' '}
+                          <strong className="text-slate-200">
+                            {fb.deferredDisposal.pendingTiles}
+                          </strong>{' '}
+                          ({formatDiagMb(fb.deferredDisposal.pendingBytes)})
+                        </span>
+                        <span>
+                          GPU Prep:{' '}
+                          <strong className="text-cyan-300">
+                            {fb.gpuPreparer.totalUnitsUploaded}u
+                          </strong>{' '}
+                          ({formatDiagMb(fb.gpuPreparer.totalEstimatedBytesUploaded)})
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>
+                          Sched Overruns:{' '}
+                          <strong className="text-amber-300">
+                            {fb.scheduler.totalIndivisibleOverruns}
+                          </strong>
+                        </span>
+                        <span>
+                          Deb/Reuse/Pre:{' '}
+                          {fb.transitionsDebouncedAvoided}/{fb.destinationPrepReused}/
+                          {hierarchicalDiagnostics.counters.prewarmReusedOnTransition}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         </section>
       )}

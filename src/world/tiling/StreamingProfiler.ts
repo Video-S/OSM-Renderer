@@ -19,6 +19,13 @@ export type StreamingLifecycleEventType =
   | 'resolution_transition_activate'
   | 'resolution_transition_cancel'
   | 'resolution_transition_defer_budget'
+  | 'transition_debounce_start'
+  | 'transition_debounce_avoided'
+  | 'transition_prep_reused'
+  | 'gpu_upload_batch'
+  | 'deferred_dispose_enqueue'
+  | 'deferred_dispose_complete'
+  | 'boundary_overlay_rebuild'
   | 'cache_hit'
   | 'cache_evict';
 
@@ -76,6 +83,10 @@ export interface StreamingLifecycleEvent {
     requiredDestinationTiles?: number;
     readyDestinationTiles?: number;
     activationDurationMs?: number;
+    gpuUploadedUnits?: number;
+    gpuUploadedBytes?: number;
+    deferredDisposePendingTiles?: number;
+    deferredDisposePendingBytes?: number;
   };
 }
 
@@ -160,6 +171,20 @@ export interface FrameStageProfileSample {
   tilesCancelledCount: number;
   workerBvhAdoptedCount: number;
   syncBvhFallbackCount: number;
+
+  // TKT-041-F1 nested children of streamTickMs (NOT added to attributedSyncMainThreadMs)
+  gpuUploadSubmitMs: number;
+  gpuUploadedBytes: number;
+  gpuUploadedMeshCount: number;
+  resolutionActivationMs: number;
+  boundaryOverlayRebuildMs: number;
+  deferredDisposeMs: number;
+  deferredDisposedTilesCount: number;
+  schedulerBudgetMs: number;
+  schedulerUsedMs: number;
+  schedulerOverrunMs: number;
+  indivisibleOverrunCount: number;
+  hasValidViewportCoverage: boolean;
 
   // Worker delivery summary inside this frame window
   workerDeliveriesCount: number;
@@ -328,6 +353,19 @@ interface MutableFrameAccumulator {
   workerBvhAdoptedCount: number;
   syncBvhFallbackCount: number;
 
+  gpuUploadSubmitMs: number;
+  gpuUploadedBytes: number;
+  gpuUploadedMeshCount: number;
+  resolutionActivationMs: number;
+  boundaryOverlayRebuildMs: number;
+  deferredDisposeMs: number;
+  deferredDisposedTilesCount: number;
+  schedulerBudgetMs: number;
+  schedulerUsedMs: number;
+  schedulerOverrunMs: number;
+  indivisibleOverrunCount: number;
+  hasValidViewportCoverage: boolean;
+
   pickingRaycasterMs: number;
   pickingCallsCount: number;
   reactCommitMs: number;
@@ -381,6 +419,18 @@ function createEmptyAccumulator(frameIndex: number): MutableFrameAccumulator {
     tilesCancelledCount: 0,
     workerBvhAdoptedCount: 0,
     syncBvhFallbackCount: 0,
+    gpuUploadSubmitMs: 0,
+    gpuUploadedBytes: 0,
+    gpuUploadedMeshCount: 0,
+    resolutionActivationMs: 0,
+    boundaryOverlayRebuildMs: 0,
+    deferredDisposeMs: 0,
+    deferredDisposedTilesCount: 0,
+    schedulerBudgetMs: 0,
+    schedulerUsedMs: 0,
+    schedulerOverrunMs: 0,
+    indivisibleOverrunCount: 0,
+    hasValidViewportCoverage: true,
     pickingRaycasterMs: 0,
     pickingCallsCount: 0,
     reactCommitMs: 0,
@@ -664,6 +714,18 @@ export class StreamingProfiler {
     commitRebuildStatsMs: number;
     commitEmitDiagnosticsMs: number;
     tilesCommittedCount: number;
+    gpuUploadSubmitMs?: number;
+    gpuUploadedBytes?: number;
+    gpuUploadedMeshCount?: number;
+    resolutionActivationMs?: number;
+    boundaryOverlayRebuildMs?: number;
+    deferredDisposeMs?: number;
+    deferredDisposedTilesCount?: number;
+    schedulerBudgetMs?: number;
+    schedulerUsedMs?: number;
+    schedulerOverrunMs?: number;
+    indivisibleOverrunCount?: number;
+    hasValidViewportCoverage?: boolean;
   }): void {
     if (!this._enabled) return;
     const acc = this.currentAcc;
@@ -679,6 +741,23 @@ export class StreamingProfiler {
     acc.commitRebuildStatsMs += stats.commitRebuildStatsMs;
     acc.commitEmitDiagnosticsMs += stats.commitEmitDiagnosticsMs;
     acc.tilesCommittedCount += stats.tilesCommittedCount;
+    acc.gpuUploadSubmitMs += stats.gpuUploadSubmitMs ?? 0;
+    acc.gpuUploadedBytes += stats.gpuUploadedBytes ?? 0;
+    acc.gpuUploadedMeshCount += stats.gpuUploadedMeshCount ?? 0;
+    acc.resolutionActivationMs += stats.resolutionActivationMs ?? 0;
+    acc.boundaryOverlayRebuildMs += stats.boundaryOverlayRebuildMs ?? 0;
+    acc.deferredDisposeMs += stats.deferredDisposeMs ?? 0;
+    acc.deferredDisposedTilesCount += stats.deferredDisposedTilesCount ?? 0;
+    if (typeof stats.schedulerBudgetMs === 'number') {
+      acc.schedulerBudgetMs = stats.schedulerBudgetMs;
+    }
+    acc.schedulerUsedMs += stats.schedulerUsedMs ?? 0;
+    acc.schedulerOverrunMs += stats.schedulerOverrunMs ?? 0;
+    acc.indivisibleOverrunCount += stats.indivisibleOverrunCount ?? 0;
+    if (typeof stats.hasValidViewportCoverage === 'boolean') {
+      acc.hasValidViewportCoverage =
+        acc.hasValidViewportCoverage && stats.hasValidViewportCoverage;
+    }
   }
 
   recordMapSceneUseFrame(stats: {
@@ -967,6 +1046,19 @@ export class StreamingProfiler {
       tilesCancelledCount: acc.tilesCancelledCount,
       workerBvhAdoptedCount: acc.workerBvhAdoptedCount,
       syncBvhFallbackCount: acc.syncBvhFallbackCount,
+
+      gpuUploadSubmitMs: roundMs(acc.gpuUploadSubmitMs),
+      gpuUploadedBytes: acc.gpuUploadedBytes,
+      gpuUploadedMeshCount: acc.gpuUploadedMeshCount,
+      resolutionActivationMs: roundMs(acc.resolutionActivationMs),
+      boundaryOverlayRebuildMs: roundMs(acc.boundaryOverlayRebuildMs),
+      deferredDisposeMs: roundMs(acc.deferredDisposeMs),
+      deferredDisposedTilesCount: acc.deferredDisposedTilesCount,
+      schedulerBudgetMs: roundMs(acc.schedulerBudgetMs),
+      schedulerUsedMs: roundMs(acc.schedulerUsedMs),
+      schedulerOverrunMs: roundMs(acc.schedulerOverrunMs),
+      indivisibleOverrunCount: acc.indivisibleOverrunCount,
+      hasValidViewportCoverage: acc.hasValidViewportCoverage,
 
       workerDeliveriesCount,
       workerDeliveryLatencyMaxMs: roundMs(workerDeliveryLatencyMaxMs),

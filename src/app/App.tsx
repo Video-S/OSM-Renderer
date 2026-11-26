@@ -104,6 +104,15 @@ import {
   type HierarchicalResourceBudgetConfig,
 } from '../world/tiling/HierarchicalResourceBudget';
 import {
+  DEFAULT_STREAMING_FRAME_BUDGET_CONFIG,
+  normalizeStreamingFrameBudgetConfig,
+  parseStreamingFrameBudgetFromSearch,
+  resolveStreamingFrameBudgetConfig,
+  STREAMING_F1_VARIANTS,
+  type StreamingF1VariantId,
+  type StreamingFrameBudgetConfig,
+} from '../world/tiling/StreamingSchedulerConfig';
+import {
   REGIONAL_MIN_ZOOM_TILE_THRESHOLD,
   clampCameraZoom,
   parseRegionalMinZoomFromSearch,
@@ -352,6 +361,21 @@ export default function App() {
   const hierarchicalBudgetRef =
     useRef<HierarchicalResourceBudgetConfig>(hierarchicalBudget);
   hierarchicalBudgetRef.current = hierarchicalBudget;
+
+  // TKT-041-F1: Frame-budgeted streaming, incremental GPU prep, deferred disposal & debounce
+  const [streamingFrameBudget, setStreamingFrameBudget] =
+    useState<StreamingFrameBudgetConfig>(() =>
+      normalizeStreamingFrameBudgetConfig(
+        typeof window !== 'undefined'
+          ? parseStreamingFrameBudgetFromSearch(window.location.search) ?? undefined
+          : undefined,
+        DEFAULT_STREAMING_FRAME_BUDGET_CONFIG
+      )
+    );
+  const streamingFrameBudgetRef =
+    useRef<StreamingFrameBudgetConfig>(streamingFrameBudget);
+  streamingFrameBudgetRef.current = streamingFrameBudget;
+  const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
@@ -875,6 +899,9 @@ export default function App() {
         | Partial<TilePreparationOptions>;
       hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
       hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
+      streamingFrameBudget?:
+        | StreamingF1VariantId
+        | Partial<StreamingFrameBudgetConfig>;
     }
   ) => {
     const loadToken = ++m2aLoadTokenRef.current;
@@ -986,6 +1013,18 @@ export default function App() {
         setHierarchicalBudget(resolvedHierarchicalBudget);
       }
 
+      const resolvedStreamingFrameBudget =
+        extraOptions?.streamingFrameBudget !== undefined
+          ? resolveStreamingFrameBudgetConfig(
+              extraOptions.streamingFrameBudget,
+              streamingFrameBudgetRef.current
+            )
+          : streamingFrameBudgetRef.current;
+      if (extraOptions?.streamingFrameBudget !== undefined) {
+        streamingFrameBudgetRef.current = resolvedStreamingFrameBudget;
+        setStreamingFrameBudget(resolvedStreamingFrameBudget);
+      }
+
       const manager = new TileStreamManager({
         apiBaseUrl: extraOptions?.apiBaseUrl,
         preloadMarginTiles: extraOptions?.preloadMarginTiles,
@@ -1000,6 +1039,7 @@ export default function App() {
         tilePreparationOptions: resolvedTilePrep,
         hierarchicalPolicy: resolvedHierarchicalPolicy,
         hierarchicalBudget: resolvedHierarchicalBudget,
+        streamingFrameBudget: resolvedStreamingFrameBudget,
         onDiagnosticsChange: (diag) => {
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
@@ -1012,6 +1052,10 @@ export default function App() {
         },
       });
       manager.setWireframe(wireframe);
+      manager.setBoundaryOverlayVisible(showM2aTileBoundaries);
+      if (webglRendererRef.current) {
+        manager.attachRenderer(webglRendererRef.current);
+      }
       tileStreamManagerRef.current = manager;
 
       const tInit0 = performance.now();
@@ -2681,6 +2725,9 @@ export default function App() {
           | Partial<TilePreparationOptions>;
         hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
         hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
+        streamingFrameBudget?:
+          | StreamingF1VariantId
+          | Partial<StreamingFrameBudgetConfig>;
         waitForIdle?: boolean;
         timeoutMs?: number;
       } = {}) => {
@@ -2702,6 +2749,7 @@ export default function App() {
             tilePreparationOptions: params.tilePreparationOptions,
             hierarchicalPolicy: params.hierarchicalPolicy,
             hierarchicalBudget: params.hierarchicalBudget,
+            streamingFrameBudget: params.streamingFrameBudget,
           }
         );
         await waitForSceneReady(
@@ -2873,6 +2921,66 @@ export default function App() {
       },
       getHierarchicalDiagnostics: () =>
         tileStreamManagerRef.current?.getHierarchicalDiagnostics() ?? null,
+      getStreamingFrameBudgetConfig: () =>
+        tileStreamManagerRef.current?.getStreamingFrameBudgetConfig() ?? {
+          ...streamingFrameBudgetRef.current,
+        },
+      setStreamingFrameBudgetConfig: (
+        input: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>
+      ) => {
+        const next = resolveStreamingFrameBudgetConfig(
+          input,
+          streamingFrameBudgetRef.current
+        );
+        streamingFrameBudgetRef.current = next;
+        setStreamingFrameBudget(next);
+        return (
+          tileStreamManagerRef.current?.setStreamingFrameBudgetConfig(next) ??
+          next
+        );
+      },
+      setHierarchicalF1Variant: (
+        variant: StreamingF1VariantId,
+        overrides?: Partial<StreamingFrameBudgetConfig>
+      ) => {
+        const base = STREAMING_F1_VARIANTS[variant];
+        if (!base) {
+          throw new Error(`Unknown StreamingF1VariantId: "${variant}"`);
+        }
+        const next = normalizeStreamingFrameBudgetConfig(overrides, base);
+        streamingFrameBudgetRef.current = next;
+        setStreamingFrameBudget(next);
+        return (
+          tileStreamManagerRef.current?.setStreamingFrameBudgetConfig(next) ??
+          next
+        );
+      },
+      getDeferredDisposalAccounting: () =>
+        tileStreamManagerRef.current?.getDeferredDisposalAccounting() ?? null,
+      getGpuPreparerStats: () =>
+        tileStreamManagerRef.current?.getGpuPreparerStats() ?? null,
+      getSchedulerStats: () =>
+        tileStreamManagerRef.current?.getSchedulerStats() ?? null,
+      getTransitionDiagnostics: () => {
+        const h = tileStreamManagerRef.current?.getHierarchicalDiagnostics();
+        if (!h) return null;
+        return {
+          transitionState: h.transitionState,
+          activeResolutionMeters: h.activeResolutionMeters,
+          desiredResolutionMeters: h.desiredResolutionMeters,
+          pendingResolutionMeters: h.pendingResolutionMeters,
+          prewarmTargetResolutionMeters: h.prewarmTargetResolutionMeters,
+          transitionElapsedMs: h.transitionElapsedMs,
+          budgetDeferralReason: h.budgetDeferralReason,
+          requiredDestinationTiles: h.requiredDestinationTiles,
+          readyDestinationTiles: h.readyDestinationTiles,
+          gpuPreparedDestinationTiles: h.gpuPreparedDestinationTiles,
+          currentTransitionBlocker: h.currentTransitionBlocker,
+          lastCompletedTransition: h.lastCompletedTransition,
+          recentTransitions: h.recentTransitions,
+          counters: h.counters,
+        };
+      },
       getAttachedResolutionBreakdown: () => {
         const mgr = tileStreamManagerRef.current;
         if (!mgr) return null;
@@ -2982,6 +3090,22 @@ export default function App() {
     setHierarchicalBudget(next);
     tileStreamManagerRef.current?.setHierarchicalBudgetConfig(next);
   };
+
+  const handleChangeStreamingFrameBudget = (
+    input: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>
+  ) => {
+    const next = resolveStreamingFrameBudgetConfig(
+      input,
+      streamingFrameBudgetRef.current
+    );
+    streamingFrameBudgetRef.current = next;
+    setStreamingFrameBudget(next);
+    tileStreamManagerRef.current?.setStreamingFrameBudgetConfig(next);
+  };
+
+  useEffect(() => {
+    tileStreamManagerRef.current?.setBoundaryOverlayVisible(showM2aTileBoundaries);
+  }, [showM2aTileBoundaries]);
 
   const handleToggleStreamingProfiler = () => {
     const prof = getGlobalStreamingProfiler();
@@ -3287,6 +3411,10 @@ export default function App() {
                       ? (cam) => tileStreamManagerRef.current?.updateFromCamera(cam)
                       : undefined
                   }
+                  onRendererReady={(renderer) => {
+                    webglRendererRef.current = renderer;
+                    tileStreamManagerRef.current?.attachRenderer(renderer);
+                  }}
                 />
               </Canvas>
             </ErrorBoundary>
@@ -3658,6 +3786,9 @@ export default function App() {
             hierarchicalBudget={hierarchicalBudget}
             onChangeHierarchicalPolicy={handleChangeHierarchicalPolicy}
             onChangeHierarchicalBudget={handleChangeHierarchicalBudget}
+            streamingFrameBudget={streamingFrameBudget}
+            frameBudgetDiagnostics={m2aStreamDiagnostics?.frameBudget ?? null}
+            onChangeStreamingFrameBudget={handleChangeStreamingFrameBudget}
           />
         )}
 

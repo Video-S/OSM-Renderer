@@ -6,7 +6,7 @@
 
 # Interface: BoundingBox2D
 
-Defined in: scene/CameraController.tsx:14
+Defined in: scene/CameraController.tsx:15
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: scene/CameraController.tsx:14
 
 > `optional` **depthMeters?**: `number`
 
-Defined in: scene/CameraController.tsx:20
+Defined in: scene/CameraController.tsx:21
 
 ***
 
@@ -22,7 +22,7 @@ Defined in: scene/CameraController.tsx:20
 
 > **maxX**: `number`
 
-Defined in: scene/CameraController.tsx:16
+Defined in: scene/CameraController.tsx:17
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: scene/CameraController.tsx:16
 
 > **maxZ**: `number`
 
-Defined in: scene/CameraController.tsx:18
+Defined in: scene/CameraController.tsx:19
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: scene/CameraController.tsx:18
 
 > **minX**: `number`
 
-Defined in: scene/CameraController.tsx:15
+Defined in: scene/CameraController.tsx:16
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: scene/CameraController.tsx:15
 
 > **minZ**: `number`
 
-Defined in: scene/CameraController.tsx:17
+Defined in: scene/CameraController.tsx:18
 
 ***
 
@@ -54,4 +54,4 @@ Defined in: scene/CameraController.tsx:17
 
 > `optional` **widthMeters?**: `number`
 
-Defined in: scene/CameraController.tsx:19
+Defined in: scene/CameraController.tsx:20

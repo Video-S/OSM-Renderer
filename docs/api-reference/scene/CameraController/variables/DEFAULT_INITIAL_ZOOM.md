@@ -8,4 +8,4 @@
 
 > `const` **DEFAULT\_INITIAL\_ZOOM**: `0.85` = `0.85`
 
-Defined in: scene/CameraController.tsx:61
+Defined in: scene/CameraController.tsx:62

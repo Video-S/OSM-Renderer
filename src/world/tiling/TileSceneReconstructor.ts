@@ -53,6 +53,8 @@ export interface ReconstructTileSceneOptions {
   foliageOptimizationConfig?: Partial<FoliageOptimizationConfig>;
   /** Optional externally managed foliage runtime state (pushed uniformly across streamed tiles). */
   foliageRuntimeState?: FoliageRuntimeState;
+  /** Optional profiling flag to measure static MeshBVH deserialization timing (default: false). */
+  collectStageTimings?: boolean;
 }
 
 export interface ReconstructedTileSceneResult {
@@ -67,6 +69,11 @@ export interface ReconstructedTileSceneResult {
   foliageBatchCount: number;
   /** Aggregate spatial picking index memory/build stats for this tile's InstancedMesh batches. */
   instancedPickingStats: InstancedPickingAggregateStats;
+  /** Breakdown of BVH reconstruction timings when `collectStageTimings` is enabled. */
+  stageTimings: {
+    staticBvhDeserializeMs: number;
+    instancedBvhBuildMs: number;
+  };
   dispose: () => void;
 }
 
@@ -78,7 +85,9 @@ export function reconstructTileSceneFromDecoded(
     materialRegistry,
     placementMode = 'tile-local',
     initialCameraZoom = materialRegistry.cameraZoom,
+    collectStageTimings = false,
   } = options;
+  let staticBvhDeserializeMs = 0;
 
   // Tile-scoped resource manager owns ONLY this tile's BufferGeometries & BVHs,
   // never shared ThemeMaterialRegistry materials.
@@ -198,6 +207,7 @@ export function reconstructTileSceneFromDecoded(
     resourceManager.registerGeometry(geo);
 
     if (m.bvh) {
+      const tBvh0 = collectStageTimings ? performance.now() : 0;
       const bvh = MeshBVH.deserialize(
         {
           version: m.bvh.version,
@@ -212,6 +222,9 @@ export function reconstructTileSceneFromDecoded(
         } as unknown as Parameters<typeof MeshBVH.deserialize>[2]
       );
       (geo as unknown as { boundsTree: MeshBVH }).boundsTree = bvh;
+      if (collectStageTimings) {
+        staticBvhDeserializeMs += performance.now() - tBvh0;
+      }
     }
 
     const material = materialRegistry.getMaterials(m.materialSlotKeys);
@@ -593,6 +606,10 @@ export function reconstructTileSceneFromDecoded(
     applyFoliageRuntimeState,
     foliageBatchCount: foliageTargets.length,
     instancedPickingStats,
+    stageTimings: {
+      staticBvhDeserializeMs: Number(staticBvhDeserializeMs.toFixed(3)),
+      instancedBvhBuildMs: instancedPickingStats.totalBuildTimeMs,
+    },
     dispose,
   };
 }

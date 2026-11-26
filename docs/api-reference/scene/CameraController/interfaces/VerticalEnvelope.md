@@ -6,7 +6,7 @@
 
 # Interface: VerticalEnvelope
 
-Defined in: scene/CameraController.tsx:23
+Defined in: scene/CameraController.tsx:24
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: scene/CameraController.tsx:23
 
 > **maxY**: `number`
 
-Defined in: scene/CameraController.tsx:25
+Defined in: scene/CameraController.tsx:26
 
 ***
 
@@ -22,4 +22,4 @@ Defined in: scene/CameraController.tsx:25
 
 > **minY**: `number`
 
-Defined in: scene/CameraController.tsx:24
+Defined in: scene/CameraController.tsx:25

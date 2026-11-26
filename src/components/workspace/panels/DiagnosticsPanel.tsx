@@ -75,6 +75,15 @@ export interface DiagnosticsPanelProps {
   onChangeFoliageConfig: (partial: Partial<FoliageOptimizationConfig>) => void;
   instancedPickingMode?: InstancedPickingMode;
   onChangeInstancedPickingMode?: (mode: InstancedPickingMode) => void;
+  streamingProfilerEnabled?: boolean;
+  onToggleStreamingProfiler?: () => void;
+  onExportStreamingProfile?: () => void;
+  streamingProfilerSummary?: {
+    totalFrames: number;
+    totalEvents: number;
+    longTasks: number;
+    loafs: number;
+  } | null;
 }
 
 function formatDiagMs(val: number | null | undefined): string {
@@ -122,6 +131,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   onChangeFoliageConfig,
   instancedPickingMode = 'accelerated',
   onChangeInstancedPickingMode,
+  streamingProfilerEnabled = false,
+  onToggleStreamingProfiler,
+  onExportStreamingProfile,
+  streamingProfilerSummary = null,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -556,6 +569,47 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     </strong>
                   </span>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+        {onToggleStreamingProfiler && (
+          <div className="pt-1 border-t border-slate-800/80 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                data-testid="diag-toggle-streaming-profiler"
+                aria-pressed={streamingProfilerEnabled}
+                onClick={onToggleStreamingProfiler}
+                className={`flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                  streamingProfilerEnabled
+                    ? 'bg-cyan-500/15 border-cyan-500/45 text-cyan-200'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                }`}
+              >
+                <span>Streaming Fluidity Profiler</span>
+                <span className="text-[10px] font-mono">
+                  {streamingProfilerEnabled ? 'REC ON' : 'OFF'}
+                </span>
+              </button>
+              {onExportStreamingProfile && (
+                <button
+                  type="button"
+                  data-testid="diag-export-streaming-profile"
+                  onClick={onExportStreamingProfile}
+                  title="Download captured streaming & frame profile JSON"
+                  className="px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-mono flex items-center gap-1 cursor-pointer"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>JSON</span>
+                </button>
+              )}
+            </div>
+            {streamingProfilerSummary && (
+              <div className="text-[10px] font-mono tabular-nums text-slate-400 flex items-center justify-between px-1">
+                <span>Frames: {streamingProfilerSummary.totalFrames}</span>
+                <span>Events: {streamingProfilerSummary.totalEvents}</span>
+                <span>LoAF: {streamingProfilerSummary.loafs}</span>
               </div>
             )}
           </div>

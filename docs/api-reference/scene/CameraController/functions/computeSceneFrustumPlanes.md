@@ -8,7 +8,7 @@
 
 > **computeSceneFrustumPlanes**(`bounds`, `cameraPosition`, `cameraTarget`, `verticalEnvelope?`): `object`
 
-Defined in: scene/CameraController.tsx:147
+Defined in: scene/CameraController.tsx:148
 
 Computes tight scene-derived orthographic clipping planes [near, far] from the actual
 3D world-space scene bounding box ([minX..maxX] x [yMin..yMax] x [minZ..maxZ]) and camera pose.

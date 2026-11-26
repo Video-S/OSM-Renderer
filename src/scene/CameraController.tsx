@@ -10,6 +10,7 @@ import {
   interpolateClampedCameraZoom,
   resolveCameraResetOrFrameTarget,
 } from './cameraZoomPolicy';
+import { getGlobalStreamingProfiler } from '../world/tiling/StreamingProfiler';
 
 export interface BoundingBox2D {
   minX: number;
@@ -631,6 +632,17 @@ export const CameraController: React.FC<CameraControllerProps> = ({
   // Frame loop
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
+    const prof = getGlobalStreamingProfiler();
+    const profOn = prof.enabled;
+    const tCamTotal0 = profOn ? performance.now() : 0;
+    let controlsUpdateMs = 0;
+    let frustumMs = 0;
+    let orientationCallbackMs = 0;
+    let targetXForProf: number | undefined;
+    let targetZForProf: number | undefined;
+    let zoomForProf: number | undefined;
+    let azForProf: number | undefined;
+
     const activeCamera = state.camera;
 
     if (isResetting.current) {
@@ -661,13 +673,18 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       }
     }
 
+    const tCtrl0 = profOn ? performance.now() : 0;
     controlsRef.current.update();
+    if (profOn) {
+      controlsUpdateMs = performance.now() - tCtrl0;
+    }
 
     if (
       'isOrthographicCamera' in activeCamera &&
       (activeCamera as THREE.OrthographicCamera).isOrthographicCamera
     ) {
       const ortho = activeCamera as THREE.OrthographicCamera;
+      const tFrust0 = profOn ? performance.now() : 0;
       const clampedZoom = clampCameraZoom(ortho.zoom, safeMinZoom, safeMaxZoom);
       let projectionDirty = false;
       if (clampedZoom !== ortho.zoom) {
@@ -689,6 +706,15 @@ export const CameraController: React.FC<CameraControllerProps> = ({
       if (projectionDirty) {
         ortho.updateProjectionMatrix();
       }
+      if (profOn) {
+        frustumMs = performance.now() - tFrust0;
+        targetXForProf = t.x;
+        targetZForProf = t.z;
+        zoomForProf = ortho.zoom;
+        const dxP = ortho.position.x - t.x;
+        const dzP = ortho.position.z - t.z;
+        azForProf = ((Math.round((Math.atan2(dxP, dzP) * 180) / Math.PI) % 360) + 360) % 360;
+      }
       if (onOrientationChangeRef.current) {
         const dx = ortho.position.x - t.x;
         const dz = ortho.position.z - t.z;
@@ -701,9 +727,26 @@ export const CameraController: React.FC<CameraControllerProps> = ({
         ) {
           lastReportedZoomRef.current = roundedZoom;
           lastReportedAzimuthRef.current = normDeg;
+          const tCb0 = profOn ? performance.now() : 0;
           onOrientationChangeRef.current({ zoom: roundedZoom, azimuthDeg: normDeg });
+          if (profOn) {
+            orientationCallbackMs = performance.now() - tCb0;
+          }
         }
       }
+    }
+
+    if (profOn) {
+      prof.recordCameraUseFrame({
+        totalMs: performance.now() - tCamTotal0,
+        controlsUpdateMs,
+        frustumMs,
+        orientationCallbackMs,
+        targetX: targetXForProf,
+        targetZ: targetZForProf,
+        zoom: zoomForProf,
+        azimuthDeg: azForProf,
+      });
     }
   });
 

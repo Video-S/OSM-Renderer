@@ -44,6 +44,11 @@ import {
   type TileManifestLoadStatus,
 } from './ActiveMosaicIdentity';
 import { utm32NToGeo } from './RegionalProjection';
+import {
+  getGlobalStreamingProfiler,
+  type StreamingProfiler,
+  type StreamingQueueDepths,
+} from './StreamingProfiler';
 
 export {
   deriveActiveMosaicNameFromPackPath,
@@ -237,6 +242,8 @@ export interface TileStreamManagerOptions {
   experimentSkipUnchangedZoom?: boolean;
   /** Optional callback fired whenever diagnostics or loaded tiles change. */
   onDiagnosticsChange?: (diagnostics: TileStreamDiagnosticsSnapshot) => void;
+  /** Optional opt-in frame/streaming profiler (defaults to global singleton; zero overhead when disabled). */
+  profiler?: StreamingProfiler | null;
 }
 
 interface ManagedTileRecord {
@@ -269,6 +276,7 @@ interface ManagedTileRecord {
   decodedFootprint: TileMemoryFootprint | null;
   reconstructed: ReconstructedTileSceneResult | null;
   lastError: string | null;
+  lastCompressedBytes?: number | null;
 }
 
 const STREAMED_LAYER_KINDS: ReadonlyArray<Exclude<TileLayerKind, 'ground'>> = [
@@ -497,6 +505,7 @@ export class TileStreamManager {
   private readonly onDiagnosticsChange?: (
     diagnostics: TileStreamDiagnosticsSnapshot
   ) => void;
+  private profiler: StreamingProfiler | null;
 
   private readonly regionalResources = new SceneResourceManager();
   private readonly compositeScene: BuiltSceneGeometry;
@@ -605,6 +614,10 @@ export class TileStreamManager {
       options.fetchFn ??
       ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     this.onDiagnosticsChange = options.onDiagnosticsChange;
+    this.profiler =
+      options.profiler === undefined
+        ? getGlobalStreamingProfiler()
+        : options.profiler;
 
     // Top-level composite layer groups mounted by MapScene.tsx
     const buildingsGroup = new THREE.Group();
@@ -704,6 +717,28 @@ export class TileStreamManager {
 
   get sharedFoliagePrototypeRegistry(): FoliagePrototypeRegistry {
     return this.foliagePrototypeRegistry;
+  }
+
+  setProfiler(profiler: StreamingProfiler | null): void {
+    this.profiler = profiler;
+  }
+
+  private getQueueDepthSnapshot(): StreamingQueueDepths {
+    let queued = 0;
+    let fetching = 0;
+    let decoding = 0;
+    let readyToCommit = 0;
+    let loaded = 0;
+    let visible = 0;
+    for (const r of this.tilesByKey.values()) {
+      if (r.isVisibleInViewport) visible += 1;
+      if (r.state === 'queued') queued += 1;
+      else if (r.state === 'fetching') fetching += 1;
+      else if (r.state === 'decoding') decoding += 1;
+      else if (r.state === 'ready_to_commit') readyToCommit += 1;
+      else if (r.state === 'loaded') loaded += 1;
+    }
+    return { queued, fetching, decoding, readyToCommit, loaded, visible };
   }
 
   getFoliageOptimizationConfig(): FoliageOptimizationConfig {
@@ -1003,6 +1038,7 @@ export class TileStreamManager {
           decodedFootprint: null,
           reconstructed: null,
           lastError: null,
+          lastCompressedBytes: null,
         });
       }
 
@@ -1085,10 +1121,22 @@ export class TileStreamManager {
     target?: { x: number; y?: number; z: number }
   ): void {
     if (this.isDisposed || !this.metadata) return;
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+
+    const tBounds0 = prof ? performance.now() : 0;
     const bounds = computeViewportGroundBoundsForCamera(camera, target);
+    const boundsMs = prof ? performance.now() - tBounds0 : 0;
+
+    let zoomSyncMs = 0;
     if (bounds.cameraZoom !== undefined) {
+      const tZoom0 = prof ? performance.now() : 0;
       this.updateCameraZoom(bounds.cameraZoom);
+      if (prof) zoomSyncMs = performance.now() - tZoom0;
     }
+    if (prof) {
+      prof.recordViewportBoundsDuration(boundsMs, zoomSyncMs);
+    }
+
     if (this.experimentSkipUnchangedViewport &&
         !this.needsViewportRefresh &&
         equalTileViewportBounds(this.currentViewport, bounds)) {
@@ -1098,6 +1146,9 @@ export class TileStreamManager {
     }
     // Keep draining completed worker decodes even when the camera is stationary.
     this.tick();
+    if (prof) {
+      prof.recordQueueDepths(this.getQueueDepthSnapshot());
+    }
   }
 
   /**
@@ -1107,10 +1158,14 @@ export class TileStreamManager {
    */
   updateViewport(viewport: TileViewportGroundBounds): void {
     if (this.isDisposed || !this.metadata) return;
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    const tTotal0 = prof ? performance.now() : 0;
+
     this.currentViewport = viewport;
     this.needsViewportRefresh = false;
     this.viewportSelectionPasses++;
 
+    const tScan0 = prof ? performance.now() : 0;
     if (this.previousFocus) {
       const dx = viewport.focusX - this.previousFocus.x;
       const dz = viewport.focusZ - this.previousFocus.z;
@@ -1142,6 +1197,10 @@ export class TileStreamManager {
     const leadFocusZ = viewport.focusZ + this.panLeadVector.z;
 
     let anyEvictedOrCancelled = false;
+    let cancelInFlightMs = 0;
+    let evictDisposeMs = 0;
+    let tilesEvictedCount = 0;
+    let tilesCancelledCount = 0;
 
     for (const record of this.tilesByKey.values()) {
       const wb = record.worldBounds;
@@ -1201,15 +1260,30 @@ export class TileStreamManager {
           record.state === 'decoding' ||
           record.state === 'ready_to_commit'
         ) {
+          const tCancel0 = prof ? performance.now() : 0;
           this.cancelInFlightTile(record);
+          if (prof) {
+            cancelInFlightMs += performance.now() - tCancel0;
+            tilesCancelledCount += 1;
+          }
           anyEvictedOrCancelled = true;
         } else if (record.state === 'loaded') {
+          const tEvict0 = prof ? performance.now() : 0;
           this.evictLoadedTile(record);
+          if (prof) {
+            evictDisposeMs += performance.now() - tEvict0;
+            tilesEvictedCount += 1;
+          }
           anyEvictedOrCancelled = true;
         }
       } else if (!isInFetch && record.state === 'queued') {
         // Tile drifted from fetchSet into hysteresis keep-only band before fetch even started
+        const tCancel0 = prof ? performance.now() : 0;
         this.cancelInFlightTile(record);
+        if (prof) {
+          cancelInFlightMs += performance.now() - tCancel0;
+          tilesCancelledCount += 1;
+        }
         anyEvictedOrCancelled = true;
       }
 
@@ -1227,13 +1301,42 @@ export class TileStreamManager {
       }
     }
 
+    const rawScanAndActionMs = prof ? performance.now() - tScan0 : 0;
+    const tileScanMs = prof
+      ? Math.max(0, rawScanAndActionMs - cancelInFlightMs - evictDisposeMs)
+      : 0;
+
+    const tPump0 = prof ? performance.now() : 0;
     this.pumpFetchQueue();
+    const pumpFetchQueueMs = prof ? performance.now() - tPump0 : 0;
+
     this.updatePeakTileCounters();
+    let evictRebuildStatsMs = 0;
+    let evictEmitDiagnosticsMs = 0;
     if (anyEvictedOrCancelled) {
+      const tStats0 = prof ? performance.now() : 0;
       this.rebuildCompositeStats();
+      if (prof) evictRebuildStatsMs = performance.now() - tStats0;
+
+      const tDiag0 = prof ? performance.now() : 0;
       this.emitDiagnostics();
+      if (prof) evictEmitDiagnosticsMs = performance.now() - tDiag0;
     }
     this.checkIdleWaiters();
+
+    if (prof) {
+      prof.recordViewportUpdate({
+        totalMs: performance.now() - tTotal0,
+        tileScanMs,
+        cancelInFlightMs,
+        evictDisposeMs,
+        evictRebuildStatsMs,
+        evictEmitDiagnosticsMs,
+        pumpFetchQueueMs,
+        tilesEvictedCount,
+        tilesCancelledCount,
+      });
+    }
   }
 
   /**
@@ -1242,8 +1345,12 @@ export class TileStreamManager {
    */
   tick(maxCommits = this.maxCommitsPerFrame): number {
     if (this.isDisposed) return 0;
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    const tTick0 = prof ? performance.now() : 0;
+
     this.pumpFetchQueue();
 
+    const tReady0 = prof ? performance.now() : 0;
     const readyRecords: ManagedTileRecord[] = [];
     for (const record of this.tilesByKey.values()) {
       if (record.state === 'ready_to_commit' && record.isInKeepSet) {
@@ -1253,17 +1360,56 @@ export class TileStreamManager {
 
     if (readyRecords.length === 0) {
       this.checkIdleWaiters();
+      if (prof) {
+        const tickTotal = performance.now() - tTick0;
+        prof.recordStreamTick({
+          totalMs: tickTotal,
+          readyScanAndSortMs: performance.now() - tReady0,
+          reconstructMs: 0,
+          instancedBvhBuildMs: 0,
+          staticBvhDeserializeMs: 0,
+          sceneAttachMs: 0,
+          commitRebuildStatsMs: 0,
+          commitEmitDiagnosticsMs: 0,
+          tilesCommittedCount: 0,
+        });
+      }
       return 0;
     }
 
     readyRecords.sort((a, b) => a.priorityScore - b.priorityScore);
+    const readyScanAndSortMs = prof ? performance.now() - tReady0 : 0;
+
     const limit = Math.min(maxCommits, readyRecords.length);
     let committed = 0;
+    let totalReconMs = 0;
+    let totalInstancedBvhMs = 0;
+    let totalStaticBvhMs = 0;
+    let totalAttachMs = 0;
+    const tileSizeMeters = this.metadata?.tileSizeMeters ?? 1024;
     const tBatch0 = performance.now();
 
     for (let i = 0; i < limit; i++) {
       const record = readyRecords[i];
       if (!record.decodedPayload) continue;
+
+      const footprintSnapshot = record.decodedFootprint;
+      const compressedBytes = record.lastCompressedBytes ?? null;
+      const rawBytes = footprintSnapshot
+        ? footprintSnapshot.cpuGeometryBytes + footprintSnapshot.bvhBytes
+        : null;
+
+      if (prof) {
+        prof.recordEvent({
+          eventType: 'reconstruct_start',
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes: rawBytes,
+          queueDepths: this.getQueueDepthSnapshot(),
+        });
+      }
 
       const t0 = performance.now();
       const reconstructed = reconstructTileSceneFromDecoded(
@@ -1274,6 +1420,7 @@ export class TileStreamManager {
           initialCameraZoom: this.currentCameraZoom,
           foliagePrototypeRegistry: this.foliagePrototypeRegistry,
           foliageRuntimeState: this.foliageRuntimeState,
+          collectStageTimings: Boolean(prof),
         }
       );
       const reconstructMs = performance.now() - t0;
@@ -1286,10 +1433,72 @@ export class TileStreamManager {
       record.decodedPayload = null;
       record.state = 'loaded';
       this.completedLoadsTotal += 1;
+
+      if (prof) {
+        totalReconMs += reconstructMs;
+        totalInstancedBvhMs += reconstructed.stageTimings.instancedBvhBuildMs;
+        totalStaticBvhMs += reconstructed.stageTimings.staticBvhDeserializeMs;
+        prof.recordEvent({
+          eventType: 'reconstruct_complete',
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes:
+            rawBytes !== null
+              ? rawBytes + reconstructed.instancedPickingStats.totalIndexMemoryBytes
+              : null,
+          durationMs: reconstructMs,
+          queueDepths: this.getQueueDepthSnapshot(),
+          detail: {
+            instancedBvhBuildMs: reconstructed.stageTimings.instancedBvhBuildMs,
+            staticBvhDeserializeMs: reconstructed.stageTimings.staticBvhDeserializeMs,
+            instancedBatchCount: reconstructed.instancedPickingStats.indexedBatchCount,
+            indexedInstances: reconstructed.instancedPickingStats.totalIndexedInstances,
+            meshCount: footprintSnapshot?.meshCount,
+            triangleCount: footprintSnapshot?.triangleCount,
+          },
+        });
+      }
+
+      const tAttach0 = prof ? performance.now() : 0;
       this.attachTileToCompositeScene(record);
+      const attachMs = prof ? performance.now() - tAttach0 : 0;
+      if (prof) {
+        totalAttachMs += attachMs;
+        const attachNowMs = performance.now();
+        prof.recordEvent({
+          eventType: 'attach',
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          timestampMs: attachNowMs,
+          payloadCompressedBytes: compressedBytes,
+          payloadRawBytes: rawBytes,
+          durationMs: attachMs,
+          queueDepths: this.getQueueDepthSnapshot(),
+          detail: {
+            meshCount: footprintSnapshot?.meshCount,
+            triangleCount: footprintSnapshot?.triangleCount,
+          },
+        });
+        prof.markTilePendingFirstRender({
+          tileKey: record.tileKey,
+          tileSizeMeters,
+          lod: record.manifest.lod,
+          triangles: reconstructed.scene.stats.totalTriangles,
+          meshes: footprintSnapshot?.meshCount ?? 0,
+          compressedBytes,
+          rawBytes,
+          attachTimestampMs: attachNowMs,
+        });
+      }
+
       committed += 1;
     }
 
+    let commitRebuildStatsMs = 0;
+    let commitEmitDiagnosticsMs = 0;
     if (committed > 0) {
       const batchCommitMs = performance.now() - tBatch0;
       this.lastCommitMs = batchCommitMs;
@@ -1299,12 +1508,29 @@ export class TileStreamManager {
       if (this.currentWireframe) {
         this.materialRegistry.setWireframe(true);
       }
+      const tStats0 = prof ? performance.now() : 0;
       this.rebuildCompositeStats();
-      this.updatePeakTileCounters();
+      if (prof) commitRebuildStatsMs = performance.now() - tStats0;
+
+      const tDiag0 = prof ? performance.now() : 0;
       this.emitDiagnostics();
+      if (prof) commitEmitDiagnosticsMs = performance.now() - tDiag0;
     }
 
     this.checkIdleWaiters();
+    if (prof) {
+      prof.recordStreamTick({
+        totalMs: performance.now() - tTick0,
+        readyScanAndSortMs,
+        reconstructMs: totalReconMs,
+        instancedBvhBuildMs: totalInstancedBvhMs,
+        staticBvhDeserializeMs: totalStaticBvhMs,
+        sceneAttachMs: totalAttachMs,
+        commitRebuildStatsMs,
+        commitEmitDiagnosticsMs,
+        tilesCommittedCount: committed,
+      });
+    }
     return committed;
   }
 
@@ -1670,8 +1896,21 @@ export class TileStreamManager {
 
     const { lod, tx, ty } = record.manifest;
     const tileKey = record.tileKey;
+    const tileSizeMeters = this.metadata?.tileSizeMeters ?? 1024;
     const url = `${this.apiBaseUrl}/${lod}/${tx}/${ty}`;
     const fetchStart = performance.now();
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'fetch_start',
+        tileKey,
+        tileSizeMeters,
+        lod,
+        timestampMs: fetchStart,
+        queueDepths: this.getQueueDepthSnapshot(),
+      });
+    }
 
     (async () => {
       try {
@@ -1690,13 +1929,43 @@ export class TileStreamManager {
         if (abortController.signal.aborted || record.requestGeneration !== generation) {
           return;
         }
-        const fetchMs = performance.now() - fetchStart;
+        // Capture compressed byteLength BEFORE decodeTile transfers the ArrayBuffer to a Worker
+        const compressedPayloadBytes = arrayBuffer.byteLength;
+        record.lastCompressedBytes = compressedPayloadBytes;
+        const fetchEnd = performance.now();
+        const fetchMs = fetchEnd - fetchStart;
         this.totalFetchMs += fetchMs;
         this.fetchSamples += 1;
         pushBoundedSample(this.fetchMsRing, fetchMs);
 
         record.state = 'decoding';
         this.updatePeakTileCounters();
+
+        const profAtFetchDone =
+          this.profiler && this.profiler.enabled ? this.profiler : null;
+        if (profAtFetchDone) {
+          const depths = this.getQueueDepthSnapshot();
+          profAtFetchDone.recordEvent({
+            eventType: 'fetch_complete',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: fetchEnd,
+            payloadCompressedBytes: compressedPayloadBytes,
+            durationMs: fetchMs,
+            queueDepths: depths,
+          });
+          profAtFetchDone.recordEvent({
+            eventType: 'decode_start',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: fetchEnd,
+            payloadCompressedBytes: compressedPayloadBytes,
+            queueDepths: depths,
+          });
+        }
+
         const decodeResult = await this.decodeClient.decodeTile(
           arrayBuffer,
           tileKey,
@@ -1738,6 +2007,41 @@ export class TileStreamManager {
         record.abortController = null;
         record.state = 'ready_to_commit';
         this.updatePeakTileCounters();
+
+        const profAtDecodeDone =
+          this.profiler && this.profiler.enabled ? this.profiler : null;
+        if (profAtDecodeDone) {
+          const readyNowMs = performance.now();
+          const fp = record.decodedFootprint;
+          const rawBytes = fp.cpuGeometryBytes + fp.bvhBytes;
+          const depths = this.getQueueDepthSnapshot();
+          profAtDecodeDone.recordEvent({
+            eventType: 'decode_complete',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: readyNowMs,
+            payloadCompressedBytes: compressedPayloadBytes,
+            payloadRawBytes: rawBytes,
+            durationMs: decodeResult.decodeDurationMs,
+            queueDepths: depths,
+            detail: {
+              meshCount: fp.meshCount,
+              triangleCount: fp.triangleCount,
+              usedWebWorker: decodeResult.usedWebWorker,
+            },
+          });
+          profAtDecodeDone.recordEvent({
+            eventType: 'ready_to_commit',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: readyNowMs,
+            payloadCompressedBytes: compressedPayloadBytes,
+            payloadRawBytes: rawBytes,
+            queueDepths: depths,
+          });
+        }
       } catch (err) {
         if (
           abortController.signal.aborted ||
@@ -1746,13 +2050,26 @@ export class TileStreamManager {
           return;
         }
         if (record.requestGeneration === generation) {
+          const msg = err instanceof Error ? err.message : String(err);
           record.state = 'error';
-          record.lastError =
-            err instanceof Error ? err.message : String(err);
+          record.lastError = msg;
           record.abortController = null;
           // updateViewport normally retries fetch errors on the next frame.
           // Invalidate the opt-in identical-camera gate to preserve that behavior.
           this.needsViewportRefresh = true;
+
+          const profAtErr =
+            this.profiler && this.profiler.enabled ? this.profiler : null;
+          if (profAtErr) {
+            profAtErr.recordEvent({
+              eventType: 'error',
+              tileKey,
+              tileSizeMeters,
+              lod,
+              queueDepths: this.getQueueDepthSnapshot(),
+              detail: { reason: msg },
+            });
+          }
         }
       } finally {
         this.activeFetchCount = Math.max(0, this.activeFetchCount - 1);
@@ -1765,6 +2082,7 @@ export class TileStreamManager {
   }
 
   private cancelInFlightTile(record: ManagedTileRecord): void {
+    const prevState = record.state;
     record.requestGeneration = this.requestGenerationCounter++;
     if (record.abortController) {
       record.abortController.abort();
@@ -1774,6 +2092,17 @@ export class TileStreamManager {
     record.decodedFootprint = null;
     record.state = 'unloaded';
     this.cancelledRequestsTotal += 1;
+    if (this.profiler && this.profiler.enabled) {
+      this.profiler.recordEvent({
+        eventType: 'cancel',
+        tileKey: record.tileKey,
+        tileSizeMeters: this.metadata?.tileSizeMeters ?? 1024,
+        lod: record.manifest.lod,
+        payloadCompressedBytes: record.lastCompressedBytes ?? null,
+        queueDepths: this.getQueueDepthSnapshot(),
+        detail: { reason: `cancelled_from_${prevState}` },
+      });
+    }
   }
 
   private evictLoadedTile(record: ManagedTileRecord): void {
@@ -1781,6 +2110,11 @@ export class TileStreamManager {
       record.state = 'unloaded';
       return;
     }
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    const t0 = prof ? performance.now() : 0;
+    const fp = record.decodedFootprint;
+    const compressedBytes = record.lastCompressedBytes ?? null;
+
     this.detachTileFromCompositeScene(record);
     record.reconstructed.dispose();
     record.reconstructed = null;
@@ -1788,6 +2122,25 @@ export class TileStreamManager {
     record.decodedFootprint = null;
     record.state = 'unloaded';
     this.evictedTilesTotal += 1;
+
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'evict',
+        tileKey: record.tileKey,
+        tileSizeMeters: this.metadata?.tileSizeMeters ?? 1024,
+        lod: record.manifest.lod,
+        payloadCompressedBytes: compressedBytes,
+        payloadRawBytes: fp ? fp.cpuGeometryBytes + fp.bvhBytes : null,
+        durationMs: performance.now() - t0,
+        queueDepths: this.getQueueDepthSnapshot(),
+        detail: fp
+          ? {
+              meshCount: fp.meshCount,
+              triangleCount: fp.triangleCount,
+            }
+          : undefined,
+      });
+    }
   }
 
   private attachTileToCompositeScene(record: ManagedTileRecord): void {

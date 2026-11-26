@@ -85,6 +85,7 @@ import {
   type TileManifestCoverageSummary,
   type TileStreamDiagnosticsSnapshot,
 } from '../world/tiling/TileStreamManager';
+import { getGlobalStreamingProfiler } from '../world/tiling/StreamingProfiler';
 import {
   REGIONAL_MIN_ZOOM_TILE_THRESHOLD,
   clampCameraZoom,
@@ -389,6 +390,15 @@ export default function App() {
   const [webglSupported, setWebglSupported] = useState<boolean>(
     () => detectWebGLSupport().supported
   );
+  const [streamingProfilerEnabled, setStreamingProfilerEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const raw = new URLSearchParams(window.location.search).get('streamingProfile');
+    const enabled = raw === '1' || raw === 'true';
+    if (enabled) {
+      getGlobalStreamingProfiler().setEnabled(true, 'url_session');
+    }
+    return enabled;
+  });
 
   // Internal provider instances (for test/benchmark fixtures & repro import only)
   const osmApiProvider = useMemo(() => new OsmApiProvider(), []);
@@ -2700,6 +2710,18 @@ export default function App() {
         typeof (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__ === 'function'
           ? (window as any).__BENCHMARK_MEASURE_FEATURE_PICK__(ndcPoints, options)
           : null,
+      setStreamingProfilerEnabled: (enabled: boolean, label?: string | null) => {
+        const next = Boolean(enabled);
+        getGlobalStreamingProfiler().setEnabled(next, label);
+        setStreamingProfilerEnabled(next);
+        return next;
+      },
+      getStreamingProfilerEnabled: () => getGlobalStreamingProfiler().enabled,
+      resetStreamingProfiler: (label?: string | null) => {
+        getGlobalStreamingProfiler().reset(label);
+      },
+      getStreamingProfilerSnapshot: () =>
+        getGlobalStreamingProfiler().getSnapshot(),
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [
@@ -2749,6 +2771,26 @@ export default function App() {
   const handleChangeInstancedPickingMode = (mode: InstancedPickingMode) => {
     const applied = setInstancedPickingMode(mode);
     setInstancedPickingModeState(applied);
+  };
+
+  const handleToggleStreamingProfiler = () => {
+    const prof = getGlobalStreamingProfiler();
+    const next = !prof.enabled;
+    prof.setEnabled(next, next ? 'interactive_session' : undefined);
+    setStreamingProfilerEnabled(next);
+  };
+
+  const handleExportStreamingProfile = () => {
+    const snap = getGlobalStreamingProfiler().getSnapshot();
+    const blob = new Blob([JSON.stringify(snap, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `osm-streaming-profile-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleResetCamera = () => {
@@ -2835,11 +2877,20 @@ export default function App() {
     navMode === 'hidden' && !activePanel && !isBenchmarkMode;
 
   return (
-    <div
-      data-testid="workspace-root"
-      className="flex w-screen h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none"
-      onContextMenu={(e) => e.preventDefault()}
+    <React.Profiler
+      id="MapWorkspace"
+      onRender={(_id, _phase, actualDuration) => {
+        const prof = getGlobalStreamingProfiler();
+        if (prof.enabled) {
+          prof.recordReactCommit(actualDuration);
+        }
+      }}
     >
+      <div
+        data-testid="workspace-root"
+        className="flex w-screen h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none"
+        onContextMenu={(e) => e.preventDefault()}
+      >
       {/* 1. LEFT NAVIGATION SIDEBAR */}
       <NavigationSidebar
         mode={navMode}
@@ -3362,6 +3413,22 @@ export default function App() {
             onChangeFoliageConfig={handleChangeFoliageConfig}
             instancedPickingMode={instancedPickingMode}
             onChangeInstancedPickingMode={handleChangeInstancedPickingMode}
+            streamingProfilerEnabled={streamingProfilerEnabled}
+            onToggleStreamingProfiler={handleToggleStreamingProfiler}
+            onExportStreamingProfile={handleExportStreamingProfile}
+            streamingProfilerSummary={
+              streamingProfilerEnabled
+                ? (() => {
+                    const s = getGlobalStreamingProfiler().getSnapshot();
+                    return {
+                      totalFrames: s.totalFramesRecorded,
+                      totalEvents: s.totalEventsRecorded,
+                      longTasks: s.browserObservers.longTaskCount,
+                      loafs: s.browserObservers.loafCount,
+                    };
+                  })()
+                : null
+            }
           />
         )}
 
@@ -3382,6 +3449,7 @@ export default function App() {
           />
         )}
       </ContextSidebar>
-    </div>
+      </div>
+    </React.Profiler>
   );
 }

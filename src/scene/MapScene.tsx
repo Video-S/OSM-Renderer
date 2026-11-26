@@ -42,6 +42,7 @@ import {
   type InstancedPickingMode,
   type InstancedRaycastDiagnostics,
 } from '../world/InstancedSpatialIndex';
+import { getGlobalStreamingProfiler } from '../world/tiling/StreamingProfiler';
 
 export interface MapSceneProps {
   builtGeometry: BuiltSceneGeometry;
@@ -986,6 +987,26 @@ export const MapScene: React.FC<MapSceneProps> = ({
         }
       }
 
+      const prof = getGlobalStreamingProfiler();
+      if (prof.enabled) {
+        const orthoCam = cameraRef.current as THREE.OrthographicCamera | null;
+        prof.finishRenderFrame({
+          frameTimestampMs: postRenderTimestampMs,
+          frameIntervalMs: lastRafIntervalMsRef.current,
+          glRenderCpuMs: cpuElapsedMs,
+          renderCalls: lastRenderCallsRef.current,
+          renderTriangles: lastRenderTrianglesRef.current,
+          driverGeometries: gl.info.memory.geometries,
+          driverTextures: gl.info.memory.textures,
+          driverPrograms: lastDriverProgramsRef.current,
+          gpuTimerQuerySupported: gpuTimerSupportedRef.current,
+          gpuTimerStatus: gpuState.gpuTimerStatus,
+          gpuDisjointOccurred: gpuState.gpuDisjointOccurred,
+          gpuPassTimeMs: gpuState.gpuPassTimeMs,
+          cameraZoom: orthoCam?.zoom,
+        });
+      }
+
       const benchmarkCollector =
         typeof window !== 'undefined' ? (window as any).__BENCHMARK_FRAME_COLLECTOR__ : null;
       if (typeof benchmarkCollector === 'function') {
@@ -1048,6 +1069,10 @@ export const MapScene: React.FC<MapSceneProps> = ({
     };
 
     gl.render = (scene: THREE.Object3D, renderCamera: THREE.Camera) => {
+      const prof = getGlobalStreamingProfiler();
+      if (prof.enabled) {
+        prof.markBeforeGlRender(gl.info.memory.geometries);
+      }
       let resolvedNsThisFrame: number | null = null;
       let disjointThisFrame = false;
 
@@ -1137,6 +1162,15 @@ export const MapScene: React.FC<MapSceneProps> = ({
 
   // Measure actual WebGL frame rate, camera zoom LOD updates, and live HUD telemetry
   useFrame((state) => {
+    const prof = getGlobalStreamingProfiler();
+    const profOn = prof.enabled;
+    const tMapTotal0 = profOn ? performance.now() : 0;
+    let shadowFollowMs = 0;
+    let zoomPropagationMs = 0;
+    let viewportFrameUpdateMs = 0;
+    let railwayIndexRebuildMs = 0;
+    let telemetryHudMs = 0;
+
     // The 3km shadow frustum must follow the camera over regional maps.
     // Moving the light, not enlarging the frustum, preserves shadow precision.
     if (
@@ -1144,6 +1178,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
       (builtGeometry.groundMesh.userData.__regionalStreamingWidthMeters as number) > 4096 &&
       sunLightRef.current
     ) {
+      const tShadow0 = profOn ? performance.now() : 0;
       const dir = sunDirectionRef.current;
       state.camera.getWorldDirection(dir);
       if (Math.abs(dir.y) > 1e-5) {
@@ -1155,45 +1190,77 @@ export const MapScene: React.FC<MapSceneProps> = ({
         light.target.position.set(x, 0, z);
         light.target.updateMatrixWorld();
       }
+      if (profOn) shadowFollowMs = performance.now() - tShadow0;
     }
     const now = performance.now();
     const frameDt = now - lastFrameTimestampRef.current;
     lastFrameTimestampRef.current = now;
     lastRafIntervalMsRef.current = frameDt;
 
+    if (profOn) {
+      prof.recordViewportFrameStart(now, frameDt);
+    }
+
     const isBenchmarkActive =
       typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true;
 
     const cam = state.camera as THREE.OrthographicCamera;
     if (typeof cam.zoom === 'number' && Math.abs(cam.zoom - lastZoomRef.current) > 0.005) {
+      const tZoom0 = profOn ? performance.now() : 0;
       lastZoomRef.current = cam.zoom;
       builtGeometry.updateCameraZoom?.(cam.zoom);
       if (onCameraZoomChange) {
         onCameraZoomChange(cam.zoom);
       }
+      if (profOn) zoomPropagationMs = performance.now() - tZoom0;
     }
 
     if (onViewportFrameUpdate && (cam as THREE.OrthographicCamera).isOrthographicCamera) {
+      const tVp0 = profOn ? performance.now() : 0;
       onViewportFrameUpdate(cam);
+      if (profOn) viewportFrameUpdateMs = performance.now() - tVp0;
     }
 
     const compositeRev = activeRailwaysGroup.userData?.compositeRevision;
     if (typeof compositeRev === 'number' && compositeRev !== lastRailwayCompositeRevRef.current) {
+      const tRw0 = profOn ? performance.now() : 0;
       lastRailwayCompositeRevRef.current = compositeRev;
       cachedRailwayIndexRef.current = buildCachedRailwayIndex(activeRailwaysGroup);
+      if (profOn) railwayIndexRebuildMs = performance.now() - tRw0;
     }
 
     // During active automated frame benchmarking, skip ring sorting, HUD stats, and React updates;
     // benchmark frame telemetry is emitted synchronously post-origRender inside gl.render().
     if (isBenchmarkActive) {
+      if (profOn) {
+        prof.recordMapSceneUseFrame({
+          totalMs: performance.now() - tMapTotal0,
+          shadowFollowMs,
+          zoomPropagationMs,
+          viewportFrameUpdateMs,
+          railwayIndexRebuildMs,
+          telemetryHudMs: 0,
+        });
+      }
       return;
     }
 
     // Skip per-frame telemetry sorting and railway sampling when the Performance panel is closed.
     if (!trackTelemetry && !trackFps) {
+      if (profOn) {
+        prof.recordMapSceneUseFrame({
+          totalMs: performance.now() - tMapTotal0,
+          shadowFollowMs,
+          zoomPropagationMs,
+          viewportFrameUpdateMs,
+          railwayIndexRebuildMs,
+          telemetryHudMs: 0,
+        });
+      }
       return;
     }
 
+    const tHud0 = profOn ? performance.now() : 0;
     if (frameDt > 0 && frameDt < 5000) {
       const ring = frameIntervalsRingRef.current;
       ring.push(frameDt);
@@ -1323,6 +1390,17 @@ export const MapScene: React.FC<MapSceneProps> = ({
           lastRaycast: lastInstancedRaycastDiagRef.current,
           indexStats: cachedInstancedIndexStatsRef.current.stats,
         },
+      });
+    }
+    if (profOn) {
+      telemetryHudMs = performance.now() - tHud0;
+      prof.recordMapSceneUseFrame({
+        totalMs: performance.now() - tMapTotal0,
+        shadowFollowMs,
+        zoomPropagationMs,
+        viewportFrameUpdateMs,
+        railwayIndexRebuildMs,
+        telemetryHudMs,
       });
     }
   });

@@ -21,6 +21,7 @@
     "bench:foliage": "tsx benchmarks/foliageOptimizationRunner.ts",
     "bench:spatial-batching": "tsx benchmarks/spatialBatchingRunner.ts",
     "bench:instanced-picking": "tsx benchmarks/instancedPickingRunner.ts",
+    "bench:streaming-fluidity": "tsx benchmarks/streamingFluidityRunner.ts",
     "osm:fetch-overijssel": "tsx scripts/fetch-overijssel-pbf.ts",
     "osm:build-overijssel-index": "tsx scripts/build-overijssel-index.ts",
     "osm:build-search-index": "tsx scripts/build-overijssel-search-index.ts",

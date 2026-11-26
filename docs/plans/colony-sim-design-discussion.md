@@ -89,6 +89,36 @@ A possible architecture is two rendering representations: a detailed local rende
 
 This may enable smaller local streaming units and avoid replacing equivalent detailed geometry merely to change batching resolution. This is a hypothesis, not a measured result or a decision to abandon the current renderer.
 
+### 6.1 Clarified navigation requirement: seamless regional-to-local travel
+
+The owner clarified that streaming remains necessary. A player should be able to navigate the regional map, select or approach an event, and enter its detailed local environment with a reasonably seamless transition. The distinction is between continuous navigation and continuous residency of full-detail geometry: the former is desirable; the latter is not a requirement.
+
+Illustrative interaction:
+1. The player notices an event or another colony on the lightweight regional map and selects a destination.
+2. Destination preparation begins immediately, overlapping camera movement where possible. Detailed geographic assets stream in while the server independently prepares or activates the relevant local simulation.
+3. The client presents detailed local geography and individual agents when the corresponding data is ready, allowing local interaction.
+
+An explicit destination is a stronger prefetch signal than inferred camera velocity alone. Free navigation should remain possible, but selecting an event provides a useful opportunity to prioritize the destination.
+
+Candidate streaming principles:
+- Keep the regional representation lightweight and readily available as a visual fallback.
+- Stream local detail in relatively small, bounded units, prioritizing the destination and visible coverage.
+- Preserve the regional representation until the corresponding local coverage is ready; avoid blank views or requiring the full-detail region to become resident.
+- Keep client geometry readiness separate from authoritative server simulation readiness. Rendering completion must not control world progression.
+- Coordinate the transition so detailed interactions are enabled only when the necessary authoritative state is available. The precise visual handoff, readiness criteria and cancellation behavior remain design questions.
+
+This preserves the usefulness of existing asynchronous preparation, cache management, prioritization and frame-budgeted scheduling. It does not imply that the current uniform-resolution atomic swap is the required mechanism for switching between strategic and local representations.
+
+### 6.2 Resource headroom and static asset distribution
+
+The owner agreed that renderer resource headroom and geographic asset distribution deserve architectural attention before relying on a minimal gameplay prototype, which may not represent the eventual product's workload.
+
+A future renderer should reserve meaningful CPU, GPU and memory capacity for agents, animations, construction, UI and other gameplay workloads. Evaluate representative synthetic workloads without requiring finalized gameplay mechanics. No numerical headroom targets have been selected.
+
+Localhost streaming benchmarks do not establish multiplayer asset-delivery performance. Investigate immutable, versioned geographic packages that clients can download or cache across sessions, separately from live authoritative gameplay state and updates. Client and server must agree on the geographic dataset identity. Distribution, cache invalidation, storage limits and installation versus browser caching remain open decisions.
+
+After F2, consider a milestone exploring local/regional representation separation, resource headroom and static asset distribution. This is a proposed direction, not authorization to begin a replacement renderer or prescribe a particular asset packaging format.
+
 ## 7. Relationship to ongoing renderer work
 
 TKT-041 introduced uniform-viewport hierarchical render batching; F1 improved severe frame-time stalls but large-resolution activation remains slow and pending for too long in owner testing. F2 is currently being worked on (streaming throughput, bounded independent stages, scheduling, prewarming and delivery-granularity feasibility).

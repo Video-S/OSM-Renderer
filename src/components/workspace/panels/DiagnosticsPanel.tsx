@@ -34,6 +34,12 @@ import type {
 } from '../../../world/FoliageLodSystem';
 import type { InstancedPickingMode } from '../../../world/InstancedSpatialIndex';
 import type { TilePreparationVariantId } from '../../../world/tiling/TilePreparationConfig';
+import type { HierarchicalStreamingDiagnosticsSnapshot } from '../../../world/tiling/TileStreamManager';
+import type {
+  HierarchicalResolutionMode,
+  HierarchicalResolutionPolicyConfig,
+} from '../../../world/tiling/HierarchicalResolutionPolicy';
+import type { HierarchicalResourceBudgetConfig } from '../../../world/tiling/HierarchicalResourceBudget';
 import type { ReproFormSessionState } from '../workspaceTypes';
 
 export interface DiagnosticsPanelProps {
@@ -92,11 +98,25 @@ export interface DiagnosticsPanelProps {
     syncBvhFallbackTotal: number;
     pendingReadyTileBytes: number;
   } | null;
+  hierarchicalDiagnostics?: HierarchicalStreamingDiagnosticsSnapshot | null;
+  hierarchicalPolicy?: HierarchicalResolutionPolicyConfig;
+  hierarchicalBudget?: HierarchicalResourceBudgetConfig;
+  onChangeHierarchicalPolicy?: (
+    partial: Partial<HierarchicalResolutionPolicyConfig>
+  ) => void;
+  onChangeHierarchicalBudget?: (
+    partial: Partial<HierarchicalResourceBudgetConfig>
+  ) => void;
 }
 
 function formatDiagMs(val: number | null | undefined): string {
   if (typeof val !== 'number' || !Number.isFinite(val)) return '—';
   return `${val.toFixed(1)} ms`;
+}
+
+function formatDiagMb(bytes: number | null | undefined): string {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return '0.0 MB';
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
@@ -146,6 +166,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   tilePreparationVariant = 'combined',
   onChangeTilePreparationVariant,
   tilePreparationStats = null,
+  hierarchicalDiagnostics = null,
+  hierarchicalPolicy,
+  hierarchicalBudget,
+  onChangeHierarchicalPolicy,
+  onChangeHierarchicalBudget,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -685,6 +710,292 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
           </div>
         )}
       </section>
+
+      {/* 1c. Hierarchical Tile Streaming (TKT-041) */}
+      {hierarchicalDiagnostics?.enabled && (
+        <section
+          data-testid="diag-hierarchical-streaming-section"
+          className="bg-slate-900/60 border border-slate-800 rounded-md p-3 space-y-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-200">
+              Hierarchical Tile Streaming
+            </span>
+            <span
+              data-testid="diag-hierarchical-active-res"
+              className="text-[10px] font-mono uppercase text-cyan-300"
+            >
+              {hierarchicalDiagnostics.activeResolutionMeters}m ·{' '}
+              {hierarchicalDiagnostics.transitionState}
+            </span>
+          </div>
+
+          {onChangeHierarchicalPolicy && hierarchicalPolicy && (
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-4 gap-1">
+                {(
+                  [
+                    { id: 'auto', label: 'AUTO' },
+                    { id: 'force_1024', label: '1024m' },
+                    { id: 'force_2048', label: '2048m' },
+                    { id: 'force_4096', label: '4096m' },
+                  ] as Array<{ id: HierarchicalResolutionMode; label: string }>
+                ).map((item) => {
+                  const active = hierarchicalPolicy.mode === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      data-testid={`diag-hierarchical-mode-${item.id}`}
+                      aria-pressed={active}
+                      onClick={() =>
+                        onChangeHierarchicalPolicy({ mode: item.id })
+                      }
+                      className={`py-1 px-1.5 rounded border text-[10px] font-mono transition cursor-pointer ${
+                        active
+                          ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-200'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {hierarchicalPolicy.bands.length >= 2 && (
+                <div className="bg-slate-950 border border-slate-800 rounded p-2 space-y-1.5 text-[10px] font-mono text-slate-400">
+                  <div className="text-slate-300 font-semibold">
+                    Hysteresis Bands (px/m)
+                  </div>
+                  {hierarchicalPolicy.bands.map((band, idx) => (
+                    <div
+                      key={`${band.fineResolutionMeters}-${band.coarseResolutionMeters}`}
+                      className="flex items-center justify-between gap-1.5"
+                    >
+                      <span className="text-slate-400 shrink-0">
+                        {band.fineResolutionMeters}↔{band.coarseResolutionMeters}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.02"
+                          min="0.05"
+                          max="10"
+                          aria-label={`${band.fineResolutionMeters} to ${band.coarseResolutionMeters} zoom-out threshold`}
+                          value={band.zoomOutThreshold}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (!Number.isFinite(val) || val <= 0) return;
+                            const nextBands = hierarchicalPolicy.bands.map((b, i) =>
+                              i === idx
+                                ? {
+                                    ...b,
+                                    zoomOutThreshold: val,
+                                    zoomInThreshold: Math.max(val, b.zoomInThreshold),
+                                  }
+                                : b
+                            );
+                            onChangeHierarchicalPolicy({ bands: nextBands });
+                          }}
+                          className="w-12 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-slate-200 text-right"
+                        />
+                        <span>/</span>
+                        <input
+                          type="number"
+                          step="0.02"
+                          min="0.05"
+                          max="10"
+                          aria-label={`${band.fineResolutionMeters} to ${band.coarseResolutionMeters} zoom-in threshold`}
+                          value={band.zoomInThreshold}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (!Number.isFinite(val) || val <= 0) return;
+                            const nextBands = hierarchicalPolicy.bands.map((b, i) =>
+                              i === idx
+                                ? {
+                                    ...b,
+                                    zoomInThreshold: Math.max(b.zoomOutThreshold, val),
+                                  }
+                                : b
+                            );
+                            onChangeHierarchicalPolicy({ bands: nextBands });
+                          }}
+                          className="w-12 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-slate-200 text-right"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {onChangeHierarchicalBudget && hierarchicalBudget && (
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                      <span>Total Budget (MiB)</span>
+                      <input
+                        type="number"
+                        step="32"
+                        min="16"
+                        max="8192"
+                        aria-label="Hierarchical total memory budget MiB"
+                        value={Math.round(
+                          hierarchicalBudget.totalMemoryBudgetBytes / (1024 * 1024)
+                        )}
+                        onChange={(e) => {
+                          const mb = Number(e.target.value);
+                          if (!Number.isFinite(mb) || mb < 1) return;
+                          onChangeHierarchicalBudget({
+                            totalMemoryBudgetBytes: Math.round(mb * 1024 * 1024),
+                          });
+                        }}
+                        className="w-16 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-slate-200 text-right"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hierarchicalDiagnostics.budgetDeferralReason && (
+            <div
+              data-testid="diag-hierarchical-budget-deferral"
+              className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px] leading-snug"
+            >
+              {hierarchicalDiagnostics.budgetDeferralReason}
+            </div>
+          )}
+
+          <div
+            data-testid="diag-hierarchical-stats"
+            className="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] font-mono tabular-nums text-slate-400 space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Active / Desired:{' '}
+                <strong className="text-slate-200">
+                  {hierarchicalDiagnostics.activeResolutionMeters}m
+                </strong>{' '}
+                /{' '}
+                <strong className="text-cyan-300">
+                  {hierarchicalDiagnostics.desiredResolutionMeters}m
+                </strong>
+              </span>
+              <span>
+                Pending:{' '}
+                <strong className="text-amber-300">
+                  {hierarchicalDiagnostics.pendingResolutionMeters
+                    ? `${hierarchicalDiagnostics.pendingResolutionMeters}m`
+                    : '—'}
+                </strong>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Zoom / Eff Scale:{' '}
+                <strong className="text-slate-200">
+                  {hierarchicalDiagnostics.rawCameraZoom.toFixed(2)}
+                </strong>{' '}
+                /{' '}
+                <strong className="text-emerald-300">
+                  {hierarchicalDiagnostics.effectiveScalePxPerMeter.toFixed(2)}
+                </strong>
+              </span>
+              <span>
+                Dest:{' '}
+                <strong className="text-slate-200">
+                  {hierarchicalDiagnostics.readyDestinationTiles}/
+                  {hierarchicalDiagnostics.requiredDestinationTiles}
+                </strong>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Trans (S/C/X/D):{' '}
+                <strong className="text-slate-200">
+                  {hierarchicalDiagnostics.counters.transitionsStarted}/
+                  {hierarchicalDiagnostics.counters.transitionsCompleted}/
+                  {hierarchicalDiagnostics.counters.transitionsCancelled}/
+                  {hierarchicalDiagnostics.counters.transitionsDeferredBudget}
+                </strong>
+              </span>
+              <span>
+                Swap:{' '}
+                <strong className="text-cyan-300">
+                  {hierarchicalDiagnostics.timings.lastActivationSwapMs.toFixed(2)}ms
+                </strong>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Cache Hit/Evict:{' '}
+                <strong className="text-emerald-300">
+                  {hierarchicalDiagnostics.counters.cacheHits}
+                </strong>
+                /{hierarchicalDiagnostics.counters.cacheEvictions}
+              </span>
+              <span>
+                Pending Q/F/D/R:{' '}
+                {hierarchicalDiagnostics.pendingQueues.queued}/
+                {hierarchicalDiagnostics.pendingQueues.fetching}/
+                {hierarchicalDiagnostics.pendingQueues.decoding}/
+                {hierarchicalDiagnostics.pendingQueues.readyToCommit}
+              </span>
+            </div>
+            <div className="pt-1 border-t border-slate-800/80 space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span>
+                  Measured CPU/BVH:{' '}
+                  <strong className="text-slate-200">
+                    {formatDiagMb(
+                      hierarchicalDiagnostics.resources.totalMeasuredBytes
+                    )}
+                  </strong>
+                </span>
+                <span>
+                  Est. GPU:{' '}
+                  <strong className="text-slate-300">
+                    {formatDiagMb(
+                      hierarchicalDiagnostics.resources.totalEstimatedGpuBytes
+                    )}
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-500">
+                <span>
+                  Cache:{' '}
+                  {formatDiagMb(
+                    hierarchicalDiagnostics.resources.retainedInactiveTilesBytes
+                  )}
+                </span>
+                <span>
+                  Queued:{' '}
+                  {formatDiagMb(
+                    hierarchicalDiagnostics.resources.queuedDecodedPayloadBytes
+                  )}
+                </span>
+              </div>
+              {hierarchicalDiagnostics.resources.byResolution.map((r) => (
+                <div
+                  key={r.tileSizeMeters}
+                  className="flex items-center justify-between text-[9px] text-slate-400"
+                >
+                  <span>
+                    {r.tileSizeMeters}m (A:{r.attachedActiveTiles} P:
+                    {r.preparedPendingTiles} C:{r.cachedInactiveTiles})
+                  </span>
+                  <span>
+                    {formatDiagMb(
+                      r.measuredCpuGeometryBytes +
+                        r.measuredStaticBvhBytes +
+                        r.measuredInstancedIndexBytes +
+                        r.measuredQueuedDecodedBytes
+                    )}{' '}
+                    / est {formatDiagMb(r.estimatedGpuBytes)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 2. Production Engine & Road Geometry Telemetry */}
       <section className="bg-slate-900/60 border border-slate-800 rounded-md p-3 space-y-2.5">

@@ -15,6 +15,7 @@ import {
   type TilePackMetadata,
 } from '../../world/tiling/TilePackContract';
 import { formatTileId } from '../../world/tiling/TileGrid';
+import type { HierarchicalMosaicManifestExtension } from '../../world/tiling/HierarchicalMosaicContract';
 
 export interface TilePackHttpHandlerOptions {
   /** Path to the baked SQLite tile pack (`overijssel-tiles-261114-8ae28196.sqlite`). */
@@ -35,6 +36,8 @@ export interface TilePackManifestHttpResponse {
   dbSizeBytes: number;
   metadata: TilePackMetadata;
   tiles: TileManifestEntry[];
+  /** Present when serving a validated multi-resolution hierarchical regional mosaic (TKT-041). */
+  hierarchy?: HierarchicalMosaicManifestExtension;
 }
 
 export interface TilePackHttpController {

@@ -94,6 +94,16 @@ import {
   type TilePreparationVariantId,
 } from '../world/tiling/TilePreparationConfig';
 import {
+  normalizeHierarchicalResolutionPolicy,
+  parseHierarchicalPolicyFromSearch,
+  type HierarchicalResolutionPolicyConfig,
+} from '../world/tiling/HierarchicalResolutionPolicy';
+import {
+  normalizeHierarchicalResourceBudget,
+  parseHierarchicalBudgetFromSearch,
+  type HierarchicalResourceBudgetConfig,
+} from '../world/tiling/HierarchicalResourceBudget';
+import {
   REGIONAL_MIN_ZOOM_TILE_THRESHOLD,
   clampCameraZoom,
   parseRegionalMinZoomFromSearch,
@@ -317,6 +327,31 @@ export default function App() {
   );
   const tilePrepOptionsRef = useRef<TilePreparationOptions>(tilePrepOptions);
   tilePrepOptionsRef.current = tilePrepOptions;
+
+  // TKT-041: Hierarchical multi-resolution tile streaming policy & resource budget
+  const [hierarchicalPolicy, setHierarchicalPolicy] =
+    useState<HierarchicalResolutionPolicyConfig>(() =>
+      normalizeHierarchicalResolutionPolicy(
+        typeof window !== 'undefined'
+          ? parseHierarchicalPolicyFromSearch(window.location.search)
+          : null
+      )
+    );
+  const hierarchicalPolicyRef =
+    useRef<HierarchicalResolutionPolicyConfig>(hierarchicalPolicy);
+  hierarchicalPolicyRef.current = hierarchicalPolicy;
+
+  const [hierarchicalBudget, setHierarchicalBudget] =
+    useState<HierarchicalResourceBudgetConfig>(() =>
+      normalizeHierarchicalResourceBudget(
+        typeof window !== 'undefined'
+          ? parseHierarchicalBudgetFromSearch(window.location.search)
+          : null
+      )
+    );
+  const hierarchicalBudgetRef =
+    useRef<HierarchicalResourceBudgetConfig>(hierarchicalBudget);
+  hierarchicalBudgetRef.current = hierarchicalBudget;
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
@@ -838,6 +873,8 @@ export default function App() {
       tilePreparationOptions?:
         | TilePreparationVariantId
         | Partial<TilePreparationOptions>;
+      hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
+      hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
     }
   ) => {
     const loadToken = ++m2aLoadTokenRef.current;
@@ -925,6 +962,30 @@ export default function App() {
         setTilePrepOptions(resolvedTilePrep);
       }
 
+      const resolvedHierarchicalPolicy =
+        extraOptions?.hierarchicalPolicy !== undefined
+          ? normalizeHierarchicalResolutionPolicy({
+              ...hierarchicalPolicyRef.current,
+              ...extraOptions.hierarchicalPolicy,
+            })
+          : hierarchicalPolicyRef.current;
+      if (extraOptions?.hierarchicalPolicy !== undefined) {
+        hierarchicalPolicyRef.current = resolvedHierarchicalPolicy;
+        setHierarchicalPolicy(resolvedHierarchicalPolicy);
+      }
+
+      const resolvedHierarchicalBudget =
+        extraOptions?.hierarchicalBudget !== undefined
+          ? normalizeHierarchicalResourceBudget({
+              ...hierarchicalBudgetRef.current,
+              ...extraOptions.hierarchicalBudget,
+            })
+          : hierarchicalBudgetRef.current;
+      if (extraOptions?.hierarchicalBudget !== undefined) {
+        hierarchicalBudgetRef.current = resolvedHierarchicalBudget;
+        setHierarchicalBudget(resolvedHierarchicalBudget);
+      }
+
       const manager = new TileStreamManager({
         apiBaseUrl: extraOptions?.apiBaseUrl,
         preloadMarginTiles: extraOptions?.preloadMarginTiles,
@@ -937,6 +998,8 @@ export default function App() {
         initialCameraZoom: provisionalZoom,
         foliageOptimizationConfig: foliageConfigRef.current,
         tilePreparationOptions: resolvedTilePrep,
+        hierarchicalPolicy: resolvedHierarchicalPolicy,
+        hierarchicalBudget: resolvedHierarchicalBudget,
         onDiagnosticsChange: (diag) => {
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
@@ -2616,6 +2679,8 @@ export default function App() {
         tilePreparationOptions?:
           | TilePreparationVariantId
           | Partial<TilePreparationOptions>;
+        hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
+        hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
         waitForIdle?: boolean;
         timeoutMs?: number;
       } = {}) => {
@@ -2635,6 +2700,8 @@ export default function App() {
             target: params.target,
             regionalMinZoom: params.regionalMinZoom,
             tilePreparationOptions: params.tilePreparationOptions,
+            hierarchicalPolicy: params.hierarchicalPolicy,
+            hierarchicalBudget: params.hierarchicalBudget,
           }
         );
         await waitForSceneReady(
@@ -2768,6 +2835,69 @@ export default function App() {
         tileStreamManagerRef.current?.setTilePreparationOptions(resolved);
         return resolved;
       },
+      getHierarchicalConfig: () =>
+        tileStreamManagerRef.current?.getHierarchicalPolicyConfig() ?? {
+          ...hierarchicalPolicyRef.current,
+          bands: hierarchicalPolicyRef.current.bands.map((b) => ({ ...b })),
+        },
+      setHierarchicalConfig: (
+        partial: Partial<HierarchicalResolutionPolicyConfig>
+      ) => {
+        const next = normalizeHierarchicalResolutionPolicy({
+          ...hierarchicalPolicyRef.current,
+          ...partial,
+          bands: partial.bands ?? hierarchicalPolicyRef.current.bands,
+        });
+        hierarchicalPolicyRef.current = next;
+        setHierarchicalPolicy(next);
+        return (
+          tileStreamManagerRef.current?.setHierarchicalPolicyConfig(next) ?? next
+        );
+      },
+      getHierarchicalBudget: () =>
+        tileStreamManagerRef.current?.getHierarchicalBudgetConfig() ?? {
+          ...hierarchicalBudgetRef.current,
+        },
+      setHierarchicalBudget: (
+        partial: Partial<HierarchicalResourceBudgetConfig>
+      ) => {
+        const next = normalizeHierarchicalResourceBudget({
+          ...hierarchicalBudgetRef.current,
+          ...partial,
+        });
+        hierarchicalBudgetRef.current = next;
+        setHierarchicalBudget(next);
+        return (
+          tileStreamManagerRef.current?.setHierarchicalBudgetConfig(next) ?? next
+        );
+      },
+      getHierarchicalDiagnostics: () =>
+        tileStreamManagerRef.current?.getHierarchicalDiagnostics() ?? null,
+      getAttachedResolutionBreakdown: () => {
+        const mgr = tileStreamManagerRef.current;
+        if (!mgr) return null;
+        const countsByResolution: Record<string, number> = {};
+        const groups = [
+          mgr.scene.buildingsGroup,
+          mgr.scene.roadsGroup,
+          mgr.scene.railwaysGroup,
+          mgr.scene.waterGroup,
+          mgr.scene.parksGroup,
+          mgr.scene.landuseGroup,
+          mgr.scene.barriersGroup,
+          mgr.scene.foliageGroup,
+        ];
+        for (const g of groups) {
+          for (const child of g.children) {
+            const res = child.userData?.resolutionMeters;
+            if (typeof res === 'number') {
+              const key = String(res);
+              countsByResolution[key] = (countsByResolution[key] ?? 0) + 1;
+            }
+          }
+        }
+        return countsByResolution;
+      },
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [
@@ -2826,6 +2956,31 @@ export default function App() {
     tilePrepOptionsRef.current = resolved;
     setTilePrepOptions(resolved);
     tileStreamManagerRef.current?.setTilePreparationOptions(resolved);
+  };
+
+  const handleChangeHierarchicalPolicy = (
+    partial: Partial<HierarchicalResolutionPolicyConfig>
+  ) => {
+    const next = normalizeHierarchicalResolutionPolicy({
+      ...hierarchicalPolicyRef.current,
+      ...partial,
+      bands: partial.bands ?? hierarchicalPolicyRef.current.bands,
+    });
+    hierarchicalPolicyRef.current = next;
+    setHierarchicalPolicy(next);
+    tileStreamManagerRef.current?.setHierarchicalPolicyConfig(next);
+  };
+
+  const handleChangeHierarchicalBudget = (
+    partial: Partial<HierarchicalResourceBudgetConfig>
+  ) => {
+    const next = normalizeHierarchicalResourceBudget({
+      ...hierarchicalBudgetRef.current,
+      ...partial,
+    });
+    hierarchicalBudgetRef.current = next;
+    setHierarchicalBudget(next);
+    tileStreamManagerRef.current?.setHierarchicalBudgetConfig(next);
   };
 
   const handleToggleStreamingProfiler = () => {
@@ -3498,6 +3653,11 @@ export default function App() {
                   }
                 : null
             }
+            hierarchicalDiagnostics={m2aStreamDiagnostics?.hierarchical ?? null}
+            hierarchicalPolicy={hierarchicalPolicy}
+            hierarchicalBudget={hierarchicalBudget}
+            onChangeHierarchicalPolicy={handleChangeHierarchicalPolicy}
+            onChangeHierarchicalBudget={handleChangeHierarchicalBudget}
           />
         )}
 

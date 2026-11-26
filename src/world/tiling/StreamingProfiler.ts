@@ -14,7 +14,13 @@ export type StreamingLifecycleEventType =
   | 'first_rendered_use'
   | 'evict'
   | 'cancel'
-  | 'error';
+  | 'error'
+  | 'resolution_transition_start'
+  | 'resolution_transition_activate'
+  | 'resolution_transition_cancel'
+  | 'resolution_transition_defer_budget'
+  | 'cache_hit'
+  | 'cache_evict';
 
 export interface StreamingQueueDepths {
   queued: number;
@@ -64,6 +70,12 @@ export interface StreamingLifecycleEvent {
     workerBvhInstanceCount?: number;
     reason?: string;
     driverGeometriesDelta?: number;
+    fromResolutionMeters?: number;
+    toResolutionMeters?: number;
+    transitionGeneration?: number;
+    requiredDestinationTiles?: number;
+    readyDestinationTiles?: number;
+    activationDurationMs?: number;
   };
 }
 

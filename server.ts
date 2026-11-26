@@ -108,9 +108,17 @@ app.get(
   tilePackController.tilePayloadHandler
 );
 
-// 3b. Reversible 1,024 m Tile-Size Experiment & Regional Mosaic API (lazy-opened on request)
+// 3b. Reversible 1,024 m Tile-Size Experiment & Regional / Hierarchical Mosaic API (lazy-opened on request)
 app.get('/api/tiles-1024m/manifest', tilePack1024Controller.manifestHandler);
 app.get('/api/tiles-region/manifest', regionalMosaicController.manifestHandler);
+app.get(
+  '/api/tiles-region/r/:tileSizeMeters/:lod/:tx/:ty',
+  regionalMosaicController.tilePayloadHandler
+);
+app.get(
+  '/api/tiles-region/r/:tileSizeMeters/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+  regionalMosaicController.tilePayloadHandler
+);
 app.get('/api/tiles-region/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
 app.get('/api/tiles-region/:snapshotId/:schemaVersion/:lod/:tx/:ty', regionalMosaicController.tilePayloadHandler);
 app.get('/api/tiles-1024m/:lod/:tx/:ty', tilePack1024Controller.tilePayloadHandler);

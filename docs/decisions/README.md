@@ -82,6 +82,9 @@ These ADRs span historic Goalpost 1 decisions and current regional architecture.
 - **[ADR-0014: Spatially Accelerated Instanced Feature Picking (Mesh-Local Flat Typed-Array BVH)](ADR-0014-spatially-accelerated-instanced-feature-picking.md)**  
   Decouples instanced feature picking (`O(log N + k)`) from rendering batch granularity via a mesh-local flat typed-array 3D AABB BVH with union LOD bounds, strict hierarchy visibility rejection, exact narrow-phase `Mesh.raycast`, and deterministic disposal (`TKT-038`).
 
+- **[ADR-0015: Uniform-Viewport Hierarchical Tile Streaming (1,024 m / 2,048 m / 4,096 m)](ADR-0015-hierarchical-tile-streaming.md)**  
+  Zoom-dependent uniform-viewport resolution selection with hysteresis deadbands, lightweight non-duplicating hierarchical mosaic descriptors, shared bounded SQLite LRU handle pooling, off-scene worker preparation, atomic frame-boundary swaps, bounded multi-resolution budgets with `deferred_budget` safeguards, and active-resolution-only picking parity (`TKT-041`).
+
 ## Decision record status convention
 
 An ADR may be accepted for one implemented scope while a broader application remains experimental. Keep historical decisions and dates intact. For a new execution path, cross-reference earlier decisions rather than incorrectly marking them globally superseded.

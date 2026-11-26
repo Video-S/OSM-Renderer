@@ -29,11 +29,19 @@ import {
   type ReconstructedTileSceneResult,
 } from './TileSceneReconstructor';
 import {
-  type DecodedTilePayload,
+  type AnyDecodedTilePayload,
+} from './CompactTileTransport';
+import {
   type TileLayerKind,
   type TileManifestEntry,
   type TilePackMetadata,
 } from './TilePackContract';
+import {
+  identifyTilePreparationVariant,
+  resolveTilePreparationOptions,
+  type TilePreparationOptions,
+  type TilePreparationVariantId,
+} from './TilePreparationConfig';
 import {
   createHengeloStudyGrid,
   formatTileId,
@@ -170,6 +178,11 @@ export interface TileStreamDiagnosticsSnapshot {
   tileInstancedIndexCount: number;
   tileInstancedIndexInstances: number;
   tileInstancedIndexBuildMsTotal: number;
+  /** TKT-040 non-blocking tile preparation & worker transfer diagnostics. */
+  tilePreparationVariant: TilePreparationVariantId | 'custom';
+  workerBvhAdoptedTotal: number;
+  syncBvhFallbackTotal: number;
+  pendingReadyTileBytes: number;
 }
 
 export interface TilePackManifestPayload {
@@ -244,6 +257,8 @@ export interface TileStreamManagerOptions {
   onDiagnosticsChange?: (diagnostics: TileStreamDiagnosticsSnapshot) => void;
   /** Optional opt-in frame/streaming profiler (defaults to global singleton; zero overhead when disabled). */
   profiler?: StreamingProfiler | null;
+  /** TKT-040: Tile preparation variant or explicit optimization flags (default: 'combined'). */
+  tilePreparationOptions?: TilePreparationVariantId | Partial<TilePreparationOptions>;
 }
 
 interface ManagedTileRecord {
@@ -272,7 +287,7 @@ interface ManagedTileRecord {
   priorityScore: number;
   abortController: AbortController | null;
   requestGeneration: number;
-  decodedPayload: DecodedTilePayload | null;
+  decodedPayload: AnyDecodedTilePayload | null;
   decodedFootprint: TileMemoryFootprint | null;
   reconstructed: ReconstructedTileSceneResult | null;
   lastError: string | null;
@@ -329,8 +344,11 @@ function summarizeTimingSamples(
 }
 
 export function computeDecodedTileMemoryFootprint(
-  decoded: DecodedTilePayload
+  decoded: AnyDecodedTilePayload
 ): TileMemoryFootprint {
+  if (decoded.precomputedFootprint) {
+    return { ...decoded.precomputedFootprint };
+  }
   let cpuGeometryBytes = 0;
   let bvhBytes = 0;
   let meshCount = 0;
@@ -360,6 +378,9 @@ export function computeDecodedTileMemoryFootprint(
     meshCount += 1;
     cpuGeometryBytes += b.matrices.byteLength;
     cpuGeometryBytes += b.instanceColors?.byteLength ?? 0;
+    if (b.preparedSpatialIndex) {
+      bvhBytes += b.preparedSpatialIndex.estimatedMemoryBytes;
+    }
   }
 
   return {
@@ -522,6 +543,7 @@ export class TileStreamManager {
   private currentCameraZoom: number;
   private foliageConfig: FoliageOptimizationConfig;
   private foliageRuntimeState: FoliageRuntimeState;
+  private tilePrepOptions: TilePreparationOptions;
   private currentWireframe = false;
   private currentViewport: TileViewportGroundBounds | null = null;
   private previousFocus: { x: number; z: number } | null = null;
@@ -536,6 +558,8 @@ export class TileStreamManager {
   private cancelledRequestsTotal = 0;
   private duplicateRequestsSkippedTotal = 0;
   private completedLoadsTotal = 0;
+  private workerBvhAdoptedTotal = 0;
+  private syncBvhFallbackTotal = 0;
   private peakLoadedTiles = 0;
   private peakLoadingTiles = 0;
   private compositeSceneRevision = 0;
@@ -582,6 +606,9 @@ export class TileStreamManager {
       null,
       this.foliageConfig
     );
+    this.tilePrepOptions = resolveTilePreparationOptions(
+      options.tilePreparationOptions
+    );
 
     if (options.materialRegistry) {
       this.materialRegistry = options.materialRegistry;
@@ -602,11 +629,60 @@ export class TileStreamManager {
       this.ownsFoliagePrototypeRegistry = true;
     }
 
+    this.profiler =
+      options.profiler === undefined
+        ? getGlobalStreamingProfiler()
+        : options.profiler;
+
     if (options.decodeClient) {
       this.decodeClient = options.decodeClient;
       this.ownsDecodeClient = false;
+      if (typeof this.decodeClient.getPreparationOptions === 'function') {
+        this.tilePrepOptions = this.decodeClient.getPreparationOptions();
+      }
     } else {
-      this.decodeClient = createTileDecodeClient();
+      this.decodeClient = createTileDecodeClient({
+        preparationOptions: this.tilePrepOptions,
+        onWorkerMessageDelivered: (info) => {
+          const prof =
+            this.profiler && this.profiler.enabled ? this.profiler : null;
+          if (!prof) return;
+          prof.recordWorkerOnMessage({
+            durationMs: info.handlerDurationMs,
+            deliveryLatencyMs: info.timings.messageDeliveryLatencyMs,
+            workerBvhBuildMs: info.timings.workerBvhBuildMs,
+            transferableBytes: info.timings.transferableBytes,
+            usedCompactTransport: info.timings.usedCompactTransport,
+          });
+          const rec = this.tilesByKey.get(info.tileKey);
+          prof.recordEvent({
+            eventType: 'worker_message_received',
+            tileKey: info.tileKey,
+            tileSizeMeters: this.metadata?.tileSizeMeters ?? 1024,
+            lod: rec?.manifest.lod ?? 0,
+            timestampMs: info.onMessageEndMs,
+            payloadCompressedBytes: rec?.lastCompressedBytes ?? null,
+            durationMs: info.handlerDurationMs,
+            queueDepths: this.getQueueDepthSnapshot(),
+            detail: {
+              usedWebWorker: info.timings.usedWebWorker,
+              usedCompactTransport: info.timings.usedCompactTransport,
+              transferAllTypedArrays: info.timings.transferAllTypedArrays,
+              workerInstanceBvhEnabled: info.timings.workerInstanceBvhEnabled,
+              workerQueueWaitMs: info.timings.workerQueueWaitMs,
+              workerInflateAndDecodeMs: info.timings.workerInflateAndDecodeMs,
+              workerBvhBuildMs: info.timings.workerBvhBuildMs,
+              workerPayloadPrepMs: info.timings.workerPayloadPrepMs,
+              messageDeliveryLatencyMs: info.timings.messageDeliveryLatencyMs,
+              mainOnMessageHandlerMs: info.timings.mainOnMessageHandlerMs,
+              transferableBufferCount: info.timings.transferableBufferCount,
+              transferableBytes: info.timings.transferableBytes,
+              workerBvhBatchCount: info.timings.workerBvhBatchCount,
+              workerBvhInstanceCount: info.timings.workerBvhInstanceCount,
+            },
+          });
+        },
+      });
       this.ownsDecodeClient = true;
     }
 
@@ -614,10 +690,6 @@ export class TileStreamManager {
       options.fetchFn ??
       ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
     this.onDiagnosticsChange = options.onDiagnosticsChange;
-    this.profiler =
-      options.profiler === undefined
-        ? getGlobalStreamingProfiler()
-        : options.profiler;
 
     // Top-level composite layer groups mounted by MapScene.tsx
     const buildingsGroup = new THREE.Group();
@@ -705,6 +777,19 @@ export class TileStreamManager {
 
   get scene(): BuiltSceneGeometry {
     return this.compositeScene;
+  }
+
+  getTilePreparationOptions(): TilePreparationOptions {
+    return { ...this.tilePrepOptions };
+  }
+
+  setTilePreparationOptions(
+    next: TilePreparationVariantId | Partial<TilePreparationOptions>
+  ): TilePreparationOptions {
+    this.tilePrepOptions = resolveTilePreparationOptions(next);
+    this.decodeClient.setPreparationOptions(this.tilePrepOptions);
+    this.emitDiagnostics();
+    return { ...this.tilePrepOptions };
   }
 
   get tileBoundaryOverlay(): THREE.Group {
@@ -1384,6 +1469,9 @@ export class TileStreamManager {
     let committed = 0;
     let totalReconMs = 0;
     let totalInstancedBvhMs = 0;
+    let totalInstancedBvhAdoptMs = 0;
+    let totalWorkerBvhAdopted = 0;
+    let totalSyncBvhFallback = 0;
     let totalStaticBvhMs = 0;
     let totalAttachMs = 0;
     const tileSizeMeters = this.metadata?.tileSizeMeters ?? 1024;
@@ -1421,6 +1509,7 @@ export class TileStreamManager {
           foliagePrototypeRegistry: this.foliagePrototypeRegistry,
           foliageRuntimeState: this.foliageRuntimeState,
           collectStageTimings: Boolean(prof),
+          optimizeMainThreadPrep: this.tilePrepOptions.optimizeMainThreadPrep,
         }
       );
       const reconstructMs = performance.now() - t0;
@@ -1428,6 +1517,9 @@ export class TileStreamManager {
       this.totalReconstructMs += reconstructMs;
       this.reconstructSamples += 1;
       pushBoundedSample(this.reconstructMsRing, reconstructMs);
+
+      this.workerBvhAdoptedTotal += reconstructed.stageTimings.workerBvhAdoptedCount;
+      this.syncBvhFallbackTotal += reconstructed.stageTimings.syncBvhFallbackCount;
 
       record.reconstructed = reconstructed;
       record.decodedPayload = null;
@@ -1437,6 +1529,9 @@ export class TileStreamManager {
       if (prof) {
         totalReconMs += reconstructMs;
         totalInstancedBvhMs += reconstructed.stageTimings.instancedBvhBuildMs;
+        totalInstancedBvhAdoptMs += reconstructed.stageTimings.instancedBvhAdoptMs;
+        totalWorkerBvhAdopted += reconstructed.stageTimings.workerBvhAdoptedCount;
+        totalSyncBvhFallback += reconstructed.stageTimings.syncBvhFallbackCount;
         totalStaticBvhMs += reconstructed.stageTimings.staticBvhDeserializeMs;
         prof.recordEvent({
           eventType: 'reconstruct_complete',
@@ -1452,6 +1547,9 @@ export class TileStreamManager {
           queueDepths: this.getQueueDepthSnapshot(),
           detail: {
             instancedBvhBuildMs: reconstructed.stageTimings.instancedBvhBuildMs,
+            instancedBvhAdoptMs: reconstructed.stageTimings.instancedBvhAdoptMs,
+            workerBvhAdoptedCount: reconstructed.stageTimings.workerBvhAdoptedCount,
+            syncBvhFallbackCount: reconstructed.stageTimings.syncBvhFallbackCount,
             staticBvhDeserializeMs: reconstructed.stageTimings.staticBvhDeserializeMs,
             instancedBatchCount: reconstructed.instancedPickingStats.indexedBatchCount,
             indexedInstances: reconstructed.instancedPickingStats.totalIndexedInstances,
@@ -1524,6 +1622,9 @@ export class TileStreamManager {
         readyScanAndSortMs,
         reconstructMs: totalReconMs,
         instancedBvhBuildMs: totalInstancedBvhMs,
+        instancedBvhAdoptMs: totalInstancedBvhAdoptMs,
+        workerBvhAdoptedCount: totalWorkerBvhAdopted,
+        syncBvhFallbackCount: totalSyncBvhFallback,
         staticBvhDeserializeMs: totalStaticBvhMs,
         sceneAttachMs: totalAttachMs,
         commitRebuildStatsMs,
@@ -1629,6 +1730,7 @@ export class TileStreamManager {
     let tileInstancedIndexCount = 0;
     let tileInstancedIndexInstances = 0;
     let tileInstancedIndexBuildMsTotal = 0;
+    let pendingReadyTileBytes = 0;
 
     const loadedTileKeys: string[] = [];
     const visibleTileKeys: string[] = [];
@@ -1685,6 +1787,11 @@ export class TileStreamManager {
       } else if (record.state === 'ready_to_commit') {
         readyToCommitTiles += 1;
         loadingTileKeys.push(key);
+        if (record.decodedFootprint) {
+          pendingReadyTileBytes +=
+            record.decodedFootprint.cpuGeometryBytes +
+            record.decodedFootprint.bvhBytes;
+        }
       } else if (record.state === 'error') {
         failedTiles += 1;
       }
@@ -1772,6 +1879,10 @@ export class TileStreamManager {
       tileInstancedIndexCount,
       tileInstancedIndexInstances,
       tileInstancedIndexBuildMsTotal: Number(tileInstancedIndexBuildMsTotal.toFixed(3)),
+      tilePreparationVariant: identifyTilePreparationVariant(this.tilePrepOptions),
+      workerBvhAdoptedTotal: this.workerBvhAdoptedTotal,
+      syncBvhFallbackTotal: this.syncBvhFallbackTotal,
+      pendingReadyTileBytes,
     };
   }
 
@@ -1796,6 +1907,8 @@ export class TileStreamManager {
     this.cancelledRequestsTotal = 0;
     this.duplicateRequestsSkippedTotal = 0;
     this.completedLoadsTotal = 0;
+    this.workerBvhAdoptedTotal = 0;
+    this.syncBvhFallbackTotal = 0;
     this.viewportSelectionPasses = 0;
     this.viewportSelectionSkips = 0;
     this.zoomPropagationSkips = 0;
@@ -1971,6 +2084,7 @@ export class TileStreamManager {
           tileKey,
           abortController.signal
         );
+        const tCont0 = performance.now();
         if (
           abortController.signal.aborted ||
           record.requestGeneration !== generation ||
@@ -1995,7 +2109,7 @@ export class TileStreamManager {
         ) {
           throw new Error(`Decoded tile identity/size mismatch: ${tileKey}`);
         }
-        const positionedPayload = {
+        const positionedPayload: AnyDecodedTilePayload = {
           ...decodeResult.decoded,
           tileCenterX: record.manifest.tileCenterX,
           tileCenterZ: record.manifest.tileCenterZ,
@@ -2008,13 +2122,22 @@ export class TileStreamManager {
         record.state = 'ready_to_commit';
         this.updatePeakTileCounters();
 
+        const contDurationMs = Math.max(0, performance.now() - tCont0);
+        if (decodeResult.workerTimings) {
+          decodeResult.workerTimings.mainPromiseContinuationMs = Number(
+            contDurationMs.toFixed(3)
+          );
+        }
+
         const profAtDecodeDone =
           this.profiler && this.profiler.enabled ? this.profiler : null;
         if (profAtDecodeDone) {
+          profAtDecodeDone.recordWorkerContinuation(contDurationMs);
           const readyNowMs = performance.now();
           const fp = record.decodedFootprint;
           const rawBytes = fp.cpuGeometryBytes + fp.bvhBytes;
           const depths = this.getQueueDepthSnapshot();
+          const wt = decodeResult.workerTimings;
           profAtDecodeDone.recordEvent({
             eventType: 'decode_complete',
             tileKey,
@@ -2029,6 +2152,13 @@ export class TileStreamManager {
               meshCount: fp.meshCount,
               triangleCount: fp.triangleCount,
               usedWebWorker: decodeResult.usedWebWorker,
+              usedCompactTransport: wt?.usedCompactTransport,
+              workerBvhBuildMs: wt?.workerBvhBuildMs,
+              messageDeliveryLatencyMs: wt?.messageDeliveryLatencyMs,
+              mainOnMessageHandlerMs: wt?.mainOnMessageHandlerMs,
+              mainPromiseContinuationMs: Number(contDurationMs.toFixed(3)),
+              transferableBufferCount: wt?.transferableBufferCount,
+              transferableBytes: wt?.transferableBytes,
             },
           });
           profAtDecodeDone.recordEvent({
@@ -2224,9 +2354,14 @@ export class TileStreamManager {
       this.compositeSceneRevision;
     this.groundMesh.userData.__compositeRevision = this.compositeSceneRevision;
 
-    for (const layerKind of STREAMED_LAYER_KINDS) {
-      const grp = this.compositeScene[`${layerKind}Group` as const];
-      grp.updateMatrixWorld(true);
+    // TKT-040 Work Package D: attachTileToCompositeScene already calls
+    // childGroup.updateMatrixWorld(true) on newly attached tiles, so avoid
+    // re-traversing every already-loaded tile in all 8 composite layer groups.
+    if (!this.tilePrepOptions.optimizeMainThreadPrep) {
+      for (const layerKind of STREAMED_LAYER_KINDS) {
+        const grp = this.compositeScene[`${layerKind}Group` as const];
+        grp.updateMatrixWorld(true);
+      }
     }
   }
 

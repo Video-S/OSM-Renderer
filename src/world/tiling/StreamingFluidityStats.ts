@@ -57,6 +57,8 @@ export interface ObservedCadenceAssessment {
   medianSyncMainThreadMs: number;
   p99IntervalMs: number;
   maxIntervalMs: number;
+  exceedsObservedCadenceCount: number;
+  exceeds144HzTargetCount: number;
   classification: RefreshCadenceClassification;
   explanation: string;
 }
@@ -74,6 +76,7 @@ export interface ScenarioEventCounts {
   fetchStart: number;
   fetchComplete: number;
   decodeStart: number;
+  workerMessageReceived: number;
   decodeComplete: number;
   readyToCommit: number;
   reconstructStart: number;
@@ -116,6 +119,7 @@ export interface ScenarioCacheClassificationResult {
 export type SpikePrimarySuspect =
   | 'sync_tile_commit_reconstruct'
   | 'instanced_bvh_build'
+  | 'worker_delivery_onmessage'
   | 'eviction_disposal'
   | 'gl_render_first_use_proxy'
   | 'gl_render_cpu'
@@ -146,17 +150,23 @@ export interface FrameSpikeAttributionRecord {
     streamTickMs: number;
     reconstructMs: number;
     instancedBvhBuildMs: number;
+    instancedBvhAdoptMs: number;
     staticBvhDeserializeMs: number;
     sceneAttachMs: number;
     commitRebuildStatsMs: number;
     evictDisposeMs: number;
     pickingRaycasterMs: number;
     reactCommitMs: number;
+    workerOnMessageMs: number;
+    workerContinuationMs: number;
     glRenderCpuMs: number;
     telemetryHudMs: number;
   };
   tilesCommittedCount: number;
   tilesEvictedCount: number;
+  workerDeliveriesCount: number;
+  workerBvhAdoptedCount: number;
+  syncBvhFallbackCount: number;
   firstRenderUploadProxy: {
     tileKeys: string[];
     tileCount: number;
@@ -172,6 +182,36 @@ export interface FrameSpikeAttributionRecord {
   overlappingLoafs: BrowserLoafSample[];
   primarySuspect: SpikePrimarySuspect;
   suspectRationale: string;
+}
+
+export interface EventConditionedFrameSummary {
+  allFrames: StreamingFrameDistribution;
+  workerDeliveryFrames: StreamingFrameDistribution;
+  tileCommitFrames: StreamingFrameDistribution;
+  activeStreamingWorkFrames: StreamingFrameDistribution;
+  quietFrames: StreamingFrameDistribution;
+}
+
+export interface WorkerDeliverySummary {
+  deliveryCount: number;
+  usedWebWorkerCount: number;
+  usedCompactTransportCount: number;
+  transferableBufferCountMean: number;
+  transferableBytesTotal: number;
+  workerBvhAdoptedTotal: number;
+  syncBvhFallbackTotal: number;
+  workerQueueWaitMs: SampleStatistics;
+  workerInflateAndDecodeMs: SampleStatistics;
+  workerBvhBuildMs: SampleStatistics;
+  workerPayloadPrepMs: SampleStatistics;
+  messageDeliveryLatencyMs: SampleStatistics;
+  mainOnMessageHandlerMs: SampleStatistics;
+  mainPromiseContinuationMs: SampleStatistics;
+  reconstructTotalMs: SampleStatistics;
+  mainInstancedBvhBuildMs: SampleStatistics;
+  mainInstancedBvhAdoptMs: SampleStatistics;
+  tileReadinessLatencyMs: SampleStatistics;
+  tilesPerSecond: number;
 }
 
 export interface StageTimingSummaryEntry {
@@ -281,6 +321,14 @@ export function assessObservedRefreshCadence(params: {
       : Math.max(1, intervalStats.median || 16.667);
 
   const estimatedRefreshHz = roundNum(1000 / cadencePeriodMs, 1);
+  const cadenceAllowanceMs = cadencePeriodMs * 1.25;
+  let exceedsObservedCadenceCount = 0;
+  let exceeds144HzTargetCount = 0;
+  for (let i = 0; i < params.frameIntervalsMs.length; i++) {
+    const v = params.frameIntervalsMs[i];
+    if (v > cadenceAllowanceMs) exceedsObservedCadenceCount += 1;
+    if (v > 6.94) exceeds144HzTargetCount += 1;
+  }
 
   if (params.isSoftwareRenderer) {
     return {
@@ -292,6 +340,8 @@ export function assessObservedRefreshCadence(params: {
       medianSyncMainThreadMs: syncStats.median,
       p99IntervalMs: intervalStats.p99,
       maxIntervalMs: intervalStats.max,
+      exceedsObservedCadenceCount,
+      exceeds144HzTargetCount,
       classification: 'software_rasterizer_limited',
       explanation: `Software WebGL renderer active (median frame ${intervalStats.median.toFixed(2)} ms, CPU render ${cpuStats.median.toFixed(2)} ms). Timings reflect CPU rasterization rather than hardware GPU.`,
     };
@@ -307,13 +357,13 @@ export function assessObservedRefreshCadence(params: {
 
   if (!hasSignificantStalls && medianWorkRatio < 0.65) {
     classification = 'refresh_limited_steady';
-    explanation = `Steady ~${estimatedRefreshHz} Hz cadence (${cadencePeriodMs.toFixed(2)} ms median interval) with low synchronous main-thread work (${syncStats.median.toFixed(2)} ms median, p99 ${intervalStats.p99.toFixed(2)} ms).`;
+    explanation = `Steady ~${estimatedRefreshHz} Hz observed display cadence (${cadencePeriodMs.toFixed(2)} ms median interval, NOT computational overhead) with low synchronous main-thread work (${syncStats.median.toFixed(2)} ms median vs 6.94 ms 144 Hz budget, p99 ${intervalStats.p99.toFixed(2)} ms).`;
   } else if (hasSignificantStalls && medianWorkRatio < 0.65) {
     classification = 'workload_induced_stalls';
-    explanation = `Median interval sits near ~${estimatedRefreshHz} Hz (${intervalStats.median.toFixed(2)} ms), but tail spikes reach p99 ${intervalStats.p99.toFixed(2)} ms / max ${intervalStats.max.toFixed(2)} ms (exceeding cadence threshold ${stallThreshold.toFixed(1)} ms).`;
+    explanation = `Median interval sits near ~${estimatedRefreshHz} Hz display cadence (${intervalStats.median.toFixed(2)} ms), but tail stalls reach p99 ${intervalStats.p99.toFixed(2)} ms / max ${intervalStats.max.toFixed(2)} ms (${exceedsObservedCadenceCount} frame(s) exceeded ${cadenceAllowanceMs.toFixed(1)} ms cadence allowance).`;
   } else {
     classification = 'mixed';
-    explanation = `Synchronous CPU workload (${syncStats.median.toFixed(2)} ms median) is high relative to cadence (${cadencePeriodMs.toFixed(2)} ms), with p99 ${intervalStats.p99.toFixed(2)} ms and max ${intervalStats.max.toFixed(2)} ms.`;
+    explanation = `Synchronous CPU workload (${syncStats.median.toFixed(2)} ms median) is high relative to ~${estimatedRefreshHz} Hz cadence (${cadencePeriodMs.toFixed(2)} ms), with p99 ${intervalStats.p99.toFixed(2)} ms and max ${intervalStats.max.toFixed(2)} ms.`;
   }
 
   return {
@@ -325,6 +375,8 @@ export function assessObservedRefreshCadence(params: {
     medianSyncMainThreadMs: syncStats.median,
     p99IntervalMs: intervalStats.p99,
     maxIntervalMs: intervalStats.max,
+    exceedsObservedCadenceCount,
+    exceeds144HzTargetCount,
     classification,
     explanation,
   };
@@ -342,6 +394,7 @@ export function summarizeStreamingEvents(
     fetchStart: 0,
     fetchComplete: 0,
     decodeStart: 0,
+    workerMessageReceived: 0,
     decodeComplete: 0,
     readyToCommit: 0,
     reconstructStart: 0,
@@ -369,6 +422,9 @@ export function summarizeStreamingEvents(
         break;
       case 'decode_start':
         counts.decodeStart += 1;
+        break;
+      case 'worker_message_received':
+        counts.workerMessageReceived += 1;
         break;
       case 'decode_complete':
         counts.decodeComplete += 1;
@@ -555,6 +611,7 @@ export function classifyScenarioCacheBehavior(params: {
 }
 
 const SYNC_MAIN_THREAD_EVENTS = new Set<string>([
+  'worker_message_received',
   'reconstruct_start',
   'reconstruct_complete',
   'attach',
@@ -585,10 +642,16 @@ export function attributeWorstFrames(params: {
 
   return selected.map(({ frame, pos }, rankIdx) => {
     const prevFrame = pos > 0 ? frames[pos - 1] : null;
-    const windowStartMs = prevFrame
-      ? prevFrame.frameTimestampMs
-      : Math.max(0, frame.rafStartMs - frame.frameIntervalMs);
-    const windowEndMs = frame.frameTimestampMs;
+    const windowStartMs =
+      typeof frame.intervalStartMs === 'number' && frame.intervalStartMs > 0
+        ? frame.intervalStartMs
+        : prevFrame
+          ? prevFrame.frameTimestampMs
+          : Math.max(0, frame.frameTimestampMs - frame.frameIntervalMs);
+    const windowEndMs =
+      typeof frame.intervalEndMs === 'number' && frame.intervalEndMs > 0
+        ? frame.intervalEndMs
+        : frame.frameTimestampMs;
 
     const targetDeltaMeters = prevFrame
       ? roundNum(
@@ -656,17 +719,23 @@ export function attributeWorstFrames(params: {
         streamTickMs: frame.streamTickMs,
         reconstructMs: frame.reconstructMs,
         instancedBvhBuildMs: frame.instancedBvhBuildMs,
+        instancedBvhAdoptMs: frame.instancedBvhAdoptMs ?? 0,
         staticBvhDeserializeMs: frame.staticBvhDeserializeMs,
         sceneAttachMs: frame.sceneAttachMs,
         commitRebuildStatsMs: frame.commitRebuildStatsMs,
         evictDisposeMs: frame.evictDisposeMs,
         pickingRaycasterMs: frame.pickingRaycasterMs,
         reactCommitMs: frame.reactCommitMs,
+        workerOnMessageMs: frame.workerOnMessageMs ?? 0,
+        workerContinuationMs: frame.workerContinuationMs ?? 0,
         glRenderCpuMs: frame.glRenderCpuMs,
         telemetryHudMs: frame.telemetryHudMs,
       },
       tilesCommittedCount: frame.tilesCommittedCount,
       tilesEvictedCount: frame.tilesEvictedCount,
+      workerDeliveriesCount: frame.workerDeliveriesCount ?? 0,
+      workerBvhAdoptedCount: frame.workerBvhAdoptedCount ?? 0,
+      syncBvhFallbackCount: frame.syncBvhFallbackCount ?? 0,
       firstRenderUploadProxy: {
         tileKeys: frame.newlyAttachedTileKeys,
         tileCount: frame.newlyAttachedTilesCount,
@@ -698,17 +767,24 @@ function classifyFramePrimarySuspect(
     };
   }
 
+  const workerDeliveryTotalMs =
+    (frame.workerOnMessageMs ?? 0) + (frame.workerContinuationMs ?? 0);
   const nonBvhTickMs = Math.max(0, frame.streamTickMs - frame.instancedBvhBuildMs);
   const candidates: Array<{ key: SpikePrimarySuspect; val: number; note: string }> = [
     {
       key: 'instanced_bvh_build',
       val: frame.instancedBvhBuildMs,
-      note: `InstancedSpatialIndex BVH build took ${frame.instancedBvhBuildMs.toFixed(2)} ms (inside reconstructMs=${frame.reconstructMs.toFixed(2)} ms across ${frame.tilesCommittedCount} committed tile(s)).`,
+      note: `Synchronous main-thread InstancedSpatialIndex BVH build took ${frame.instancedBvhBuildMs.toFixed(2)} ms (inside reconstructMs=${frame.reconstructMs.toFixed(2)} ms across ${frame.tilesCommittedCount} committed tile(s); fallbackBatches=${frame.syncBvhFallbackCount ?? 0}).`,
+    },
+    {
+      key: 'worker_delivery_onmessage',
+      val: workerDeliveryTotalMs,
+      note: `Main-thread worker delivery took ${workerDeliveryTotalMs.toFixed(2)} ms across ${frame.workerDeliveriesCount ?? 0} message(s) (onmessage=${(frame.workerOnMessageMs ?? 0).toFixed(2)} ms, continuation=${(frame.workerContinuationMs ?? 0).toFixed(2)} ms, maxDeliveryLatency=${(frame.workerDeliveryLatencyMaxMs ?? 0).toFixed(2)} ms).`,
     },
     {
       key: 'sync_tile_commit_reconstruct',
       val: nonBvhTickMs,
-      note: `Synchronous tile commit/reconstruction (excl. instanced BVH) took ${nonBvhTickMs.toFixed(2)} ms (${frame.tilesCommittedCount} tile(s), reconstruct=${frame.reconstructMs.toFixed(2)} ms, attach=${frame.sceneAttachMs.toFixed(2)} ms, stats=${frame.commitRebuildStatsMs.toFixed(2)} ms).`,
+      note: `Synchronous tile commit/reconstruction (excl. sync instanced BVH) took ${nonBvhTickMs.toFixed(2)} ms (${frame.tilesCommittedCount} tile(s), reconstruct=${frame.reconstructMs.toFixed(2)} ms, bvhAdopt=${(frame.instancedBvhAdoptMs ?? 0).toFixed(2)} ms, attach=${frame.sceneAttachMs.toFixed(2)} ms, stats=${frame.commitRebuildStatsMs.toFixed(2)} ms).`,
     },
     {
       key: 'eviction_disposal',
@@ -752,10 +828,20 @@ function classifyFramePrimarySuspect(
       overlappingLoafs.length > 0 && overlappingLoafs[0].topScripts.length > 0
         ? ` Top LoAF script: ${overlappingLoafs[0].topScripts[0].invoker || overlappingLoafs[0].topScripts[0].sourceFunctionName || 'unknown'} (${overlappingLoafs[0].topScripts[0].durationMs.toFixed(1)} ms).`
         : '';
+    const workerDeserHint =
+      (frame.workerDeliveriesCount ?? 0) > 0
+        ? ` Note: ${frame.workerDeliveriesCount} worker message(s) delivered in this window (max cross-thread delivery latency ${(frame.workerDeliveryLatencyMaxMs ?? 0).toFixed(1)} ms); browser-internal structured-clone deserialization before JS onmessage entry may account for residual time.`
+        : '';
     candidates.push({
-      key: 'browser_unattributed_or_gc_loaf',
+      key:
+        (frame.workerDeliveriesCount ?? 0) > 0 &&
+        overlappingLoafs.some((lf) =>
+          lf.topScripts.some((s) => /Worker\.onmessage/i.test(s.invoker))
+        )
+          ? 'worker_delivery_onmessage'
+          : 'browser_unattributed_or_gc_loaf',
       val: unattributedMs,
-      note: `Unattributed interval residual is ${unattributedMs.toFixed(2)} ms (exceeds measured sync work ${frame.attributedSyncMainThreadMs.toFixed(2)} ms; suggests GC, compositor/driver stall, style/layout, or rAF scheduling delay).${loafHint}`,
+      note: `Unattributed interval residual is ${unattributedMs.toFixed(2)} ms (exceeds measured sync work ${frame.attributedSyncMainThreadMs.toFixed(2)} ms; suggests browser structured-clone deserialization, GC, compositor/driver stall, style/layout, or rAF scheduling delay).${workerDeserHint}${loafHint}`,
     });
   }
 
@@ -778,12 +864,15 @@ export function summarizeStageTimings(
   }> = [
     { stageKey: 'attributedSyncMainThreadMs', label: 'Total Attributed Sync Main-Thread', nestingLevel: 'top_level', pick: (f) => f.attributedSyncMainThreadMs },
     { stageKey: 'glRenderCpuMs', label: 'gl.render() CPU Wall Time', nestingLevel: 'top_level', pick: (f) => f.glRenderCpuMs },
+    { stageKey: 'workerOnMessageMs', label: 'Worker.onmessage Handler (sync JS)', nestingLevel: 'top_level', pick: (f) => f.workerOnMessageMs ?? 0 },
+    { stageKey: 'workerContinuationMs', label: 'Worker Post-Decode Promise Continuation', nestingLevel: 'top_level', pick: (f) => f.workerContinuationMs ?? 0 },
     { stageKey: 'streamTickMs', label: 'Streaming Commit Tick (tile commit)', nestingLevel: 'top_level', pick: (f) => f.streamTickMs },
     { stageKey: 'reconstructMs', label: '  Tile Reconstruct (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.reconstructMs },
-    { stageKey: 'instancedBvhBuildMs', label: '    InstancedSpatialIndex BVH Build (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.instancedBvhBuildMs },
+    { stageKey: 'instancedBvhBuildMs', label: '    InstancedSpatialIndex Sync BVH Build (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.instancedBvhBuildMs },
+    { stageKey: 'instancedBvhAdoptMs', label: '    InstancedSpatialIndex Worker BVH Adopt (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.instancedBvhAdoptMs ?? 0 },
     { stageKey: 'staticBvhDeserializeMs', label: '    Static MeshBVH Deserialize (inside reconstruct)', nestingLevel: 'child_of_reconstruct', pick: (f) => f.staticBvhDeserializeMs },
     { stageKey: 'sceneAttachMs', label: '  Composite Scene Attach (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.sceneAttachMs },
-    { stageKey: 'commitRebuildStatsMs', label: '  Commit rebuildCompositeStats + MatrixWorld (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.commitRebuildStatsMs },
+    { stageKey: 'commitRebuildStatsMs', label: '  Commit rebuildCompositeStats (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.commitRebuildStatsMs },
     { stageKey: 'commitEmitDiagnosticsMs', label: '  Commit emitDiagnostics Callback (inside tick)', nestingLevel: 'child_of_tick', pick: (f) => f.commitEmitDiagnosticsMs },
     { stageKey: 'viewportUpdateMs', label: 'Viewport Streaming Evaluation', nestingLevel: 'top_level', pick: (f) => f.viewportUpdateMs },
     { stageKey: 'tileScanMs', label: '  Tile Grid Scan & Priority (inside viewport)', nestingLevel: 'child_of_viewport', pick: (f) => f.tileScanMs },
@@ -814,6 +903,171 @@ export function summarizeStageTimings(
 }
 
 /**
+ * Separates frame-interval distributions across event-conditioned subsets so
+ * worker-delivery and tile-commit stalls are never hidden behind quiet VSync frames.
+ */
+export function summarizeEventConditionedFrames(
+  frames: readonly FrameStageProfileSample[]
+): EventConditionedFrameSummary {
+  const all: number[] = [];
+  const workerDelivery: number[] = [];
+  const tileCommit: number[] = [];
+  const activeStreamingWork: number[] = [];
+  const quiet: number[] = [];
+
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    all.push(f.frameIntervalMs);
+    const hasDelivery = (f.workerDeliveriesCount ?? 0) > 0;
+    const hasCommit = f.tilesCommittedCount > 0;
+    const hasEvict = f.tilesEvictedCount > 0;
+    if (hasDelivery) workerDelivery.push(f.frameIntervalMs);
+    if (hasCommit) tileCommit.push(f.frameIntervalMs);
+    if (hasDelivery || hasCommit || hasEvict) {
+      activeStreamingWork.push(f.frameIntervalMs);
+    } else {
+      quiet.push(f.frameIntervalMs);
+    }
+  }
+
+  return {
+    allFrames: computeStreamingFrameDistribution(all),
+    workerDeliveryFrames: computeStreamingFrameDistribution(workerDelivery),
+    tileCommitFrames: computeStreamingFrameDistribution(tileCommit),
+    activeStreamingWorkFrames: computeStreamingFrameDistribution(activeStreamingWork),
+    quietFrames: computeStreamingFrameDistribution(quiet),
+  };
+}
+
+/**
+ * Summarizes cross-thread worker decode, BVH build/adopt, delivery latency,
+ * tile readiness latency (`fetch_start` -> `first_rendered_use`), and streaming throughput.
+ */
+export function summarizeWorkerDeliveryMetrics(
+  events: readonly StreamingLifecycleEvent[],
+  frames: readonly FrameStageProfileSample[]
+): WorkerDeliverySummary {
+  const queueWaits: number[] = [];
+  const inflateDecodes: number[] = [];
+  const workerBvhs: number[] = [];
+  const payloadPreps: number[] = [];
+  const deliveryLatencies: number[] = [];
+  const mainOnMessages: number[] = [];
+  const mainContinuations: number[] = [];
+  const reconTotals: number[] = [];
+  const mainBvhBuilds: number[] = [];
+  const mainBvhAdopts: number[] = [];
+  const readinessLatencies: number[] = [];
+
+  let usedWebWorkerCount = 0;
+  let usedCompactTransportCount = 0;
+  let totalTransferableCount = 0;
+  let transferableBytesTotal = 0;
+  let workerBvhAdoptedTotal = 0;
+  let syncBvhFallbackTotal = 0;
+
+  const fetchStartByTile = new Map<string, number>();
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.eventType === 'fetch_start') {
+      fetchStartByTile.set(e.tileKey, e.timestampMs);
+    } else if (e.eventType === 'worker_message_received' && e.detail) {
+      if (e.detail.usedWebWorker) usedWebWorkerCount += 1;
+      if (e.detail.usedCompactTransport) usedCompactTransportCount += 1;
+      if (typeof e.detail.workerQueueWaitMs === 'number') {
+        queueWaits.push(e.detail.workerQueueWaitMs);
+      }
+      if (typeof e.detail.workerInflateAndDecodeMs === 'number') {
+        inflateDecodes.push(e.detail.workerInflateAndDecodeMs);
+      }
+      if (typeof e.detail.workerBvhBuildMs === 'number') {
+        workerBvhs.push(e.detail.workerBvhBuildMs);
+      }
+      if (typeof e.detail.workerPayloadPrepMs === 'number') {
+        payloadPreps.push(e.detail.workerPayloadPrepMs);
+      }
+      if (typeof e.detail.messageDeliveryLatencyMs === 'number') {
+        deliveryLatencies.push(e.detail.messageDeliveryLatencyMs);
+      }
+      if (typeof e.detail.mainOnMessageHandlerMs === 'number') {
+        mainOnMessages.push(e.detail.mainOnMessageHandlerMs);
+      }
+      if (typeof e.detail.transferableBufferCount === 'number') {
+        totalTransferableCount += e.detail.transferableBufferCount;
+      }
+      if (typeof e.detail.transferableBytes === 'number') {
+        transferableBytesTotal += e.detail.transferableBytes;
+      }
+    } else if (e.eventType === 'decode_complete' && e.detail) {
+      if (typeof e.detail.mainPromiseContinuationMs === 'number') {
+        mainContinuations.push(e.detail.mainPromiseContinuationMs);
+      }
+    } else if (e.eventType === 'reconstruct_complete') {
+      if (typeof e.durationMs === 'number') {
+        reconTotals.push(e.durationMs);
+      }
+      if (e.detail) {
+        if (typeof e.detail.instancedBvhBuildMs === 'number') {
+          mainBvhBuilds.push(e.detail.instancedBvhBuildMs);
+        }
+        if (typeof e.detail.instancedBvhAdoptMs === 'number') {
+          mainBvhAdopts.push(e.detail.instancedBvhAdoptMs);
+        }
+        if (typeof e.detail.workerBvhAdoptedCount === 'number') {
+          workerBvhAdoptedTotal += e.detail.workerBvhAdoptedCount;
+        }
+        if (typeof e.detail.syncBvhFallbackCount === 'number') {
+          syncBvhFallbackTotal += e.detail.syncBvhFallbackCount;
+        }
+      }
+    } else if (e.eventType === 'first_rendered_use') {
+      const startMs = fetchStartByTile.get(e.tileKey);
+      if (typeof startMs === 'number' && e.timestampMs >= startMs) {
+        readinessLatencies.push(e.timestampMs - startMs);
+        fetchStartByTile.delete(e.tileKey);
+      }
+    }
+  }
+
+  const spanSec =
+    frames.length >= 2
+      ? Math.max(
+          0.001,
+          (frames[frames.length - 1].frameTimestampMs - frames[0].frameTimestampMs) /
+            1000
+        )
+      : 0;
+  const tilesPerSecond =
+    spanSec > 0 ? roundNum(reconTotals.length / spanSec, 2) : 0;
+
+  return {
+    deliveryCount: deliveryLatencies.length,
+    usedWebWorkerCount,
+    usedCompactTransportCount,
+    transferableBufferCountMean:
+      deliveryLatencies.length > 0
+        ? roundNum(totalTransferableCount / deliveryLatencies.length, 1)
+        : 0,
+    transferableBytesTotal,
+    workerBvhAdoptedTotal,
+    syncBvhFallbackTotal,
+    workerQueueWaitMs: computeSampleStatistics(queueWaits, 3),
+    workerInflateAndDecodeMs: computeSampleStatistics(inflateDecodes, 3),
+    workerBvhBuildMs: computeSampleStatistics(workerBvhs, 3),
+    workerPayloadPrepMs: computeSampleStatistics(payloadPreps, 3),
+    messageDeliveryLatencyMs: computeSampleStatistics(deliveryLatencies, 3),
+    mainOnMessageHandlerMs: computeSampleStatistics(mainOnMessages, 3),
+    mainPromiseContinuationMs: computeSampleStatistics(mainContinuations, 3),
+    reconstructTotalMs: computeSampleStatistics(reconTotals, 3),
+    mainInstancedBvhBuildMs: computeSampleStatistics(mainBvhBuilds, 3),
+    mainInstancedBvhAdoptMs: computeSampleStatistics(mainBvhAdopts, 4),
+    tileReadinessLatencyMs: computeSampleStatistics(readinessLatencies, 2),
+    tilesPerSecond,
+  };
+}
+
+/**
  * Verifies the documented stage-nesting invariants so top-level `attributedSyncMainThreadMs`
  * never double-counts child stages.
  */
@@ -832,6 +1086,8 @@ export function verifyFrameStageNesting(
     frame.telemetryHudMs +
     frame.pickingRaycasterMs +
     frame.reactCommitMs +
+    (frame.workerOnMessageMs ?? 0) +
+    (frame.workerContinuationMs ?? 0) +
     frame.glRenderCpuMs;
 
   if (Math.abs(frame.attributedSyncMainThreadMs - expectedTopSum) > epsilonMs) {
@@ -851,7 +1107,9 @@ export function verifyFrameStageNesting(
   }
 
   const reconChildren =
-    frame.instancedBvhBuildMs + frame.staticBvhDeserializeMs;
+    frame.instancedBvhBuildMs +
+    (frame.instancedBvhAdoptMs ?? 0) +
+    frame.staticBvhDeserializeMs;
   if (reconChildren > frame.reconstructMs + epsilonMs) {
     violations.push(
       `reconstruct child stages (${reconChildren.toFixed(4)}) exceed reconstructMs (${frame.reconstructMs})`

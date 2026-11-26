@@ -8,7 +8,7 @@
 
 > **getTriangleCount**(`geom`): `number`
 
-Defined in: world/GeometryBuilder.ts:785
+Defined in: world/GeometryBuilder.ts:856
 
 ## Parameters
 

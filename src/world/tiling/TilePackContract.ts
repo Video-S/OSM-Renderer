@@ -1,5 +1,7 @@
 import type { InspectableFeatureInfo } from '../../types/MapFeature';
+import type { PreparedInstancedSpatialIndexData } from '../InstancedSpatialIndex';
 import { EPSG_25832_CODE } from './RegionalProjection';
+import type { TileMemoryFootprint } from './TileStreamManager';
 
 export const OSMTILE1_MAGIC = 'OSMTILE1';
 export const OSMTILE1_FORMAT_VERSION = 1;
@@ -28,6 +30,19 @@ export type TilePrototypeKind =
   | 'tree_broadleaved'
   | 'tree_needleleaved'
   | 'sleeper_box_unit';
+
+/**
+ * Exact local-space bounding box of `buildUnitSleeperBoxGeometry()` (`BoxGeometry(1, 1, 1)`
+ * translated by `(0, 0.5, 0)`), shared between worker-side BVH pre-building and runtime.
+ */
+export const UNIT_SLEEPER_BOX_LOCAL_BOUNDS: readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+] = [-0.5, 0, -0.5, 0.5, 1, 0.5];
 
 export type TileCoordinatePlacementMode = 'tile-local' | 'study-world-mesh-offset';
 
@@ -105,6 +120,8 @@ export interface TileInstancedBatchRecord {
   instanceFeatureIdxs: Int32Array; // instanceCount (-1 if missing)
   sleeperBoxes: TileSleeperBearerBox[] | null;
   chunkKey?: string;
+  /** Optional worker-prepared InstancedSpatialIndex BVH typed arrays (TKT-040 Work Package C). */
+  preparedSpatialIndex?: PreparedInstancedSpatialIndexData | null;
 }
 
 export interface DecodedTilePayload {
@@ -129,6 +146,8 @@ export interface DecodedTilePayload {
   meshes: TileMeshRecord[];
   instancedBatches: TileInstancedBatchRecord[];
   byteLength: number;
+  /** Optional worker-precomputed CPU/BVH memory footprint (TKT-040 Work Package D). */
+  precomputedFootprint?: TileMemoryFootprint;
 }
 
 export interface TilePackMetadata {

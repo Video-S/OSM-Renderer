@@ -87,6 +87,13 @@ import {
 } from '../world/tiling/TileStreamManager';
 import { getGlobalStreamingProfiler } from '../world/tiling/StreamingProfiler';
 import {
+  identifyTilePreparationVariant,
+  parseTilePreparationOptionsFromSearch,
+  resolveTilePreparationOptions,
+  type TilePreparationOptions,
+  type TilePreparationVariantId,
+} from '../world/tiling/TilePreparationConfig';
+import {
   REGIONAL_MIN_ZOOM_TILE_THRESHOLD,
   clampCameraZoom,
   parseRegionalMinZoomFromSearch,
@@ -301,6 +308,15 @@ export default function App() {
     setInstancedPickingMode(initial);
     return initial;
   });
+
+  // TKT-040: Non-blocking tile preparation & worker transfer configuration
+  const [tilePrepOptions, setTilePrepOptions] = useState<TilePreparationOptions>(() =>
+    typeof window !== 'undefined'
+      ? parseTilePreparationOptionsFromSearch(window.location.search)
+      : resolveTilePreparationOptions()
+  );
+  const tilePrepOptionsRef = useRef<TilePreparationOptions>(tilePrepOptions);
+  tilePrepOptionsRef.current = tilePrepOptions;
 
   // TKT-017: Deterministic scene revision tracking & live refs for race-free benchmark snapshots
   const transitionRevisionRef = useRef<number>(0);
@@ -819,6 +835,9 @@ export default function App() {
       themeId?: string;
       target?: [number, number, number];
       regionalMinZoom?: number;
+      tilePreparationOptions?:
+        | TilePreparationVariantId
+        | Partial<TilePreparationOptions>;
     }
   ) => {
     const loadToken = ++m2aLoadTokenRef.current;
@@ -897,6 +916,15 @@ export default function App() {
       const initialTarget: [number, number, number] = extraOptions?.target ?? [0, 0, 0];
       const activeTheme = MAP_THEMES[targetThemeId] || MAP_THEMES.tactical;
 
+      const resolvedTilePrep =
+        extraOptions?.tilePreparationOptions !== undefined
+          ? resolveTilePreparationOptions(extraOptions.tilePreparationOptions)
+          : tilePrepOptionsRef.current;
+      if (extraOptions?.tilePreparationOptions !== undefined) {
+        tilePrepOptionsRef.current = resolvedTilePrep;
+        setTilePrepOptions(resolvedTilePrep);
+      }
+
       const manager = new TileStreamManager({
         apiBaseUrl: extraOptions?.apiBaseUrl,
         preloadMarginTiles: extraOptions?.preloadMarginTiles,
@@ -908,6 +936,7 @@ export default function App() {
         initialTheme: activeTheme,
         initialCameraZoom: provisionalZoom,
         foliageOptimizationConfig: foliageConfigRef.current,
+        tilePreparationOptions: resolvedTilePrep,
         onDiagnosticsChange: (diag) => {
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
@@ -2584,6 +2613,9 @@ export default function App() {
         zoom?: number;
         azimuthDeg?: number;
         regionalMinZoom?: number;
+        tilePreparationOptions?:
+          | TilePreparationVariantId
+          | Partial<TilePreparationOptions>;
         waitForIdle?: boolean;
         timeoutMs?: number;
       } = {}) => {
@@ -2602,6 +2634,7 @@ export default function App() {
             themeId: params.themeId,
             target: params.target,
             regionalMinZoom: params.regionalMinZoom,
+            tilePreparationOptions: params.tilePreparationOptions,
           }
         );
         await waitForSceneReady(
@@ -2722,6 +2755,19 @@ export default function App() {
       },
       getStreamingProfilerSnapshot: () =>
         getGlobalStreamingProfiler().getSnapshot(),
+      getTilePreparationOptions: () =>
+        tileStreamManagerRef.current?.getTilePreparationOptions() ?? {
+          ...tilePrepOptionsRef.current,
+        },
+      setTilePreparationOptions: (
+        input: TilePreparationVariantId | Partial<TilePreparationOptions>
+      ) => {
+        const resolved = resolveTilePreparationOptions(input);
+        tilePrepOptionsRef.current = resolved;
+        setTilePrepOptions(resolved);
+        tileStreamManagerRef.current?.setTilePreparationOptions(resolved);
+        return resolved;
+      },
     };
     (window as any).__BENCHMARK_HARNESS__ = (window as any).__M21_LAB__;
   }, [
@@ -2771,6 +2817,15 @@ export default function App() {
   const handleChangeInstancedPickingMode = (mode: InstancedPickingMode) => {
     const applied = setInstancedPickingMode(mode);
     setInstancedPickingModeState(applied);
+  };
+
+  const handleChangeTilePreparationVariant = (
+    variant: TilePreparationVariantId
+  ) => {
+    const resolved = resolveTilePreparationOptions(variant);
+    tilePrepOptionsRef.current = resolved;
+    setTilePrepOptions(resolved);
+    tileStreamManagerRef.current?.setTilePreparationOptions(resolved);
   };
 
   const handleToggleStreamingProfiler = () => {
@@ -3427,6 +3482,20 @@ export default function App() {
                       loafs: s.browserObservers.loafCount,
                     };
                   })()
+                : null
+            }
+            tilePreparationVariant={identifyTilePreparationVariant(tilePrepOptions)}
+            onChangeTilePreparationVariant={handleChangeTilePreparationVariant}
+            tilePreparationStats={
+              m2aStreamDiagnostics
+                ? {
+                    workerBvhAdoptedTotal:
+                      m2aStreamDiagnostics.workerBvhAdoptedTotal,
+                    syncBvhFallbackTotal:
+                      m2aStreamDiagnostics.syncBvhFallbackTotal,
+                    pendingReadyTileBytes:
+                      m2aStreamDiagnostics.pendingReadyTileBytes,
+                  }
                 : null
             }
           />

@@ -307,25 +307,88 @@ export function resolveInspectedFeature(hit: {
   const ud = obj.userData;
   if (!ud) return null;
 
-  // 1. InstancedMesh lookup
-  if (ud.isInstanced && Array.isArray(ud.instanceInfos) && typeof hit.instanceId === 'number') {
-    return ud.instanceInfos[hit.instanceId] || null;
+  // 1. InstancedMesh lookup (prefer compact typed-array + lazy table path before eager array getter)
+  if (ud.isInstanced && typeof hit.instanceId === 'number') {
+    const featIdxs = ud.__instanceFeatureIdxs as Int32Array | undefined;
+    if (featIdxs) {
+      if (hit.instanceId < 0 || hit.instanceId >= featIdxs.length) {
+        return null;
+      }
+      const infoIdx = featIdxs[hit.instanceId];
+      if (infoIdx < 0) return null;
+      if (ud.__featureTable && typeof ud.__featureTable.getFeatureInfo === 'function') {
+        return ud.__featureTable.getFeatureInfo(infoIdx) || null;
+      }
+      if (Array.isArray(ud.__featureInfosArray)) {
+        return ud.__featureInfosArray[infoIdx] || null;
+      }
+      return null;
+    }
+    if (Array.isArray(ud.instanceInfos)) {
+      return ud.instanceInfos[hit.instanceId] || null;
+    }
   }
 
   // 2. Merged geometry faceIndex binary search lookup
-  if (Array.isArray(ud.faceRanges) && typeof hit.faceIndex === 'number') {
-    const ranges: FaceFeatureRange[] = ud.faceRanges;
-    let lo = 0;
-    let hi = ranges.length - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >>> 1;
-      const r = ranges[mid];
-      if (hit.faceIndex < r.startFace) {
-        hi = mid - 1;
-      } else if (hit.faceIndex >= r.endFace) {
-        lo = mid + 1;
-      } else {
-        return r.info;
+  if (typeof hit.faceIndex === 'number') {
+    const packed = ud.__packedFaceRanges as
+      | {
+          data: Uint32Array;
+          offset: number;
+          count: number;
+          featureTable: { getFeatureInfo(idx: number): InspectableFeatureInfo | null };
+        }
+      | undefined;
+    if (packed && packed.count > 0) {
+      const { data, offset, count, featureTable } = packed;
+      let lo = 0;
+      let hi = count - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const base = (offset + mid) * 3;
+        const startFace = data[base];
+        const endFace = data[base + 1];
+        if (hit.faceIndex < startFace) {
+          hi = mid - 1;
+        } else if (hit.faceIndex >= endFace) {
+          lo = mid + 1;
+        } else {
+          return featureTable.getFeatureInfo(data[base + 2] | 0);
+        }
+      }
+    } else if (Array.isArray(ud.__rawFaceRanges) && Array.isArray(ud.__featureInfosArray)) {
+      const rawRanges = ud.__rawFaceRanges as Array<{
+        startFace: number;
+        endFace: number;
+        infoIdx: number;
+      }>;
+      let lo = 0;
+      let hi = rawRanges.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const r = rawRanges[mid];
+        if (hit.faceIndex < r.startFace) {
+          hi = mid - 1;
+        } else if (hit.faceIndex >= r.endFace) {
+          lo = mid + 1;
+        } else {
+          return ud.__featureInfosArray[r.infoIdx] || null;
+        }
+      }
+    } else if (Array.isArray(ud.faceRanges)) {
+      const ranges: FaceFeatureRange[] = ud.faceRanges;
+      let lo = 0;
+      let hi = ranges.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const r = ranges[mid];
+        if (hit.faceIndex < r.startFace) {
+          hi = mid - 1;
+        } else if (hit.faceIndex >= r.endFace) {
+          lo = mid + 1;
+        } else {
+          return r.info;
+        }
       }
     }
   }
@@ -333,6 +396,14 @@ export function resolveInspectedFeature(hit: {
   // 3. Direct mesh userData lookup (e.g. Buildings)
   if (ud.id) {
     return ud as InspectableFeatureInfo;
+  }
+  if (
+    typeof ud.__singleFeatureIdx === 'number' &&
+    ud.__singleFeatureIdx >= 0 &&
+    ud.__featureTable &&
+    typeof ud.__featureTable.getFeatureInfo === 'function'
+  ) {
+    return ud.__featureTable.getFeatureInfo(ud.__singleFeatureIdx) || null;
   }
 
   return null;

@@ -5,6 +5,7 @@ export type StreamingLifecycleEventType =
   | 'fetch_start'
   | 'fetch_complete'
   | 'decode_start'
+  | 'worker_message_received'
   | 'decode_complete'
   | 'ready_to_commit'
   | 'reconstruct_start'
@@ -38,12 +39,29 @@ export interface StreamingLifecycleEvent {
   queueDepths: StreamingQueueDepths;
   detail?: {
     instancedBvhBuildMs?: number;
+    instancedBvhAdoptMs?: number;
+    workerBvhAdoptedCount?: number;
+    syncBvhFallbackCount?: number;
     staticBvhDeserializeMs?: number;
     instancedBatchCount?: number;
     indexedInstances?: number;
     meshCount?: number;
     triangleCount?: number;
     usedWebWorker?: boolean;
+    usedCompactTransport?: boolean;
+    transferAllTypedArrays?: boolean;
+    workerInstanceBvhEnabled?: boolean;
+    workerQueueWaitMs?: number;
+    workerInflateAndDecodeMs?: number;
+    workerBvhBuildMs?: number;
+    workerPayloadPrepMs?: number;
+    messageDeliveryLatencyMs?: number;
+    mainOnMessageHandlerMs?: number;
+    mainPromiseContinuationMs?: number;
+    transferableBufferCount?: number;
+    transferableBytes?: number;
+    workerBvhBatchCount?: number;
+    workerBvhInstanceCount?: number;
     reason?: string;
     driverGeometriesDelta?: number;
   };
@@ -52,6 +70,11 @@ export interface StreamingLifecycleEvent {
 /**
  * Explicitly nested synchronous main-thread stage timings for a single WebGL frame.
  *
+ * Canonical frame window: `[intervalStartMs, intervalEndMs]` spans post-render of frame
+ * `N - 1` to post-render of frame `N`, so every inter-frame callback (`worker.onmessage`,
+ * promise continuations, picking, React commits), every `useFrame` callback, and `gl.render()`
+ * executing during frame `N` fall strictly inside frame `N`'s `frameIntervalMs`.
+ *
  * Non-overlapping top-level main-thread buckets summed into `attributedSyncMainThreadMs`:
  *   1. cameraUseFrameMs (parent of controlsUpdateMs, cameraFrustumMs, cameraOrientationCallbackMs)
  *   2. mapSceneUseFrameOtherMs (shadowFollowMs, railwayIndexRebuildMs, remaining MapScene useFrame logic)
@@ -59,16 +82,21 @@ export interface StreamingLifecycleEvent {
  *   4. viewportUpdateMs (parent of viewportBoundsMs, zoomSyncMs, tileScanMs, cancelInFlightMs,
  *      evictDisposeMs, evictRebuildStatsMs, evictEmitDiagnosticsMs, pumpFetchQueueMs)
  *   5. streamTickMs (parent of readyScanAndSortMs, reconstructMs [parent of instancedBvhBuildMs,
- *      staticBvhDeserializeMs], sceneAttachMs, commitRebuildStatsMs, commitEmitDiagnosticsMs)
+ *      instancedBvhAdoptMs, staticBvhDeserializeMs], sceneAttachMs, commitRebuildStatsMs,
+ *      commitEmitDiagnosticsMs)
  *   6. telemetryHudMs (PerformancePanel live HUD computation & callback)
  *   7. pickingRaycasterMs (Raycaster.intersectObjects + pointer hover/click handler overhead in window)
  *   8. reactCommitMs (React <Profiler> actualDuration committed during this frame window)
- *   9. glRenderCpuMs (CPU wall-clock around gl.render(); may include WebGL driver sync/uploads)
+ *   9. workerOnMessageMs (synchronous JS duration inside TileDecodeClient worker.onmessage handlers)
+ *  10. workerContinuationMs (synchronous JS duration inside TileStreamManager post-decode continuations)
+ *  11. glRenderCpuMs (CPU wall-clock around gl.render(); may include WebGL driver sync/uploads)
  *
  * Child stages MUST NEVER be added to their parent when computing `attributedSyncMainThreadMs`.
  */
 export interface FrameStageProfileSample {
   frameIndex: number;
+  intervalStartMs: number;
+  intervalEndMs: number;
   rafStartMs: number;
   frameTimestampMs: number;
   frameIntervalMs: number;
@@ -82,6 +110,8 @@ export interface FrameStageProfileSample {
   telemetryHudMs: number;
   pickingRaycasterMs: number;
   reactCommitMs: number;
+  workerOnMessageMs: number;
+  workerContinuationMs: number;
   glRenderCpuMs: number;
   attributedSyncMainThreadMs: number;
 
@@ -108,6 +138,7 @@ export interface FrameStageProfileSample {
   readyScanAndSortMs: number;
   reconstructMs: number;
   instancedBvhBuildMs: number;
+  instancedBvhAdoptMs: number;
   staticBvhDeserializeMs: number;
   sceneAttachMs: number;
   commitRebuildStatsMs: number;
@@ -115,6 +146,15 @@ export interface FrameStageProfileSample {
   tilesCommittedCount: number;
   tilesEvictedCount: number;
   tilesCancelledCount: number;
+  workerBvhAdoptedCount: number;
+  syncBvhFallbackCount: number;
+
+  // Worker delivery summary inside this frame window
+  workerDeliveriesCount: number;
+  workerDeliveryLatencyMaxMs: number;
+  workerBvhBuildMsTotal: number;
+  transferableBytesTotal: number;
+  usedCompactTransportCount: number;
 
   // Nested picking/react details
   pickingCallsCount: number;
@@ -265,6 +305,7 @@ interface MutableFrameAccumulator {
   readyScanAndSortMs: number;
   reconstructMs: number;
   instancedBvhBuildMs: number;
+  instancedBvhAdoptMs: number;
   staticBvhDeserializeMs: number;
   sceneAttachMs: number;
   commitRebuildStatsMs: number;
@@ -272,6 +313,8 @@ interface MutableFrameAccumulator {
   tilesCommittedCount: number;
   tilesEvictedCount: number;
   tilesCancelledCount: number;
+  workerBvhAdoptedCount: number;
+  syncBvhFallbackCount: number;
 
   pickingRaycasterMs: number;
   pickingCallsCount: number;
@@ -316,6 +359,7 @@ function createEmptyAccumulator(frameIndex: number): MutableFrameAccumulator {
     readyScanAndSortMs: 0,
     reconstructMs: 0,
     instancedBvhBuildMs: 0,
+    instancedBvhAdoptMs: 0,
     staticBvhDeserializeMs: 0,
     sceneAttachMs: 0,
     commitRebuildStatsMs: 0,
@@ -323,6 +367,8 @@ function createEmptyAccumulator(frameIndex: number): MutableFrameAccumulator {
     tilesCommittedCount: 0,
     tilesEvictedCount: 0,
     tilesCancelledCount: 0,
+    workerBvhAdoptedCount: 0,
+    syncBvhFallbackCount: 0,
     pickingRaycasterMs: 0,
     pickingCallsCount: 0,
     reactCommitMs: 0,
@@ -412,10 +458,18 @@ export class StreamingProfiler {
   private readonly loafsRing: BoundedRing<BrowserLoafSample>;
 
   private currentAcc: MutableFrameAccumulator;
+  private lastFinishedFrameEndMs = 0;
   private interFramePickingMs = 0;
   private interFramePickingCalls = 0;
   private interFrameReactCommitMs = 0;
   private interFrameReactCommits = 0;
+  private interFrameWorkerOnMessageMs = 0;
+  private interFrameWorkerContinuationMs = 0;
+  private interFrameWorkerDeliveriesCount = 0;
+  private interFrameWorkerDeliveryLatencyMaxMs = 0;
+  private interFrameWorkerBvhBuildMsTotal = 0;
+  private interFrameTransferableBytesTotal = 0;
+  private interFrameUsedCompactTransportCount = 0;
   private pendingFirstRenderTiles: PendingFirstRenderTileInfo[] = [];
 
   private readonly installBrowserObserversOpt: boolean;
@@ -495,10 +549,18 @@ export class StreamingProfiler {
     this.longTasksRing.clear();
     this.loafsRing.clear();
     this.currentAcc = createEmptyAccumulator(0);
+    this.lastFinishedFrameEndMs = 0;
     this.interFramePickingMs = 0;
     this.interFramePickingCalls = 0;
     this.interFrameReactCommitMs = 0;
     this.interFrameReactCommits = 0;
+    this.interFrameWorkerOnMessageMs = 0;
+    this.interFrameWorkerContinuationMs = 0;
+    this.interFrameWorkerDeliveriesCount = 0;
+    this.interFrameWorkerDeliveryLatencyMaxMs = 0;
+    this.interFrameWorkerBvhBuildMsTotal = 0;
+    this.interFrameTransferableBytesTotal = 0;
+    this.interFrameUsedCompactTransportCount = 0;
     this.pendingFirstRenderTiles = [];
     this.sessionLabel = sessionLabel ?? null;
     this.sessionStartMs = this._enabled ? performance.now() : 0;
@@ -534,10 +596,12 @@ export class StreamingProfiler {
     }
   }
 
-  recordViewportFrameStart(rafStartMs: number, frameIntervalMs: number): void {
+  recordViewportFrameStart(rafStartMs: number, frameIntervalMs?: number): void {
     if (!this._enabled) return;
     this.currentAcc.rafStartMs = rafStartMs;
-    this.currentAcc.frameIntervalMs = frameIntervalMs;
+    if (typeof frameIntervalMs === 'number' && Number.isFinite(frameIntervalMs)) {
+      this.currentAcc.frameIntervalMs = frameIntervalMs;
+    }
   }
 
   recordViewportUpdate(stats: {
@@ -580,6 +644,9 @@ export class StreamingProfiler {
     readyScanAndSortMs: number;
     reconstructMs: number;
     instancedBvhBuildMs: number;
+    instancedBvhAdoptMs?: number;
+    workerBvhAdoptedCount?: number;
+    syncBvhFallbackCount?: number;
     staticBvhDeserializeMs: number;
     sceneAttachMs: number;
     commitRebuildStatsMs: number;
@@ -592,6 +659,9 @@ export class StreamingProfiler {
     acc.readyScanAndSortMs += stats.readyScanAndSortMs;
     acc.reconstructMs += stats.reconstructMs;
     acc.instancedBvhBuildMs += stats.instancedBvhBuildMs;
+    acc.instancedBvhAdoptMs += stats.instancedBvhAdoptMs ?? 0;
+    acc.workerBvhAdoptedCount += stats.workerBvhAdoptedCount ?? 0;
+    acc.syncBvhFallbackCount += stats.syncBvhFallbackCount ?? 0;
     acc.staticBvhDeserializeMs += stats.staticBvhDeserializeMs;
     acc.sceneAttachMs += stats.sceneAttachMs;
     acc.commitRebuildStatsMs += stats.commitRebuildStatsMs;
@@ -634,6 +704,38 @@ export class StreamingProfiler {
     this.interFrameReactCommits += 1;
   }
 
+  recordWorkerOnMessage(stats: {
+    durationMs: number;
+    deliveryLatencyMs?: number;
+    workerBvhBuildMs?: number;
+    transferableBytes?: number;
+    usedCompactTransport?: boolean;
+  }): void {
+    if (!this._enabled) return;
+    this.interFrameWorkerOnMessageMs += Math.max(0, stats.durationMs);
+    this.interFrameWorkerDeliveriesCount += 1;
+    if (
+      typeof stats.deliveryLatencyMs === 'number' &&
+      stats.deliveryLatencyMs > this.interFrameWorkerDeliveryLatencyMaxMs
+    ) {
+      this.interFrameWorkerDeliveryLatencyMaxMs = stats.deliveryLatencyMs;
+    }
+    if (typeof stats.workerBvhBuildMs === 'number' && stats.workerBvhBuildMs > 0) {
+      this.interFrameWorkerBvhBuildMsTotal += stats.workerBvhBuildMs;
+    }
+    if (typeof stats.transferableBytes === 'number' && stats.transferableBytes > 0) {
+      this.interFrameTransferableBytesTotal += stats.transferableBytes;
+    }
+    if (stats.usedCompactTransport) {
+      this.interFrameUsedCompactTransportCount += 1;
+    }
+  }
+
+  recordWorkerContinuation(durationMs: number): void {
+    if (!this._enabled) return;
+    this.interFrameWorkerContinuationMs += Math.max(0, durationMs);
+  }
+
   markTilePendingFirstRender(info: PendingFirstRenderTileInfo): void {
     if (!this._enabled) return;
     this.pendingFirstRenderTiles.push(info);
@@ -650,6 +752,7 @@ export class StreamingProfiler {
     tileSizeMeters: number;
     lod: number;
     timestampMs?: number;
+    frameIndex?: number;
     payloadCompressedBytes?: number | null;
     payloadRawBytes?: number | null;
     durationMs?: number | null;
@@ -657,10 +760,13 @@ export class StreamingProfiler {
     detail?: StreamingLifecycleEvent['detail'];
   }): void {
     if (!this._enabled) return;
+    // Events emitted while frame `this.frameSeq + 1` is accumulating belong to frame `this.frameSeq + 1`.
+    const effectiveFrameIndex =
+      typeof params.frameIndex === 'number' ? params.frameIndex : this.frameSeq + 1;
     const evt: StreamingLifecycleEvent = {
       seq: ++this.eventSeq,
       timestampMs: roundMs(params.timestampMs ?? performance.now()),
-      frameIndex: this.frameSeq,
+      frameIndex: effectiveFrameIndex,
       eventType: params.eventType,
       tileKey: params.tileKey,
       tileSizeMeters: params.tileSizeMeters,
@@ -678,6 +784,7 @@ export class StreamingProfiler {
   }
 
   finishRenderFrame(params: {
+    intervalStartMs?: number;
     frameTimestampMs: number;
     frameIntervalMs: number;
     glRenderCpuMs: number;
@@ -700,6 +807,23 @@ export class StreamingProfiler {
     const acc = this.currentAcc;
     const frameIndex = ++this.frameSeq;
 
+    const intervalEndMs = params.frameTimestampMs;
+    const intervalStartMs =
+      typeof params.intervalStartMs === 'number' &&
+      Number.isFinite(params.intervalStartMs)
+        ? params.intervalStartMs
+        : this.lastFinishedFrameEndMs > 0
+          ? this.lastFinishedFrameEndMs
+          : Math.max(0, intervalEndMs - Math.max(0, params.frameIntervalMs));
+    const effectiveFrameIntervalMs =
+      typeof params.intervalStartMs === 'number' &&
+      Number.isFinite(params.intervalStartMs)
+        ? Math.max(0, intervalEndMs - intervalStartMs)
+        : params.frameIntervalMs > 0
+          ? params.frameIntervalMs
+          : acc.frameIntervalMs;
+    this.lastFinishedFrameEndMs = intervalEndMs;
+
     // Combine explicit viewportUpdateMs + streamTickMs cleanly (nested inside viewportFrameUpdateMs)
     const viewportPlusTickMs = acc.viewportUpdateMs + acc.streamTickMs;
     const mapSceneUseFrameOtherMs = Math.max(
@@ -714,10 +838,25 @@ export class StreamingProfiler {
     const pickingCallsCount = this.interFramePickingCalls;
     const reactCommitMs = this.interFrameReactCommitMs;
     const reactCommitsCount = this.interFrameReactCommits;
+    const workerOnMessageMs = this.interFrameWorkerOnMessageMs;
+    const workerContinuationMs = this.interFrameWorkerContinuationMs;
+    const workerDeliveriesCount = this.interFrameWorkerDeliveriesCount;
+    const workerDeliveryLatencyMaxMs = this.interFrameWorkerDeliveryLatencyMaxMs;
+    const workerBvhBuildMsTotal = this.interFrameWorkerBvhBuildMsTotal;
+    const transferableBytesTotal = this.interFrameTransferableBytesTotal;
+    const usedCompactTransportCount = this.interFrameUsedCompactTransportCount;
+
     this.interFramePickingMs = 0;
     this.interFramePickingCalls = 0;
     this.interFrameReactCommitMs = 0;
     this.interFrameReactCommits = 0;
+    this.interFrameWorkerOnMessageMs = 0;
+    this.interFrameWorkerContinuationMs = 0;
+    this.interFrameWorkerDeliveriesCount = 0;
+    this.interFrameWorkerDeliveryLatencyMaxMs = 0;
+    this.interFrameWorkerBvhBuildMsTotal = 0;
+    this.interFrameTransferableBytesTotal = 0;
+    this.interFrameUsedCompactTransportCount = 0;
 
     const newlyAttached = this.pendingFirstRenderTiles.splice(
       0,
@@ -739,10 +878,11 @@ export class StreamingProfiler {
         tileKey: tile.tileKey,
         tileSizeMeters: tile.tileSizeMeters,
         lod: tile.lod,
-        timestampMs: params.frameTimestampMs,
+        timestampMs: intervalEndMs,
+        frameIndex,
         payloadCompressedBytes: tile.compressedBytes,
         payloadRawBytes: tile.rawBytes,
-        durationMs: params.frameTimestampMs - tile.attachTimestampMs,
+        durationMs: intervalEndMs - tile.attachTimestampMs,
         queueDepths: acc.queueDepths,
         detail: {
           meshCount: tile.meshes,
@@ -761,15 +901,17 @@ export class StreamingProfiler {
       acc.telemetryHudMs +
       pickingRaycasterMs +
       reactCommitMs +
+      workerOnMessageMs +
+      workerContinuationMs +
       params.glRenderCpuMs;
 
     const sample: FrameStageProfileSample = {
       frameIndex,
-      rafStartMs: roundMs(acc.rafStartMs || params.frameTimestampMs),
-      frameTimestampMs: roundMs(params.frameTimestampMs),
-      frameIntervalMs: roundMs(
-        acc.frameIntervalMs > 0 ? acc.frameIntervalMs : params.frameIntervalMs
-      ),
+      intervalStartMs: roundMs(intervalStartMs),
+      intervalEndMs: roundMs(intervalEndMs),
+      rafStartMs: roundMs(acc.rafStartMs || intervalEndMs),
+      frameTimestampMs: roundMs(intervalEndMs),
+      frameIntervalMs: roundMs(effectiveFrameIntervalMs),
 
       cameraUseFrameMs: roundMs(acc.cameraUseFrameMs),
       mapSceneUseFrameOtherMs: roundMs(mapSceneUseFrameOtherMs),
@@ -779,6 +921,8 @@ export class StreamingProfiler {
       telemetryHudMs: roundMs(acc.telemetryHudMs),
       pickingRaycasterMs: roundMs(pickingRaycasterMs),
       reactCommitMs: roundMs(reactCommitMs),
+      workerOnMessageMs: roundMs(workerOnMessageMs),
+      workerContinuationMs: roundMs(workerContinuationMs),
       glRenderCpuMs: roundMs(params.glRenderCpuMs),
       attributedSyncMainThreadMs: roundMs(attributedSyncMainThreadMs),
 
@@ -801,6 +945,7 @@ export class StreamingProfiler {
       readyScanAndSortMs: roundMs(acc.readyScanAndSortMs),
       reconstructMs: roundMs(acc.reconstructMs),
       instancedBvhBuildMs: roundMs(acc.instancedBvhBuildMs),
+      instancedBvhAdoptMs: roundMs(acc.instancedBvhAdoptMs),
       staticBvhDeserializeMs: roundMs(acc.staticBvhDeserializeMs),
       sceneAttachMs: roundMs(acc.sceneAttachMs),
       commitRebuildStatsMs: roundMs(acc.commitRebuildStatsMs),
@@ -808,6 +953,14 @@ export class StreamingProfiler {
       tilesCommittedCount: acc.tilesCommittedCount,
       tilesEvictedCount: acc.tilesEvictedCount,
       tilesCancelledCount: acc.tilesCancelledCount,
+      workerBvhAdoptedCount: acc.workerBvhAdoptedCount,
+      syncBvhFallbackCount: acc.syncBvhFallbackCount,
+
+      workerDeliveriesCount,
+      workerDeliveryLatencyMaxMs: roundMs(workerDeliveryLatencyMaxMs),
+      workerBvhBuildMsTotal: roundMs(workerBvhBuildMsTotal),
+      transferableBytesTotal,
+      usedCompactTransportCount,
 
       pickingCallsCount,
       reactCommitsCount,

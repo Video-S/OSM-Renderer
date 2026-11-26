@@ -15,5 +15,6 @@ Preserved measurement artifacts and their accompanying reports. Read each report
 | [TKT-037 spatial batching feasibility](./tkt037-spatial-batching-feasibility.md) | Offline `1,024 m → 2,048 m / 4,096 m` tile consolidation & benchmark plan |
 | [TKT-038 instanced feature picking](./tkt038-instanced-feature-picking.md) | Spatially accelerated instanced picking (`InstancedSpatialIndex`) & multi-mosaic benchmark plan |
 | [TKT-039 streaming fluidity profiling](./tkt039-streaming-fluidity-profiling.md) | Camera-movement & streaming frame-time profiling instrumentation & benchmark plan |
+| [TKT-040 non-blocking tile preparation](./tkt040-non-blocking-tile-preparation.md) | Compact zero-copy worker transfer, worker-side instanced BVH & main-thread tile prep evaluation |
 
 Other benchmark datasets and raw harness code remain in the repository's top-level `benchmarks/` directory because they are used by executable tooling. The writers for the M2.1 and M2.2 reports now output to this directory.

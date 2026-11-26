@@ -184,6 +184,7 @@ export const MapScene: React.FC<MapSceneProps> = ({
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(performance.now());
   const lastFrameTimestampRef = useRef<number>(performance.now());
+  const lastPostRenderTimestampRef = useRef<number>(performance.now());
   const lastRafIntervalMsRef = useRef<number>(16.667);
   const frameIntervalsRingRef = useRef<number[]>([]);
   const lastZoomRef = useRef<number>(-1);
@@ -959,6 +960,13 @@ export const MapScene: React.FC<MapSceneProps> = ({
       disjointOccurredThisFrame: boolean
     ) => {
       const postRenderTimestampMs = performance.now();
+      const prevPostRenderTimestampMs = lastPostRenderTimestampRef.current;
+      const postRenderIntervalMs = Math.max(
+        0,
+        postRenderTimestampMs - prevPostRenderTimestampMs
+      );
+      lastPostRenderTimestampRef.current = postRenderTimestampMs;
+      lastRafIntervalMsRef.current = postRenderIntervalMs;
       lastCpuRenderTimeMsRef.current = Number(cpuElapsedMs.toFixed(3));
       lastRenderCallsRef.current = gl.info.render.calls;
       lastRenderTrianglesRef.current = gl.info.render.triangles;
@@ -991,8 +999,9 @@ export const MapScene: React.FC<MapSceneProps> = ({
       if (prof.enabled) {
         const orthoCam = cameraRef.current as THREE.OrthographicCamera | null;
         prof.finishRenderFrame({
+          intervalStartMs: prevPostRenderTimestampMs,
           frameTimestampMs: postRenderTimestampMs,
-          frameIntervalMs: lastRafIntervalMsRef.current,
+          frameIntervalMs: postRenderIntervalMs,
           glRenderCpuMs: cpuElapsedMs,
           renderCalls: lastRenderCallsRef.current,
           renderTriangles: lastRenderTrianglesRef.current,
@@ -1195,10 +1204,9 @@ export const MapScene: React.FC<MapSceneProps> = ({
     const now = performance.now();
     const frameDt = now - lastFrameTimestampRef.current;
     lastFrameTimestampRef.current = now;
-    lastRafIntervalMsRef.current = frameDt;
 
     if (profOn) {
-      prof.recordViewportFrameStart(now, frameDt);
+      prof.recordViewportFrameStart(now);
     }
 
     const isBenchmarkActive =

@@ -9,6 +9,7 @@ import {
 import {
   applyFoliageRuntimeStateToBatches,
   computeConservativeInstancedBounds,
+  CONSERVATIVE_FOLIAGE_BOUNDS_MARGIN_METERS,
   FoliagePrototypeRegistry,
   isFoliagePrototypeKind,
   normalizeFoliageOptimizationConfig,
@@ -19,6 +20,7 @@ import {
 } from '../FoliageLodSystem';
 import {
   attachInstancedSpatialIndex,
+  attachPreparedInstancedSpatialIndex,
   disposeInstancedSpatialIndex,
   type InstancedPickingAggregateStats,
 } from '../InstancedSpatialIndex';
@@ -29,6 +31,15 @@ import {
 } from '../infrastructure/railways/RailwayTopology';
 import { buildUnitSleeperBoxGeometry } from '../infrastructure/railways/RailwayGeometryBuilder';
 import {
+  isCompactDecodedTilePayload,
+  LazyTileFeatureTable,
+  materializeSleeperBoxesFromCompact,
+  type AnyDecodedTilePayload,
+  type CompactInstancedBatchRecord,
+  type CompactMeshRecord,
+  type PackedFaceRangeLookup,
+} from './CompactTileTransport';
+import {
   TILE_MESH_FLAG_CAST_SHADOW,
   TILE_MESH_FLAG_FRUSTUM_CULLED,
   TILE_MESH_FLAG_HIDDEN_UNDERGROUND,
@@ -37,9 +48,10 @@ import {
   TILE_MESH_FLAG_UNDERGROUND_GEOM,
   TILE_MESH_FLAG_UNDERGROUND_TRACE,
   TILE_MESH_FLAG_VISIBLE,
-  type DecodedTilePayload,
   type TileCoordinatePlacementMode,
+  type TileInstancedBatchRecord,
   type TileLayerKind,
+  type TileMeshRecord,
 } from './TilePackContract';
 import { ThemeMaterialRegistry } from './ThemeMaterialRegistry';
 
@@ -55,6 +67,12 @@ export interface ReconstructTileSceneOptions {
   foliageRuntimeState?: FoliageRuntimeState;
   /** Optional profiling flag to measure static MeshBVH deserialization timing (default: false). */
   collectStageTimings?: boolean;
+  /**
+   * TKT-040 Work Package D: eliminate avoidable main-thread preparation work
+   * (zero-copy `instanceMatrix` adoption, O(1) bounds from worker BVH root, lazy metadata getters).
+   * Defaults to `true` when reconstructing a compact payload, else `false` for baseline parity.
+   */
+  optimizeMainThreadPrep?: boolean;
 }
 
 export interface ReconstructedTileSceneResult {
@@ -73,21 +91,60 @@ export interface ReconstructedTileSceneResult {
   stageTimings: {
     staticBvhDeserializeMs: number;
     instancedBvhBuildMs: number;
+    instancedBvhAdoptMs: number;
+    workerBvhAdoptedCount: number;
+    syncBvhFallbackCount: number;
   };
   dispose: () => void;
 }
 
+function defineLazyProperty<T>(
+  target: Record<string, unknown>,
+  key: string,
+  compute: () => T
+): void {
+  let cached: T | undefined;
+  let initialized = false;
+  Object.defineProperty(target, key, {
+    enumerable: true,
+    configurable: true,
+    get(): T {
+      if (!initialized) {
+        cached = compute();
+        initialized = true;
+      }
+      return cached!;
+    },
+    set(value: T) {
+      cached = value;
+      initialized = true;
+    },
+  });
+}
+
 export function reconstructTileSceneFromDecoded(
-  decoded: DecodedTilePayload,
+  decoded: AnyDecodedTilePayload,
   options: ReconstructTileSceneOptions
 ): ReconstructedTileSceneResult {
+  const isCompact = isCompactDecodedTilePayload(decoded);
   const {
     materialRegistry,
     placementMode = 'tile-local',
     initialCameraZoom = materialRegistry.cameraZoom,
     collectStageTimings = false,
+    optimizeMainThreadPrep = isCompact,
   } = options;
+
   let staticBvhDeserializeMs = 0;
+  let syncInstancedBvhBuildMs = 0;
+  let instancedBvhAdoptMs = 0;
+  let workerBvhAdoptedCount = 0;
+  let syncBvhFallbackCount = 0;
+
+  const featureTable = isCompact
+    ? new LazyTileFeatureTable(decoded.featureTable)
+    : null;
+  const legacyFeatureInfos = !isCompact ? decoded.featureInfos : null;
 
   // Tile-scoped resource manager owns ONLY this tile's BufferGeometries & BVHs,
   // never shared ThemeMaterialRegistry materials.
@@ -124,8 +181,10 @@ export function reconstructTileSceneFromDecoded(
     foliage: foliageGroup,
   };
 
-  const shiftX = placementMode === 'study-world-mesh-offset' ? decoded.tileCenterX : 0;
-  const shiftZ = placementMode === 'study-world-mesh-offset' ? decoded.tileCenterZ : 0;
+  const shiftX =
+    placementMode === 'study-world-mesh-offset' ? decoded.tileCenterX : 0;
+  const shiftZ =
+    placementMode === 'study-world-mesh-offset' ? decoded.tileCenterZ : 0;
 
   let groundMesh: THREE.Mesh | null = null;
   const interactiveBuildings: THREE.Mesh[] = [];
@@ -173,7 +232,7 @@ export function reconstructTileSceneFromDecoded(
         chunkParent = new THREE.Group();
         chunkParent.name = baseName;
         chunkParent.visible = visibleFlag;
-        chunkParent.userData = { faceRanges: [] as FaceFeatureRange[] };
+        chunkParent.userData = {};
         railwayChunkGroups.set(baseName, chunkParent);
         targetLayerGroup.add(chunkParent);
         trackRailwayTarget(chunkParent, baseName);
@@ -188,17 +247,40 @@ export function reconstructTileSceneFromDecoded(
   };
 
   // Reconstruct static meshes
-  for (const m of decoded.meshes) {
+  for (let mi = 0; mi < decoded.meshes.length; mi++) {
+    const m = decoded.meshes[mi];
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
-    if (m.normals) geo.setAttribute('normal', new THREE.BufferAttribute(m.normals, 3));
+    if (m.normals)
+      geo.setAttribute('normal', new THREE.BufferAttribute(m.normals, 3));
     if (m.uvs) geo.setAttribute('uv', new THREE.BufferAttribute(m.uvs, 2));
-    if (m.switchAttrs) geo.setAttribute('aSwitchAttr', new THREE.BufferAttribute(m.switchAttrs, 2));
-    if (m.colors) geo.setAttribute('color', new THREE.BufferAttribute(m.colors, 3));
+    if (m.switchAttrs)
+      geo.setAttribute(
+        'aSwitchAttr',
+        new THREE.BufferAttribute(m.switchAttrs, 2)
+      );
+    if (m.colors)
+      geo.setAttribute('color', new THREE.BufferAttribute(m.colors, 3));
     if (m.indices) geo.setIndex(new THREE.BufferAttribute(m.indices, 1));
-    for (const g of m.groups) {
-      geo.addGroup(g.start, g.count, g.materialIndex);
+
+    if (isCompact) {
+      const cm = m as CompactMeshRecord;
+      const packedGroups = decoded.packedGroups;
+      for (let g = 0; g < cm.groupCount; g++) {
+        const base = (cm.groupOffset + g) * 3;
+        geo.addGroup(
+          packedGroups[base],
+          packedGroups[base + 1],
+          packedGroups[base + 2]
+        );
+      }
+    } else {
+      const lm = m as TileMeshRecord;
+      for (const g of lm.groups) {
+        geo.addGroup(g.start, g.count, g.materialIndex);
+      }
     }
+
     geo.boundingBox = new THREE.Box3(
       new THREE.Vector3(m.bboxMin[0], m.bboxMin[1], m.bboxMin[2]),
       new THREE.Vector3(m.bboxMax[0], m.bboxMax[1], m.bboxMax[2])
@@ -212,7 +294,9 @@ export function reconstructTileSceneFromDecoded(
         {
           version: m.bvh.version,
           roots: m.bvh.roots,
-          index: geo.index ? (geo.index.array as Uint32Array | Uint16Array) : null,
+          index: geo.index
+            ? (geo.index.array as Uint32Array | Uint16Array)
+            : null,
           indirectBuffer: m.bvh.indirectBuffer,
         } as unknown as Parameters<typeof MeshBVH.deserialize>[0],
         geo,
@@ -244,18 +328,75 @@ export function reconstructTileSceneFromDecoded(
       mesh.raycast = acceleratedRaycast;
     }
 
-    const faceRanges: FaceFeatureRange[] = m.faceRanges.map((r) => ({
-      startFace: r.startFace,
-      endFace: r.endFace,
-      info: decoded.featureInfos[r.infoIdx],
-    }));
+    const baseUserData: Record<string, unknown> = {};
+    if (isCompact) {
+      const cm = m as CompactMeshRecord;
+      if (featureTable) {
+        baseUserData.__featureTable = featureTable;
+      }
+      if (cm.singleFeatureIdx >= 0 && featureTable) {
+        if (!optimizeMainThreadPrep) {
+          const singleInfo = featureTable.getFeatureInfo(cm.singleFeatureIdx);
+          if (singleInfo) {
+            Object.assign(baseUserData, singleInfo);
+          }
+        }
+        baseUserData.__singleFeatureIdx = cm.singleFeatureIdx;
+      }
+      if (cm.faceRangeCount > 0 && featureTable) {
+        const packedLookup: PackedFaceRangeLookup = {
+          data: decoded.packedFaceRanges,
+          offset: cm.faceRangeOffset,
+          count: cm.faceRangeCount,
+          featureTable,
+        };
+        baseUserData.__packedFaceRanges = packedLookup;
+        defineLazyProperty<FaceFeatureRange[]>(baseUserData, 'faceRanges', () => {
+          const out: FaceFeatureRange[] = new Array(cm.faceRangeCount);
+          const data = decoded.packedFaceRanges;
+          for (let r = 0; r < cm.faceRangeCount; r++) {
+            const base = (cm.faceRangeOffset + r) * 3;
+            out[r] = {
+              startFace: data[base],
+              endFace: data[base + 1],
+              info: featureTable.getFeatureInfo(data[base + 2] | 0)!,
+            };
+          }
+          return out;
+        });
+      } else {
+        baseUserData.faceRanges = [];
+      }
+    } else {
+      const lm = m as TileMeshRecord;
+      if (lm.singleFeatureIdx >= 0 && legacyFeatureInfos) {
+        Object.assign(baseUserData, legacyFeatureInfos[lm.singleFeatureIdx]);
+      }
+      if (optimizeMainThreadPrep && legacyFeatureInfos) {
+        if (lm.faceRanges.length > 0) {
+          baseUserData.__rawFaceRanges = lm.faceRanges;
+          baseUserData.__featureInfosArray = legacyFeatureInfos;
+          defineLazyProperty<FaceFeatureRange[]>(baseUserData, 'faceRanges', () =>
+            lm.faceRanges.map((r) => ({
+              startFace: r.startFace,
+              endFace: r.endFace,
+              info: legacyFeatureInfos[r.infoIdx],
+            }))
+          );
+        } else {
+          baseUserData.faceRanges = [];
+        }
+      } else {
+        baseUserData.faceRanges = lm.faceRanges.map((r) => ({
+          startFace: r.startFace,
+          endFace: r.endFace,
+          info: legacyFeatureInfos![r.infoIdx],
+        }));
+      }
+    }
 
-    const baseUserData: Record<string, unknown> =
-      m.singleFeatureIdx >= 0
-        ? { ...decoded.featureInfos[m.singleFeatureIdx], faceRanges }
-        : { faceRanges };
-
-    if ((m.flags & TILE_MESH_FLAG_STRUCTURAL_3D) !== 0) baseUserData.isStructural3D = true;
+    if ((m.flags & TILE_MESH_FLAG_STRUCTURAL_3D) !== 0)
+      baseUserData.isStructural3D = true;
     if ((m.flags & TILE_MESH_FLAG_UNDERGROUND_GEOM) !== 0) {
       baseUserData.isUndergroundTunnelGeometry = true;
     }
@@ -278,29 +419,43 @@ export function reconstructTileSceneFromDecoded(
     }
   }
 
-  // Finalize chunked railway parent userData.faceRanges
+  // Finalize chunked railway parent userData.faceRanges (lazy in compact/optimized mode)
   for (const chunkParent of railwayChunkGroups.values()) {
-    const aggRanges: FaceFeatureRange[] = [];
-    let runningFace = 0;
-    for (const child of chunkParent.children) {
-      const childMesh = child as THREE.Mesh;
-      const childRanges = childMesh.userData?.faceRanges as FaceFeatureRange[] | undefined;
-      if (childRanges) {
-        for (const cr of childRanges) {
-          aggRanges.push({
-            startFace: runningFace + cr.startFace,
-            endFace: runningFace + cr.endFace,
-            info: cr.info,
-          });
+    const buildAggRanges = (): FaceFeatureRange[] => {
+      const aggRanges: FaceFeatureRange[] = [];
+      let runningFace = 0;
+      for (const child of chunkParent.children) {
+        const childMesh = child as THREE.Mesh;
+        const childRanges = childMesh.userData?.faceRanges as
+          | FaceFeatureRange[]
+          | undefined;
+        if (childRanges) {
+          for (const cr of childRanges) {
+            aggRanges.push({
+              startFace: runningFace + cr.startFace,
+              endFace: runningFace + cr.endFace,
+              info: cr.info,
+            });
+          }
         }
+        const cg = childMesh.geometry;
+        const triCount = cg.index
+          ? Math.floor(cg.index.count / 3)
+          : Math.floor((cg.attributes.position?.count ?? 0) / 3);
+        runningFace += triCount;
       }
-      const cg = childMesh.geometry;
-      const triCount = cg.index
-        ? Math.floor(cg.index.count / 3)
-        : Math.floor((cg.attributes.position?.count ?? 0) / 3);
-      runningFace += triCount;
+      return aggRanges;
+    };
+
+    if (isCompact || optimizeMainThreadPrep) {
+      defineLazyProperty<FaceFeatureRange[]>(
+        chunkParent.userData,
+        'faceRanges',
+        buildAggRanges
+      );
+    } else {
+      chunkParent.userData.faceRanges = buildAggRanges();
     }
-    chunkParent.userData.faceRanges = aggRanges;
   }
 
   // Reconstruct InstancedMesh batches
@@ -332,10 +487,16 @@ export function reconstructTileSceneFromDecoded(
     totalIndexNodes: 0,
     totalIndexMemoryBytes: 0,
     totalBuildTimeMs: 0,
+    workerBuiltBatchCount: 0,
+    syncFallbackBatchCount: 0,
+    totalAdoptTimeMs: 0,
   };
 
-  for (const b of decoded.instancedBatches) {
-    const foliageKind = isFoliagePrototypeKind(b.prototypeKind) ? b.prototypeKind : null;
+  for (let bi = 0; bi < decoded.instancedBatches.length; bi++) {
+    const b = decoded.instancedBatches[bi];
+    const foliageKind = isFoliagePrototypeKind(b.prototypeKind)
+      ? b.prototypeKind
+      : null;
     let protoGeo: THREE.BufferGeometry;
     if (foliageKind) {
       const foliageRegistry = getFoliageRegistry();
@@ -353,7 +514,21 @@ export function reconstructTileSceneFromDecoded(
     }
 
     const mat = materialRegistry.getMaterial(b.materialSlotKey);
-    const inst = new THREE.InstancedMesh(protoGeo, mat, b.instanceCount);
+    let inst: THREE.InstancedMesh;
+    if (optimizeMainThreadPrep) {
+      // TKT-040 Work Package D: adopt the transferred Float32Array directly without
+      // allocating and copying a second 16 * N Float32Array on the main thread.
+      inst = new THREE.InstancedMesh(protoGeo, mat, 0);
+      inst.instanceMatrix = new THREE.InstancedBufferAttribute(b.matrices, 16);
+      inst.instanceMatrix.needsUpdate = true;
+      inst.count = b.instanceCount;
+    } else {
+      inst = new THREE.InstancedMesh(protoGeo, mat, b.instanceCount);
+      const instMatrixArr = inst.instanceMatrix.array as Float32Array;
+      instMatrixArr.set(b.matrices);
+      inst.instanceMatrix.needsUpdate = true;
+    }
+
     tileInstancedMeshes.push(inst);
     inst.name = b.name;
     inst.renderOrder = b.renderOrder;
@@ -364,46 +539,146 @@ export function reconstructTileSceneFromDecoded(
     inst.frustumCulled = (b.flags & TILE_MESH_FLAG_FRUSTUM_CULLED) !== 0;
     inst.position.set(shiftX, 0, shiftZ);
 
-    const instMatrixArr = inst.instanceMatrix.array as Float32Array;
-    instMatrixArr.set(b.matrices);
-    inst.instanceMatrix.needsUpdate = true;
-
     if (b.instanceColors) {
       const colorAttr = new THREE.InstancedBufferAttribute(b.instanceColors, 3);
       inst.instanceColor = colorAttr;
       inst.instanceColor.needsUpdate = true;
     }
 
+    const preparedSpatialIndex =
+      b.preparedSpatialIndex &&
+      b.preparedSpatialIndex.instanceCount === b.instanceCount
+        ? b.preparedSpatialIndex
+        : null;
+
     if (foliageKind) {
-      // Compute exact conservative mesh-local bounds across all instance matrices and
-      // union prototype extents across LOD0..LOD2 (+0.25m margin) so frustum culling
-      // works accurately across rotations, scales, canopy overhang, LOD swaps, and tile offsets.
-      const foliageRegistry = getFoliageRegistry();
-      const bounds = computeConservativeInstancedBounds(
-        b.matrices,
-        b.instanceCount,
-        foliageRegistry.getUnionLocalBounds(foliageKind)
-      );
-      inst.boundingBox = bounds.boundingBox;
-      inst.boundingSphere = bounds.boundingSphere;
+      if (optimizeMainThreadPrep && preparedSpatialIndex && b.instanceCount > 0) {
+        // O(1) conservative bounds directly from worker-computed exact Arvo root bounds
+        // (+0.25 m margin), matching computeConservativeInstancedBounds bit-for-bit.
+        const mrg = CONSERVATIVE_FOLIAGE_BOUNDS_MARGIN_METERS;
+        const rMin = preparedSpatialIndex.rootBoundsMin;
+        const rMax = preparedSpatialIndex.rootBoundsMax;
+        inst.boundingBox = new THREE.Box3(
+          new THREE.Vector3(rMin[0] - mrg, rMin[1] - mrg, rMin[2] - mrg),
+          new THREE.Vector3(rMax[0] + mrg, rMax[1] + mrg, rMax[2] + mrg)
+        );
+        inst.boundingSphere = inst.boundingBox.getBoundingSphere(
+          new THREE.Sphere()
+        );
+      } else {
+        const foliageRegistry = getFoliageRegistry();
+        const bounds = computeConservativeInstancedBounds(
+          b.matrices,
+          b.instanceCount,
+          foliageRegistry.getUnionLocalBounds(foliageKind)
+        );
+        inst.boundingBox = bounds.boundingBox;
+        inst.boundingSphere = bounds.boundingSphere;
+      }
     } else {
       inst.boundingBox = new THREE.Box3(
         new THREE.Vector3(b.bboxMin[0], b.bboxMin[1], b.bboxMin[2]),
         new THREE.Vector3(b.bboxMax[0], b.bboxMax[1], b.bboxMax[2])
       );
-      inst.boundingSphere = inst.boundingBox.getBoundingSphere(new THREE.Sphere());
-    }
-
-    const instanceInfos: InspectableFeatureInfo[] = new Array(b.instanceCount);
-    for (let i = 0; i < b.instanceCount; i++) {
-      const idx = b.instanceFeatureIdxs[i];
-      instanceInfos[i] = idx >= 0 ? decoded.featureInfos[idx] : ({} as InspectableFeatureInfo);
+      inst.boundingSphere = inst.boundingBox.getBoundingSphere(
+        new THREE.Sphere()
+      );
     }
 
     const userData: Record<string, unknown> = {
       isInstanced: true,
-      instanceInfos,
     };
+
+    let eagerInstanceInfos: InspectableFeatureInfo[] | null = null;
+    if (isCompact && featureTable) {
+      const cb = b as CompactInstancedBatchRecord;
+      userData.__instanceFeatureIdxs = cb.instanceFeatureIdxs;
+      userData.__featureTable = featureTable;
+      defineLazyProperty<InspectableFeatureInfo[]>(
+        userData,
+        'instanceInfos',
+        () => {
+          const arr: InspectableFeatureInfo[] = new Array(cb.instanceCount);
+          for (let i = 0; i < cb.instanceCount; i++) {
+            const idx = cb.instanceFeatureIdxs[i];
+            arr[i] =
+              idx >= 0
+                ? (featureTable.getFeatureInfo(idx) ??
+                  ({} as InspectableFeatureInfo))
+                : ({} as InspectableFeatureInfo);
+          }
+          return arr;
+        }
+      );
+      if (cb.sleeperBoxFloats && cb.sleeperBoxTrackStrIdxs) {
+        const boxFloats = cb.sleeperBoxFloats;
+        const boxTracks = cb.sleeperBoxTrackStrIdxs;
+        defineLazyProperty<SleeperBearerBox3D[]>(
+          userData,
+          'instanceBoxes',
+          () =>
+            materializeSleeperBoxesFromCompact(
+              boxFloats,
+              boxTracks,
+              featureTable,
+              shiftX,
+              shiftZ
+            )
+        );
+      }
+    } else {
+      const lb = b as TileInstancedBatchRecord;
+      if (optimizeMainThreadPrep && legacyFeatureInfos) {
+        userData.__instanceFeatureIdxs = lb.instanceFeatureIdxs;
+        userData.__featureInfosArray = legacyFeatureInfos;
+        defineLazyProperty<InspectableFeatureInfo[]>(
+          userData,
+          'instanceInfos',
+          () => {
+            const arr: InspectableFeatureInfo[] = new Array(lb.instanceCount);
+            for (let i = 0; i < lb.instanceCount; i++) {
+              const idx = lb.instanceFeatureIdxs[i];
+              arr[i] =
+                idx >= 0
+                  ? legacyFeatureInfos[idx]
+                  : ({} as InspectableFeatureInfo);
+            }
+            return arr;
+          }
+        );
+        if (lb.sleeperBoxes) {
+          const rawBoxes = lb.sleeperBoxes;
+          defineLazyProperty<SleeperBearerBox3D[]>(
+            userData,
+            'instanceBoxes',
+            () =>
+              rawBoxes.map((sb) => ({
+                ...sb,
+                cx: sb.cx + shiftX,
+                cz: sb.cz + shiftZ,
+              }))
+          );
+        }
+      } else {
+        eagerInstanceInfos = new Array(lb.instanceCount);
+        for (let i = 0; i < lb.instanceCount; i++) {
+          const idx = lb.instanceFeatureIdxs[i];
+          eagerInstanceInfos[i] =
+            idx >= 0
+              ? legacyFeatureInfos![idx]
+              : ({} as InspectableFeatureInfo);
+        }
+        userData.instanceInfos = eagerInstanceInfos;
+        if (lb.sleeperBoxes) {
+          userData.instanceBoxes = lb.sleeperBoxes.map((sb) => ({
+            ...sb,
+            cx: sb.cx + shiftX,
+            cz: sb.cz + shiftZ,
+          }));
+        }
+      }
+    }
+
     if (foliageKind) {
       userData.foliagePrototypeKind = foliageKind;
       foliageTargets.push({
@@ -418,29 +693,31 @@ export function reconstructTileSceneFromDecoded(
     if (b.chunkKey !== undefined) {
       userData.chunkKey = b.chunkKey;
     }
-    if (b.sleeperBoxes) {
-      const restoredBoxes: SleeperBearerBox3D[] = b.sleeperBoxes.map((sb) => ({
-        ...sb,
-        cx: sb.cx + shiftX,
-        cz: sb.cz + shiftZ,
-      }));
-      userData.instanceBoxes = restoredBoxes;
-    }
     inst.userData = userData;
 
-    // Attach mesh-local instance AABB BVH using conservative union prototype bounds
-    // so picking cost scales O(log N) independent of rendering batch size and stays
-    // valid across all zoom-driven foliage LOD geometry swaps without rebuilding.
-    const indexLocalBox = foliageKind
-      ? getFoliageRegistry().getUnionLocalBounds(foliageKind)
-      : (() => {
-          if (!protoGeo.boundingBox) protoGeo.computeBoundingBox();
-          return protoGeo.boundingBox!;
-        })();
-    const spatialIdx = attachInstancedSpatialIndex(inst, indexLocalBox, {
-      matrices: b.matrices,
-      instanceCount: b.instanceCount,
-    });
+    // Adopt worker-prepared BVH in O(1) when available, else fall back to synchronous build.
+    let spatialIdx;
+    if (preparedSpatialIndex) {
+      const tAdopt0 = performance.now();
+      spatialIdx = attachPreparedInstancedSpatialIndex(inst, preparedSpatialIndex);
+      instancedBvhAdoptMs += performance.now() - tAdopt0;
+      workerBvhAdoptedCount += 1;
+    } else {
+      const indexLocalBox = foliageKind
+        ? getFoliageRegistry().getUnionLocalBounds(foliageKind)
+        : (() => {
+            if (!protoGeo.boundingBox) protoGeo.computeBoundingBox();
+            return protoGeo.boundingBox!;
+          })();
+      const tBuild0 = performance.now();
+      spatialIdx = attachInstancedSpatialIndex(inst, indexLocalBox, {
+        matrices: b.matrices,
+        instanceCount: b.instanceCount,
+      });
+      syncInstancedBvhBuildMs += performance.now() - tBuild0;
+      syncBvhFallbackCount += 1;
+    }
+
     const idxStats = spatialIdx.getStats();
     instancedPickingStats.indexedBatchCount += 1;
     instancedPickingStats.totalIndexedInstances += idxStats.instanceCount;
@@ -449,6 +726,19 @@ export function reconstructTileSceneFromDecoded(
     instancedPickingStats.totalBuildTimeMs = Number(
       (instancedPickingStats.totalBuildTimeMs + idxStats.buildTimeMs).toFixed(3)
     );
+    if (preparedSpatialIndex) {
+      instancedPickingStats.workerBuiltBatchCount =
+        (instancedPickingStats.workerBuiltBatchCount ?? 0) + 1;
+      instancedPickingStats.totalAdoptTimeMs = Number(
+        (
+          (instancedPickingStats.totalAdoptTimeMs ?? 0) +
+          (idxStats.adoptTimeMs ?? 0)
+        ).toFixed(4)
+      );
+    } else {
+      instancedPickingStats.syncFallbackBatchCount =
+        (instancedPickingStats.syncFallbackBatchCount ?? 0) + 1;
+    }
 
     if (b.layer === 'railways' && b.name.includes('_chunk_')) {
       const baseName = b.name.split('_chunk_')[0];
@@ -460,13 +750,35 @@ export function reconstructTileSceneFromDecoded(
         parentGroup.userData = {
           isInstanced: true,
           isStructural3D: true,
-          instanceInfos: [] as InspectableFeatureInfo[],
         };
+        if (isCompact || optimizeMainThreadPrep) {
+          const capturedParent = parentGroup;
+          defineLazyProperty<InspectableFeatureInfo[]>(
+            parentGroup.userData,
+            'instanceInfos',
+            () => {
+              const merged: InspectableFeatureInfo[] = [];
+              for (const child of capturedParent.children) {
+                const infos = child.userData?.instanceInfos as
+                  | InspectableFeatureInfo[]
+                  | undefined;
+                if (infos) merged.push(...infos);
+              }
+              return merged;
+            }
+          );
+        } else {
+          parentGroup.userData.instanceInfos = [] as InspectableFeatureInfo[];
+        }
         sleeperChunkParents.set(baseName, parentGroup);
         railwaysGroup.add(parentGroup);
         trackRailwayTarget(parentGroup, baseName);
       }
-      (parentGroup.userData.instanceInfos as InspectableFeatureInfo[]).push(...instanceInfos);
+      if (!isCompact && !optimizeMainThreadPrep && eagerInstanceInfos) {
+        (parentGroup.userData.instanceInfos as InspectableFeatureInfo[]).push(
+          ...eagerInstanceInfos
+        );
+      }
       parentGroup.add(inst);
     } else {
       groupByLayer[b.layer].add(inst);
@@ -491,10 +803,18 @@ export function reconstructTileSceneFromDecoded(
   // Fallback GroundPlane if decoded tile had none
   if (!groundMesh) {
     const fallbackGeo = resourceManager.registerGeometry(
-      new THREE.PlaneGeometry(decoded.tileSizeMeters, decoded.tileSizeMeters, 1, 1)
+      new THREE.PlaneGeometry(
+        decoded.tileSizeMeters,
+        decoded.tileSizeMeters,
+        1,
+        1
+      )
     );
     fallbackGeo.rotateX(-Math.PI / 2);
-    groundMesh = new THREE.Mesh(fallbackGeo, materialRegistry.getMaterial('ground'));
+    groundMesh = new THREE.Mesh(
+      fallbackGeo,
+      materialRegistry.getMaterial('ground')
+    );
     groundMesh.name = 'GroundPlane';
     groundMesh.position.set(shiftX, -0.015, shiftZ);
     groundMesh.receiveShadow = true;
@@ -608,7 +928,10 @@ export function reconstructTileSceneFromDecoded(
     instancedPickingStats,
     stageTimings: {
       staticBvhDeserializeMs: Number(staticBvhDeserializeMs.toFixed(3)),
-      instancedBvhBuildMs: instancedPickingStats.totalBuildTimeMs,
+      instancedBvhBuildMs: Number(syncInstancedBvhBuildMs.toFixed(3)),
+      instancedBvhAdoptMs: Number(instancedBvhAdoptMs.toFixed(4)),
+      workerBvhAdoptedCount,
+      syncBvhFallbackCount,
     },
     dispose,
   };

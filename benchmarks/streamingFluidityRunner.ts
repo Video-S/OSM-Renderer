@@ -32,15 +32,23 @@ import {
   attributeWorstFrames,
   computeStreamingFrameDistribution,
   classifyScenarioCacheBehavior,
+  summarizeEventConditionedFrames,
   summarizeStageTimings,
+  summarizeWorkerDeliveryMetrics,
   utmToLocalTarget,
+  type EventConditionedFrameSummary,
   type FrameSpikeAttributionRecord,
   type ObservedCadenceAssessment,
   type ScenarioCacheClassificationResult,
   type StageTimingSummaryEntry,
   type StreamingFluidityScenarioId,
   type StreamingFrameDistribution,
+  type WorkerDeliverySummary,
 } from '../src/world/tiling/StreamingFluidityStats';
+import {
+  TILE_PREPARATION_VARIANT_PRESETS,
+  type TilePreparationVariantId,
+} from '../src/world/tiling/TilePreparationConfig';
 
 export type StreamingFoliageFilter = 'both' | 'on' | 'off';
 export type StreamingPickingFilter = 'accelerated' | 'unaccelerated' | 'both';
@@ -57,6 +65,7 @@ export interface StreamingMosaicInput {
 
 export interface StreamingFluidityCli {
   mosaics: StreamingMosaicInput[];
+  variants: TilePreparationVariantId[];
   foliage: StreamingFoliageFilter;
   picking: StreamingPickingFilter;
   scenarios: StreamingScenarioSelector[];
@@ -78,6 +87,14 @@ export interface StreamingFluidityCli {
   markdownPath: string;
   quick: boolean;
 }
+
+const ALL_VARIANTS: readonly TilePreparationVariantId[] = [
+  'baseline',
+  'transfer_only',
+  'compact_transport',
+  'worker_bvh',
+  'combined',
+];
 
 const ALL_SCENARIOS: readonly StreamingScenarioSelector[] = [
   'A_stationary_baseline',
@@ -133,6 +150,7 @@ export function parseStreamingFluidityCli(
 
   const opts: StreamingFluidityCli = {
     mosaics: [],
+    variants: ['combined'],
     foliage: 'both',
     picking: 'accelerated',
     scenarios: [...ALL_SCENARIOS],
@@ -150,8 +168,8 @@ export function parseStreamingFluidityCli(
     requireHardware: true,
     gpuBackend: 'auto',
     traceOutPath: null,
-    outputPath: path.resolve('benchmarks/results/tkt039-streaming-fluidity.json'),
-    markdownPath: path.resolve('benchmarks/results/tkt039-streaming-fluidity.md'),
+    outputPath: path.resolve('benchmarks/results/tkt040-streaming-fluidity.json'),
+    markdownPath: path.resolve('benchmarks/results/tkt040-streaming-fluidity.md'),
     quick: false,
   };
 
@@ -178,7 +196,33 @@ export function parseStreamingFluidityCli(
     if (key === 'index-1024') index1024 = path.resolve(val);
     else if (key === 'index-2048') index2048 = path.resolve(val);
     else if (key === 'index-4096') index4096 = path.resolve(val);
-    else if (key === 'foliage') {
+    else if (key === 'variant') {
+      const norm = val.trim().toLowerCase();
+      if (norm === 'all') {
+        opts.variants = [...ALL_VARIANTS];
+      } else {
+        const parsed = norm
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const list: TilePreparationVariantId[] = [];
+        for (const token of parsed) {
+          if (
+            token in TILE_PREPARATION_VARIANT_PRESETS
+          ) {
+            list.push(token as TilePreparationVariantId);
+          } else {
+            throw new Error(
+              `Invalid --variant token "${token}" (expected baseline|transfer_only|compact_transport|worker_bvh|combined|all)`
+            );
+          }
+        }
+        if (list.length === 0) {
+          throw new Error('Empty --variant list');
+        }
+        opts.variants = Array.from(new Set(list));
+      }
+    } else if (key === 'foliage') {
       if (val !== 'both' && val !== 'on' && val !== 'off') {
         throw new Error(`Invalid --foliage value "${val}" (expected both|on|off)`);
       }
@@ -382,6 +426,7 @@ export interface StreamingMosaicSummary {
 export interface StreamingScenarioResult {
   mosaicLabel: string;
   tileSizeMeters: number;
+  variant: TilePreparationVariantId;
   foliageEnabled: boolean;
   pickingMode: 'accelerated' | 'unaccelerated';
   scenarioId: StreamingFluidityScenarioId;
@@ -392,6 +437,8 @@ export interface StreamingScenarioResult {
   droppedFramesCount: number;
   droppedEventsCount: number;
   frameDistribution: StreamingFrameDistribution;
+  eventConditionedFrames: EventConditionedFrameSummary;
+  workerDeliverySummary: WorkerDeliverySummary;
   cadenceAssessment: ObservedCadenceAssessment;
   cacheClassification: ScenarioCacheClassificationResult;
   stageSummary: StageTimingSummaryEntry[];
@@ -410,6 +457,7 @@ export interface StreamingScenarioResult {
 export interface TeleportationScenarioResult {
   mosaicLabel: string;
   tileSizeMeters: number;
+  variant: TilePreparationVariantId;
   foliageEnabled: boolean;
   pickingMode: 'accelerated' | 'unaccelerated';
   fromTarget: [number, number, number];
@@ -419,6 +467,8 @@ export interface TeleportationScenarioResult {
   timeToAllVisibleAttachedMs: number | null;
   timeToIdleMs: number;
   frameDistribution: StreamingFrameDistribution;
+  eventConditionedFrames: EventConditionedFrameSummary;
+  workerDeliverySummary: WorkerDeliverySummary;
   cacheClassification: ScenarioCacheClassificationResult;
   stageSummary: StageTimingSummaryEntry[];
   worstFrames: FrameSpikeAttributionRecord[];
@@ -427,6 +477,7 @@ export interface TeleportationScenarioResult {
 export interface ProfilingOverheadCheckResult {
   mosaicLabel: string;
   tileSizeMeters: number;
+  variant: TilePreparationVariantId;
   foliageEnabled: boolean;
   pickingMode: 'accelerated' | 'unaccelerated';
   disabledSampleCount: number;
@@ -446,6 +497,7 @@ export interface StreamingFluidityBenchmarkReport {
   generatedAtIso: string;
   viewport: { width: number; height: number; deviceScaleFactor: number };
   themeId: string;
+  variants: TilePreparationVariantId[];
   targetUtm: { easting: number; northing: number };
   preloadMarginTiles: number;
   retainMarginTiles: number;
@@ -572,6 +624,7 @@ async function startMultiMosaicServer(
 function summarizeScenarioSnapshot(params: {
   mosaicLabel: string;
   tileSizeMeters: number;
+  variant: TilePreparationVariantId;
   foliageEnabled: boolean;
   pickingMode: 'accelerated' | 'unaccelerated';
   scenarioId: StreamingFluidityScenarioId;
@@ -589,6 +642,11 @@ function summarizeScenarioSnapshot(params: {
   const frames = params.snapshot.frames;
   const intervals = frames.map((f) => f.frameIntervalMs);
   const frameDistribution = computeStreamingFrameDistribution(intervals);
+  const eventConditionedFrames = summarizeEventConditionedFrames(frames);
+  const workerDeliverySummary = summarizeWorkerDeliveryMetrics(
+    params.snapshot.events,
+    frames
+  );
   const cadenceAssessment = assessObservedRefreshCadence({
     frameIntervalsMs: intervals,
     cpuRenderMs: frames.map((f) => f.glRenderCpuMs),
@@ -624,6 +682,7 @@ function summarizeScenarioSnapshot(params: {
   return {
     mosaicLabel: params.mosaicLabel,
     tileSizeMeters: params.tileSizeMeters,
+    variant: params.variant,
     foliageEnabled: params.foliageEnabled,
     pickingMode: params.pickingMode,
     scenarioId: params.scenarioId,
@@ -634,6 +693,8 @@ function summarizeScenarioSnapshot(params: {
     droppedFramesCount: params.snapshot.droppedFramesCount,
     droppedEventsCount: params.snapshot.droppedEventsCount,
     frameDistribution,
+    eventConditionedFrames,
+    workerDeliverySummary,
     cadenceAssessment,
     cacheClassification,
     stageSummary,
@@ -657,10 +718,11 @@ export function formatStreamingFluidityMarkdown(
   report: StreamingFluidityBenchmarkReport
 ): string {
   const lines: string[] = [
-    '# TKT-039 Camera Movement & Streaming Frame-Time Profiling Report',
+    '# TKT-040 Non-blocking Tile Preparation & Streaming Frame-Time Report',
     '',
     `- **Generated:** ${report.generatedAtIso}`,
     `- **Viewport:** ${report.viewport.width} × ${report.viewport.height} @ DPR ${report.viewport.deviceScaleFactor} | **Theme:** \`${report.themeId}\``,
+    `- **Tile Preparation Variants:** ${report.variants.map((v) => `\`${v}\``).join(', ')}`,
     `- **Shared Physical UTM Reference:** E ${report.targetUtm.easting.toFixed(1)} m, N ${report.targetUtm.northing.toFixed(1)} m`,
     `- **Streaming Policy:** \`preloadMarginTiles=${report.preloadMarginTiles}\`, \`retainMarginTiles=${report.retainMarginTiles}\`, \`panSpeed=${report.panSpeedMps} m/s\`, \`warmPan=${report.warmPanDistanceMeters} m\``,
     `- **WebGL Renderer:** \`${report.gpuRenderer}\` (${report.gpuVendor})`,
@@ -689,16 +751,41 @@ export function formatStreamingFluidityMarkdown(
   }
   lines.push('');
 
+  if (report.variants.length > 1 && report.interactiveResults.length > 0) {
+    lines.push(
+      '## Variant Comparison Summary (TKT-040 A/B Evaluation)',
+      '',
+      '| Mosaic | Foliage | Scenario | Variant | med / p95 / p99 / p99.9 / max (ms) | >6.94ms (144Hz) | >16.67ms | OnMsg Max (ms) | Recon Max (ms) | InstBVH Build / Adopt Max (ms) | Worker BVH Adopt / Fallback | Delivery-Frame p95 / max (ms) | Recon-Frame p95 / max (ms) | Throughput (tiles/s) |',
+      '|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|'
+    );
+    for (const r of report.interactiveResults) {
+      const d = r.frameDistribution;
+      const ex6 = d.thresholdExceedances[0];
+      const ex16 = d.thresholdExceedances[2];
+      const byId = new Map(r.stageSummary.map((s) => [s.stageKey, s]));
+      const onMsgMax = byId.get('workerOnMessageMs')?.stats.max ?? 0;
+      const reconMax = byId.get('reconstructMs')?.stats.max ?? 0;
+      const bvhBuildMax = byId.get('instancedBvhBuildMs')?.stats.max ?? 0;
+      const bvhAdoptMax = byId.get('instancedBvhAdoptMs')?.stats.max ?? 0;
+      const wd = r.workerDeliverySummary;
+      const ec = r.eventConditionedFrames;
+      lines.push(
+        `| ${r.mosaicLabel} | ${r.foliageEnabled ? 'ON' : 'OFF'} | \`${r.scenarioId}\` | \`${r.variant}\` | ${d.median.toFixed(2)} / ${d.p95.toFixed(2)} / ${d.p99.toFixed(2)} / ${d.p999.toFixed(2)} / ${d.max.toFixed(2)} | ${ex6?.count ?? 0} (${(ex6?.pct ?? 0).toFixed(1)}%) | ${ex16?.count ?? 0} | ${onMsgMax.toFixed(2)} | ${reconMax.toFixed(2)} | ${bvhBuildMax.toFixed(2)} / ${bvhAdoptMax.toFixed(2)} | ${wd.workerBvhAdoptedTotal} / ${wd.syncBvhFallbackTotal} | ${ec.workerDeliveryFrames.p95.toFixed(2)} / ${ec.workerDeliveryFrames.max.toFixed(2)} | ${ec.tileCommitFrames.p95.toFixed(2)} / ${ec.tileCommitFrames.max.toFixed(2)} | ${wd.tilesPerSecond.toFixed(2)} |`
+      );
+    }
+    lines.push('');
+  }
+
   if (report.overheadChecks.length > 0) {
     lines.push(
       '## Profiling Overhead Check (`profiler=false` vs. `profiler=true`)',
       '',
-      '| Mosaic | Foliage | Picking | Disabled Samples | Enabled Samples | Disabled med / p95 (ms) | Enabled med / p95 (ms) | Interval Median Δ | CPU Render med (Off → On) |',
-      '|---|---|---|---|---:|---:|---:|---:|---:|'
+      '| Mosaic | Variant | Foliage | Picking | Disabled Samples | Enabled Samples | Disabled med / p95 (ms) | Enabled med / p95 (ms) | Interval Median Δ | CPU Render med (Off → On) |',
+      '|---|---|---|---|---:|---:|---:|---:|---:|---:|'
     );
     for (const ov of report.overheadChecks) {
       lines.push(
-        `| ${ov.mosaicLabel} | ${ov.foliageEnabled ? 'ON' : 'OFF'} | ${ov.pickingMode} | ${ov.disabledSampleCount} | ${ov.enabledSampleCount} | ${ov.disabledIntervalMedianMs.toFixed(2)} / ${ov.disabledIntervalP95Ms.toFixed(2)} | ${ov.enabledIntervalMedianMs.toFixed(2)} / ${ov.enabledIntervalP95Ms.toFixed(2)} | ${ov.intervalMedianDeltaMs >= 0 ? '+' : ''}${ov.intervalMedianDeltaMs.toFixed(2)} ms | ${ov.disabledCpuRenderMedianMs.toFixed(2)} → ${ov.enabledCpuRenderMedianMs.toFixed(2)} ms (${ov.cpuRenderDeltaMs >= 0 ? '+' : ''}${ov.cpuRenderDeltaMs.toFixed(2)} ms) |`
+        `| ${ov.mosaicLabel} | \`${ov.variant}\` | ${ov.foliageEnabled ? 'ON' : 'OFF'} | ${ov.pickingMode} | ${ov.disabledSampleCount} | ${ov.enabledSampleCount} | ${ov.disabledIntervalMedianMs.toFixed(2)} / ${ov.disabledIntervalP95Ms.toFixed(2)} | ${ov.enabledIntervalMedianMs.toFixed(2)} / ${ov.enabledIntervalP95Ms.toFixed(2)} | ${ov.intervalMedianDeltaMs >= 0 ? '+' : ''}${ov.intervalMedianDeltaMs.toFixed(2)} ms | ${ov.disabledCpuRenderMedianMs.toFixed(2)} → ${ov.enabledCpuRenderMedianMs.toFixed(2)} ms (${ov.cpuRenderDeltaMs >= 0 ? '+' : ''}${ov.cpuRenderDeltaMs.toFixed(2)} ms) |`
       );
     }
     lines.push('');
@@ -708,8 +795,8 @@ export function formatStreamingFluidityMarkdown(
     lines.push(
       '## Interactive Camera & Streaming Scenarios (Scenarios A–E & G; Teleportation Isolated Below)',
       '',
-      '| Mosaic | Foliage | Picking | Scenario | Input Path | N | med / p95 / p99 / p99.9 / max (ms) | >6.94ms (144Hz) | >16.67ms (60Hz) | >33.33ms / >50ms | Max Streak (>16.67ms) | Cadence Class | Cache Verification (Fetch/Recon/Attach/Evict) |',
-      '|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|'
+      '| Mosaic | Variant | Foliage | Picking | Scenario | Input Path | N | med / p95 / p99 / p99.9 / max (ms) | >6.94ms (144Hz) | >16.67ms (60Hz) | >33.33ms / >50ms | Max Streak (>16.67ms) | Cadence Class | Cache Verification (Fetch/Recon/Attach/Evict) |',
+      '|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|'
     );
     for (const r of report.interactiveResults) {
       const d = r.frameDistribution;
@@ -719,7 +806,7 @@ export function formatStreamingFluidityMarkdown(
       const ex50 = d.thresholdExceedances[4];
       const ev = r.cacheClassification.eventCounts;
       lines.push(
-        `| ${r.mosaicLabel} | ${r.foliageEnabled ? 'ON' : 'OFF'} | ${r.pickingMode} | \`${r.scenarioId}\` | \`${r.inputPath}\` | ${d.sampleCount} | ${d.median.toFixed(2)} / ${d.p95.toFixed(2)} / ${d.p99.toFixed(2)} / ${d.p999.toFixed(2)} / ${d.max.toFixed(2)} | ${ex6?.count ?? 0} (${(ex6?.pct ?? 0).toFixed(1)}%) | ${ex16?.count ?? 0} (${(ex16?.pct ?? 0).toFixed(1)}%) | ${ex33?.count ?? 0} / ${ex50?.count ?? 0} | ${ex16?.maxConsecutiveFrames ?? 0} | \`${r.cadenceAssessment.classification}\` | \`${r.cacheClassification.classification}\` (${ev.fetchStart}/${ev.reconstructComplete}/${ev.attach}/${ev.evict}) |`
+        `| ${r.mosaicLabel} | \`${r.variant}\` | ${r.foliageEnabled ? 'ON' : 'OFF'} | ${r.pickingMode} | \`${r.scenarioId}\` | \`${r.inputPath}\` | ${d.sampleCount} | ${d.median.toFixed(2)} / ${d.p95.toFixed(2)} / ${d.p99.toFixed(2)} / ${d.p999.toFixed(2)} / ${d.max.toFixed(2)} | ${ex6?.count ?? 0} (${(ex6?.pct ?? 0).toFixed(1)}%) | ${ex16?.count ?? 0} (${(ex16?.pct ?? 0).toFixed(1)}%) | ${ex33?.count ?? 0} / ${ex50?.count ?? 0} | ${ex16?.maxConsecutiveFrames ?? 0} | \`${r.cadenceAssessment.classification}\` | \`${r.cacheClassification.classification}\` (${ev.fetchStart}/${ev.reconstructComplete}/${ev.attach}/${ev.evict}) |`
       );
     }
     lines.push('');
@@ -734,13 +821,17 @@ export function formatStreamingFluidityMarkdown(
       r.scenarioId === 'B_warm_cache_pan'
   );
   if (focusScenarios.length > 0) {
-    lines.push('## Stage Breakdown & Worst-Frame Spike Attribution (Focus Scenarios)', '');
+    lines.push('## Stage Breakdown, Worker Delivery & Worst-Frame Attribution (Focus Scenarios)', '');
     for (const r of focusScenarios) {
+      const wd = r.workerDeliverySummary;
+      const ec = r.eventConditionedFrames;
       lines.push(
-        `### ${r.mosaicLabel} | Foliage ${r.foliageEnabled ? 'ON' : 'OFF'} | ${r.pickingMode} | \`${r.scenarioId}\``,
+        `### ${r.mosaicLabel} | \`${r.variant}\` | Foliage ${r.foliageEnabled ? 'ON' : 'OFF'} | ${r.pickingMode} | \`${r.scenarioId}\``,
         '',
         `- **Cadence Note:** ${r.cadenceAssessment.explanation}`,
-        `- **Cache / Streaming Verification:** ${r.cacheClassification.reason}`
+        `- **Cache / Streaming Verification:** ${r.cacheClassification.reason}`,
+        `- **Worker Delivery & Prep:** deliveries=${wd.deliveryCount}, compact=${wd.usedCompactTransportCount}, transferred=${(wd.transferableBytesTotal / (1024 * 1024)).toFixed(2)} MB (mean ${wd.transferableBufferCountMean} buffers/tile), workerDecode med/max=${wd.workerInflateAndDecodeMs.median.toFixed(2)}/${wd.workerInflateAndDecodeMs.max.toFixed(2)} ms, workerBVH med/max=${wd.workerBvhBuildMs.median.toFixed(2)}/${wd.workerBvhBuildMs.max.toFixed(2)} ms, deliveryLatency med/max=${wd.messageDeliveryLatencyMs.median.toFixed(2)}/${wd.messageDeliveryLatencyMs.max.toFixed(2)} ms, mainOnMsg med/max=${wd.mainOnMessageHandlerMs.median.toFixed(2)}/${wd.mainOnMessageHandlerMs.max.toFixed(2)} ms, workerBVH adopted=${wd.workerBvhAdoptedTotal}, syncFallback=${wd.syncBvhFallbackTotal}, readiness med=${wd.tileReadinessLatencyMs.median.toFixed(1)} ms, throughput=${wd.tilesPerSecond.toFixed(2)} tiles/s`,
+        `- **Event-Conditioned Frames (med / p95 / max ms):** quiet(n=${ec.quietFrames.sampleCount})=${ec.quietFrames.median.toFixed(2)}/${ec.quietFrames.p95.toFixed(2)}/${ec.quietFrames.max.toFixed(2)}, delivery(n=${ec.workerDeliveryFrames.sampleCount})=${ec.workerDeliveryFrames.median.toFixed(2)}/${ec.workerDeliveryFrames.p95.toFixed(2)}/${ec.workerDeliveryFrames.max.toFixed(2)}, commit(n=${ec.tileCommitFrames.sampleCount})=${ec.tileCommitFrames.median.toFixed(2)}/${ec.tileCommitFrames.p95.toFixed(2)}/${ec.tileCommitFrames.max.toFixed(2)}, activeStreaming(n=${ec.activeStreamingWorkFrames.sampleCount})=${ec.activeStreamingWorkFrames.median.toFixed(2)}/${ec.activeStreamingWorkFrames.p95.toFixed(2)}/${ec.activeStreamingWorkFrames.max.toFixed(2)}`
       );
       if (r.cacheClassification.reverseReuseSummary) {
         const rev = r.cacheClassification.reverseReuseSummary;
@@ -780,13 +871,13 @@ export function formatStreamingFluidityMarkdown(
     lines.push(
       '## Scenario F — Teleportation (Isolated Cold Jump Latency)',
       '',
-      '| Mosaic | Foliage | Picking | Jump (m) | First Visible Attach (ms) | All Visible Attached (ms) | Time To Idle (ms) | Worst Frame (ms) | Fetches / Recon / Attach / Evict |',
-      '|---|---|---|---:|---:|---:|---:|---:|---:|'
+      '| Mosaic | Variant | Foliage | Picking | Jump (m) | First Visible Attach (ms) | All Visible Attached (ms) | Time To Idle (ms) | Worst Frame (ms) | Fetches / Recon / Attach / Evict |',
+      '|---|---|---|---|---:|---:|---:|---:|---:|---:|'
     );
     for (const tp of report.teleportationResults) {
       const ev = tp.cacheClassification.eventCounts;
       lines.push(
-        `| ${tp.mosaicLabel} | ${tp.foliageEnabled ? 'ON' : 'OFF'} | ${tp.pickingMode} | ${tp.jumpDistanceMeters.toFixed(0)} | ${tp.timeToFirstVisibleAttachMs !== null ? tp.timeToFirstVisibleAttachMs.toFixed(1) : 'n/a'} | ${tp.timeToAllVisibleAttachedMs !== null ? tp.timeToAllVisibleAttachedMs.toFixed(1) : 'n/a'} | ${tp.timeToIdleMs.toFixed(1)} | ${tp.frameDistribution.max.toFixed(2)} | ${ev.fetchStart} / ${ev.reconstructComplete} / ${ev.attach} / ${ev.evict} |`
+        `| ${tp.mosaicLabel} | \`${tp.variant}\` | ${tp.foliageEnabled ? 'ON' : 'OFF'} | ${tp.pickingMode} | ${tp.jumpDistanceMeters.toFixed(0)} | ${tp.timeToFirstVisibleAttachMs !== null ? tp.timeToFirstVisibleAttachMs.toFixed(1) : 'n/a'} | ${tp.timeToAllVisibleAttachedMs !== null ? tp.timeToAllVisibleAttachedMs.toFixed(1) : 'n/a'} | ${tp.timeToIdleMs.toFixed(1)} | ${tp.frameDistribution.max.toFixed(2)} | ${ev.fetchStart} / ${ev.reconstructComplete} / ${ev.attach} / ${ev.evict} |`
       );
     }
     lines.push('');
@@ -795,10 +886,11 @@ export function formatStreamingFluidityMarkdown(
   lines.push(
     '## Methodological Caveats & Chrome DevTools Trace Capture',
     '',
-    '1. **`gl.render()` Driver Sync Caveat:** `glRenderCpuMs` measures synchronous CPU wall-clock around `WebGLRenderer.render()`, which can include ANGLE/driver command-buffer flushing or first-use GPU buffer/shader uploads rather than pure GPU execution time.',
-    '2. **First-Render Upload Proxy:** `first_rendered_use` and `driverGeometriesDelta` record which newly attached tiles entered their first `gl.render()` pass and how many WebGL buffer objects changed. They are **correlative proxies**, not direct GPU upload timers.',
-    '3. **VSync Cadence:** Desktop browsers typically pace `requestAnimationFrame` at monitor refresh (e.g., 60 Hz ≈ 16.67 ms or 144 Hz ≈ 6.94 ms); stationary intervals matching monitor cadence reflect display sync rather than workload saturation.',
-    '4. **Chrome DevTools Performance Trace:** Pass `--trace-out=benchmarks/results/tkt039-trace.json` to capture a full Chrome DevTools Performance trace via CDP (`Tracing.start`/`Tracing.end`) during `C_streaming_pan`, or open `chrome://tracing` / DevTools → Performance and load the JSON to inspect V8 GC, worker threads, GPU process, and compositor frames.',
+    '1. **Frame-Interval Alignment (TKT-040 Fix):** Frame intervals are measured post-render to post-render (`[intervalStartMs, intervalEndMs]`), ensuring inter-frame callbacks (`Worker.onmessage`, promise continuations, React commits), `useFrame` work, and `gl.render()` land on the exact affected frame `N` rather than shifting to `N+1`.',
+    '2. **`gl.render()` Driver Sync Caveat:** `glRenderCpuMs` measures synchronous CPU wall-clock around `WebGLRenderer.render()`, which can include ANGLE/driver command-buffer flushing or first-use GPU buffer/shader uploads rather than pure GPU execution time.',
+    '3. **First-Render Upload Proxy:** `first_rendered_use` and `driverGeometriesDelta` record which newly attached tiles entered their first `gl.render()` pass and how many WebGL buffer objects changed. They are **correlative proxies**, not direct GPU upload timers.',
+    '4. **VSync Cadence vs. 144 Hz Target:** Desktop browsers typically pace `requestAnimationFrame` at monitor refresh (e.g., 60 Hz ≈ 16.67 ms or 144 Hz ≈ 6.94 ms); stationary intervals matching monitor cadence reflect display sync, while `>6.94 ms` tracking evaluates against the 144 Hz target independently.',
+    '5. **Chrome DevTools Performance Trace:** Pass `--trace-out=benchmarks/results/tkt040-trace.json` to capture a full Chrome DevTools Performance trace via CDP (`Tracing.start`/`Tracing.end`) during `C_streaming_pan`.',
     ''
   );
 
@@ -1092,42 +1184,46 @@ export async function runStreamingFluidityBenchmark(
           summary.studyOriginNorthing
         );
 
-        console.log(
-          `[bench:streaming-fluidity] Loading ${summary.label} (${summary.tileSizeMeters} m, ${summary.gridCols}×${summary.gridRows})...`
-        );
+        for (const variant of opts.variants) {
+          console.log(
+            `[bench:streaming-fluidity] Loading ${summary.label} (${summary.tileSizeMeters} m, ${summary.gridCols}×${summary.gridRows}) [variant=${variant}]...`
+          );
 
-        await page.evaluate(
-          async ({
-            apiBaseUrl,
-            themeId,
-            target,
-            preloadMarginTiles,
-            retainMarginTiles,
-          }) => {
-            const h = (window as any).__BENCHMARK_HARNESS__;
-            h.setStreamingProfilerEnabled(false);
-            await h.unloadDataset?.();
-            await h.loadM2aStreaming({
+          await page.evaluate(
+            async ({
               apiBaseUrl,
-              preloadMarginTiles,
-              retainMarginTiles,
               themeId,
               target,
-              zoom: 1.2,
-              azimuthDeg: 45,
-              regionalMinZoom: 0.15,
-              waitForIdle: true,
-              timeoutMs: 120000,
-            });
-          },
-          {
-            apiBaseUrl: mosaicInput.apiBaseUrl,
-            themeId: opts.themeId,
-            target: centerTarget,
-            preloadMarginTiles: opts.preloadMarginTiles,
-            retainMarginTiles: opts.retainMarginTiles,
-          }
-        );
+              preloadMarginTiles,
+              retainMarginTiles,
+              tilePreparationOptions,
+            }) => {
+              const h = (window as any).__BENCHMARK_HARNESS__;
+              h.setStreamingProfilerEnabled(false);
+              await h.unloadDataset?.();
+              await h.loadM2aStreaming({
+                apiBaseUrl,
+                preloadMarginTiles,
+                retainMarginTiles,
+                themeId,
+                target,
+                zoom: 1.2,
+                azimuthDeg: 45,
+                regionalMinZoom: 0.15,
+                tilePreparationOptions,
+                waitForIdle: true,
+                timeoutMs: 120000,
+              });
+            },
+            {
+              apiBaseUrl: mosaicInput.apiBaseUrl,
+              themeId: opts.themeId,
+              target: centerTarget,
+              preloadMarginTiles: opts.preloadMarginTiles,
+              retainMarginTiles: opts.retainMarginTiles,
+              tilePreparationOptions: variant,
+            }
+          );
 
         for (const foliageEnabled of foliageConfigs) {
           for (const pickingMode of pickingModes) {
@@ -1238,6 +1334,7 @@ export async function runStreamingFluidityBenchmark(
               overheadChecks.push({
                 mosaicLabel: summary.label,
                 tileSizeMeters: summary.tileSizeMeters,
+                variant,
                 foliageEnabled,
                 pickingMode,
                 disabledSampleCount: disabledSamples.length,
@@ -1287,6 +1384,7 @@ export async function runStreamingFluidityBenchmark(
               const res = summarizeScenarioSnapshot({
                 mosaicLabel: summary.label,
                 tileSizeMeters: summary.tileSizeMeters,
+                variant,
                 foliageEnabled,
                 pickingMode,
                 scenarioId: 'A_stationary_baseline',
@@ -1331,6 +1429,7 @@ export async function runStreamingFluidityBenchmark(
                 summarizeScenarioSnapshot({
                   mosaicLabel: summary.label,
                   tileSizeMeters: summary.tileSizeMeters,
+                  variant,
                   foliageEnabled,
                   pickingMode,
                   scenarioId: 'B_warm_cache_pan',
@@ -1424,6 +1523,7 @@ export async function runStreamingFluidityBenchmark(
                 summarizeScenarioSnapshot({
                   mosaicLabel: summary.label,
                   tileSizeMeters: summary.tileSizeMeters,
+                  variant,
                   foliageEnabled,
                   pickingMode,
                   scenarioId: 'C_streaming_pan',
@@ -1499,6 +1599,7 @@ export async function runStreamingFluidityBenchmark(
                 summarizeScenarioSnapshot({
                   mosaicLabel: summary.label,
                   tileSizeMeters: summary.tileSizeMeters,
+                  variant,
                   foliageEnabled,
                   pickingMode,
                   scenarioId: 'D_reverse_traversal',
@@ -1547,6 +1648,7 @@ export async function runStreamingFluidityBenchmark(
                 summarizeScenarioSnapshot({
                   mosaicLabel: summary.label,
                   tileSizeMeters: summary.tileSizeMeters,
+                  variant,
                   foliageEnabled,
                   pickingMode,
                   scenarioId: 'E_continuous_zoom',
@@ -1595,6 +1697,7 @@ export async function runStreamingFluidityBenchmark(
                   summarizeScenarioSnapshot({
                     mosaicLabel: summary.label,
                     tileSizeMeters: summary.tileSizeMeters,
+                    variant,
                     foliageEnabled,
                     pickingMode,
                     scenarioId: 'G_pointer_drag_pan',
@@ -1648,6 +1751,7 @@ export async function runStreamingFluidityBenchmark(
               const tpRes = summarizeScenarioSnapshot({
                 mosaicLabel: summary.label,
                 tileSizeMeters: summary.tileSizeMeters,
+                variant,
                 foliageEnabled,
                 pickingMode,
                 scenarioId: 'F_teleportation',
@@ -1663,6 +1767,7 @@ export async function runStreamingFluidityBenchmark(
               teleportationResults.push({
                 mosaicLabel: summary.label,
                 tileSizeMeters: summary.tileSizeMeters,
+                variant,
                 foliageEnabled,
                 pickingMode,
                 fromTarget: summary.startLocalTarget,
@@ -1678,6 +1783,8 @@ export async function runStreamingFluidityBenchmark(
                     : null,
                 timeToIdleMs: Number(tpData.timeToIdleMs.toFixed(1)),
                 frameDistribution: tpRes.frameDistribution,
+                eventConditionedFrames: tpRes.eventConditionedFrames,
+                workerDeliverySummary: tpRes.workerDeliverySummary,
                 cacheClassification: tpRes.cacheClassification,
                 stageSummary: tpRes.stageSummary,
                 worstFrames: tpRes.worstFrames,
@@ -1685,13 +1792,15 @@ export async function runStreamingFluidityBenchmark(
             }
           }
         }
+        }
       }
 
       const report: StreamingFluidityBenchmarkReport = {
-        schemaVersion: '1.0.0',
+        schemaVersion: '2.0.0',
         generatedAtIso: new Date().toISOString(),
         viewport: { width: 1440, height: 900, deviceScaleFactor: 1 },
         themeId: opts.themeId,
+        variants: [...opts.variants],
         targetUtm: { easting: targetEasting, northing: targetNorthing },
         preloadMarginTiles: opts.preloadMarginTiles,
         retainMarginTiles: opts.retainMarginTiles,

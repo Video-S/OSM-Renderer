@@ -22,6 +22,32 @@ export interface InstancedSpatialIndexStats {
   boundsMarginMeters: number;
   buildTimeMs: number;
   estimatedMemoryBytes: number;
+  builtInWorker?: boolean;
+  adoptTimeMs?: number;
+}
+
+/**
+ * Worker-transferable flat typed-array representation of an `InstancedSpatialIndex` BVH
+ * (TKT-040 Work Package C). Built off the main thread inside `TileDecodeWorker` using
+ * exact Arvo affine-AABB math and adopted on the main thread in O(1) without rebuilding.
+ */
+export interface PreparedInstancedSpatialIndexData {
+  instanceCount: number;
+  nodeCount: number;
+  leafCount: number;
+  maxDepth: number;
+  leafSize: number;
+  boundsMarginMeters: number;
+  estimatedMemoryBytes: number;
+  buildTimeMs: number;
+  builtInWorker: boolean;
+  /** Exact un-margined Arvo mesh-local union bounds across all instances. */
+  rootBoundsMin: [number, number, number];
+  rootBoundsMax: [number, number, number];
+  nodeBounds: Float32Array;
+  nodeMeta: Int32Array;
+  sortedInstanceIds: Uint32Array;
+  instanceBounds: Float32Array;
 }
 
 export interface InstancedPickingAggregateStats {
@@ -30,6 +56,9 @@ export interface InstancedPickingAggregateStats {
   totalIndexNodes: number;
   totalIndexMemoryBytes: number;
   totalBuildTimeMs: number;
+  workerBuiltBatchCount?: number;
+  syncFallbackBatchCount?: number;
+  totalAdoptTimeMs?: number;
 }
 
 export interface InstancedRaycastDiagnostics {
@@ -253,6 +282,326 @@ function intersectRayAabbSlab(
  *   margin); narrow phase invokes exact `THREE.Mesh.prototype.raycast` against the active
  *   `mesh.geometry`, preserving original `instanceId`, distances, and feature metadata.
  */
+/**
+ * Pure, worker-safe builder for flat typed-array instanced BVH data.
+ * Shared identically between Web Worker pre-building (`TileDecodeWorker`) and
+ * main-thread fallback construction (`new InstancedSpatialIndex(...)`).
+ */
+export function buildInstancedSpatialIndexData(
+  matrices: Float32Array,
+  instanceCount: number,
+  prototypeLocalBounds: readonly [number, number, number, number, number, number],
+  options?: Pick<InstancedSpatialIndexOptions, 'leafSize' | 'boundsMarginMeters'> & {
+    builtInWorker?: boolean;
+  }
+): PreparedInstancedSpatialIndexData {
+  const t0 = performance.now();
+  const leafSize = Math.max(1, Math.floor(options?.leafSize ?? DEFAULT_INSTANCED_BVH_LEAF_SIZE));
+  const margin = Math.max(0, options?.boundsMarginMeters ?? DEFAULT_INSTANCED_AABB_MARGIN_METERS);
+  const builtInWorker = Boolean(options?.builtInWorker);
+  const count = Math.max(0, Math.min(instanceCount, Math.floor(matrices.length / 16)));
+
+  const lMinX = prototypeLocalBounds[0];
+  const lMinY = prototypeLocalBounds[1];
+  const lMinZ = prototypeLocalBounds[2];
+  const lMaxX = prototypeLocalBounds[3];
+  const lMaxY = prototypeLocalBounds[4];
+  const lMaxZ = prototypeLocalBounds[5];
+  const isEmptyProto =
+    lMinX > lMaxX ||
+    lMinY > lMaxY ||
+    lMinZ > lMaxZ ||
+    !Number.isFinite(lMinX) ||
+    !Number.isFinite(lMaxX);
+
+  if (count === 0 || isEmptyProto) {
+    return {
+      instanceCount: 0,
+      nodeCount: 0,
+      leafCount: 0,
+      maxDepth: 0,
+      leafSize,
+      boundsMarginMeters: margin,
+      estimatedMemoryBytes: FIXED_INDEX_OVERHEAD_BYTES,
+      buildTimeMs: Number((performance.now() - t0).toFixed(3)),
+      builtInWorker,
+      rootBoundsMin: [0, 0, 0],
+      rootBoundsMax: [0, 0, 0],
+      nodeBounds: new Float32Array(0),
+      nodeMeta: new Int32Array(0),
+      sortedInstanceIds: new Uint32Array(0),
+      instanceBounds: new Float32Array(0),
+    };
+  }
+
+  // 1. Compute conservative per-instance mesh-local AABBs using Arvo's exact affine-AABB transform
+  //    and accumulate exact un-margined union root bounds in the same pass.
+  const origBounds = new Float32Array(count * 6);
+  const sortedIds = new Uint32Array(count);
+
+  let rawRootMinX = Number.POSITIVE_INFINITY;
+  let rawRootMinY = Number.POSITIVE_INFINITY;
+  let rawRootMinZ = Number.POSITIVE_INFINITY;
+  let rawRootMaxX = Number.NEGATIVE_INFINITY;
+  let rawRootMaxY = Number.NEGATIVE_INFINITY;
+  let rawRootMaxZ = Number.NEGATIVE_INFINITY;
+
+  for (let i = 0; i < count; i++) {
+    sortedIds[i] = i;
+    const o = i * 16;
+    const e0 = matrices[o];
+    const e1 = matrices[o + 1];
+    const e2 = matrices[o + 2];
+    const e4 = matrices[o + 4];
+    const e5 = matrices[o + 5];
+    const e6 = matrices[o + 6];
+    const e8 = matrices[o + 8];
+    const e9 = matrices[o + 9];
+    const e10 = matrices[o + 10];
+    const tx = matrices[o + 12];
+    const ty = matrices[o + 13];
+    const tz = matrices[o + 14];
+
+    const xa0 = e0 * lMinX;
+    const xb0 = e0 * lMaxX;
+    const xa1 = e4 * lMinY;
+    const xb1 = e4 * lMaxY;
+    const xa2 = e8 * lMinZ;
+    const xb2 = e8 * lMaxZ;
+
+    const ya0 = e1 * lMinX;
+    const yb0 = e1 * lMaxX;
+    const ya1 = e5 * lMinY;
+    const yb1 = e5 * lMaxY;
+    const ya2 = e9 * lMinZ;
+    const yb2 = e9 * lMaxZ;
+
+    const za0 = e2 * lMinX;
+    const zb0 = e2 * lMaxX;
+    const za1 = e6 * lMinY;
+    const zb1 = e6 * lMaxY;
+    const za2 = e10 * lMinZ;
+    const zb2 = e10 * lMaxZ;
+
+    const instMinX =
+      tx + (xa0 < xb0 ? xa0 : xb0) + (xa1 < xb1 ? xa1 : xb1) + (xa2 < xb2 ? xa2 : xb2);
+    const instMinY =
+      ty + (ya0 < yb0 ? ya0 : yb0) + (ya1 < yb1 ? ya1 : yb1) + (ya2 < yb2 ? ya2 : yb2);
+    const instMinZ =
+      tz + (za0 < zb0 ? za0 : zb0) + (za1 < zb1 ? za1 : zb1) + (za2 < zb2 ? za2 : zb2);
+    const instMaxX =
+      tx + (xa0 > xb0 ? xa0 : xb0) + (xa1 > xb1 ? xa1 : xb1) + (xa2 > xb2 ? xa2 : xb2);
+    const instMaxY =
+      ty + (ya0 > yb0 ? ya0 : yb0) + (ya1 > yb1 ? ya1 : yb1) + (ya2 > yb2 ? ya2 : yb2);
+    const instMaxZ =
+      tz + (za0 > zb0 ? za0 : zb0) + (za1 > zb1 ? za1 : zb1) + (za2 > zb2 ? za2 : zb2);
+
+    if (instMinX < rawRootMinX) rawRootMinX = instMinX;
+    if (instMinY < rawRootMinY) rawRootMinY = instMinY;
+    if (instMinZ < rawRootMinZ) rawRootMinZ = instMinZ;
+    if (instMaxX > rawRootMaxX) rawRootMaxX = instMaxX;
+    if (instMaxY > rawRootMaxY) rawRootMaxY = instMaxY;
+    if (instMaxZ > rawRootMaxZ) rawRootMaxZ = instMaxZ;
+
+    const b = i * 6;
+    origBounds[b] = instMinX - margin;
+    origBounds[b + 1] = instMinY - margin;
+    origBounds[b + 2] = instMinZ - margin;
+    origBounds[b + 3] = instMaxX + margin;
+    origBounds[b + 4] = instMaxY + margin;
+    origBounds[b + 5] = instMaxZ + margin;
+  }
+
+  // 2. Iterative top-down spatial-midpoint BVH build (guaranteed O(N log N) termination)
+  const maxNodes = Math.max(1, Math.min(count * 2, Math.ceil((count / leafSize) * 4) + 16));
+  let nodeBoundsBuf = new Float32Array(maxNodes * 6);
+  let nodeMetaBuf = new Int32Array(maxNodes * 2);
+
+  const ensureNodeCapacity = (needed: number) => {
+    const currentCap = nodeMetaBuf.length >>> 1;
+    if (needed <= currentCap) return;
+    const nextCap = Math.max(needed, currentCap * 2);
+    const nextBounds = new Float32Array(nextCap * 6);
+    nextBounds.set(nodeBoundsBuf);
+    nodeBoundsBuf = nextBounds;
+    const nextMeta = new Int32Array(nextCap * 2);
+    nextMeta.set(nodeMetaBuf);
+    nodeMetaBuf = nextMeta;
+  };
+
+  // Explicit build task stacks: (nodeIdx, start, end, depth)
+  const stackNode: number[] = [0];
+  const stackStart: number[] = [0];
+  const stackEnd: number[] = [count];
+  const stackDepth: number[] = [1];
+
+  let nodeCount = 1;
+  let leafCount = 0;
+  let maxDepth = 1;
+
+  while (stackNode.length > 0) {
+    const nodeIdx = stackNode.pop()!;
+    const start = stackStart.pop()!;
+    const end = stackEnd.pop()!;
+    const depth = stackDepth.pop()!;
+    if (depth > maxDepth) maxDepth = depth;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    let cMinX = Number.POSITIVE_INFINITY;
+    let cMinY = Number.POSITIVE_INFINITY;
+    let cMinZ = Number.POSITIVE_INFINITY;
+    let cMaxX = Number.NEGATIVE_INFINITY;
+    let cMaxY = Number.NEGATIVE_INFINITY;
+    let cMaxZ = Number.NEGATIVE_INFINITY;
+
+    for (let i = start; i < end; i++) {
+      const b = sortedIds[i] * 6;
+      const x0 = origBounds[b];
+      const y0 = origBounds[b + 1];
+      const z0 = origBounds[b + 2];
+      const x1 = origBounds[b + 3];
+      const y1 = origBounds[b + 4];
+      const z1 = origBounds[b + 5];
+
+      if (x0 < minX) minX = x0;
+      if (y0 < minY) minY = y0;
+      if (z0 < minZ) minZ = z0;
+      if (x1 > maxX) maxX = x1;
+      if (y1 > maxY) maxY = y1;
+      if (z1 > maxZ) maxZ = z1;
+
+      const cx = x0 + x1;
+      const cy = y0 + y1;
+      const cz = z0 + z1;
+      if (cx < cMinX) cMinX = cx;
+      if (cy < cMinY) cMinY = cy;
+      if (cz < cMinZ) cMinZ = cz;
+      if (cx > cMaxX) cMaxX = cx;
+      if (cy > cMaxY) cMaxY = cy;
+      if (cz > cMaxZ) cMaxZ = cz;
+    }
+
+    const nb = nodeIdx * 6;
+    nodeBoundsBuf[nb] = minX;
+    nodeBoundsBuf[nb + 1] = minY;
+    nodeBoundsBuf[nb + 2] = minZ;
+    nodeBoundsBuf[nb + 3] = maxX;
+    nodeBoundsBuf[nb + 4] = maxY;
+    nodeBoundsBuf[nb + 5] = maxZ;
+
+    const rangeCount = end - start;
+    if (rangeCount <= leafSize) {
+      nodeMetaBuf[nodeIdx * 2] = start;
+      nodeMetaBuf[nodeIdx * 2 + 1] = -rangeCount;
+      leafCount++;
+      continue;
+    }
+
+    const spanX = cMaxX - cMinX;
+    const spanY = cMaxY - cMinY;
+    const spanZ = cMaxZ - cMinZ;
+
+    let axis = 0;
+    let maxSpan = spanX;
+    let splitTwice = (cMinX + cMaxX) * 0.5;
+    if (spanZ > maxSpan) {
+      axis = 2;
+      maxSpan = spanZ;
+      splitTwice = (cMinZ + cMaxZ) * 0.5;
+    }
+    if (spanY > maxSpan) {
+      axis = 1;
+      maxSpan = spanY;
+      splitTwice = (cMinY + cMaxY) * 0.5;
+    }
+
+    let mid = (start + end) >>> 1;
+    if (maxSpan > 1e-6 && depth < 48) {
+      // In-place Hoare-style partition around centroid midpoint
+      let lo = start;
+      let hi = end - 1;
+      while (lo <= hi) {
+        const b = sortedIds[lo] * 6;
+        const c2 = origBounds[b + axis] + origBounds[b + axis + 3];
+        if (c2 < splitTwice) {
+          lo++;
+        } else {
+          const tmp = sortedIds[lo];
+          sortedIds[lo] = sortedIds[hi];
+          sortedIds[hi] = tmp;
+          hi--;
+        }
+      }
+      if (lo > start && lo < end) {
+        mid = lo;
+      }
+    }
+
+    const leftIdx = nodeCount;
+    const rightIdx = nodeCount + 1;
+    nodeCount += 2;
+    ensureNodeCapacity(nodeCount);
+
+    nodeMetaBuf[nodeIdx * 2] = leftIdx;
+    nodeMetaBuf[nodeIdx * 2 + 1] = rightIdx;
+
+    stackNode.push(rightIdx, leftIdx);
+    stackStart.push(mid, start);
+    stackEnd.push(end, mid);
+    stackDepth.push(depth + 1, depth + 1);
+  }
+
+  // 3. Reorder per-instance AABBs into cache-sequential BVH leaf order and trim node buffers
+  const sortedBounds = new Float32Array(count * 6);
+  for (let i = 0; i < count; i++) {
+    const src = sortedIds[i] * 6;
+    const dst = i * 6;
+    sortedBounds[dst] = origBounds[src];
+    sortedBounds[dst + 1] = origBounds[src + 1];
+    sortedBounds[dst + 2] = origBounds[src + 2];
+    sortedBounds[dst + 3] = origBounds[src + 3];
+    sortedBounds[dst + 4] = origBounds[src + 4];
+    sortedBounds[dst + 5] = origBounds[src + 5];
+  }
+
+  const nodeBounds = nodeBoundsBuf.slice(0, nodeCount * 6);
+  const nodeMeta = nodeMetaBuf.slice(0, nodeCount * 2);
+
+  const estimatedMemoryBytes =
+    nodeBounds.byteLength +
+    nodeMeta.byteLength +
+    sortedIds.byteLength +
+    sortedBounds.byteLength +
+    FIXED_INDEX_OVERHEAD_BYTES;
+
+  return {
+    instanceCount: count,
+    nodeCount,
+    leafCount,
+    maxDepth,
+    leafSize,
+    boundsMarginMeters: margin,
+    estimatedMemoryBytes,
+    buildTimeMs: Number((performance.now() - t0).toFixed(3)),
+    builtInWorker,
+    rootBoundsMin: [rawRootMinX, rawRootMinY, rawRootMinZ],
+    rootBoundsMax: [rawRootMaxX, rawRootMaxY, rawRootMaxZ],
+    nodeBounds,
+    nodeMeta,
+    sortedInstanceIds: sortedIds,
+    instanceBounds: sortedBounds,
+  };
+}
+
+const _EMPTY_FLOAT32 = new Float32Array(0);
+const _EMPTY_BOX3 = new THREE.Box3();
+
 export class InstancedSpatialIndex {
   private nodeBounds: Float32Array;
   private nodeMeta: Int32Array;
@@ -265,274 +614,75 @@ export class InstancedSpatialIndex {
     matrices: Float32Array,
     instanceCount: number,
     unionPrototypeLocalBox: THREE.Box3,
-    options?: Pick<InstancedSpatialIndexOptions, 'leafSize' | 'boundsMarginMeters'>
+    options?: Pick<InstancedSpatialIndexOptions, 'leafSize' | 'boundsMarginMeters'>,
+    preparedOverride?: PreparedInstancedSpatialIndexData
   ) {
-    const t0 = performance.now();
-    const leafSize = Math.max(1, Math.floor(options?.leafSize ?? DEFAULT_INSTANCED_BVH_LEAF_SIZE));
-    const margin = Math.max(0, options?.boundsMarginMeters ?? DEFAULT_INSTANCED_AABB_MARGIN_METERS);
-    const count = Math.max(0, Math.min(instanceCount, Math.floor(matrices.length / 16)));
-
-    if (count === 0 || unionPrototypeLocalBox.isEmpty()) {
-      this.nodeBounds = new Float32Array(0);
-      this.nodeMeta = new Int32Array(0);
-      this.sortedInstanceIds = new Uint32Array(0);
-      this.instanceBounds = new Float32Array(0);
+    if (preparedOverride) {
+      const tAdopt0 = performance.now();
+      this.nodeBounds = preparedOverride.nodeBounds;
+      this.nodeMeta = preparedOverride.nodeMeta;
+      this.sortedInstanceIds = preparedOverride.sortedInstanceIds;
+      this.instanceBounds = preparedOverride.instanceBounds;
+      const adoptTimeMs = Number((performance.now() - tAdopt0).toFixed(4));
       this.stats = {
-        instanceCount: 0,
-        nodeCount: 0,
-        leafCount: 0,
-        maxDepth: 0,
-        leafSize,
-        boundsMarginMeters: margin,
-        buildTimeMs: Number((performance.now() - t0).toFixed(3)),
-        estimatedMemoryBytes: FIXED_INDEX_OVERHEAD_BYTES,
+        instanceCount: preparedOverride.instanceCount,
+        nodeCount: preparedOverride.nodeCount,
+        leafCount: preparedOverride.leafCount,
+        maxDepth: preparedOverride.maxDepth,
+        leafSize: preparedOverride.leafSize,
+        boundsMarginMeters: preparedOverride.boundsMarginMeters,
+        buildTimeMs: preparedOverride.buildTimeMs,
+        estimatedMemoryBytes: preparedOverride.estimatedMemoryBytes,
+        builtInWorker: preparedOverride.builtInWorker,
+        adoptTimeMs,
       };
       return;
     }
 
-    // 1. Compute conservative per-instance mesh-local AABBs using Arvo's exact affine-AABB transform
-    const origBounds = new Float32Array(count * 6);
-    const sortedIds = new Uint32Array(count);
+    const localBounds: [number, number, number, number, number, number] =
+      unionPrototypeLocalBox.isEmpty()
+        ? [1, 1, 1, -1, -1, -1]
+        : [
+            unionPrototypeLocalBox.min.x,
+            unionPrototypeLocalBox.min.y,
+            unionPrototypeLocalBox.min.z,
+            unionPrototypeLocalBox.max.x,
+            unionPrototypeLocalBox.max.y,
+            unionPrototypeLocalBox.max.z,
+          ];
 
-    const lMinX = unionPrototypeLocalBox.min.x;
-    const lMinY = unionPrototypeLocalBox.min.y;
-    const lMinZ = unionPrototypeLocalBox.min.z;
-    const lMaxX = unionPrototypeLocalBox.max.x;
-    const lMaxY = unionPrototypeLocalBox.max.y;
-    const lMaxZ = unionPrototypeLocalBox.max.z;
+    const built = buildInstancedSpatialIndexData(matrices, instanceCount, localBounds, {
+      leafSize: options?.leafSize,
+      boundsMarginMeters: options?.boundsMarginMeters,
+      builtInWorker: false,
+    });
 
-    for (let i = 0; i < count; i++) {
-      sortedIds[i] = i;
-      const o = i * 16;
-      const e0 = matrices[o];
-      const e1 = matrices[o + 1];
-      const e2 = matrices[o + 2];
-      const e4 = matrices[o + 4];
-      const e5 = matrices[o + 5];
-      const e6 = matrices[o + 6];
-      const e8 = matrices[o + 8];
-      const e9 = matrices[o + 9];
-      const e10 = matrices[o + 10];
-      const tx = matrices[o + 12];
-      const ty = matrices[o + 13];
-      const tz = matrices[o + 14];
-
-      const xa0 = e0 * lMinX;
-      const xb0 = e0 * lMaxX;
-      const xa1 = e4 * lMinY;
-      const xb1 = e4 * lMaxY;
-      const xa2 = e8 * lMinZ;
-      const xb2 = e8 * lMaxZ;
-
-      const ya0 = e1 * lMinX;
-      const yb0 = e1 * lMaxX;
-      const ya1 = e5 * lMinY;
-      const yb1 = e5 * lMaxY;
-      const ya2 = e9 * lMinZ;
-      const yb2 = e9 * lMaxZ;
-
-      const za0 = e2 * lMinX;
-      const zb0 = e2 * lMaxX;
-      const za1 = e6 * lMinY;
-      const zb1 = e6 * lMaxY;
-      const za2 = e10 * lMinZ;
-      const zb2 = e10 * lMaxZ;
-
-      const b = i * 6;
-      origBounds[b] =
-        tx + (xa0 < xb0 ? xa0 : xb0) + (xa1 < xb1 ? xa1 : xb1) + (xa2 < xb2 ? xa2 : xb2) - margin;
-      origBounds[b + 1] =
-        ty + (ya0 < yb0 ? ya0 : yb0) + (ya1 < yb1 ? ya1 : yb1) + (ya2 < yb2 ? ya2 : yb2) - margin;
-      origBounds[b + 2] =
-        tz + (za0 < zb0 ? za0 : zb0) + (za1 < zb1 ? za1 : zb1) + (za2 < zb2 ? za2 : zb2) - margin;
-      origBounds[b + 3] =
-        tx + (xa0 > xb0 ? xa0 : xb0) + (xa1 > xb1 ? xa1 : xb1) + (xa2 > xb2 ? xa2 : xb2) + margin;
-      origBounds[b + 4] =
-        ty + (ya0 > yb0 ? ya0 : yb0) + (ya1 > yb1 ? ya1 : yb1) + (ya2 > yb2 ? ya2 : yb2) + margin;
-      origBounds[b + 5] =
-        tz + (za0 > zb0 ? za0 : zb0) + (za1 > zb1 ? za1 : zb1) + (za2 > zb2 ? za2 : zb2) + margin;
-    }
-
-    // 2. Iterative top-down spatial-midpoint BVH build (guaranteed O(N log N) termination)
-    const maxNodes = Math.max(1, Math.min(count * 2, Math.ceil((count / leafSize) * 4) + 16));
-    let nodeBoundsBuf = new Float32Array(maxNodes * 6);
-    let nodeMetaBuf = new Int32Array(maxNodes * 2);
-
-    const ensureNodeCapacity = (needed: number) => {
-      const currentCap = nodeMetaBuf.length >>> 1;
-      if (needed <= currentCap) return;
-      const nextCap = Math.max(needed, currentCap * 2);
-      const nextBounds = new Float32Array(nextCap * 6);
-      nextBounds.set(nodeBoundsBuf);
-      nodeBoundsBuf = nextBounds;
-      const nextMeta = new Int32Array(nextCap * 2);
-      nextMeta.set(nodeMetaBuf);
-      nodeMetaBuf = nextMeta;
-    };
-
-    // Explicit build task stacks: (nodeIdx, start, end, depth)
-    const stackNode: number[] = [0];
-    const stackStart: number[] = [0];
-    const stackEnd: number[] = [count];
-    const stackDepth: number[] = [1];
-
-    let nodeCount = 1;
-    let leafCount = 0;
-    let maxDepth = 1;
-
-    while (stackNode.length > 0) {
-      const nodeIdx = stackNode.pop()!;
-      const start = stackStart.pop()!;
-      const end = stackEnd.pop()!;
-      const depth = stackDepth.pop()!;
-      if (depth > maxDepth) maxDepth = depth;
-
-      let minX = Number.POSITIVE_INFINITY;
-      let minY = Number.POSITIVE_INFINITY;
-      let minZ = Number.POSITIVE_INFINITY;
-      let maxX = Number.NEGATIVE_INFINITY;
-      let maxY = Number.NEGATIVE_INFINITY;
-      let maxZ = Number.NEGATIVE_INFINITY;
-
-      let cMinX = Number.POSITIVE_INFINITY;
-      let cMinY = Number.POSITIVE_INFINITY;
-      let cMinZ = Number.POSITIVE_INFINITY;
-      let cMaxX = Number.NEGATIVE_INFINITY;
-      let cMaxY = Number.NEGATIVE_INFINITY;
-      let cMaxZ = Number.NEGATIVE_INFINITY;
-
-      for (let i = start; i < end; i++) {
-        const b = sortedIds[i] * 6;
-        const x0 = origBounds[b];
-        const y0 = origBounds[b + 1];
-        const z0 = origBounds[b + 2];
-        const x1 = origBounds[b + 3];
-        const y1 = origBounds[b + 4];
-        const z1 = origBounds[b + 5];
-
-        if (x0 < minX) minX = x0;
-        if (y0 < minY) minY = y0;
-        if (z0 < minZ) minZ = z0;
-        if (x1 > maxX) maxX = x1;
-        if (y1 > maxY) maxY = y1;
-        if (z1 > maxZ) maxZ = z1;
-
-        const cx = x0 + x1;
-        const cy = y0 + y1;
-        const cz = z0 + z1;
-        if (cx < cMinX) cMinX = cx;
-        if (cy < cMinY) cMinY = cy;
-        if (cz < cMinZ) cMinZ = cz;
-        if (cx > cMaxX) cMaxX = cx;
-        if (cy > cMaxY) cMaxY = cy;
-        if (cz > cMaxZ) cMaxZ = cz;
-      }
-
-      const nb = nodeIdx * 6;
-      nodeBoundsBuf[nb] = minX;
-      nodeBoundsBuf[nb + 1] = minY;
-      nodeBoundsBuf[nb + 2] = minZ;
-      nodeBoundsBuf[nb + 3] = maxX;
-      nodeBoundsBuf[nb + 4] = maxY;
-      nodeBoundsBuf[nb + 5] = maxZ;
-
-      const rangeCount = end - start;
-      if (rangeCount <= leafSize) {
-        nodeMetaBuf[nodeIdx * 2] = start;
-        nodeMetaBuf[nodeIdx * 2 + 1] = -rangeCount;
-        leafCount++;
-        continue;
-      }
-
-      const spanX = cMaxX - cMinX;
-      const spanY = cMaxY - cMinY;
-      const spanZ = cMaxZ - cMinZ;
-
-      let axis = 0;
-      let maxSpan = spanX;
-      let splitTwice = (cMinX + cMaxX) * 0.5;
-      if (spanZ > maxSpan) {
-        axis = 2;
-        maxSpan = spanZ;
-        splitTwice = (cMinZ + cMaxZ) * 0.5;
-      }
-      if (spanY > maxSpan) {
-        axis = 1;
-        maxSpan = spanY;
-        splitTwice = (cMinY + cMaxY) * 0.5;
-      }
-
-      let mid = (start + end) >>> 1;
-      if (maxSpan > 1e-6 && depth < 48) {
-        // In-place Hoare-style partition around centroid midpoint
-        let lo = start;
-        let hi = end - 1;
-        while (lo <= hi) {
-          const b = sortedIds[lo] * 6;
-          const c2 = origBounds[b + axis] + origBounds[b + axis + 3];
-          if (c2 < splitTwice) {
-            lo++;
-          } else {
-            const tmp = sortedIds[lo];
-            sortedIds[lo] = sortedIds[hi];
-            sortedIds[hi] = tmp;
-            hi--;
-          }
-        }
-        if (lo > start && lo < end) {
-          mid = lo;
-        }
-      }
-
-      const leftIdx = nodeCount;
-      const rightIdx = nodeCount + 1;
-      nodeCount += 2;
-      ensureNodeCapacity(nodeCount);
-
-      nodeMetaBuf[nodeIdx * 2] = leftIdx;
-      nodeMetaBuf[nodeIdx * 2 + 1] = rightIdx;
-
-      stackNode.push(rightIdx, leftIdx);
-      stackStart.push(mid, start);
-      stackEnd.push(end, mid);
-      stackDepth.push(depth + 1, depth + 1);
-    }
-
-    // 3. Reorder per-instance AABBs into cache-sequential BVH leaf order and trim node buffers
-    const sortedBounds = new Float32Array(count * 6);
-    for (let i = 0; i < count; i++) {
-      const src = sortedIds[i] * 6;
-      const dst = i * 6;
-      sortedBounds[dst] = origBounds[src];
-      sortedBounds[dst + 1] = origBounds[src + 1];
-      sortedBounds[dst + 2] = origBounds[src + 2];
-      sortedBounds[dst + 3] = origBounds[src + 3];
-      sortedBounds[dst + 4] = origBounds[src + 4];
-      sortedBounds[dst + 5] = origBounds[src + 5];
-    }
-
-    this.nodeBounds = nodeBoundsBuf.slice(0, nodeCount * 6);
-    this.nodeMeta = nodeMetaBuf.slice(0, nodeCount * 2);
-    this.sortedInstanceIds = sortedIds;
-    this.instanceBounds = sortedBounds;
-
-    const estimatedMemoryBytes =
-      this.nodeBounds.byteLength +
-      this.nodeMeta.byteLength +
-      this.sortedInstanceIds.byteLength +
-      this.instanceBounds.byteLength +
-      FIXED_INDEX_OVERHEAD_BYTES;
-
+    this.nodeBounds = built.nodeBounds;
+    this.nodeMeta = built.nodeMeta;
+    this.sortedInstanceIds = built.sortedInstanceIds;
+    this.instanceBounds = built.instanceBounds;
     this.stats = {
-      instanceCount: count,
-      nodeCount,
-      leafCount,
-      maxDepth,
-      leafSize,
-      boundsMarginMeters: margin,
-      buildTimeMs: Number((performance.now() - t0).toFixed(3)),
-      estimatedMemoryBytes,
+      instanceCount: built.instanceCount,
+      nodeCount: built.nodeCount,
+      leafCount: built.leafCount,
+      maxDepth: built.maxDepth,
+      leafSize: built.leafSize,
+      boundsMarginMeters: built.boundsMarginMeters,
+      buildTimeMs: built.buildTimeMs,
+      estimatedMemoryBytes: built.estimatedMemoryBytes,
+      builtInWorker: false,
+      adoptTimeMs: 0,
     };
+  }
+
+  /**
+   * Adopts prebuilt flat typed-array BVH buffers constructed inside a Web Worker in O(1)
+   * time with zero buffer copying or tree rebuilding.
+   */
+  static fromPreparedData(
+    prepared: PreparedInstancedSpatialIndexData
+  ): InstancedSpatialIndex {
+    return new InstancedSpatialIndex(_EMPTY_FLOAT32, 0, _EMPTY_BOX3, undefined, prepared);
   }
 
   get disposed(): boolean {
@@ -884,6 +1034,27 @@ function runUnacceleratedInstancedRaycastWithDiagnostics(
   lastDiag.instancedRaycastDurationMs += performance.now() - t0;
 }
 
+function installSpatialIndexOnMesh(
+  mesh: THREE.InstancedMesh,
+  index: InstancedSpatialIndex
+): InstancedSpatialIndex {
+  mesh.userData = mesh.userData ?? {};
+  mesh.userData.instancedSpatialIndex = index;
+  mesh.raycast = function acceleratedInstancedRaycast(
+    this: THREE.InstancedMesh,
+    raycaster: THREE.Raycaster,
+    intersects: THREE.Intersection[]
+  ) {
+    const mode = getEffectiveInstancedPickingMode(raycaster);
+    if (mode === 'unaccelerated') {
+      runUnacceleratedInstancedRaycastWithDiagnostics(this, raycaster, intersects);
+      return;
+    }
+    index.raycastMesh(this, raycaster, intersects);
+  };
+  return index;
+}
+
 /**
  * Builds and attaches a mesh-local `InstancedSpatialIndex` to a `THREE.InstancedMesh`,
  * installing a zero-allocation `mesh.raycast` dispatcher that supports switching between
@@ -906,22 +1077,21 @@ export function attachInstancedSpatialIndex(
     options
   );
 
-  mesh.userData = mesh.userData ?? {};
-  mesh.userData.instancedSpatialIndex = index;
-  mesh.raycast = function acceleratedInstancedRaycast(
-    this: THREE.InstancedMesh,
-    raycaster: THREE.Raycaster,
-    intersects: THREE.Intersection[]
-  ) {
-    const mode = getEffectiveInstancedPickingMode(raycaster);
-    if (mode === 'unaccelerated') {
-      runUnacceleratedInstancedRaycastWithDiagnostics(this, raycaster, intersects);
-      return;
-    }
-    index.raycastMesh(this, raycaster, intersects);
-  };
+  return installSpatialIndexOnMesh(mesh, index);
+}
 
-  return index;
+/**
+ * Adopts a worker-prepared `PreparedInstancedSpatialIndexData` BVH onto `mesh` in O(1)
+ * time, installing the exact same accelerated/unaccelerated raycast dispatcher as
+ * `attachInstancedSpatialIndex`.
+ */
+export function attachPreparedInstancedSpatialIndex(
+  mesh: THREE.InstancedMesh,
+  prepared: PreparedInstancedSpatialIndexData
+): InstancedSpatialIndex {
+  disposeInstancedSpatialIndex(mesh);
+  const index = InstancedSpatialIndex.fromPreparedData(prepared);
+  return installSpatialIndexOnMesh(mesh, index);
 }
 
 /**
@@ -963,6 +1133,9 @@ export function collectInstancedSpatialIndexStats(
   let totalIndexNodes = 0;
   let totalIndexMemoryBytes = 0;
   let totalBuildTimeMs = 0;
+  let workerBuiltBatchCount = 0;
+  let syncFallbackBatchCount = 0;
+  let totalAdoptTimeMs = 0;
 
   if (!root) {
     return {
@@ -971,6 +1144,9 @@ export function collectInstancedSpatialIndexStats(
       totalIndexNodes,
       totalIndexMemoryBytes,
       totalBuildTimeMs,
+      workerBuiltBatchCount,
+      syncFallbackBatchCount,
+      totalAdoptTimeMs,
     };
   }
 
@@ -983,6 +1159,12 @@ export function collectInstancedSpatialIndexStats(
       totalIndexNodes += s.nodeCount;
       totalIndexMemoryBytes += s.estimatedMemoryBytes;
       totalBuildTimeMs += s.buildTimeMs;
+      if (s.builtInWorker) {
+        workerBuiltBatchCount++;
+      } else {
+        syncFallbackBatchCount++;
+      }
+      totalAdoptTimeMs += s.adoptTimeMs ?? 0;
     }
   };
 
@@ -1000,5 +1182,8 @@ export function collectInstancedSpatialIndexStats(
     totalIndexNodes,
     totalIndexMemoryBytes,
     totalBuildTimeMs: Number(totalBuildTimeMs.toFixed(3)),
+    workerBuiltBatchCount,
+    syncFallbackBatchCount,
+    totalAdoptTimeMs: Number(totalAdoptTimeMs.toFixed(4)),
   };
 }

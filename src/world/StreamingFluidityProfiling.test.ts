@@ -654,6 +654,8 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
   const frames = [
     {
       frameIndex: 1,
+      intervalStartMs: 100,
+      intervalEndMs: 106.9,
       rafStartMs: 100,
       frameTimestampMs: 106.9,
       frameIntervalMs: 6.9,
@@ -665,6 +667,8 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       telemetryHudMs: 0.1,
       pickingRaycasterMs: 0.1,
       reactCommitMs: 0,
+      workerOnMessageMs: 0,
+      workerContinuationMs: 0,
       glRenderCpuMs: 1.5,
       attributedSyncMainThreadMs: 2.8,
       controlsUpdateMs: 0.2,
@@ -683,6 +687,7 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       readyScanAndSortMs: 0.1,
       reconstructMs: 0,
       instancedBvhBuildMs: 0,
+      instancedBvhAdoptMs: 0,
       staticBvhDeserializeMs: 0,
       sceneAttachMs: 0,
       commitRebuildStatsMs: 0,
@@ -690,6 +695,13 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       tilesCommittedCount: 0,
       tilesEvictedCount: 0,
       tilesCancelledCount: 0,
+      workerBvhAdoptedCount: 0,
+      syncBvhFallbackCount: 0,
+      workerDeliveriesCount: 0,
+      workerDeliveryLatencyMaxMs: 0,
+      workerBvhBuildMsTotal: 0,
+      transferableBytesTotal: 0,
+      usedCompactTransportCount: 0,
       pickingCallsCount: 1,
       reactCommitsCount: 0,
       newlyAttachedTilesCount: 0,
@@ -716,6 +728,8 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
     },
     {
       frameIndex: 2,
+      intervalStartMs: 106.9,
+      intervalEndMs: 152.9,
       rafStartMs: 107,
       frameTimestampMs: 152.9,
       frameIntervalMs: 46.0,
@@ -727,6 +741,8 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       telemetryHudMs: 0.1,
       pickingRaycasterMs: 0.2,
       reactCommitMs: 0.4,
+      workerOnMessageMs: 0,
+      workerContinuationMs: 0,
       glRenderCpuMs: 8.4,
       attributedSyncMainThreadMs: 35.0,
       controlsUpdateMs: 0.2,
@@ -745,6 +761,7 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       readyScanAndSortMs: 0.2,
       reconstructMs: 22.0,
       instancedBvhBuildMs: 18.2,
+      instancedBvhAdoptMs: 0,
       staticBvhDeserializeMs: 2.1,
       sceneAttachMs: 1.1,
       commitRebuildStatsMs: 0.8,
@@ -752,6 +769,13 @@ test('attributeWorstFrames separates sync vs async events, LoAFs, first-render p
       tilesCommittedCount: 1,
       tilesEvictedCount: 0,
       tilesCancelledCount: 0,
+      workerBvhAdoptedCount: 0,
+      syncBvhFallbackCount: 1,
+      workerDeliveriesCount: 0,
+      workerDeliveryLatencyMaxMs: 0,
+      workerBvhBuildMsTotal: 0,
+      transferableBytesTotal: 0,
+      usedCompactTransportCount: 0,
       pickingCallsCount: 1,
       reactCommitsCount: 1,
       newlyAttachedTilesCount: 1,
@@ -861,10 +885,11 @@ test('utmToLocalTarget, parseStreamingFluidityCli, buildTrajectoryPoseAtElapsedM
   assert.deepEqual(pMid.target, [2100, 0, -50]);
 
   const dummyReport: StreamingFluidityBenchmarkReport = {
-    schemaVersion: '1.0.0',
+    schemaVersion: '2.0.0',
     generatedAtIso: '2026-11-25T12:00:00.000Z',
     viewport: { width: 1440, height: 900, deviceScaleFactor: 1 },
     themeId: 'daylight',
+    variants: ['combined'],
     targetUtm: { easting: 344000, northing: 5790000 },
     preloadMarginTiles: 1,
     retainMarginTiles: 2,
@@ -884,6 +909,6 @@ test('utmToLocalTarget, parseStreamingFluidityCli, buildTrajectoryPoseAtElapsedM
     overheadChecks: [],
   };
   const md = formatStreamingFluidityMarkdown(dummyReport);
-  assert.ok(md.includes('TKT-039 Camera Movement & Streaming Frame-Time Profiling Report'));
+  assert.ok(md.includes('TKT-040 Non-blocking Tile Preparation & Streaming Frame-Time Report'));
   assert.ok(md.includes('Methodological Caveats'));
 });

@@ -5,7 +5,7 @@ type: perf
 status: in_progress
 priority: high
 created: 2026-11-25
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
 # TKT-039: Camera Movement and Streaming Frame-Time Profiling
@@ -58,10 +58,11 @@ Candidate contributors identified for direct measurement (not pre-judged):
 - [x] Reproducible multi-mosaic Playwright runner (`benchmarks/streamingFluidityRunner.ts`, `npm run bench:streaming-fluidity`) supports `1,024 m`, `2,048 m`, and `4,096 m` mosaics at shared UTM coordinates across Scenarios A–G, profiling overhead verification, and optional CDP Chrome traces (`--trace-out`).
 - [x] Deterministic unit/integration suite (`src/world/StreamingFluidityProfiling.test.ts`), end-to-end synthetic Playwright verification (`--allow-software`), 9-file tiling/foliage/picking/UI regression suite (`46/46`), `npm run lint`, `npm run build`, and `npm run docs:api` pass.
 - [x] Evaluation report (`docs/reports/tkt039-streaming-fluidity-profiling.md`) published with methodological caveats, Chrome DevTools trace instructions, and Windows PowerShell reproduction commands for all three Twente mosaics.
-- [ ] **Owner hardware profiling run on real Twente mosaics:** Project owner runs `npm run bench:streaming-fluidity` on the RTX 4060 Ti against `data/osm/twente-full-1024m-foliage-fix/mosaic.json`, `data/osm/twente-full-foliage-fix-batched-2048m/mosaic.json`, and `data/osm/twente-full-foliage-fix-batched-4096m/mosaic.json` (both foliage ON and OFF) and inspects the ranked worst-frame attribution and optional `--trace-out` trace to select the next optimization ticket.
+- [ ] **Owner hardware profiling run on real Twente mosaics:** Initial owner RTX 4060 Ti profiling on Twente identified intermittent `>190 ms` streaming stalls driven by expensive `Worker.onmessage` decoded-tile delivery and synchronous `InstancedSpatialIndex` BVH construction (persisting even with foliage disabled), motivating [`TKT-040`](TKT-040-non-blocking-tile-preparation-and-worker-transfer.md). TKT-040 Work Package A also corrected the pre-work frame-interval attribution and off-by-one `event.frameIndex` alignment bugs in `StreamingProfiler` / `MapScene.tsx` and added cross-thread worker delivery telemetry. Full multi-mosaic sign-off and ticket closure remain pending explicit owner review.
 
 ## References
 
 - Evaluation & benchmark guide: [`docs/reports/tkt039-streaming-fluidity-profiling.md`](../docs/reports/tkt039-streaming-fluidity-profiling.md)
+- Follow-up optimization & profiler refinement: [`TKT-040`](TKT-040-non-blocking-tile-preparation-and-worker-transfer.md), [`docs/reports/tkt040-non-blocking-tile-preparation.md`](../docs/reports/tkt040-non-blocking-tile-preparation.md)
 - Core implementation: `src/world/tiling/StreamingProfiler.ts`, `src/world/tiling/StreamingFluidityStats.ts`, `src/world/tiling/TileStreamManager.ts`, `src/world/tiling/TileSceneReconstructor.ts`, `src/scene/CameraController.tsx`, `src/scene/MapScene.tsx`
 - Tests & runner: `src/world/StreamingFluidityProfiling.test.ts`, `benchmarks/streamingFluidityRunner.ts`

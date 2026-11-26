@@ -1,15 +1,32 @@
-import { decodeTileBinary } from './TileBinaryCodec';
-import type { DecodedTilePayload } from './TilePackContract';
-import type {
-  TileDecodeWorkerErrorResponse,
-  TileDecodeWorkerRequest,
-  TileDecodeWorkerResponse,
+import type { AnyDecodedTilePayload } from './CompactTileTransport';
+import {
+  ensureRawOmsTileBytes,
+  prepareTileInWorker,
+  type TileDecodeWorkerErrorResponse,
+  type TileDecodeWorkerRequest,
+  type TileDecodeWorkerResponse,
 } from './TileDecodeWorker';
+import {
+  nowEpochMs,
+  resolveTilePreparationOptions,
+  type TilePreparationOptions,
+  type TilePreparationVariantId,
+  type WorkerDecodeStageTimings,
+} from './TilePreparationConfig';
 
 export interface TileDecodeResult {
-  decoded: DecodedTilePayload;
+  decoded: AnyDecodedTilePayload;
   decodeDurationMs: number;
   usedWebWorker: boolean;
+  workerTimings: WorkerDecodeStageTimings;
+}
+
+export interface WorkerMessageDeliveredInfo {
+  tileKey: string;
+  onMessageStartMs: number;
+  onMessageEndMs: number;
+  handlerDurationMs: number;
+  timings: WorkerDecodeStageTimings;
 }
 
 export interface TileDecodeClient {
@@ -18,6 +35,10 @@ export interface TileDecodeClient {
     tileKey: string,
     signal?: AbortSignal
   ): Promise<TileDecodeResult>;
+  getPreparationOptions(): TilePreparationOptions;
+  setPreparationOptions(
+    options: TilePreparationVariantId | Partial<TilePreparationOptions>
+  ): TilePreparationOptions;
   getActiveWorkerCount(): number;
   getPendingDecodeCount(): number;
   dispose(): void;
@@ -28,6 +49,10 @@ export interface TileDecodeClientOptions {
   workerCount?: number;
   /** Force inline async decode (useful for deterministic unit tests). */
   forceInlineDecode?: boolean;
+  /** Initial TKT-040 tile preparation variant or explicit options (default: 'combined'). */
+  preparationOptions?: TilePreparationVariantId | Partial<TilePreparationOptions>;
+  /** Optional hook fired synchronously at the end of `worker.onmessage` for frame attribution. */
+  onWorkerMessageDelivered?: (info: WorkerMessageDeliveredInfo) => void;
 }
 
 interface PendingJob {
@@ -48,13 +73,17 @@ function createAbortError(tileKey: string): Error {
 
 /**
  * Manages a pool of browser Web Workers that decode `OSMTILE1` binary tile payloads
- * off the main thread, with `AbortSignal` cancellation for queued jobs and automatic
- * fallback when running in Node.js test environments without browser `Worker`.
+ * off the main thread, with `AbortSignal` cancellation for queued jobs, TKT-040
+ * cross-thread timing instrumentation, and automatic fallback when running in Node.js
+ * test environments without browser `Worker`.
  */
 export function createTileDecodeClient(
   options: TileDecodeClientOptions = {}
 ): TileDecodeClient {
   const desiredWorkers = Math.max(1, options.workerCount ?? 2);
+  let currentPrepOptions: TilePreparationOptions = resolveTilePreparationOptions(
+    options.preparationOptions
+  );
   const workers: Worker[] = [];
   const busyWorkers = new Set<Worker>();
   const activeJobsByRequestId = new Map<
@@ -93,6 +122,8 @@ export function createTileDecodeClient(
         requestId: job.requestId,
         tileKey: job.tileKey,
         buffer: job.buffer,
+        options: { ...currentPrepOptions },
+        mainPostMessageEpochMs: nowEpochMs(),
       };
       try {
         idleWorker.postMessage(message, [job.buffer]);
@@ -117,6 +148,8 @@ export function createTileDecodeClient(
           { type: 'module' }
         );
         worker.onmessage = (event: MessageEvent<TileDecodeWorkerResponse>) => {
+          const onMessageStartMs = performance.now();
+          const onMessageEnterEpochMs = nowEpochMs();
           const response = event.data;
           const active = activeJobsByRequestId.get(response.requestId);
           if (!active) return;
@@ -129,13 +162,43 @@ export function createTileDecodeClient(
             job.signal.removeEventListener('abort', job.abortHandler);
           }
 
+          let deliveredTimings: WorkerDecodeStageTimings | null = null;
           if (job.signal?.aborted) {
             job.reject(createAbortError(job.tileKey));
           } else if (response.ok) {
+            const wt = response.workerTimings;
+            const deliveryLatencyMs = Number(
+              Math.max(
+                0,
+                onMessageEnterEpochMs - wt.workerPostMessageStartEpochMs
+              ).toFixed(3)
+            );
+            deliveredTimings = {
+              usedWebWorker: true,
+              usedCompactTransport: wt.usedCompactTransport,
+              transferAllTypedArrays: wt.transferAllTypedArrays,
+              workerInstanceBvhEnabled: wt.workerInstanceBvhEnabled,
+              workerQueueWaitMs: wt.workerQueueWaitMs,
+              workerInflateAndDecodeMs: wt.workerInflateAndDecodeMs,
+              workerBvhBuildMs: wt.workerBvhBuildMs,
+              workerPayloadPrepMs: wt.workerPayloadPrepMs,
+              workerPostMessageCallMs: 0,
+              workerTotalMs: wt.workerTotalBeforePostMessageMs,
+              messageDeliveryLatencyMs: deliveryLatencyMs,
+              mainOnMessageHandlerMs: 0,
+              mainPromiseContinuationMs: 0,
+              mainOnMessageStartMs: onMessageStartMs,
+              mainOnMessageEndMs: onMessageStartMs,
+              transferableBufferCount: wt.transferableBufferCount,
+              transferableBytes: wt.transferableBytes,
+              workerBvhBatchCount: wt.workerBvhBatchCount,
+              workerBvhInstanceCount: wt.workerBvhInstanceCount,
+            };
             job.resolve({
               decoded: response.decoded,
               decodeDurationMs: response.decodeDurationMs,
               usedWebWorker: true,
+              workerTimings: deliveredTimings,
             });
           } else {
             const errResp = response as TileDecodeWorkerErrorResponse;
@@ -143,6 +206,22 @@ export function createTileDecodeClient(
           }
 
           pumpQueue();
+
+          const onMessageEndMs = performance.now();
+          const handlerDurationMs = Math.max(0, onMessageEndMs - onMessageStartMs);
+          if (deliveredTimings) {
+            deliveredTimings.mainOnMessageHandlerMs = Number(
+              handlerDurationMs.toFixed(3)
+            );
+            deliveredTimings.mainOnMessageEndMs = onMessageEndMs;
+            options.onWorkerMessageDelivered?.({
+              tileKey: job.tileKey,
+              onMessageStartMs,
+              onMessageEndMs,
+              handlerDurationMs,
+              timings: deliveredTimings,
+            });
+          }
         };
 
         worker.onerror = (event: ErrorEvent) => {
@@ -159,7 +238,8 @@ export function createTileDecodeClient(
               }
               active.job.reject(
                 new Error(
-                  event.message || `TileDecodeWorker error for ${active.job.tileKey}`
+                  event.message ||
+                    `TileDecodeWorker error for ${active.job.tileKey}`
                 )
               );
             }
@@ -195,12 +275,45 @@ export function createTileDecodeClient(
       throw createAbortError(tileKey);
     }
     const t0 = performance.now();
-    const decoded = decodeTileBinary(new Uint8Array(buffer), tileKey);
-    const decodeDurationMs = performance.now() - t0;
+    const tInflate0 = performance.now();
+    const rawBytes = await ensureRawOmsTileBytes(buffer);
+    const inflateMs = performance.now() - tInflate0;
+    const prep = prepareTileInWorker(rawBytes, tileKey, currentPrepOptions, false);
+    const endMs = performance.now();
+    const decodeDurationMs = endMs - t0;
+    const timings: WorkerDecodeStageTimings = {
+      usedWebWorker: false,
+      usedCompactTransport: prep.options.compactMetadataTransport,
+      transferAllTypedArrays: prep.options.transferAllTypedArrays,
+      workerInstanceBvhEnabled: prep.options.workerInstanceBvh,
+      workerQueueWaitMs: 0,
+      workerInflateAndDecodeMs: Number((inflateMs + prep.decodeOnlyMs).toFixed(3)),
+      workerBvhBuildMs: Number(prep.workerBvhBuildMs.toFixed(3)),
+      workerPayloadPrepMs: Number(prep.workerPayloadPrepMs.toFixed(3)),
+      workerPostMessageCallMs: 0,
+      workerTotalMs: Number(decodeDurationMs.toFixed(3)),
+      messageDeliveryLatencyMs: 0,
+      mainOnMessageHandlerMs: Number(decodeDurationMs.toFixed(3)),
+      mainPromiseContinuationMs: 0,
+      mainOnMessageStartMs: t0,
+      mainOnMessageEndMs: endMs,
+      transferableBufferCount: prep.transferables.length,
+      transferableBytes: prep.transferableBytes,
+      workerBvhBatchCount: prep.workerBvhBatchCount,
+      workerBvhInstanceCount: prep.workerBvhInstanceCount,
+    };
+    options.onWorkerMessageDelivered?.({
+      tileKey,
+      onMessageStartMs: t0,
+      onMessageEndMs: endMs,
+      handlerDurationMs: decodeDurationMs,
+      timings,
+    });
     return {
-      decoded,
+      decoded: prep.decoded,
       decodeDurationMs,
       usedWebWorker: false,
+      workerTimings: timings,
     };
   };
 
@@ -250,6 +363,13 @@ export function createTileDecodeClient(
 
   return {
     decodeTile,
+    getPreparationOptions: () => ({ ...currentPrepOptions }),
+    setPreparationOptions: (
+      next: TilePreparationVariantId | Partial<TilePreparationOptions>
+    ) => {
+      currentPrepOptions = resolveTilePreparationOptions(next);
+      return { ...currentPrepOptions };
+    },
     getActiveWorkerCount: () => workers.length,
     getPendingDecodeCount: () =>
       queuedJobs.length + activeJobsByRequestId.size,

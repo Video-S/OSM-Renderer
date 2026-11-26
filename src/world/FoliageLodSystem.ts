@@ -304,6 +304,46 @@ export function buildFoliagePrototypeGeometry(
   return singleCone;
 }
 
+const cachedUnionLocalBoundsArrays = new Map<
+  FoliagePrototypeKind,
+  readonly [number, number, number, number, number, number]
+>();
+
+/**
+ * Worker-safe helper returning the exact union local-space AABB `[minX, minY, minZ, maxX, maxY, maxZ]`
+ * across all LOD variants (`lod0`..`lod2`) for a foliage prototype kind.
+ *
+ * Uses the exact same `buildFoliagePrototypeGeometry` definitions as `FoliagePrototypeRegistry`
+ * so worker-side `InstancedSpatialIndex` BVH construction matches main-thread bounds bit-for-bit.
+ */
+export function computeFoliagePrototypeUnionLocalBoundsArray(
+  kind: FoliagePrototypeKind
+): readonly [number, number, number, number, number, number] {
+  const cached = cachedUnionLocalBoundsArrays.get(kind);
+  if (cached) return cached;
+
+  const unionBox = new THREE.Box3();
+  const lods: readonly FoliageLodLevel[] =
+    kind === 'tree_trunk' ? ['lod0'] : FOLIAGE_LOD_LEVELS;
+  for (const lod of lods) {
+    const geo = buildFoliagePrototypeGeometry(kind, lod);
+    if (geo.boundingBox) {
+      unionBox.union(geo.boundingBox);
+    }
+    geo.dispose();
+  }
+  const tuple: readonly [number, number, number, number, number, number] = [
+    unionBox.min.x,
+    unionBox.min.y,
+    unionBox.min.z,
+    unionBox.max.x,
+    unionBox.max.y,
+    unionBox.max.z,
+  ];
+  cachedUnionLocalBoundsArrays.set(kind, tuple);
+  return tuple;
+}
+
 /**
  * Shared registry owning the small fixed set of foliage prototype `BufferGeometry` objects
  * across all loaded tiles (7 unique GPU buffers total across the entire regional mosaic:

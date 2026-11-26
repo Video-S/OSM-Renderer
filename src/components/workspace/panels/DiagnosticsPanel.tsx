@@ -33,6 +33,7 @@ import type {
   FoliageOptimizationConfig,
 } from '../../../world/FoliageLodSystem';
 import type { InstancedPickingMode } from '../../../world/InstancedSpatialIndex';
+import type { TilePreparationVariantId } from '../../../world/tiling/TilePreparationConfig';
 import type { ReproFormSessionState } from '../workspaceTypes';
 
 export interface DiagnosticsPanelProps {
@@ -83,6 +84,13 @@ export interface DiagnosticsPanelProps {
     totalEvents: number;
     longTasks: number;
     loafs: number;
+  } | null;
+  tilePreparationVariant?: TilePreparationVariantId | 'custom';
+  onChangeTilePreparationVariant?: (variant: TilePreparationVariantId) => void;
+  tilePreparationStats?: {
+    workerBvhAdoptedTotal: number;
+    syncBvhFallbackTotal: number;
+    pendingReadyTileBytes: number;
   } | null;
 }
 
@@ -135,6 +143,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   onToggleStreamingProfiler,
   onExportStreamingProfile,
   streamingProfilerSummary = null,
+  tilePreparationVariant = 'combined',
+  onChangeTilePreparationVariant,
+  tilePreparationStats = null,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
@@ -610,6 +621,65 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <span>Frames: {streamingProfilerSummary.totalFrames}</span>
                 <span>Events: {streamingProfilerSummary.totalEvents}</span>
                 <span>LoAF: {streamingProfilerSummary.loafs}</span>
+              </div>
+            )}
+            {onChangeTilePreparationVariant && (
+              <div className="pt-1.5 space-y-1">
+                <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                  <span>Tile Prep Mode</span>
+                  <select
+                    data-testid="diag-tile-prep-variant"
+                    value={tilePreparationVariant}
+                    onChange={(e) => {
+                      const val = e.target.value as TilePreparationVariantId;
+                      if (
+                        val === 'baseline' ||
+                        val === 'transfer_only' ||
+                        val === 'compact_transport' ||
+                        val === 'worker_bvh' ||
+                        val === 'combined'
+                      ) {
+                        onChangeTilePreparationVariant(val);
+                      }
+                    }}
+                    className="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] font-mono text-slate-200 cursor-pointer"
+                  >
+                    <option value="combined">combined (default)</option>
+                    <option value="worker_bvh">worker_bvh</option>
+                    <option value="compact_transport">compact_transport</option>
+                    <option value="transfer_only">transfer_only</option>
+                    <option value="baseline">baseline (TKT-039)</option>
+                  </select>
+                </div>
+                {tilePreparationStats && (
+                  <div
+                    data-testid="diag-tile-prep-stats"
+                    className="text-[10px] font-mono tabular-nums text-slate-400 flex items-center justify-between px-1"
+                  >
+                    <span>
+                      Worker BVH:{' '}
+                      <strong className="text-emerald-300">
+                        {tilePreparationStats.workerBvhAdoptedTotal}
+                      </strong>
+                    </span>
+                    <span>
+                      Sync Fallback:{' '}
+                      <strong
+                        className={
+                          tilePreparationStats.syncBvhFallbackTotal > 0
+                            ? 'text-amber-300'
+                            : 'text-slate-300'
+                        }
+                      >
+                        {tilePreparationStats.syncBvhFallbackTotal}
+                      </strong>
+                    </span>
+                    <span>
+                      Ready:{' '}
+                      {(tilePreparationStats.pendingReadyTileBytes / (1024 * 1024)).toFixed(1)} MB
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

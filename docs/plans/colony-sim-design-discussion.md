@@ -1,7 +1,7 @@
 # Exploratory design — Regional colony simulation and A-Life-inspired world
 
 **Recorded:** 2026-11-26  
-**Status:** Discussion notes; not an approved implementation plan.  
+**Status:** Authoritative record of this design discussion and agreed product direction; not a finalized game design or approved implementation plan. Explicit owner decisions take precedence over exploratory proposals and older notes.  
 **Related:** [Persistent regional simulation](./persistent-regional-simulation.md) (earlier proposal, originally framed around Atom Zombie Smasher).
 
 ## 1. Change in game direction
@@ -89,9 +89,9 @@ A possible architecture is two rendering representations: a detailed local rende
 
 This may enable smaller local streaming units and avoid replacing equivalent detailed geometry merely to change batching resolution. This is a hypothesis, not a measured result or a decision to abandon the current renderer.
 
-### 6.1 Clarified navigation requirement: seamless regional-to-local travel
+### 6.1 Clarified navigation requirement: regional-to-local travel with a polished transition
 
-The owner clarified that streaming remains necessary. A player should be able to navigate the regional map, select or approach an event, and enter its detailed local environment with a reasonably seamless transition. The distinction is between continuous navigation and continuous residency of full-detail geometry: the former is desirable; the latter is not a requirement.
+The owner clarified that streaming remains necessary. A player should be able to navigate the regional map, select or approach an event, and enter its detailed local environment with a somewhat seamless transition. The owner explicitly accepts a loading screen concealed or presented through a deliberate visual transition (for example, a fade, camera animation or stylized transition). Completely invisible loading and uninterrupted full-detail zoom across the region are not requirements. Smooth local navigation and responsive regional navigation remain goals; distant jumps need not stream detailed geography along the intervening route.
 
 Illustrative interaction:
 1. The player notices an event or another colony on the lightweight regional map and selects a destination.
@@ -103,9 +103,9 @@ An explicit destination is a stronger prefetch signal than inferred camera veloc
 Candidate streaming principles:
 - Keep the regional representation lightweight and readily available as a visual fallback.
 - Stream local detail in relatively small, bounded units, prioritizing the destination and visible coverage.
-- Preserve the regional representation until the corresponding local coverage is ready; avoid blank views or requiring the full-detail region to become resident.
+- Use the regional representation as a possible visual fallback while local coverage prepares, or use an intentional loading transition. Avoid accidental blank views; do not require the full-detail region to become resident.
 - Keep client geometry readiness separate from authoritative server simulation readiness. Rendering completion must not control world progression.
-- Coordinate the transition so detailed interactions are enabled only when the necessary authoritative state is available. The precise visual handoff, readiness criteria and cancellation behavior remain design questions.
+- Coordinate the transition so detailed interactions are enabled only when the necessary authoritative state is available. The precise visual handoff, readiness criteria, acceptable loading duration and cancellation behavior remain design questions. Destination preloading is desirable for reducing waits, not a requirement that every transition complete without visible loading.
 
 This preserves the usefulness of existing asynchronous preparation, cache management, prioritization and frame-budgeted scheduling. It does not imply that the current uniform-resolution atomic swap is the required mechanism for switching between strategic and local representations.
 
@@ -117,7 +117,7 @@ A future renderer should reserve meaningful CPU, GPU and memory capacity for age
 
 Localhost streaming benchmarks do not establish multiplayer asset-delivery performance. Investigate immutable, versioned geographic packages that clients can download or cache across sessions, separately from live authoritative gameplay state and updates. Client and server must agree on the geographic dataset identity. Distribution, cache invalidation, storage limits and installation versus browser caching remain open decisions.
 
-After F2, consider a milestone exploring local/regional representation separation, resource headroom and static asset distribution. This is a proposed direction, not authorization to begin a replacement renderer or prescribe a particular asset packaging format.
+The owner agreed to work toward a renderer supporting this revised goal. After F2, the proposed development order is: evaluate a lightweight regional representation, integrate regional-to-local navigation and destination preparation, investigate static asset distribution and persistent caching, then validate resource headroom under representative synthetic gameplay workloads. The sequence is a proposal, not an approved set of tickets or authorization to begin a replacement renderer.
 
 ## 7. Relationship to ongoing renderer work
 
@@ -142,4 +142,4 @@ The discussion suggests reviewing game requirements before another major renderi
 
 ## 9. Scope guard
 
-This document records the discussion and a promising direction, not a formal ADR, finalized game design, approved ticket or commitment to an engine, server language, networking implementation or pathfinding algorithm. Do not start gameplay implementation, a simulation bake or a renderer replacement solely on the basis of these notes. No existing ticket status is changed.
+This is the authoritative record of this discussion, including agreed requirements and explicitly identified exploratory ideas. It is not a formal ADR, finalized game design, approved ticket or commitment to an engine, server language, networking implementation or pathfinding algorithm. Update this document as the owner clarifies the direction; do not treat superseded discussion wording as an active requirement. Do not start gameplay implementation, a simulation bake or a renderer replacement solely on the basis of these notes. No existing ticket status is changed.

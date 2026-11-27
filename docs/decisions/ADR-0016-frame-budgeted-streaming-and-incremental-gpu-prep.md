@@ -1,8 +1,8 @@
 # ADR-0016: Frame-Budgeted Streaming, Offscreen Incremental GPU Preparation, Deferred Disposal, and Transition Critical-Path Prioritization
 
-- **Status:** Implemented (synthetic unit, integration, and 7-variant Playwright verification complete; pending owner RTX 4060 Ti hardware benchmark and full-Twente visual acceptance under [`TKT-041-F1`](../../tickets/TKT-041-F1-frame-budgeted-streaming.md))
+- **Status:** Implemented and extended by [`ADR-0017`](ADR-0017-decoupled-streaming-pipeline-and-adaptive-prewarm.md) (`TKT-041-F2`, closed 2026-11-27); `combined_prewarm` validated on owner RTX 4060 Ti as F1 reference (`f2_combined` is now default foundation). [`TKT-041-F1`](../../tickets/TKT-041-F1-frame-budgeted-streaming.md) remains `in_progress` with dedicated budget/debounce sweeps and further uniform full-detail tuning deferred.
 - **Date:** 2026-11-26
-- **Related Tickets:** [`TKT-041`](../../tickets/TKT-041-hierarchical-tile-streaming.md), [`TKT-041-F1`](../../tickets/TKT-041-F1-frame-budgeted-streaming.md), [`TKT-040`](../../tickets/TKT-040-non-blocking-tile-preparation.md), [`TKT-039`](../../tickets/TKT-039-camera-movement-streaming-profiling.md)
+- **Related Tickets:** [`TKT-041`](../../tickets/TKT-041-hierarchical-tile-streaming.md), [`TKT-041-F1`](../../tickets/TKT-041-F1-frame-budgeted-streaming.md), [`TKT-040`](../../tickets/TKT-040-non-blocking-tile-preparation-and-worker-transfer.md), [`TKT-039`](../../tickets/TKT-039-camera-movement-and-streaming-frame-time-profiling.md)
 - **Qualifies / Extends:** [`ADR-0006`](ADR-0006-gpu-resource-lifecycle-and-disposal.md), [`ADR-0011`](ADR-0011-baked-tiles-and-runtime-streaming.md), [`ADR-0015`](ADR-0015-hierarchical-tile-streaming.md)
 
 ---

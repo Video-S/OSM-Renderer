@@ -105,7 +105,9 @@ The objective of `TKT-041-F1` is to distribute expensive main-thread and GPU-upl
 - Synthetic 7-variant Playwright benchmark verification (`benchmarks/hierarchicalStreamingRunner.ts`) across continuous elapsed-time simultaneous pan+zoom scenarios (`simultaneous_pan_zoom_cold`, `simultaneous_pan_zoom_warm`, `rapid_zoom_reversal_pan`, `repeated_resolution_transitions_pan`) with independent frame-time and transition-latency reporting.
 - `npm run docs:api`, `npm run lint`, and `npm run build` pass cleanly.
 
-### Open Acceptance Gates (Owner Local Hardware & Visual QA)
-- Execute `benchmarks/hierarchicalStreamingRunner.ts` on the owner's RTX 4060 Ti against `data/osm/twente-full-hierarchical.json` across the 7 F1 variants, frame-budget sweep (`1.0 / 2.0 / 4.0 ms`), and debounce sweep (`100 / 150 / 250 ms`).
-- Confirm interactive panning + zooming fluidity (`p95`, `p99`, `max`, `% > 6.94 / 8.33 / 16.67 / 33.33 ms`, longest slow-frame streak) and Section 12 `1,024 m -> 2,048 m -> 4,096 m` transition latency (`p50`, `p95`, `max`, critical-path stage breakdown) on full Twente.
-- Owner interactive visual acceptance confirming zero missing/duplicate tiles, zero flash/pop regression, and responsive feature picking during continuous pan+zoom transitions.
+### Reconciled Hardware Validation & Open Acceptance Gates (Owner Local Hardware & Visual QA)
+- **Validated & Accepted as Foundation via `TKT-041-F2` (`2026-11-27`):** Owner RTX 4060 Ti hardware benchmarks and interactive testing on `data/osm/twente-full-hierarchical.json` (`1,536 MiB` memory budget, foliage enabled) compared `combined_prewarm` (F1 reference) against `f2_combined`, passing all single-resolution consistency checks, sampled feature picking parity, and zero unfinished transitions. `f2_combined` is retained as the accepted default foundation.
+- **Unfinished F1 Gates (Keep `TKT-041-F1` `in_progress`, tuning deferred):**
+  - The full 7-variant matrix (`tkt041_baseline`..`combined_prewarm`), frame-budget sweep (`1.0 / 2.0 / 4.0 ms`), and debounce sweep (`100 / 150 / 250 ms`) were not executed on owner hardware.
+  - Frame-time consistency in the `TKT-041-F2` hardware comparison remained mixed with regressions in some scenarios (explicitly accepted for the current phase without claiming resolution).
+  - Further optimization and tuning of uniform full-detail resolution transitions are deferred while future renderer exploration moves toward separating detailed local rendering from a lightweight strategic regional view ([`docs/plans/colony-sim-design-discussion.md`](../docs/plans/colony-sim-design-discussion.md)).

@@ -1,6 +1,6 @@
 # ADR-0015: Uniform-Viewport Hierarchical Tile Streaming (1,024 m / 2,048 m / 4,096 m)
 
-- **Status:** Accepted for implemented `TKT-041` architecture (synthetic sandbox validation passed; owner RTX 4060 Ti benchmarking and interactive visual QA on full Twente pending)
+- **Status:** Accepted architecture; deployed on full Twente and extended by [`ADR-0016`](ADR-0016-frame-budgeted-streaming-and-incremental-gpu-prep.md) (`TKT-041-F1`) and [`ADR-0017`](ADR-0017-decoupled-streaming-pipeline-and-adaptive-prewarm.md) (`TKT-041-F2`, closed 2026-11-27 as current foundation). `TKT-041` remains `in_progress` for its unexecuted `--foliage=both` matrix sweep and explicit closure sign-off.
 - **Date:** 2026-11-26
 - **Related ADRs:** [ADR-0001](ADR-0001-geographic-coordinates-and-local-projection.md), [ADR-0006](ADR-0006-gpu-resource-lifecycle-and-disposal.md), [ADR-0011](ADR-0011-baked-tiles-and-runtime-streaming.md), [ADR-0012](ADR-0012-bounded-regional-mosaics.md), [ADR-0013](ADR-0013-regional-camera-zoom-policy.md), [ADR-0014](ADR-0014-spatially-accelerated-instanced-feature-picking.md)
 - **Related Ticket:** [TKT-041](../../tickets/TKT-041-hierarchical-tile-streaming.md)

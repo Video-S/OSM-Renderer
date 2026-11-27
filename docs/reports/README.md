@@ -16,8 +16,8 @@ Preserved measurement artifacts and their accompanying reports. Read each report
 | [TKT-038 instanced feature picking](./tkt038-instanced-feature-picking.md) | Spatially accelerated instanced picking (`InstancedSpatialIndex`) & multi-mosaic benchmark plan |
 | [TKT-039 streaming fluidity profiling](./tkt039-streaming-fluidity-profiling.md) | Camera-movement & streaming frame-time profiling instrumentation & benchmark plan |
 | [TKT-040 non-blocking tile preparation](./tkt040-non-blocking-tile-preparation.md) | Compact zero-copy worker transfer, worker-side instanced BVH & main-thread tile prep evaluation |
-| [TKT-041 hierarchical tile streaming](./tkt041-hierarchical-tile-streaming.md) | Uniform-viewport `1,024 m / 2,048 m / 4,096 m` hierarchical streaming, synthetic validation & Twente benchmark plan |
-| [TKT-041-F1 frame-budgeted streaming](./tkt041-f1-frame-budgeted-streaming.md) | Shared per-frame streaming scheduler, offscreen 1×1 incremental GPU prep, deferred disposal & Section 12 transition critical-path analysis |
-| [TKT-041-F2 streaming throughput & granularity](./tkt041-f2-streaming-throughput-and-granularity.md) | Decoupled 8-stage bounded pipeline, compressed HTTP worker transfer, reserved destination slots, tail-tile boost, latency-aware adaptive prewarming & Candidate A/B/C granularity study |
+| [TKT-041 hierarchical tile streaming](./tkt041-hierarchical-tile-streaming.md) | Uniform-viewport `1,024 m / 2,048 m / 4,096 m` hierarchical streaming, synthetic validation, full-Twente interactive verification & benchmark plan |
+| [TKT-041-F1 frame-budgeted streaming](./tkt041-f1-frame-budgeted-streaming.md) | Shared per-frame streaming scheduler, offscreen 1×1 incremental GPU prep, deferred disposal, Section 12 transition critical-path analysis & F1 reference (`combined_prewarm`) |
+| [TKT-041-F2 streaming throughput & granularity](./tkt041-f2-streaming-throughput-and-granularity.md) | Decoupled 8-stage bounded pipeline, compressed HTTP worker transfer, RTX 4060 Ti hardware validation (`f2_combined` accepted foundation), documented limitations & Candidate A/B/C granularity study |
 
 Other benchmark datasets and raw harness code remain in the repository's top-level `benchmarks/` directory because they are used by executable tooling. The writers for the M2.1 and M2.2 reports now output to this directory.

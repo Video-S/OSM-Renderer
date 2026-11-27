@@ -1,8 +1,8 @@
 # ADR-0017: Decoupled Multi-Stage Streaming Pipeline, Compressed Worker Transfer, Reserved Destination Fairness, and Latency-Aware Adaptive Prewarming (`TKT-041-F2`)
 
-- **Status:** Accepted for implementation; pending owner RTX 4060 Ti hardware validation on full Twente (`TKT-041-F2` `in_progress`)
+- **Status:** Accepted (`TKT-041-F2` closed 2026-11-27; `f2_combined` retained as accepted default foundation with documented limitations; further uniform full-detail transition optimization deferred pending dual-map exploration)
 - **Date:** 2026-11-27
-- **Related Tickets:** `TKT-041-F2`, `TKT-041-F1`, `TKT-041`, `TKT-040`
+- **Related Tickets:** `TKT-041-F2` (`closed`), `TKT-041-F1`, `TKT-041`, `TKT-040`
 - **Related ADRs:** [`ADR-0011`](ADR-0011-baked-tiles-and-runtime-streaming.md), [`ADR-0015`](ADR-0015-hierarchical-tile-streaming.md), [`ADR-0016`](ADR-0016-frame-budgeted-streaming-and-incremental-gpu-prep.md)
 
 ---
@@ -69,18 +69,23 @@ We retain the uniform-viewport resolution invariant, atomic frame-boundary activ
 
 ### 2.5 Streaming vs. Rendering Granularity Decision Gate
 
-As documented in [`docs/reports/tkt041-f2-streaming-throughput-and-granularity.md`](../reports/tkt041-f2-streaming-throughput-and-granularity.md), we adopt **Candidate A** (preserving `1,024 m / 2,048 m / 4,096 m` `OSMTILE1` v1 spatial batching and streaming granularity while optimizing pipeline decoupling, worker-side decompression, concurrency, and adaptive prewarming) as the primary zero-rebake implementation, and establish an explicit quantitative decision gate for **Candidate B** (`1,024 m` streaming units assembled at runtime into `2,048 m / 4,096 m` render batches) if hardware benchmarking shows cold `4,096 m` transitions remain `> 1,500 ms` due to single-tile tail serialization.
+As documented in [`docs/reports/tkt041-f2-streaming-throughput-and-granularity.md`](../reports/tkt041-f2-streaming-throughput-and-granularity.md), we adopted **Candidate A** (`1,024 m / 2,048 m / 4,096 m` `OSMTILE1` v1 spatial batching and streaming granularity with pipeline decoupling, `?compressed=1` worker-side decompression, `8` HTTP × `4` workers, reserved destination fairness, and adaptive prewarming) as the zero-rebake implementation (`f2_combined` default). Following RTX 4060 Ti hardware validation and interactive testing (`2026-11-27`), the owner accepted **Candidate A (`f2_combined`)** with its remaining limitations as the current foundation and reference implementation, deferring **Candidate B** (`1,024 m`/`2,048 m` runtime sub-chunk assembly), **Candidate C**, and further optimization of uniform full-detail resolution transitions until exploring a dual-map architecture ([`docs/plans/colony-sim-design-discussion.md`](../plans/colony-sim-design-discussion.md)).
 
 ---
 
 ## 3. Consequences
 
 ### Positive
-- Eliminates idle network slots during heavy worker decoding and eliminates synchronous Node.js `zlib.inflateSync` serialization when `?compressed=1` is active.
+- Eliminates idle network slots during heavy worker decoding and eliminates synchronous Node.js `zlib.inflateSync` serialization when `?compressed=1` is active (with concurrent `DecompressionStream('deflate')` stream consumption in `TileDecodeWorker.ts` avoiding backpressure deadlocks on `>160 MiB` payloads).
 - Guarantees deadlock-free loading for `>160 MB` `4,096 m` tiles while keeping multi-tile queues strictly memory-bounded.
 - Prevents active-resolution preload traffic from starving destination transitions during simultaneous pan + zoom.
-- Preserves 100% backward compatibility with existing baked `OSMTILE1` v1 SQLite packs and all `TKT-041-F1` / `TKT-041` / `TKT-040` presets for reproducible A/B hardware benchmarking.
+- Demonstrated substantial `4,096 m` transition-latency reductions on owner RTX 4060 Ti full-Twente validation (`combined_prewarm` -> `f2_combined`, foliage enabled, `1,536 MiB`): cold `1,024 -> 4,096 m` `6812.0 -> 2603.5 ms`, cold `2,048 -> 4,096 m` `3543.1 -> 2606.0 ms`, gradual zoom-out with panning `7551.0 -> 2715.1 ms`, and long-distance teleport `8319.6 -> 1022.5 ms`, with all single-resolution consistency checks, zero unfinished transitions, and sampled feature picking parity passing.
+- Preserves 100% backward compatibility with existing baked `OSMTILE1` v1 SQLite packs and all `TKT-041-F1` / `TKT-041` / `TKT-040` presets for reproducible A/B hardware evaluation.
 
-### Trade-offs & Constraints
-- Running 4 decode workers and up to 8 concurrent HTTP retrievals increases transient peak worker memory footprint during `4,096 m` transitions; bounded by `maxRetrievedPayloadQueueBytes` (`384 MiB`), `maxWorkerPreparationBytes` (`512 MiB`), and the `1,536 MiB` total hierarchical budget.
-- Final default tuning (`maxConcurrentHttpRetrievals`: `6, 8, 12`; `workerConcurrency`: `2, 4`) remains subject to owner RTX 4060 Ti hardware measurements on `data/osm/twente-full-hierarchical.json`.
+### Trade-offs, Constraints & Owner-Accepted Limitations (`TKT-041-F2` Closure)
+- The provisional `>= 50%` latency reduction target was not achieved universally (`2,048 -> 4,096 m` improved ~`26.4%`).
+- Frame-time consistency remained mixed on hardware, with regressions observed in some scenarios.
+- Peak accounted memory consumption increased in several scenarios under concurrent `8` HTTP × `4` worker preparation (`maxRetrievedPayloadQueueBytes: 384 MiB`, `maxWorkerPreparationBytes: 512 MiB`, `1,536 MiB` total budget).
+- The full staged variant matrix (`--variants=f2_all`) and concurrency matrix (`HTTP 6/8/12 × Worker 2/4`) were not executed on owner hardware.
+- The existing hierarchy still relies on relatively large, indivisible `4,096 m` streaming payloads.
+- All five limitations above are explicitly accepted by the owner for the current phase (`TKT-041-F2` closed `2026-11-27`) and must not be misrepresented as resolved; further optimization of uniform full-detail transitions is deferred in favor of exploring a detailed local renderer paired with a lightweight strategic regional view ([`docs/plans/colony-sim-design-discussion.md`](../plans/colony-sim-design-discussion.md)).

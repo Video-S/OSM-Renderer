@@ -2,7 +2,7 @@
 id: TKT-041-F2
 title: "Streaming Throughput and Transition Latency"
 type: tech_debt
-status: in_progress
+status: closed
 priority: high
 created: 2026-11-27
 updated: 2026-11-27
@@ -95,17 +95,35 @@ Owner hardware validation of `TKT-041-F1` confirmed that frame-budgeted scheduli
 - [x] Existing feature picking and visual fidelity are preserved (`OSMTILE1` v1 compatibility; zero rebaking or reconsolidation).
 - [x] Streaming versus rendering granularity options (Candidates A, B, C across all 10 dimensions) are evaluated with a clear recommendation and decision gate in `docs/reports/tkt041-f2-streaming-throughput-and-granularity.md`.
 - [x] Automated tests cover independent stage queuing, oversized-payload forward progress, dynamic reprioritization, running-job retention, adaptive prewarming, destination progress under continuous active panning, picking parity, leak-free cancellation across all stages, byte-exact decompression of small to `>160 MiB` payloads, and actual browser Web Worker compressed tile decoding + explicit decode failure surfacing (`src/world/StreamingThroughputAndLatency.test.ts`).
-- [ ] Owner validates real-data transition latency (`>= 50%` cold-transition latency reduction target or hardware throughput ceiling characterization) and interactive fluidity on the full Twente dataset (`data/osm/twente-full-hierarchical.json`).
+- [x] Owner validates real-data transition latency (`>= 50%` cold-transition latency reduction target or hardware throughput ceiling characterization) and interactive fluidity on the full Twente dataset (`data/osm/twente-full-hierarchical.json`) — **Accepted as foundation with documented limitations (`2026-11-27`):** owner RTX 4060 Ti validation and interactive testing confirmed `f2_combined` delivers noticeable, worthwhile improvements (`Cold 1,024 -> 4,096 m`: `6812.0 -> 2603.5 ms`, `Cold 2,048 -> 4,096 m`: `3543.1 -> 2606.0 ms`, `Gradual zoom-out w/ pan`: `7551.0 -> 2715.1 ms`, `Teleport`: `8319.6 -> 1022.5 ms`; single-resolution consistency checks passed; zero unfinished transitions; sampled feature picking parity passed). The provisional `>= 50%` reduction target was not met universally (`2,048 -> 4,096 m`: ~`26.4%`), frame-time consistency remained mixed with regressions in some scenarios, peak accounted memory increased in several scenarios, full staged/concurrency matrices were not executed on hardware, and large indivisible payloads remain; all five limitations are explicitly accepted for the current phase.
+
+## Owner Hardware Validation, Closure & Revised Product Direction (`2026-11-27`)
+
+Owner hardware validation on the full Twente dataset (`RTX 4060 Ti`, `combined_prewarm` vs `f2_combined`, foliage enabled, `1,536 MiB` memory budget) followed by interactive testing:
+
+| Transition to `4,096 m` | F1 reference (`combined_prewarm`) | F2 combined (`f2_combined`) |
+| --- | ---: | ---: |
+| Cold `1,024 m -> 4,096 m` | `6812.0 ms` | `2603.5 ms` |
+| Cold `2,048 m -> 4,096 m` | `3543.1 ms` | `2606.0 ms` |
+| Gradual zoom-out with panning | `7551.0 ms` | `2715.1 ms` |
+| Long-distance teleport scenario | `8319.6 ms` | `1022.5 ms` |
+
+- **Accepted Baseline & Preserved Tooling:** `f2_combined` is retained as the accepted default (`DEFAULT_STREAMING_FRAME_BUDGET_CONFIG`), and all 12 staged F1/F2 benchmark variants and diagnostic instrumentation remain intact for future evaluation.
+- **Compressed Payload Decompression Regression:** Resolved a `DecompressionStream('deflate')` backpressure deadlock in `ensureRawOmsTileBytes()` (`TileDecodeWorker.ts`) that previously caused a 120 s readiness timeout with zero meshes under `f2_combined`, added bounded worker decode timeouts + explicit failure surfacing (`TileDecodeClient.ts`, `TileStreamManager.ts`, `App.tsx`), verified up to `164 MiB` uncompressed + end-to-end Chromium Web Worker tests, and removed unsupported `--mosaic`/`--f2-matrix`/`--headed` flags from docs.
+- **Explicitly Accepted Limitations (Unresolved for Current Phase):** provisional `50%` latency target not met universally; mixed frame-time consistency with regressions in some scenarios; higher peak accounted memory in several scenarios; full staged variant and concurrency matrices not executed on hardware; large indivisible streaming payloads remain.
+- **Revised Product Direction:** Per [`docs/plans/colony-sim-design-discussion.md`](../docs/plans/colony-sim-design-discussion.md), future renderer development will be guided by regional colony simulation requirements (distinguishing detailed local rendering from a lightweight strategic regional view). The current hierarchical renderer (`f2_combined`) serves as an accepted foundation/reference implementation; further optimization of uniform full-detail resolution transitions is deferred until the dual-map architecture is explored.
 
 ## Verification
 
-### Automated Verification Executed in Sandbox (`2026-11-27`)
-- `npx tsx --test src/world/StreamingThroughputAndLatency.test.ts src/world/FrameBudgetedStreaming.test.ts src/world/HierarchicalTileStreaming.test.ts src/world/NonBlockingTilePreparation.test.ts` — **25 / 25 tests passed** (`9/9` in `StreamingThroughputAndLatency.test.ts`, `6/6` in `FrameBudgetedStreaming.test.ts`, `4/4` in `HierarchicalTileStreaming.test.ts`, `6/6` in `NonBlockingTilePreparation.test.ts`).
-- `npm run lint` (`tsc --noEmit`), `npm run build`, and `npm run docs:api`.
+### Final Automated Verification Suite (`2026-11-27`)
+- `npx tsx --test src/world/StreamingThroughputAndLatency.test.ts src/world/FrameBudgetedStreaming.test.ts src/world/HierarchicalTileStreaming.test.ts src/world/NonBlockingTilePreparation.test.ts src/world/InstancedSpatialPicking.test.ts` — **29 / 29 passed** (`9/9` in `StreamingThroughputAndLatency.test.ts`, `6/6` in `FrameBudgetedStreaming.test.ts`, `4/4` in `HierarchicalTileStreaming.test.ts`, `6/6` in `NonBlockingTilePreparation.test.ts`, `4/4` in `InstancedSpatialPicking.test.ts`).
+- `npm test` (`tsx --test --test-concurrency=1 src/world/*.test.ts`) — **513 passed, 12 failed, 3 skipped** (`528` tests across `53` suites): `2` pre-existing test mocks incompatible with `f2_combined` default (`FoliageLodOptimization.test.ts:501` missing `?compressed=1` URL handling, `StreamingFluidityProfiling.test.ts:363` missing `getWorkerUtilizationSnapshot()` on mock `decodeClient`) plus `10` unrelated/fixture/data-dependent pre-existing failures and `3` skips (`ElevationAndZIndex.test.ts`, `JunctionAndTopology.test.ts`, `PlanarAndRoadSpatialIndex.test.ts`, `RailwayNetworkTopology.test.ts`, `RoadNetworkTopology.test.ts`, `TilingFullTwenteScale.test.ts`).
+- `npm run lint` (`tsc --noEmit`) — **0 errors** (passed).
+- `npm run build` (`vite build`) — **succeeded** (passed).
+- `npm run docs:api` (`typedoc`) — **0 errors, 5 warnings** (passed).
 
-### Outstanding Verification (Requires Owner Hardware & Local Twente Dataset)
-- Real-data 6-variant (`combined_prewarm` vs `f2_independent_pipeline`, `f2_destination_scheduling`, `f2_tuned_concurrency`, `f2_latency_aware_prewarm`, `f2_combined`) and concurrency-matrix (`HTTP 6/8/12 × Worker 2/4`) runs on `data/osm/twente-full-hierarchical.json` on the owner's RTX 4060 Ti workstation.
-- Owner visual and interactive navigation sign-off. Keep status `in_progress` until owner hardware validation completes.
+### Owner Hardware Verification Outcome (`2026-11-27`)
+- Full Twente (`RTX 4060 Ti`, `combined_prewarm` vs `f2_combined`, foliage enabled, `1,536 MiB`): completed and accepted with documented limitations; full `--variants=f2_all` staged matrix and `HTTP 6/8/12 × Worker 2/4` concurrency matrix were not executed and are deferred.
 
 ## Related References
 

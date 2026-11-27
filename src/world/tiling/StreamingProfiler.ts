@@ -65,6 +65,8 @@ export interface StreamingLifecycleEvent {
     transferAllTypedArrays?: boolean;
     workerInstanceBvhEnabled?: boolean;
     workerQueueWaitMs?: number;
+    workerInflateMs?: number;
+    workerDecodeOnlyMs?: number;
     workerInflateAndDecodeMs?: number;
     workerBvhBuildMs?: number;
     workerPayloadPrepMs?: number;

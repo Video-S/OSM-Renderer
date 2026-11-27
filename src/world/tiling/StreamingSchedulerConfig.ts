@@ -1,13 +1,27 @@
 /**
- * Frame-Budgeted Streaming & Resolution Transition Configuration (TKT-041-F1)
+ * Frame-Budgeted Streaming, Throughput & Resolution Transition Configuration (TKT-041-F1 / TKT-041-F2)
  *
  * Provides separable feature flags and presets for evaluating:
- *  1. `tkt041_baseline`        — TKT-041 behavior (no shared F1 scheduler, no incremental GPU prep, sync disposal, 0 ms debounce)
- *  2. `scheduler_only`         — Shared time-aware streaming workload scheduler (configurable 1 / 2 / 4 ms frame budget)
- *  3. `incremental_gpu_only`   — Incremental offscreen GPU buffer preparation before atomic resolution activation
- *  4. `deferred_disposal_only` — Immediate detach + bounded deferred disposal queue across subsequent frames
- *  5. `debounce_reuse_only`    — Configurable transition debounce (100–250 ms) + destination preparation reuse & speculative suppression
- *  6. `combined`               — All TKT-041-F1 mechanisms active together
+ *  TKT-041-F1 variants:
+ *   1. `tkt041_baseline`            — TKT-041 behavior (no shared F1 scheduler, no incremental GPU prep, sync disposal, 0 ms debounce)
+ *   2. `scheduler_only`             — Shared time-aware streaming workload scheduler (configurable 1 / 2 / 4 ms frame budget)
+ *   3. `incremental_gpu_only`       — Incremental offscreen GPU buffer preparation before atomic resolution activation
+ *   4. `deferred_disposal_only`     — Immediate detach + bounded deferred disposal queue across subsequent frames
+ *   5. `debounce_reuse_only`        — Configurable transition debounce (100–250 ms) + destination preparation reuse & speculative suppression
+ *   6. `combined`                   — All TKT-041-F1 mechanisms active together (without predictive pre-warming)
+ *   7. `combined_prewarm`           — TKT-041-F1 reference baseline with zoom-band predictive pre-warming
+ *
+ *  TKT-041-F2 staged throughput & transition-latency variants:
+ *   8. `f2_independent_pipeline`    — Work Package B: Decoupled HTTP retrieval queue, bounded retrieved-payload byte queue,
+ *                                     independent worker preparation queue, bounded prepared-payload byte queue, and
+ *                                     oversized-payload (>160 MB) forward-progress admission
+ *   9. `f2_destination_scheduling`  — Work Package B + C: 5-class priority scheduling, reserved destination fetch & worker slots,
+ *                                     dynamic queue reprioritization without restart, age escalation, and tail-tile priority boost
+ *  10. `f2_tuned_concurrency`       — Work Package B + C + D: Tuned HTTP retrieval concurrency (8), worker concurrency (4),
+ *                                     compressed HTTP transfer (?compressed=1 + worker deflate), and time-governed transition GPU upload cap
+ *  11. `f2_latency_aware_prewarm`   — Work Package B + C + E: Adaptive latency-aware preparation horizon using zoom/pan velocity,
+ *                                     historical resolution preparation latency, predicted activation viewport intersection, and reversal retention
+ *  12. `f2_combined`                — All TKT-041-F2 throughput & transition-latency improvements combined (production default)
  *
  * Preserves TKT-040 `combined` worker preparation as default throughout.
  */
@@ -19,7 +33,29 @@ export type StreamingF1VariantId =
   | 'deferred_disposal_only'
   | 'debounce_reuse_only'
   | 'combined'
-  | 'combined_prewarm';
+  | 'combined_prewarm'
+  | 'f2_independent_pipeline'
+  | 'f2_destination_scheduling'
+  | 'f2_tuned_concurrency'
+  | 'f2_latency_aware_prewarm'
+  | 'f2_combined';
+
+export type StreamingF2VariantId =
+  | 'combined_prewarm'
+  | 'f2_independent_pipeline'
+  | 'f2_destination_scheduling'
+  | 'f2_tuned_concurrency'
+  | 'f2_latency_aware_prewarm'
+  | 'f2_combined';
+
+export const STREAMING_F2_COMPARISON_VARIANTS: readonly StreamingF2VariantId[] = [
+  'combined_prewarm',
+  'f2_independent_pipeline',
+  'f2_destination_scheduling',
+  'f2_tuned_concurrency',
+  'f2_latency_aware_prewarm',
+  'f2_combined',
+];
 
 export interface StreamingFrameBudgetConfig {
   /** Enable the shared time-aware per-frame streaming workload scheduler. */
@@ -67,9 +103,77 @@ export interface StreamingFrameBudgetConfig {
    * predictive pre-warming (default: 0.30).
    */
   predictivePrewarmMinHeadroomRatio: number;
+
+  // --- TKT-041-F2 Work Package B: Independent Bounded Pipeline Stages & Byte Backpressure ---
+  /**
+   * Decouple HTTP retrieval from worker decoding so HTTP fetch slots release immediately
+   * upon `response.arrayBuffer()` completion into a bounded retrieved-payload byte queue.
+   */
+  independentPipelineStagesEnabled: boolean;
+  /** Maximum concurrent in-flight HTTP tile payload retrievals (WP D sweep: 6, 8, 12). */
+  maxConcurrentHttpRetrievals: number;
+  /** Maximum concurrent Web Worker tile preparation jobs (WP D sweep: 2, 4). */
+  workerConcurrency: number;
+  /** Maximum reserved bytes for in-flight HTTP response retrieval. */
+  maxInFlightHttpReservationBytes: number;
+  /** Maximum bytes queued in the retrieved-payload queue awaiting worker dispatch. */
+  maxRetrievedPayloadQueueBytes: number;
+  /** Maximum estimated bytes concurrently undergoing Web Worker preparation. */
+  maxWorkerPreparationBytes: number;
+  /** Maximum estimated bytes queued in the prepared-payload queue awaiting main-thread reconstruction. */
+  maxPreparedPayloadQueueBytes: number;
+  /** Maximum estimated geometry bytes reconstructed and awaiting incremental GPU preparation. */
+  maxReconstructedAwaitingGpuBytes: number;
+
+  // --- TKT-041-F2 Work Package C: Destination Throughput, Fairness & Dynamic Reprioritization ---
+  /** Reserved HTTP retrieval slots for required pending destination coverage during continuous movement. */
+  reservedDestinationFetchSlots: number;
+  /** Reserved Web Worker slots for required pending destination coverage during continuous movement. */
+  reservedDestinationWorkerSlots: number;
+  /** Dynamically reprioritize queued HTTP, retrieved-payload, and worker decode jobs on camera movement without restarting valid in-flight work. */
+  dynamicQueueReprioritizationEnabled: boolean;
+  /** Allow an already-running worker decode job to complete and populate inactive cache when beneficial and memory permits. */
+  retainRunningWorkerJobOnDemotion: boolean;
+  /** Prioritize the oldest/slowest remaining required destination tiles ("tail tiles") to complete atomic transitions earlier. */
+  tailTilePriorityBoostEnabled: boolean;
+  /** Age interval in ms per priority escalation step for waiting required destination tiles. */
+  destinationAgeEscalationMs: number;
+
+  // --- TKT-041-F2 Work Package D: Compressed Transfer & Time-Governed Transition Throughput ---
+  /** Request deflate-compressed OSMTILE1 payloads (?compressed=1) over HTTP and inflate in parallel Web Workers. */
+  useCompressedHttpTransfer: boolean;
+
+  // --- TKT-041-F2 Work Package E: Adaptive Latency-Aware Preparation Horizon & Predicted Coverage ---
+  /** Enable latency-aware adaptive preparation horizon based on zoom/pan velocity and historical resolution preparation latency. */
+  adaptivePrewarmHorizonEnabled: boolean;
+  /** Lead-time multiplier applied to historical resolution transition preparation latency when estimating adaptive horizon. */
+  adaptivePrewarmLeadMultiplier: number;
+  /** Retain pre-warmed destination tiles across brief zoom-direction reversals when memory budget permits. */
+  retainPrewarmAcrossReversals: boolean;
 }
 
 const MIB = 1024 * 1024;
+
+const F1_PIPELINE_DEFAULTS = {
+  independentPipelineStagesEnabled: false,
+  maxConcurrentHttpRetrievals: 6,
+  workerConcurrency: 2,
+  maxInFlightHttpReservationBytes: 256 * MIB,
+  maxRetrievedPayloadQueueBytes: 256 * MIB,
+  maxWorkerPreparationBytes: 384 * MIB,
+  maxPreparedPayloadQueueBytes: 256 * MIB,
+  maxReconstructedAwaitingGpuBytes: 384 * MIB,
+  reservedDestinationFetchSlots: 0,
+  reservedDestinationWorkerSlots: 0,
+  dynamicQueueReprioritizationEnabled: false,
+  retainRunningWorkerJobOnDemotion: false,
+  tailTilePriorityBoostEnabled: false,
+  destinationAgeEscalationMs: 250,
+  useCompressedHttpTransfer: false,
+  adaptivePrewarmHorizonEnabled: false,
+  adaptivePrewarmLeadMultiplier: 1.35,
+  retainPrewarmAcrossReversals: false,
+} as const;
 
 export const STREAMING_F1_VARIANTS: Readonly<
   Record<StreamingF1VariantId, StreamingFrameBudgetConfig>
@@ -91,6 +195,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   scheduler_only: {
     sharedSchedulerEnabled: true,
@@ -109,6 +214,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   incremental_gpu_only: {
     sharedSchedulerEnabled: false,
@@ -127,6 +233,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   deferred_disposal_only: {
     sharedSchedulerEnabled: false,
@@ -145,6 +252,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   debounce_reuse_only: {
     sharedSchedulerEnabled: false,
@@ -163,6 +271,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   combined: {
     sharedSchedulerEnabled: true,
@@ -181,6 +290,7 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: false,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
   },
   combined_prewarm: {
     sharedSchedulerEnabled: true,
@@ -199,26 +309,173 @@ export const STREAMING_F1_VARIANTS: Readonly<
     predictivePrewarmEnabled: true,
     predictivePrewarmBandFraction: 0.25,
     predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
+  },
+  f2_independent_pipeline: {
+    sharedSchedulerEnabled: true,
+    frameStreamingBudgetMs: 2.0,
+    incrementalGpuPrepEnabled: true,
+    maxGpuUploadBytesPerFrame: 4 * MIB,
+    maxGpuUploadUnitsPerFrame: 4,
+    deferredDisposalEnabled: true,
+    maxDeferredDisposeTilesPerFrame: 1,
+    maxPendingDisposalBytes: 128 * MIB,
+    transitionDebounceMs: 120,
+    reuseDestinationPreparation: true,
+    suppressSpeculativeDuringActiveCoverageGap: true,
+    deferHiddenBoundaryOverlayRebuild: true,
+    prioritizeDestinationOverActivePreload: true,
+    predictivePrewarmEnabled: true,
+    predictivePrewarmBandFraction: 0.25,
+    predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
+    independentPipelineStagesEnabled: true,
+  },
+  f2_destination_scheduling: {
+    sharedSchedulerEnabled: true,
+    frameStreamingBudgetMs: 2.0,
+    incrementalGpuPrepEnabled: true,
+    maxGpuUploadBytesPerFrame: 4 * MIB,
+    maxGpuUploadUnitsPerFrame: 4,
+    deferredDisposalEnabled: true,
+    maxDeferredDisposeTilesPerFrame: 1,
+    maxPendingDisposalBytes: 128 * MIB,
+    transitionDebounceMs: 100,
+    reuseDestinationPreparation: true,
+    suppressSpeculativeDuringActiveCoverageGap: true,
+    deferHiddenBoundaryOverlayRebuild: true,
+    prioritizeDestinationOverActivePreload: true,
+    predictivePrewarmEnabled: true,
+    predictivePrewarmBandFraction: 0.25,
+    predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
+    independentPipelineStagesEnabled: true,
+    reservedDestinationFetchSlots: 2,
+    reservedDestinationWorkerSlots: 1,
+    dynamicQueueReprioritizationEnabled: true,
+    retainRunningWorkerJobOnDemotion: true,
+    tailTilePriorityBoostEnabled: true,
+    destinationAgeEscalationMs: 200,
+  },
+  f2_tuned_concurrency: {
+    sharedSchedulerEnabled: true,
+    frameStreamingBudgetMs: 2.0,
+    incrementalGpuPrepEnabled: true,
+    maxGpuUploadBytesPerFrame: 24 * MIB,
+    maxGpuUploadUnitsPerFrame: 16,
+    deferredDisposalEnabled: true,
+    maxDeferredDisposeTilesPerFrame: 1,
+    maxPendingDisposalBytes: 128 * MIB,
+    transitionDebounceMs: 100,
+    reuseDestinationPreparation: true,
+    suppressSpeculativeDuringActiveCoverageGap: true,
+    deferHiddenBoundaryOverlayRebuild: true,
+    prioritizeDestinationOverActivePreload: true,
+    predictivePrewarmEnabled: true,
+    predictivePrewarmBandFraction: 0.25,
+    predictivePrewarmMinHeadroomRatio: 0.3,
+    ...F1_PIPELINE_DEFAULTS,
+    independentPipelineStagesEnabled: true,
+    maxConcurrentHttpRetrievals: 8,
+    workerConcurrency: 4,
+    maxInFlightHttpReservationBytes: 384 * MIB,
+    maxRetrievedPayloadQueueBytes: 384 * MIB,
+    maxWorkerPreparationBytes: 512 * MIB,
+    maxPreparedPayloadQueueBytes: 384 * MIB,
+    maxReconstructedAwaitingGpuBytes: 512 * MIB,
+    reservedDestinationFetchSlots: 3,
+    reservedDestinationWorkerSlots: 2,
+    dynamicQueueReprioritizationEnabled: true,
+    retainRunningWorkerJobOnDemotion: true,
+    tailTilePriorityBoostEnabled: true,
+    destinationAgeEscalationMs: 200,
+    useCompressedHttpTransfer: true,
+  },
+  f2_latency_aware_prewarm: {
+    sharedSchedulerEnabled: true,
+    frameStreamingBudgetMs: 2.0,
+    incrementalGpuPrepEnabled: true,
+    maxGpuUploadBytesPerFrame: 12 * MIB,
+    maxGpuUploadUnitsPerFrame: 10,
+    deferredDisposalEnabled: true,
+    maxDeferredDisposeTilesPerFrame: 1,
+    maxPendingDisposalBytes: 128 * MIB,
+    transitionDebounceMs: 100,
+    reuseDestinationPreparation: true,
+    suppressSpeculativeDuringActiveCoverageGap: true,
+    deferHiddenBoundaryOverlayRebuild: true,
+    prioritizeDestinationOverActivePreload: true,
+    predictivePrewarmEnabled: true,
+    predictivePrewarmBandFraction: 0.38,
+    predictivePrewarmMinHeadroomRatio: 0.25,
+    ...F1_PIPELINE_DEFAULTS,
+    independentPipelineStagesEnabled: true,
+    reservedDestinationFetchSlots: 2,
+    reservedDestinationWorkerSlots: 1,
+    dynamicQueueReprioritizationEnabled: true,
+    retainRunningWorkerJobOnDemotion: true,
+    tailTilePriorityBoostEnabled: true,
+    destinationAgeEscalationMs: 200,
+    adaptivePrewarmHorizonEnabled: true,
+    adaptivePrewarmLeadMultiplier: 1.4,
+    retainPrewarmAcrossReversals: true,
+  },
+  f2_combined: {
+    sharedSchedulerEnabled: true,
+    frameStreamingBudgetMs: 2.0,
+    incrementalGpuPrepEnabled: true,
+    maxGpuUploadBytesPerFrame: 24 * MIB,
+    maxGpuUploadUnitsPerFrame: 16,
+    deferredDisposalEnabled: true,
+    maxDeferredDisposeTilesPerFrame: 1,
+    maxPendingDisposalBytes: 128 * MIB,
+    transitionDebounceMs: 100,
+    reuseDestinationPreparation: true,
+    suppressSpeculativeDuringActiveCoverageGap: true,
+    deferHiddenBoundaryOverlayRebuild: true,
+    prioritizeDestinationOverActivePreload: true,
+    predictivePrewarmEnabled: true,
+    predictivePrewarmBandFraction: 0.38,
+    predictivePrewarmMinHeadroomRatio: 0.25,
+    independentPipelineStagesEnabled: true,
+    maxConcurrentHttpRetrievals: 8,
+    workerConcurrency: 4,
+    maxInFlightHttpReservationBytes: 384 * MIB,
+    maxRetrievedPayloadQueueBytes: 384 * MIB,
+    maxWorkerPreparationBytes: 512 * MIB,
+    maxPreparedPayloadQueueBytes: 384 * MIB,
+    maxReconstructedAwaitingGpuBytes: 512 * MIB,
+    reservedDestinationFetchSlots: 3,
+    reservedDestinationWorkerSlots: 2,
+    dynamicQueueReprioritizationEnabled: true,
+    retainRunningWorkerJobOnDemotion: true,
+    tailTilePriorityBoostEnabled: true,
+    destinationAgeEscalationMs: 200,
+    useCompressedHttpTransfer: true,
+    adaptivePrewarmHorizonEnabled: true,
+    adaptivePrewarmLeadMultiplier: 1.4,
+    retainPrewarmAcrossReversals: true,
   },
 };
 
 /**
- * Default interactive app configuration (full TKT-041-F1 combined pipeline).
- * Note: Individual thresholds (`frameStreamingBudgetMs = 2.0`, `transitionDebounceMs = 150`)
- * are provisional starting points meant to be evaluated on hardware.
+ * Default interactive app configuration (full TKT-041-F2 combined throughput + frame-budgeted pipeline).
  */
 export const DEFAULT_STREAMING_FRAME_BUDGET_CONFIG: StreamingFrameBudgetConfig = {
-  ...STREAMING_F1_VARIANTS.combined,
+  ...STREAMING_F1_VARIANTS.f2_combined,
 };
 
 /**
- * Default headless/direct TileStreamManager configuration when no explicit F1 config
- * is passed: enables the F1 frame-budgeted mechanics while keeping `transitionDebounceMs = 0`
- * so synchronous unit tests expecting immediate zoom-band transitions remain deterministic.
+ * Default headless/direct TileStreamManager configuration when no explicit F1/F2 config
+ * is passed: enables the F1/F2 frame-budgeted + decoupled pipeline mechanics while keeping
+ * `transitionDebounceMs = 0` and `predictivePrewarmEnabled = false` so synchronous unit
+ * tests expecting immediate single-resolution zoom-band transitions remain deterministic.
  */
 export const DEFAULT_MANAGER_STREAMING_FRAME_BUDGET_CONFIG: StreamingFrameBudgetConfig = {
-  ...STREAMING_F1_VARIANTS.combined,
+  ...STREAMING_F1_VARIANTS.f2_combined,
   transitionDebounceMs: 0,
+  predictivePrewarmEnabled: false,
+  adaptivePrewarmHorizonEnabled: false,
 };
 
 function clampFinite(value: unknown, fallback: number, min: number, max: number): number {
@@ -232,6 +489,17 @@ export function normalizeStreamingFrameBudgetConfig(
   base: StreamingFrameBudgetConfig = DEFAULT_STREAMING_FRAME_BUDGET_CONFIG
 ): StreamingFrameBudgetConfig {
   const src = input ?? {};
+  const maxHttp = Math.round(
+    clampFinite(
+      src.maxConcurrentHttpRetrievals,
+      base.maxConcurrentHttpRetrievals,
+      1,
+      32
+    )
+  );
+  const maxWork = Math.round(
+    clampFinite(src.workerConcurrency, base.workerConcurrency, 1, 16)
+  );
   return {
     sharedSchedulerEnabled:
       typeof src.sharedSchedulerEnabled === 'boolean'
@@ -318,6 +586,106 @@ export function normalizeStreamingFrameBudgetConfig(
       0.05,
       0.9
     ),
+    independentPipelineStagesEnabled:
+      typeof src.independentPipelineStagesEnabled === 'boolean'
+        ? src.independentPipelineStagesEnabled
+        : base.independentPipelineStagesEnabled,
+    maxConcurrentHttpRetrievals: maxHttp,
+    workerConcurrency: maxWork,
+    maxInFlightHttpReservationBytes: Math.round(
+      clampFinite(
+        src.maxInFlightHttpReservationBytes,
+        base.maxInFlightHttpReservationBytes,
+        64,
+        4096 * MIB
+      )
+    ),
+    maxRetrievedPayloadQueueBytes: Math.round(
+      clampFinite(
+        src.maxRetrievedPayloadQueueBytes,
+        base.maxRetrievedPayloadQueueBytes,
+        64,
+        4096 * MIB
+      )
+    ),
+    maxWorkerPreparationBytes: Math.round(
+      clampFinite(
+        src.maxWorkerPreparationBytes,
+        base.maxWorkerPreparationBytes,
+        64,
+        4096 * MIB
+      )
+    ),
+    maxPreparedPayloadQueueBytes: Math.round(
+      clampFinite(
+        src.maxPreparedPayloadQueueBytes,
+        base.maxPreparedPayloadQueueBytes,
+        64,
+        4096 * MIB
+      )
+    ),
+    maxReconstructedAwaitingGpuBytes: Math.round(
+      clampFinite(
+        src.maxReconstructedAwaitingGpuBytes,
+        base.maxReconstructedAwaitingGpuBytes,
+        64,
+        4096 * MIB
+      )
+    ),
+    reservedDestinationFetchSlots: Math.round(
+      clampFinite(
+        src.reservedDestinationFetchSlots,
+        base.reservedDestinationFetchSlots,
+        0,
+        Math.max(0, maxHttp - 1)
+      )
+    ),
+    reservedDestinationWorkerSlots: Math.round(
+      clampFinite(
+        src.reservedDestinationWorkerSlots,
+        base.reservedDestinationWorkerSlots,
+        0,
+        Math.max(0, maxWork - 1)
+      )
+    ),
+    dynamicQueueReprioritizationEnabled:
+      typeof src.dynamicQueueReprioritizationEnabled === 'boolean'
+        ? src.dynamicQueueReprioritizationEnabled
+        : base.dynamicQueueReprioritizationEnabled,
+    retainRunningWorkerJobOnDemotion:
+      typeof src.retainRunningWorkerJobOnDemotion === 'boolean'
+        ? src.retainRunningWorkerJobOnDemotion
+        : base.retainRunningWorkerJobOnDemotion,
+    tailTilePriorityBoostEnabled:
+      typeof src.tailTilePriorityBoostEnabled === 'boolean'
+        ? src.tailTilePriorityBoostEnabled
+        : base.tailTilePriorityBoostEnabled,
+    destinationAgeEscalationMs: Math.round(
+      clampFinite(
+        src.destinationAgeEscalationMs,
+        base.destinationAgeEscalationMs,
+        25,
+        5000
+      )
+    ),
+    useCompressedHttpTransfer:
+      typeof src.useCompressedHttpTransfer === 'boolean'
+        ? src.useCompressedHttpTransfer
+        : base.useCompressedHttpTransfer,
+    adaptivePrewarmHorizonEnabled:
+      typeof src.adaptivePrewarmHorizonEnabled === 'boolean'
+        ? src.adaptivePrewarmHorizonEnabled
+        : base.adaptivePrewarmHorizonEnabled,
+    adaptivePrewarmLeadMultiplier: clampFinite(
+      src.adaptivePrewarmLeadMultiplier,
+      base.adaptivePrewarmLeadMultiplier,
+      0.5,
+      4.0
+    ),
+    retainPrewarmAcrossReversals:
+      typeof src.retainPrewarmAcrossReversals === 'boolean'
+        ? src.retainPrewarmAcrossReversals
+        : base.retainPrewarmAcrossReversals,
   };
 }
 
@@ -356,6 +724,13 @@ export function identifyStreamingF1Variant(
       config.prioritizeDestinationOverActivePreload ===
         preset.prioritizeDestinationOverActivePreload &&
       config.predictivePrewarmEnabled === preset.predictivePrewarmEnabled &&
+      config.independentPipelineStagesEnabled ===
+        preset.independentPipelineStagesEnabled &&
+      config.dynamicQueueReprioritizationEnabled ===
+        preset.dynamicQueueReprioritizationEnabled &&
+      config.useCompressedHttpTransfer === preset.useCompressedHttpTransfer &&
+      config.adaptivePrewarmHorizonEnabled ===
+        preset.adaptivePrewarmHorizonEnabled &&
       (preset.transitionDebounceMs === 0
         ? config.transitionDebounceMs === 0
         : config.transitionDebounceMs > 0)
@@ -374,7 +749,8 @@ export function parseStreamingFrameBudgetFromSearch(
   let found = false;
   let result: Partial<StreamingFrameBudgetConfig> = {};
 
-  const variantParam = params.get('streamingF1Variant');
+  const variantParam =
+    params.get('streamingF2Variant') ?? params.get('streamingF1Variant');
   if (variantParam && variantParam in STREAMING_F1_VARIANTS) {
     result = { ...STREAMING_F1_VARIANTS[variantParam as StreamingF1VariantId] };
     found = true;
@@ -434,5 +810,47 @@ export function parseStreamingFrameBudgetFromSearch(
     found = true;
   }
 
+  const independentPipeline = params.get('independentPipeline');
+  if (independentPipeline === '0' || independentPipeline === 'false') {
+    result.independentPipelineStagesEnabled = false;
+    found = true;
+  } else if (independentPipeline === '1' || independentPipeline === 'true') {
+    result.independentPipelineStagesEnabled = true;
+    found = true;
+  }
+
+  const maxHttp =
+    params.get('maxHttpConcurrency') ??
+    params.get('maxConcurrentHttpRetrievals');
+  if (maxHttp !== null && Number.isFinite(Number(maxHttp))) {
+    result.maxConcurrentHttpRetrievals = Math.round(Number(maxHttp));
+    found = true;
+  }
+
+  const workerConc = params.get('workerConcurrency');
+  if (workerConc !== null && Number.isFinite(Number(workerConc))) {
+    result.workerConcurrency = Math.round(Number(workerConc));
+    found = true;
+  }
+
+  const compressedTransfer = params.get('compressedTransfer');
+  if (compressedTransfer === '0' || compressedTransfer === 'false') {
+    result.useCompressedHttpTransfer = false;
+    found = true;
+  } else if (compressedTransfer === '1' || compressedTransfer === 'true') {
+    result.useCompressedHttpTransfer = true;
+    found = true;
+  }
+
+  const adaptivePrewarm = params.get('adaptivePrewarm');
+  if (adaptivePrewarm === '0' || adaptivePrewarm === 'false') {
+    result.adaptivePrewarmHorizonEnabled = false;
+    found = true;
+  } else if (adaptivePrewarm === '1' || adaptivePrewarm === 'true') {
+    result.adaptivePrewarmHorizonEnabled = true;
+    found = true;
+  }
+
   return found ? result : null;
 }
+

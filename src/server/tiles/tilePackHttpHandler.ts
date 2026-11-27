@@ -168,6 +168,7 @@ export function createTilePackHttpHandler(
   };
 
   const tilePayloadHandler = async (req: Request, res: Response): Promise<void> => {
+    const tTotal0 = performance.now();
     try {
       const store = getStore();
       const metadata = store.getMetadata();
@@ -219,7 +220,9 @@ export function createTilePackHttpHandler(
         return;
       }
 
+      const tSqlite0 = performance.now();
       const tileRecord = store.getTileCompressed(lod, tx, ty);
+      const serverSqliteLookupMs = Math.max(0, performance.now() - tSqlite0);
       if (!tileRecord) {
         res.status(404).json({
           error: `Tile lod=${lod} tx=${tx} ty=${ty} not found in baked pack.`,
@@ -233,28 +236,54 @@ export function createTilePackHttpHandler(
 
       const { manifest, compressedPayload } = tileRecord;
       const tileKey = formatTileId(manifest.tx, manifest.ty);
-      const etag = `"${manifest.contentHash}"`;
+      const wantCompressed =
+        req.query?.compressed === '1' || req.query?.compressed === 'true';
+      const etag = wantCompressed
+        ? `"${manifest.contentHash}:deflate"`
+        : `"${manifest.contentHash}"`;
       const ifNoneMatch = req.headers['if-none-match'];
-      if (ifNoneMatch === etag || ifNoneMatch === manifest.contentHash) {
+      if (
+        ifNoneMatch === etag ||
+        (!wantCompressed && ifNoneMatch === manifest.contentHash)
+      ) {
         res.setHeader('ETag', etag);
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         res.status(304).end();
         return;
       }
 
-      // Inflate compressed blob and verify exact raw byte length before serving
-      // raw OSMTILE1 binary bytes to the browser Web Worker decoder.
-      const rawPayload = inflateTilePayload(compressedPayload, tileKey);
-      if (rawPayload.byteLength !== manifest.rawBytes) {
-        throw new TilePackCorruptError(
-          `Tile ${tileKey} inflated byte length mismatch (expected ${manifest.rawBytes}, got ${rawPayload.byteLength}).`,
-          tileKey,
-          'raw_bytes_mismatch'
-        );
+      let payloadBytes: Uint8Array;
+      let serverInflateMs = 0;
+
+      if (wantCompressed) {
+        if (compressedPayload.byteLength !== manifest.compressedBytes) {
+          throw new TilePackCorruptError(
+            `Tile ${tileKey} compressed byte length mismatch (expected ${manifest.compressedBytes}, got ${compressedPayload.byteLength}).`,
+            tileKey,
+            'compressed_bytes_mismatch'
+          );
+        }
+        payloadBytes = compressedPayload;
+      } else {
+        // Inflate compressed blob and verify exact raw byte length before serving
+        // raw OSMTILE1 binary bytes to the browser Web Worker decoder.
+        const tInflate0 = performance.now();
+        const rawPayload = inflateTilePayload(compressedPayload, tileKey);
+        serverInflateMs = Math.max(0, performance.now() - tInflate0);
+        if (rawPayload.byteLength !== manifest.rawBytes) {
+          throw new TilePackCorruptError(
+            `Tile ${tileKey} inflated byte length mismatch (expected ${manifest.rawBytes}, got ${rawPayload.byteLength}).`,
+            tileKey,
+            'raw_bytes_mismatch'
+          );
+        }
+        payloadBytes = rawPayload;
       }
 
+      const serverTotalMs = Math.max(0, performance.now() - tTotal0);
+
       res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Length', String(rawPayload.byteLength));
+      res.setHeader('Content-Length', String(payloadBytes.byteLength));
       res.setHeader('ETag', etag);
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       res.setHeader('X-OSM-Snapshot-Id', metadata.snapshotId);
@@ -264,12 +293,22 @@ export function createTilePackHttpHandler(
       res.setHeader('X-Tile-Raw-Bytes', String(manifest.rawBytes));
       res.setHeader('X-Tile-Compressed-Bytes', String(manifest.compressedBytes));
       res.setHeader('X-Tile-Is-Empty', manifest.isEmpty ? '1' : '0');
+      res.setHeader('X-Tile-Transfer-Compressed', wantCompressed ? '1' : '0');
+      res.setHeader(
+        'X-Tile-Server-Sqlite-Ms',
+        serverSqliteLookupMs.toFixed(3)
+      );
+      res.setHeader(
+        'X-Tile-Server-Inflate-Ms',
+        serverInflateMs.toFixed(3)
+      );
+      res.setHeader('X-Tile-Server-Total-Ms', serverTotalMs.toFixed(3));
 
       res.status(200).send(
         Buffer.from(
-          rawPayload.buffer,
-          rawPayload.byteOffset,
-          rawPayload.byteLength
+          payloadBytes.buffer,
+          payloadBytes.byteOffset,
+          payloadBytes.byteLength
         )
       );
     } catch (err) {

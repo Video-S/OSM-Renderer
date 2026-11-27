@@ -63,11 +63,15 @@ import {
   type HierarchicalMosaicManifestExtension,
 } from './HierarchicalMosaicContract';
 import {
+  computeEffectiveOrthographicScale,
   DEFAULT_HIERARCHICAL_RESOLUTION_POLICY,
+  evaluateAdaptivePrewarmHorizon,
   normalizeHierarchicalResolutionPolicy,
+  predictViewportBoundsAtHorizon,
   resolveApproachingResolutionForPrewarm,
   resolveDesiredHierarchicalResolution,
   resolvePhysicalMarginsForResolution,
+  type AdaptivePrewarmHorizonEvaluation,
   type HierarchicalResolutionMode,
   type HierarchicalResolutionPolicyConfig,
   type HierarchicalScaleEvaluation,
@@ -116,6 +120,7 @@ export type TileStreamLifecycleState =
   | 'unloaded'
   | 'queued'
   | 'fetching'
+  | 'retrieved_queued'
   | 'decoding'
   | 'ready_to_commit'
   | 'prepared_inactive'
@@ -165,6 +170,54 @@ export interface TileTimingSummaryStats {
   avgMs: number;
 }
 
+/**
+ * TKT-041-F2 Work Package A/B/C/D/E: Stage-by-stage throughput, queue capacity,
+ * byte-reservation, worker utilization, and prediction effectiveness snapshot.
+ */
+export interface StreamingThroughputPipelineSnapshot {
+  independentPipelineStagesEnabled: boolean;
+  useCompressedHttpTransfer: boolean;
+  maxConcurrentHttpRetrievals: number;
+  workerConcurrency: number;
+  reservedDestinationFetchSlots: number;
+  reservedDestinationWorkerSlots: number;
+  fetchQueuedCount: number;
+  httpRetrievingCount: number;
+  retrievedQueuedCount: number;
+  workerDecodingCount: number;
+  preparedQueuedCount: number;
+  inFlightHttpReservationBytes: number;
+  retrievedPayloadQueueBytes: number;
+  inFlightWorkerPreparationBytes: number;
+  preparedPayloadQueueBytes: number;
+  reconstructedAwaitingGpuBytes: number;
+  busyWorkerCount: number;
+  idleWorkerCount: number;
+  activeDestinationFetchCount: number;
+  activeDestinationWorkerCount: number;
+  totalNetworkTransferBytes: number;
+  totalRawPayloadBytesDecoded: number;
+  sustainedHttpTransferMibPerSec: number;
+  sustainedDecodeRawMibPerSec: number;
+  sustainedTilesDecodedPerSec: number;
+  avgRetrievedQueueWaitMs: number;
+  avgServerSqliteLookupMs: number;
+  avgServerInflateMs: number;
+  avgServerTotalMs: number;
+  dynamicReprioritizationsTotal: number;
+  tailTileBoostsAppliedTotal: number;
+  ageEscalationsAppliedTotal: number;
+  oversizedPayloadAdmissionsTotal: number;
+  runningWorkerJobsRetainedAfterDemotionTotal: number;
+  discardedPreparedTilesTotal: number;
+  wastedNetworkBytes: number;
+  wastedWorkerTimeMs: number;
+  wastedPrewarmBytes: number;
+  prewarmedTilesActivatedTotal: number;
+  lastPreparationLeadTimeMs: number;
+  historicalPrepLatencyByResMs: Record<number, number>;
+}
+
 export interface TileStreamDiagnosticsSnapshot {
   manifestStatus: TileManifestLoadStatus;
   manifestError: string | null;
@@ -189,6 +242,7 @@ export interface TileStreamDiagnosticsSnapshot {
   peakLoadingTiles: number;
   queuedTiles: number;
   fetchingTiles: number;
+  retrievedQueuedTiles: number;
   decodingTiles: number;
   readyToCommitTiles: number;
   failedTiles: number;
@@ -243,6 +297,8 @@ export interface TileStreamDiagnosticsSnapshot {
   pendingReadyTileBytes: number;
   /** TKT-041-F1 frame-budgeted streaming, GPU prep, deferred disposal, and debounce telemetry. */
   frameBudget: StreamingFrameBudgetDiagnosticsSnapshot;
+  /** TKT-041-F2 stage-by-stage throughput, decoupled queues, byte backpressure, and adaptive prewarm snapshot. */
+  throughputPipeline: StreamingThroughputPipelineSnapshot;
   /** TKT-041 hierarchical multi-resolution streaming diagnostics (null for single-resolution packs). */
   hierarchical: HierarchicalStreamingDiagnosticsSnapshot | null;
 }
@@ -268,6 +324,7 @@ export type TransitionBlockerCategory =
   | 'active_coverage_gap'
   | 'fetch_queue_contention'
   | 'network_fetching'
+  | 'retrieved_queue_waiting'
   | 'worker_queue_waiting'
   | 'worker_decoding'
   | 'main_thread_reconstruct_waiting'
@@ -283,6 +340,7 @@ export interface TransitionOutstandingTileSnapshot {
   currentStage:
     | 'queued'
     | 'fetching'
+    | 'retrieved_queued'
     | 'worker_queue_or_decoding'
     | 'reconstruct_waiting'
     | 'gpu_prep_waiting'
@@ -292,6 +350,7 @@ export interface TransitionOutstandingTileSnapshot {
   currentStageElapsedMs: number;
   fetchQueueWaitMs: number;
   payloadRetrievalMs: number;
+  retrievedQueueWaitMs?: number;
   workerQueueWaitMs: number;
   workerDecodeAndBvhMs: number;
   mainThreadReconstructWaitMs: number;
@@ -314,13 +373,17 @@ export interface TransitionBlockerSnapshot {
   elapsedMs: number;
   requiredVisibleCount: number;
   readyCount: number;
+  destinationCoverageReadinessRatio: number;
+  newlyRequiredDestinationTilesCount: number;
   queuedCount: number;
   fetchingCount: number;
+  retrievedQueuedCount: number;
   decodingCount: number;
   reconstructWaitingCount: number;
   gpuPrepWaitingCount: number;
   failedCount: number;
   slowestOutstandingTile: TransitionOutstandingTileSnapshot | null;
+  oldestOutstandingTile: TransitionOutstandingTileSnapshot | null;
   contention: {
     activeVisibleInFlightCount: number;
     activePreloadInFlightCount: number;
@@ -328,6 +391,8 @@ export interface TransitionBlockerSnapshot {
     pendingDestinationSpeculativeInFlightCount: number;
     fetchSlotsUsed: number;
     fetchSlotsMax: number;
+    retrievedQueueCount: number;
+    retrievedQueueBytes: number;
     workerPendingDecodes: number;
     workerPoolSize: number;
     workerBackpressureActive: boolean;
@@ -348,17 +413,25 @@ export interface TransitionCriticalPathRecord {
   finishedAtMs: number;
   totalDurationMs: number;
   debounceWaitMs: number;
+  /** Desired-resolution-change to activation latency (`debounceWaitMs + totalDurationMs`). */
+  desiredToActivationMs: number;
+  /** Prewarm lead time before transition start (ms) if tiles were pre-warmed. */
+  prewarmLeadTimeMs: number;
   activationSwapMs: number;
   requiredTileCount: number;
   reusedFromCacheCount: number;
   reusedFromPrewarmCount: number;
+  newlyRequiredTilesDuringTransitionCount: number;
   cancellationsDuringTransition: number;
   dominantBlockerCategory: TransitionBlockerCategory;
   criticalPathTileKey: string | null;
   stagesMs: {
     fetchQueueWaitMs: number;
     payloadRetrievalMs: number;
+    retrievedQueueWaitMs: number;
     workerQueueWaitMs: number;
+    workerInflateMs: number;
+    workerDecodeOnlyMs: number;
     workerInflateAndDecodeMs: number;
     workerBvhBuildMs: number;
     workerDecodeAndBvhMs: number;
@@ -390,6 +463,7 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
   requiredDestinationTiles: number;
   readyDestinationTiles: number;
   gpuPreparedDestinationTiles: number;
+  destinationCoverageReadinessRatio: number;
   activeVisibleTiles: number;
   activeLoadedTiles: number;
   pendingPreparedTiles: number;
@@ -406,6 +480,7 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
   pendingQueues: {
     queued: number;
     fetching: number;
+    retrievedQueued: number;
     decoding: number;
     readyToCommit: number;
   };
@@ -432,6 +507,7 @@ export interface HierarchicalStreamingDiagnosticsSnapshot {
   lastCompletedTransition: TransitionCriticalPathRecord | null;
   recentTransitions: TransitionCriticalPathRecord[];
   frameBudget: StreamingFrameBudgetDiagnosticsSnapshot;
+  throughputPipeline: StreamingThroughputPipelineSnapshot;
 }
 
 export interface TilePackManifestPayload {
@@ -514,7 +590,7 @@ export interface TileStreamManagerOptions {
   hierarchicalPolicy?: Partial<HierarchicalResolutionPolicyConfig>;
   /** TKT-041: Hierarchical memory budget, inactive LRU cache, and time-aware commit limits. */
   hierarchicalBudget?: Partial<HierarchicalResourceBudgetConfig>;
-  /** TKT-041-F1: Frame-budgeted streaming scheduler, incremental GPU prep, deferred disposal, and debounce config. */
+  /** TKT-041-F1 / TKT-041-F2: Frame-budgeted streaming scheduler, decoupled pipeline, incremental GPU prep, deferred disposal, and debounce config. */
   streamingFrameBudget?: StreamingF1VariantId | Partial<StreamingFrameBudgetConfig>;
   /** Optional custom GPU upload adapter (for deterministic headless unit tests). */
   gpuUploadAdapter?: GpuPrepUploadAdapter | null;
@@ -526,6 +602,7 @@ interface TilePipelineTimings {
   queuedAtMs: number | null;
   fetchStartAtMs: number | null;
   fetchCompleteAtMs: number | null;
+  retrievedQueuedAtMs: number | null;
   decodeStartAtMs: number | null;
   decodeCompleteAtMs: number | null;
   reconstructStartAtMs: number | null;
@@ -535,8 +612,14 @@ interface TilePipelineTimings {
   readyAtMs: number | null;
   fetchQueueWaitMs: number;
   payloadRetrievalMs: number;
+  retrievedQueueWaitMs: number;
+  serverSqliteLookupMs: number;
+  serverInflateMs: number;
+  serverTotalMs: number;
   workerClientQueueWaitMs: number;
   workerThreadQueueWaitMs: number;
+  workerInflateMs: number;
+  workerDecodeOnlyMs: number;
   workerInflateAndDecodeMs: number;
   workerBvhBuildMs: number;
   workerPayloadPrepMs: number;
@@ -548,6 +631,7 @@ interface TilePipelineTimings {
   gpuPrepSliceCount: number;
   reusedFromCache: boolean;
   preparedByPrewarm: boolean;
+  enteredDuringActiveTransitionAtMs: number | null;
 }
 
 function createEmptyTilePipelineTimings(): TilePipelineTimings {
@@ -555,6 +639,7 @@ function createEmptyTilePipelineTimings(): TilePipelineTimings {
     queuedAtMs: null,
     fetchStartAtMs: null,
     fetchCompleteAtMs: null,
+    retrievedQueuedAtMs: null,
     decodeStartAtMs: null,
     decodeCompleteAtMs: null,
     reconstructStartAtMs: null,
@@ -564,8 +649,14 @@ function createEmptyTilePipelineTimings(): TilePipelineTimings {
     readyAtMs: null,
     fetchQueueWaitMs: 0,
     payloadRetrievalMs: 0,
+    retrievedQueueWaitMs: 0,
+    serverSqliteLookupMs: 0,
+    serverInflateMs: 0,
+    serverTotalMs: 0,
     workerClientQueueWaitMs: 0,
     workerThreadQueueWaitMs: 0,
+    workerInflateMs: 0,
+    workerDecodeOnlyMs: 0,
     workerInflateAndDecodeMs: 0,
     workerBvhBuildMs: 0,
     workerPayloadPrepMs: 0,
@@ -577,6 +668,7 @@ function createEmptyTilePipelineTimings(): TilePipelineTimings {
     gpuPrepSliceCount: 0,
     reusedFromCache: false,
     preparedByPrewarm: false,
+    enteredDuringActiveTransitionAtMs: null,
   };
 }
 
@@ -608,6 +700,12 @@ interface ManagedTileRecord {
   priorityScore: number;
   abortController: AbortController | null;
   requestGeneration: number;
+  /** TKT-041-F2 Work Package B: Retrieved binary payload awaiting worker decode dispatch. */
+  retrievedBuffer: ArrayBuffer | null;
+  /** TKT-041-F2 Work Package B: Active byte reservation while HTTP fetch is in flight. */
+  reservedHttpBytes: number;
+  /** TKT-041-F2 Work Package B: Active estimated byte reservation while worker preparation is in flight. */
+  reservedWorkerBytes: number;
   decodedPayload: AnyDecodedTilePayload | null;
   decodedFootprint: TileMemoryFootprint | null;
   reconstructed: ReconstructedTileSceneResult | null;
@@ -615,7 +713,7 @@ interface ManagedTileRecord {
   lastCompressedBytes?: number | null;
   /** Monotonic timestamp for LRU eviction in `cached_inactive`. */
   lastUsedAtMs: number;
-  /** TKT-041-F1 Section 12 per-tile pipeline stage timings. */
+  /** TKT-041-F1 / TKT-041-F2 per-tile pipeline stage timings. */
   pipeline: TilePipelineTimings;
 }
 
@@ -943,6 +1041,57 @@ export class TileStreamManager {
   private readonly recentTransitions: TransitionCriticalPathRecord[] = [];
   private lastCompletedTransition: TransitionCriticalPathRecord | null = null;
 
+  // TKT-041-F2: Throughput, decoupled pipeline reservations, adaptive prewarm & fairness state
+  private readonly explicitMaxConcurrentFetches: number | null;
+  private inFlightHttpReservationBytes = 0;
+  private retrievedPayloadQueueBytes = 0;
+  private inFlightWorkerPreparationBytes = 0;
+  private oversizedPayloadAdmissionsTotal = 0;
+  private totalNetworkTransferBytes = 0;
+  private totalRawPayloadBytesDecoded = 0;
+  private totalTilesDecoded = 0;
+  private totalHttpRetrievalDurationMs = 0;
+  private totalWorkerActiveDurationMs = 0;
+  private totalServerSqliteLookupMs = 0;
+  private totalServerInflateMs = 0;
+  private totalServerTotalMs = 0;
+  private serverHeaderSamples = 0;
+  private totalFetchQueueWaitMs = 0;
+  private totalRetrievedQueueWaitMs = 0;
+  private totalWorkerClientQueueWaitMs = 0;
+  private totalWorkerThreadQueueWaitMs = 0;
+  private totalWorkerInflateMs = 0;
+  private totalWorkerDecodeOnlyMs = 0;
+  private totalWorkerBvhBuildMs = 0;
+  private totalWorkerPayloadPrepMs = 0;
+  private totalWorkerDeliveryLatencyMs = 0;
+  private totalReconstructQueueWaitMs = 0;
+  private totalGpuPrepQueueWaitMs = 0;
+  private totalGpuPrepSubmitMs = 0;
+  private gpuPrepCompletedTileSamples = 0;
+  private dynamicReprioritizationsTotal = 0;
+  private runningWorkerJobsRetainedAfterDemotionTotal = 0;
+  private wastedNetworkBytes = 0;
+  private wastedWorkerTimeMs = 0;
+  private discardedPreparedTilesTotal = 0;
+  private wastedPrewarmBytes = 0;
+  private prewarmedTilesActivatedTotal = 0;
+  private currentPrewarmStartedAtMs: number | null = null;
+  private lastPreparationLeadTimeMs = 0;
+  private lastZoomSampleAtMs: number | null = null;
+  private lastScalePxPerMeterSample: number | null = null;
+  private scaleVelocityPerSec = 0;
+  private lastFocusSampleAtMs: number | null = null;
+  private panVelocityXPerSec = 0;
+  private panVelocityZPerSec = 0;
+  private lastAdaptivePrewarmEval: AdaptivePrewarmHorizonEvaluation | null = null;
+  private readonly historicalPrepLatencyByResMs: Record<number, number> = {
+    1024: 260,
+    2048: 580,
+    4096: 1250,
+  };
+  private currentTransitionNewlyRequiredTilesCount = 0;
+
   // Hierarchical telemetry counters & timings
   private transitionsStartedTotal = 0;
   private transitionsCompletedTotal = 0;
@@ -971,6 +1120,10 @@ export class TileStreamManager {
   private panLeadVector: { x: number; z: number } = { x: 0, z: 0 };
 
   private activeFetchCount = 0;
+  private activeDestinationFetchCount = 0;
+  private activeDecodeCount = 0;
+  private tailTileBoostsAppliedTotal = 0;
+  private ageEscalationsAppliedTotal = 0;
   private requestGenerationCounter = 1;
   private isDisposed = false;
 
@@ -1013,7 +1166,12 @@ export class TileStreamManager {
       this.preloadMarginTiles,
       options.retainMarginTiles ?? this.preloadMarginTiles + 1
     );
-    this.maxConcurrentFetches = Math.max(1, options.maxConcurrentFetches ?? 6);
+    this.explicitMaxConcurrentFetches =
+      typeof options.maxConcurrentFetches === 'number' &&
+      Number.isFinite(options.maxConcurrentFetches)
+        ? Math.max(1, Math.floor(options.maxConcurrentFetches))
+        : null;
+    this.maxConcurrentFetches = this.explicitMaxConcurrentFetches ?? 6;
     this.maxCommitsPerFrame = Math.max(1, options.maxCommitsPerFrame ?? 4);
     this.experimentSkipUnchangedViewport = options.experimentSkipUnchangedViewport === true;
     this.experimentSkipUnchangedZoom = options.experimentSkipUnchangedZoom === true;
@@ -1078,8 +1236,18 @@ export class TileStreamManager {
       if (typeof this.decodeClient.getPreparationOptions === 'function') {
         this.tilePrepOptions = this.decodeClient.getPreparationOptions();
       }
+      if (typeof this.decodeClient.setMaxWorkerConcurrency === 'function') {
+        this.decodeClient.setMaxWorkerConcurrency(
+          this.streamingFrameBudget.workerConcurrency,
+          this.streamingFrameBudget.reservedDestinationWorkerSlots
+        );
+      }
     } else {
       this.decodeClient = createTileDecodeClient({
+        workerCount: Math.max(4, this.streamingFrameBudget.workerConcurrency),
+        maxConcurrentWorkers: this.streamingFrameBudget.workerConcurrency,
+        reservedDestinationWorkerSlots:
+          this.streamingFrameBudget.reservedDestinationWorkerSlots,
         preparationOptions: this.tilePrepOptions,
         onWorkerMessageDelivered: (info) => {
           const prof =
@@ -1222,6 +1390,15 @@ export class TileStreamManager {
     return this.hierarchy !== null;
   }
 
+  private getEffectiveMaxConcurrentHttpRetrievals(): number {
+    if (this.explicitMaxConcurrentFetches !== null) {
+      return this.explicitMaxConcurrentFetches;
+    }
+    return this.streamingFrameBudget.independentPipelineStagesEnabled
+      ? this.streamingFrameBudget.maxConcurrentHttpRetrievals
+      : this.maxConcurrentFetches;
+  }
+
   getTilePreparationOptions(): TilePreparationOptions {
     return { ...this.tilePrepOptions };
   }
@@ -1335,6 +1512,12 @@ export class TileStreamManager {
       input,
       this.streamingFrameBudget
     );
+    if (typeof this.decodeClient.setMaxWorkerConcurrency === 'function') {
+      this.decodeClient.setMaxWorkerConcurrency(
+        this.streamingFrameBudget.workerConcurrency,
+        this.streamingFrameBudget.reservedDestinationWorkerSlots
+      );
+    }
     if (!this.streamingFrameBudget.deferredDisposalEnabled) {
       this.deferredDisposalQueue.flushAll();
     }
@@ -1434,7 +1617,7 @@ export class TileStreamManager {
       }
       if (r.state === 'queued') queued += 1;
       else if (r.state === 'fetching') fetching += 1;
-      else if (r.state === 'decoding') decoding += 1;
+      else if (r.state === 'retrieved_queued' || r.state === 'decoding') decoding += 1;
       else if (r.state === 'ready_to_commit') readyToCommit += 1;
       else if (r.state === 'loaded') loaded += 1;
     }
@@ -1590,16 +1773,21 @@ export class TileStreamManager {
         record.abortController.abort();
         record.abortController = null;
       }
+      this.releaseRecordStageReservations(record);
       if (record.reconstructed) {
         this.detachTileFromCompositeScene(record);
         record.reconstructed.dispose();
         record.reconstructed = null;
         detachedAny = true;
       }
+      record.retrievedBuffer = null;
       record.decodedPayload = null;
       record.decodedFootprint = null;
       record.state = 'unloaded';
     }
+    this.inFlightHttpReservationBytes = 0;
+    this.retrievedPayloadQueueBytes = 0;
+    this.inFlightWorkerPreparationBytes = 0;
     this.tilesByKey.clear();
     this.levelsByResolution.clear();
     this.hierarchy = null;
@@ -1607,10 +1795,12 @@ export class TileStreamManager {
     this.desiredResolutionMeters = null;
     this.pendingResolutionMeters = null;
     this.prewarmTargetResolutionMeters = null;
+    this.currentPrewarmStartedAtMs = null;
     this.pendingDebounceTargetResolution = null;
     this.pendingDebounceStartedAtMs = null;
     this.currentTransitionDebounceWaitMs = 0;
     this.currentTransitionCancellations = 0;
+    this.currentTransitionNewlyRequiredTilesCount = 0;
     this.recentTransitions.length = 0;
     this.lastCompletedTransition = null;
     this.transitionState = 'idle';
@@ -1676,6 +1866,9 @@ export class TileStreamManager {
       priorityScore: Number.POSITIVE_INFINITY,
       abortController: null,
       requestGeneration: 0,
+      retrievedBuffer: null,
+      reservedHttpBytes: 0,
+      reservedWorkerBytes: 0,
       decodedPayload: null,
       decodedFootprint: null,
       reconstructed: null,
@@ -2026,6 +2219,30 @@ export class TileStreamManager {
     return `${viewport.minX.toFixed(1)},${viewport.maxX.toFixed(1)},${viewport.minZ.toFixed(1)},${viewport.maxZ.toFixed(1)},${(viewport.cameraZoom ?? this.currentCameraZoom).toFixed(4)},${viewport.viewportWidthPx ?? 0}`;
   }
 
+  private releaseRecordStageReservations(record: ManagedTileRecord): void {
+    if (record.reservedHttpBytes > 0) {
+      this.inFlightHttpReservationBytes = Math.max(
+        0,
+        this.inFlightHttpReservationBytes - record.reservedHttpBytes
+      );
+      record.reservedHttpBytes = 0;
+    }
+    if (record.retrievedBuffer !== null) {
+      this.retrievedPayloadQueueBytes = Math.max(
+        0,
+        this.retrievedPayloadQueueBytes - record.retrievedBuffer.byteLength
+      );
+      record.retrievedBuffer = null;
+    }
+    if (record.reservedWorkerBytes > 0) {
+      this.inFlightWorkerPreparationBytes = Math.max(
+        0,
+        this.inFlightWorkerPreparationBytes - record.reservedWorkerBytes
+      );
+      record.reservedWorkerBytes = 0;
+    }
+  }
+
   private cancelPendingTransition(reason: string): void {
     if (this.pendingResolutionMeters === null) return;
     const prevPendingRes = this.pendingResolutionMeters;
@@ -2045,6 +2262,7 @@ export class TileStreamManager {
         if (
           record.state === 'queued' ||
           record.state === 'fetching' ||
+          record.state === 'retrieved_queued' ||
           record.state === 'decoding' ||
           record.state === 'ready_to_commit'
         ) {
@@ -2059,6 +2277,7 @@ export class TileStreamManager {
             record.state = 'cached_inactive';
             record.lastUsedAtMs = now;
           } else {
+            this.discardedPreparedTilesTotal += 1;
             this.disposeReconstructedTile(record, false);
           }
         }
@@ -2078,6 +2297,7 @@ export class TileStreamManager {
     this.pendingDebounceStartedAtMs = null;
     this.currentTransitionDebounceWaitMs = 0;
     this.currentTransitionCancellations = 0;
+    this.currentTransitionNewlyRequiredTilesCount = 0;
     this.transitionState = 'idle';
     this.transitionStartedAtMs = null;
     this.budgetDeferralReason = null;
@@ -2123,11 +2343,13 @@ export class TileStreamManager {
         if (
           record.state === 'queued' ||
           record.state === 'fetching' ||
+          record.state === 'retrieved_queued' ||
           record.state === 'decoding' ||
           record.state === 'ready_to_commit'
         ) {
           this.cancelInFlightTile(record);
         } else if (record.state === 'prepared_inactive') {
+          this.discardedPreparedTilesTotal += 1;
           this.disposeReconstructedTile(record, false, true);
         }
       }
@@ -2273,9 +2495,21 @@ export class TileStreamManager {
     }
 
     // Debounce elapsed (or disabled / forced mode): start the transition!
+    if (
+      this.prewarmTargetResolutionMeters === nextDesired &&
+      this.currentPrewarmStartedAtMs !== null
+    ) {
+      this.lastPreparationLeadTimeMs = Math.max(
+        0,
+        now - this.currentPrewarmStartedAtMs
+      );
+    } else {
+      this.lastPreparationLeadTimeMs = 0;
+    }
     this.pendingDebounceTargetResolution = null;
     this.pendingDebounceStartedAtMs = null;
     this.prewarmTargetResolutionMeters = null;
+    this.currentPrewarmStartedAtMs = null;
 
     if (this.pendingResolutionMeters !== null) {
       this.cancelPendingTransition('retargeted_to_new_resolution');
@@ -2285,6 +2519,7 @@ export class TileStreamManager {
     this.transitionStartedAtMs = now;
     this.currentTransitionDebounceWaitMs = debounceElapsedMs;
     this.currentTransitionCancellations = 0;
+    this.currentTransitionNewlyRequiredTilesCount = 0;
     this.transitionState = 'preparing';
     this.budgetDeferralReason = null;
     this.lastDeferredViewportSignature = null;
@@ -2330,12 +2565,15 @@ export class TileStreamManager {
       this.hierarchicalPolicy.mode !== 'auto'
     ) {
       this.prewarmTargetResolutionMeters = null;
+      this.currentPrewarmStartedAtMs = null;
+      this.lastAdaptivePrewarmEval = null;
       return;
     }
 
     // Never prewarm when active viewport has missing visible coverage or tight memory headroom
     if (this.hasActiveVisibleCoverageGap() || this.speculativeBackpressureActive) {
       this.prewarmTargetResolutionMeters = null;
+      this.currentPrewarmStartedAtMs = null;
       return;
     }
 
@@ -2350,19 +2588,60 @@ export class TileStreamManager {
         : 0;
     if (headroomRatio < this.streamingFrameBudget.predictivePrewarmMinHeadroomRatio) {
       this.prewarmTargetResolutionMeters = null;
+      this.currentPrewarmStartedAtMs = null;
       return;
     }
 
-    const res = resolveApproachingResolutionForPrewarm({
-      availableResolutionsMeters: this.hierarchy.resolutionsMeters,
-      activeResolutionMeters: this.activeResolutionMeters,
-      cameraZoom: this.currentCameraZoom,
-      viewportWidthPx: this.currentViewportWidthPx,
-      policy: this.hierarchicalPolicy,
-      bandFraction: this.streamingFrameBudget.predictivePrewarmBandFraction,
-      zoomTrend: this.zoomTrend,
-    });
-    this.prewarmTargetResolutionMeters = res.targetResolutionMeters;
+    let nextPrewarmTarget: number | null = null;
+    if (this.streamingFrameBudget.adaptivePrewarmHorizonEnabled) {
+      const queueOccupancyWaitMs =
+        this.decodeClient.getQueuedDecodeCount() * 90 +
+        this.activeFetchCount * 25;
+      const adaptiveEval = evaluateAdaptivePrewarmHorizon({
+        availableResolutionsMeters: this.hierarchy.resolutionsMeters,
+        activeResolutionMeters: this.activeResolutionMeters,
+        cameraZoom: this.currentCameraZoom,
+        viewportWidthPx: this.currentViewportWidthPx,
+        policy: this.hierarchicalPolicy,
+        bandFraction: this.streamingFrameBudget.predictivePrewarmBandFraction,
+        zoomTrend: this.zoomTrend,
+        scaleVelocityPerSec: this.scaleVelocityPerSec,
+        historicalPrepLatencyMs: this.historicalPrepLatencyByResMs,
+        queueBacklogMs: queueOccupancyWaitMs,
+        leadMultiplier: this.streamingFrameBudget.adaptivePrewarmLeadMultiplier,
+      });
+      this.lastAdaptivePrewarmEval = adaptiveEval;
+      nextPrewarmTarget = adaptiveEval.targetResolutionMeters;
+    } else {
+      const res = resolveApproachingResolutionForPrewarm({
+        availableResolutionsMeters: this.hierarchy.resolutionsMeters,
+        activeResolutionMeters: this.activeResolutionMeters,
+        cameraZoom: this.currentCameraZoom,
+        viewportWidthPx: this.currentViewportWidthPx,
+        policy: this.hierarchicalPolicy,
+        bandFraction: this.streamingFrameBudget.predictivePrewarmBandFraction,
+        zoomTrend: this.zoomTrend,
+      });
+      this.lastAdaptivePrewarmEval = {
+        targetResolutionMeters: res.targetResolutionMeters,
+        reason: res.reason,
+        estimatedTimeToThresholdMs: null,
+        requiredLeadTimeMs: null,
+        distanceToThresholdScale: null,
+        triggeredByVelocityHorizon: false,
+      };
+      nextPrewarmTarget = res.targetResolutionMeters;
+    }
+
+    if (nextPrewarmTarget !== null) {
+      if (this.prewarmTargetResolutionMeters !== nextPrewarmTarget) {
+        this.currentPrewarmStartedAtMs = this.nowFn();
+      }
+      this.prewarmTargetResolutionMeters = nextPrewarmTarget;
+    } else {
+      this.prewarmTargetResolutionMeters = null;
+      this.currentPrewarmStartedAtMs = null;
+    }
   }
 
   private computeTotalMeasuredMemoryBytes(): number {
@@ -2406,7 +2685,7 @@ export class TileStreamManager {
     let fetchMarginMeters: number;
     let keepMarginMeters: number;
     if (isPredictivePrewarm) {
-      // Predictive pre-warming prepares ONLY currently visible tiles of the approaching resolution
+      // Predictive pre-warming prepares visible tiles (plus predicted horizon coverage when adaptive horizon is enabled)
       fetchMarginMeters = 0;
       keepMarginMeters = Math.min(tileSize, this.hierarchicalPolicy.retainMarginMeters);
     } else if (this.hierarchy) {
@@ -2431,6 +2710,69 @@ export class TileStreamManager {
     const keepMinZ = viewport.minZ - keepMarginMeters;
     const keepMaxZ = viewport.maxZ + keepMarginMeters;
 
+    // Work Package E: Predict viewport bounds at estimated activation horizon so destination
+    // or prewarm tiles moving into view get prioritized ahead of trailing tiles.
+    const usePredictedViewport =
+      this.streamingFrameBudget.adaptivePrewarmHorizonEnabled &&
+      (isPendingDestination || isPredictivePrewarm);
+    const estHorizonMs = usePredictedViewport
+      ? (this.historicalPrepLatencyByResMs[tileSize] ?? 850)
+      : 0;
+    const predictedBounds = usePredictedViewport
+      ? predictViewportBoundsAtHorizon({
+          currentBounds: {
+            minX: viewport.minX,
+            maxX: viewport.maxX,
+            minZ: viewport.minZ,
+            maxZ: viewport.maxZ,
+            centerX: (viewport.minX + viewport.maxX) * 0.5,
+            centerZ: (viewport.minZ + viewport.maxZ) * 0.5,
+          },
+          panVelocityXPerSec: this.panVelocityXPerSec,
+          panVelocityZPerSec: this.panVelocityZPerSec,
+          horizonSeconds: estHorizonMs / 1000,
+        })
+      : null;
+
+    // Work Package C: Tail-tile awareness for pending destination transitions
+    let unreadyVisibleDestinationCount = 0;
+    let totalVisibleDestinationCount = 0;
+    if (isPendingDestination && this.streamingFrameBudget.tailTilePriorityBoostEnabled) {
+      const requireGpu = this.isIncrementalGpuPrepActive();
+      for (const rec of level.tilesByKey.values()) {
+        const ob = rec.overhangWorldBounds;
+        const vis = aabbIntersects2D(
+          ob.minX,
+          ob.maxX,
+          ob.minZ,
+          ob.maxZ,
+          viewport.minX,
+          viewport.maxX,
+          viewport.minZ,
+          viewport.maxZ
+        );
+        if (!vis) continue;
+        totalVisibleDestinationCount += 1;
+        if (rec.manifest.isEmpty) continue;
+        const cpuReady =
+          (rec.state === 'prepared_inactive' ||
+            rec.state === 'cached_inactive' ||
+            rec.state === 'loaded') &&
+          rec.reconstructed !== null;
+        const gpuReady =
+          cpuReady && (!requireGpu || this.gpuPreparer.isTilePrepared(rec.reconstructed!));
+        if (!gpuReady) {
+          unreadyVisibleDestinationCount += 1;
+        }
+      }
+    }
+    const isTailPhase =
+      isPendingDestination &&
+      this.streamingFrameBudget.tailTilePriorityBoostEnabled &&
+      unreadyVisibleDestinationCount > 0 &&
+      (unreadyVisibleDestinationCount <= 2 ||
+        unreadyVisibleDestinationCount <= Math.ceil(totalVisibleDestinationCount * 0.5));
+
     let anyEvictedOrCancelled = false;
     let anyAttachedFromCache = false;
     let cancelInFlightMs = 0;
@@ -2453,8 +2795,20 @@ export class TileStreamManager {
         viewport.minZ,
         viewport.maxZ
       );
+      const intersectsPredicted =
+        predictedBounds !== null &&
+        aabbIntersects2D(
+          ob.minX,
+          ob.maxX,
+          ob.minZ,
+          ob.maxZ,
+          predictedBounds.minX,
+          predictedBounds.maxX,
+          predictedBounds.minZ,
+          predictedBounds.maxZ
+        );
       const isInFetch = isPredictivePrewarm
-        ? isVisible
+        ? isVisible || intersectsPredicted
         : isVisible ||
           aabbIntersects2D(
             wb.minX,
@@ -2488,43 +2842,99 @@ export class TileStreamManager {
         wb.centerZ - leadFocusZ
       );
 
+      const prevPriority = record.priorityScore;
       if (this.hierarchy) {
-        // 5-tier priority queue:
-        // 1. Active visible (-4M)
-        // 2. Pending required destination (-3M)
-        // 3. Active preload (-2M)
-        // 4. Pending speculative preload (-1M)
-        // 5. Predictive pre-warm (-500k)
-        const tierOffset = isPredictivePrewarm
-          ? -500_000
-          : isPendingDestination
-            ? isVisible
-              ? -3_000_000
-              : -1_000_000
-            : isVisible
-              ? -4_000_000
-              : -2_000_000;
-        record.priorityScore = tierOffset + distToFocus;
+        // Work Package C 5-tier priority model:
+        // 1. Missing active visible coverage (-4,000,000)
+        // 2. Required pending destination coverage (-3,000,000, escalated with age & tail phase)
+        // 3. Approaching-resolution prewarm coverage (-2,400,000 when adaptive/fairness enabled, else -500,000)
+        // 4. Active preload coverage (-2,000,000)
+        // 5. Speculative destination preload (-1,000,000)
+        let tierOffset: number;
+        if (isPredictivePrewarm) {
+          tierOffset = this.streamingFrameBudget.reservedDestinationFetchSlots > 0
+            ? -2_400_000
+            : -500_000;
+        } else if (isPendingDestination) {
+          tierOffset = isVisible ? -3_000_000 : -1_000_000;
+        } else {
+          tierOffset = isVisible ? -4_000_000 : -2_000_000;
+        }
+
+        let dynamicBoost = 0;
+        if (intersectsPredicted) {
+          dynamicBoost -= 150_000;
+        }
+        if (isPendingDestination && isVisible) {
+          if (isTailPhase) {
+            dynamicBoost -= 250_000;
+          }
+          const ageStart =
+            record.pipeline.queuedAtMs ??
+            this.transitionStartedAtMs ??
+            now;
+          const ageMs = Math.max(0, now - ageStart);
+          const escStep = Math.max(100, this.streamingFrameBudget.destinationAgeEscalationMs);
+          const steps = Math.min(12, Math.floor(ageMs / escStep));
+          dynamicBoost -= steps * 60_000;
+        }
+        record.priorityScore = tierOffset + dynamicBoost + distToFocus;
       } else {
         // Visible tiles get a -1,000,000 priority boost so they always load before preload margin tiles
         record.priorityScore = (isVisible ? -1_000_000 : 0) + distToFocus;
       }
 
+      // Work Package C: Dynamically reprioritize queued worker jobs when camera movement changes relevance
+      if (
+        isInKeep &&
+        this.streamingFrameBudget.dynamicQueueReprioritizationEnabled &&
+        Math.abs(record.priorityScore - prevPriority) > 1 &&
+        (record.state === 'queued' ||
+          record.state === 'retrieved_queued' ||
+          record.state === 'decoding')
+      ) {
+        this.dynamicReprioritizationsTotal += 1;
+        if (
+          record.state === 'decoding' &&
+          typeof this.decodeClient.updateJobPriority === 'function'
+        ) {
+          this.decodeClient.updateJobPriority(
+            record.tileKey,
+            record.priorityScore,
+            isPendingDestination && isVisible
+          );
+        }
+      }
+
       if (!isInKeep) {
-        // Cancel any queued, fetching, decoding, or uncommitted tile outside keepSet
+        // Cancel any queued, fetching, retrieved_queued, decoding, or uncommitted tile outside keepSet
         if (
           record.state === 'queued' ||
           record.state === 'fetching' ||
+          record.state === 'retrieved_queued' ||
           record.state === 'decoding' ||
           record.state === 'ready_to_commit'
         ) {
-          const tCancel0 = prof ? performance.now() : 0;
-          this.cancelInFlightTile(record);
-          if (prof) {
-            cancelInFlightMs += performance.now() - tCancel0;
-            tilesCancelledCount += 1;
+          // Work Package C: If a worker decode is already running on a worker thread and memory permits,
+          // allow it to finish into cached_inactive instead of wasting worker CPU and network bytes.
+          if (
+            record.state === 'decoding' &&
+            this.hierarchy !== null &&
+            this.streamingFrameBudget.retainRunningWorkerJobOnDemotion &&
+            !this.speculativeBackpressureActive &&
+            this.hierarchicalBudget.maxInactiveCachedTiles > 0 &&
+            this.hierarchicalBudget.inactiveCacheBudgetBytes > 0
+          ) {
+            // Keep running; decode completion handler will see !record.isInKeepSet and retain or cache.
+          } else {
+            const tCancel0 = prof ? performance.now() : 0;
+            this.cancelInFlightTile(record);
+            if (prof) {
+              cancelInFlightMs += performance.now() - tCancel0;
+              tilesCancelledCount += 1;
+            }
+            anyEvictedOrCancelled = true;
           }
-          anyEvictedOrCancelled = true;
         } else if (record.state === 'loaded') {
           const tEvict0 = prof ? performance.now() : 0;
           if (
@@ -2558,6 +2968,7 @@ export class TileStreamManager {
             record.state = 'cached_inactive';
             record.lastUsedAtMs = now;
           } else {
+            this.discardedPreparedTilesTotal += 1;
             this.disposeReconstructedTile(record, false);
             tilesEvictedCount += 1;
           }
@@ -2654,9 +3065,19 @@ export class TileStreamManager {
             record.lastError = null;
             record.pipeline = createEmptyTilePipelineTimings();
             record.pipeline.queuedAtMs = now;
+            if (
+              isPendingDestination &&
+              isVisible &&
+              this.transitionStartedAtMs !== null &&
+              now > this.transitionStartedAtMs + 1
+            ) {
+              record.pipeline.enteredDuringActiveTransitionAtMs = now;
+              this.currentTransitionNewlyRequiredTilesCount += 1;
+            }
           }
         } else if (
           record.state === 'fetching' ||
+          record.state === 'retrieved_queued' ||
           record.state === 'decoding' ||
           record.state === 'ready_to_commit'
         ) {
@@ -2684,6 +3105,7 @@ export class TileStreamManager {
     if (this.isDisposed || !this.metadata) return;
     const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
     const tTotal0 = prof ? performance.now() : 0;
+    const now = this.nowFn();
 
     this.currentViewport = viewport;
     if (viewport.viewportWidthPx !== undefined) {
@@ -2724,6 +3146,14 @@ export class TileStreamManager {
     if (this.previousFocus) {
       const dx = viewport.focusX - this.previousFocus.x;
       const dz = viewport.focusZ - this.previousFocus.z;
+      const dtSec =
+        this.lastFocusSampleAtMs !== null
+          ? Math.max(0.004, (now - this.lastFocusSampleAtMs) / 1000)
+          : 0.016;
+      const instVx = dx / dtSec;
+      const instVz = dz / dtSec;
+      this.panVelocityXPerSec = this.panVelocityXPerSec * 0.6 + instVx * 0.4;
+      this.panVelocityZPerSec = this.panVelocityZPerSec * 0.6 + instVz * 0.4;
       const len = Math.hypot(dx, dz);
       if (len > 1.0) {
         const scale = Math.min(len, this.metadata.tileSizeMeters * 0.5) / len;
@@ -2733,6 +3163,7 @@ export class TileStreamManager {
       }
     }
     this.previousFocus = { x: viewport.focusX, z: viewport.focusZ };
+    this.lastFocusSampleAtMs = now;
 
     const leadFocusX = viewport.focusX + this.panLeadVector.x;
     const leadFocusZ = viewport.focusZ + this.panLeadVector.z;
@@ -2816,14 +3247,25 @@ export class TileStreamManager {
           if (
             record.state === 'queued' ||
             record.state === 'fetching' ||
+            record.state === 'retrieved_queued' ||
             record.state === 'decoding' ||
             record.state === 'ready_to_commit'
           ) {
             this.cancelInFlightTile(record);
             anyEvictedOrCancelled = true;
           } else if (record.state === 'prepared_inactive') {
-            record.state = 'cached_inactive';
-            record.lastUsedAtMs = this.nowFn();
+            if (
+              record.pipeline.preparedByPrewarm &&
+              !this.streamingFrameBudget.retainPrewarmAcrossReversals
+            ) {
+              const fp = record.decodedFootprint;
+              this.wastedPrewarmBytes += fp ? fp.cpuGeometryBytes + fp.bvhBytes : 0;
+              this.discardedPreparedTilesTotal += 1;
+              this.disposeReconstructedTile(record, false);
+            } else {
+              record.state = 'cached_inactive';
+              record.lastUsedAtMs = this.nowFn();
+            }
           }
           record.isVisibleInViewport = false;
           record.isInFetchSet = false;
@@ -2960,6 +3402,7 @@ export class TileStreamManager {
       if (
         record.state === 'queued' ||
         record.state === 'fetching' ||
+        record.state === 'retrieved_queued' ||
         record.state === 'decoding' ||
         record.state === 'ready_to_commit'
       ) {
@@ -2996,6 +3439,9 @@ export class TileStreamManager {
         record.reconstructed !== null
       ) {
         if (record.isInKeepSet) {
+          if (record.pipeline.preparedByPrewarm) {
+            this.prewarmedTilesActivatedTotal += 1;
+          }
           record.reconstructed.scene.updateCameraZoom?.(this.currentCameraZoom);
           record.reconstructed.applyFoliageRuntimeState(this.foliageRuntimeState);
           record.state = 'loaded';
@@ -3100,6 +3546,7 @@ export class TileStreamManager {
     pushBoundedSample(this.transitionDurationMsRing, elapsedTotalMs);
     this.currentTransitionDebounceWaitMs = 0;
     this.currentTransitionCancellations = 0;
+    this.currentTransitionNewlyRequiredTilesCount = 0;
 
     if (prof) {
       prof.recordEvent({
@@ -3192,6 +3639,7 @@ export class TileStreamManager {
         0,
         t0 - record.pipeline.decodeCompleteAtMs
       );
+      this.totalReconstructQueueWaitMs += record.pipeline.mainThreadReconstructWaitMs;
     }
     const reconstructed = reconstructTileSceneFromDecoded(
       record.decodedPayload,
@@ -3264,12 +3712,14 @@ export class TileStreamManager {
       }
       if (!this.isIncrementalGpuPrepActive() || record.manifest.isEmpty) {
         record.pipeline.readyAtMs = tReconEnd;
+        this.updateHistoricalPrepLatency(record, tReconEnd);
       }
       accum.committed += 1;
       this.enforceResourceBudgets();
     } else {
       record.state = 'loaded';
       record.pipeline.readyAtMs = tReconEnd;
+      this.updateHistoricalPrepLatency(record, tReconEnd);
       const tAttach0 = prof ? this.nowFn() : 0;
       this.attachTileToCompositeScene(record);
       const attachMs = prof ? Math.max(0, this.nowFn() - tAttach0) : 0;
@@ -3306,6 +3756,17 @@ export class TileStreamManager {
       accum.committedActive += 1;
     }
     return true;
+  }
+
+  private updateHistoricalPrepLatency(record: ManagedTileRecord, readyAtMs: number): void {
+    const startMs = record.pipeline.fetchStartAtMs ?? record.pipeline.queuedAtMs;
+    if (startMs === null) return;
+    const totalLatencyMs = Math.max(20, readyAtMs - startMs);
+    const res = record.resolutionMeters;
+    const prev = this.historicalPrepLatencyByResMs[res] ?? totalLatencyMs;
+    this.historicalPrepLatencyByResMs[res] = Number(
+      (prev * 0.7 + totalLatencyMs * 0.3).toFixed(2)
+    );
   }
 
   private collectPendingGpuPrepRecords(pendingLevel: ResolutionLevelState): ManagedTileRecord[] {
@@ -4054,6 +4515,23 @@ export class TileStreamManager {
       this.zoomPropagationSkips++;
       return false;
     }
+    const now = this.nowFn();
+    const nextScale = computeEffectiveOrthographicScale(
+      zoom,
+      this.currentViewportWidthPx,
+      this.hierarchicalPolicy
+    ).effectiveScalePxPerMeter;
+    if (
+      this.lastScalePxPerMeterSample !== null &&
+      this.lastZoomSampleAtMs !== null
+    ) {
+      const dtSec = Math.max(0.004, (now - this.lastZoomSampleAtMs) / 1000);
+      const instVel = (nextScale - this.lastScalePxPerMeterSample) / dtSec;
+      this.scaleVelocityPerSec = this.scaleVelocityPerSec * 0.6 + instVel * 0.4;
+    }
+    this.lastScalePxPerMeterSample = nextScale;
+    this.lastZoomSampleAtMs = now;
+
     if (
       this.previousCameraZoomForTrend !== null &&
       Number.isFinite(zoom) &&
@@ -4137,10 +4615,42 @@ export class TileStreamManager {
     totalMeasuredBytes: number;
   } {
     const fp = record.decodedFootprint;
-    if (record.state === 'fetching' || record.state === 'decoding') {
-      // Conservative estimate of in-flight worker preparation buffers based on compressed payload size (or 0 before response).
+    if (record.state === 'fetching') {
+      return {
+        cpuGeometryBytes: 0,
+        staticBvhBytes: 0,
+        instancedIndexBytes: 0,
+        queuedDecodedBytes: 0,
+        estimatedWorkerBytes: record.reservedHttpBytes,
+        estimatedGpuBytes: 0,
+        totalMeasuredBytes: 0,
+      };
+    }
+
+    if (record.state === 'retrieved_queued') {
+      // Binary payload currently held in retrievedBuffer awaiting worker transfer.
+      // Single-owner accounting: counted as measured queued bytes until transferred to worker!
+      const bufBytes = record.retrievedBuffer?.byteLength ?? 0;
+      return {
+        cpuGeometryBytes: 0,
+        staticBvhBytes: 0,
+        instancedIndexBytes: 0,
+        queuedDecodedBytes: bufBytes,
+        estimatedWorkerBytes: 0,
+        estimatedGpuBytes: 0,
+        totalMeasuredBytes: bufBytes,
+      };
+    }
+
+    if (record.state === 'decoding') {
+      // ArrayBuffer has been transferred to worker (retrievedBuffer is null -> zero double-counting).
       const comp = record.lastCompressedBytes ?? 0;
-      const estimatedWorkerBytes = comp > 0 ? comp * 4 : 0;
+      const estimatedWorkerBytes =
+        record.reservedWorkerBytes > 0
+          ? record.reservedWorkerBytes
+          : comp > 0
+            ? comp * 4
+            : 0;
       return {
         cpuGeometryBytes: 0,
         staticBvhBytes: 0,
@@ -4231,6 +4741,10 @@ export class TileStreamManager {
       const totalGpuSpan = Math.max(0, doneMs - startRef);
       p.gpuPrepWaitMs = Math.max(0, totalGpuSpan - p.gpuPrepSubmitMs);
       p.readyAtMs = doneMs;
+      this.totalGpuPrepQueueWaitMs += p.gpuPrepWaitMs;
+      this.totalGpuPrepSubmitMs += p.gpuPrepSubmitMs;
+      this.gpuPrepCompletedTileSamples += 1;
+      this.updateHistoricalPrepLatency(record, doneMs);
     }
   }
 
@@ -4243,11 +4757,16 @@ export class TileStreamManager {
     let pendingDestinationVisibleInFlightCount = 0;
     let pendingDestinationSpeculativeInFlightCount = 0;
     let pendingDecodedBytes = 0;
+    let retrievedQueueCount = 0;
 
     for (const record of this.tilesByKey.values()) {
+      if (record.state === 'retrieved_queued') {
+        retrievedQueueCount += 1;
+      }
       const inFlight =
         record.state === 'queued' ||
         record.state === 'fetching' ||
+        record.state === 'retrieved_queued' ||
         record.state === 'decoding' ||
         record.state === 'ready_to_commit';
       if (record.state === 'ready_to_commit' && record.decodedFootprint) {
@@ -4268,20 +4787,25 @@ export class TileStreamManager {
       0,
       this.hierarchicalBudget.totalMemoryBudgetBytes - resources.totalMeasuredBytes
     );
+    const maxFetches = this.getEffectiveMaxConcurrentHttpRetrievals();
     const contention = {
       activeVisibleInFlightCount,
       activePreloadInFlightCount,
       pendingDestinationVisibleInFlightCount,
       pendingDestinationSpeculativeInFlightCount,
       fetchSlotsUsed: this.activeFetchCount,
-      fetchSlotsMax: this.maxConcurrentFetches,
+      fetchSlotsMax: maxFetches,
+      retrievedQueueCount,
+      retrievedQueueBytes: this.retrievedPayloadQueueBytes,
       workerPendingDecodes: this.decodeClient.getPendingDecodeCount(),
       workerPoolSize: this.decodeClient.getActiveWorkerCount(),
       workerBackpressureActive: this.workerBackpressureActive,
       speculativeBackpressureActive: this.speculativeBackpressureActive,
       memoryHeadroomBytes,
       pendingDecodedBytes,
-      pendingDecodedCapBytes: this.hierarchicalBudget.maxPendingDecodedBytes,
+      pendingDecodedCapBytes: this.streamingFrameBudget.independentPipelineStagesEnabled
+        ? this.streamingFrameBudget.maxPreparedPayloadQueueBytes
+        : this.hierarchicalBudget.maxPendingDecodedBytes,
       cancellationsDuringTransition: this.currentTransitionCancellations,
     };
 
@@ -4303,13 +4827,17 @@ export class TileStreamManager {
         elapsedMs: Number(elapsedMs.toFixed(2)),
         requiredVisibleCount: 0,
         readyCount: 0,
+        destinationCoverageReadinessRatio: 0,
+        newlyRequiredDestinationTilesCount: 0,
         queuedCount: 0,
         fetchingCount: 0,
+        retrievedQueuedCount: 0,
         decodingCount: 0,
         reconstructWaitingCount: 0,
         gpuPrepWaitingCount: 0,
         failedCount: 0,
         slowestOutstandingTile: null,
+        oldestOutstandingTile: null,
         contention,
       };
     }
@@ -4325,13 +4853,17 @@ export class TileStreamManager {
         elapsedMs: 0,
         requiredVisibleCount: 0,
         readyCount: 0,
+        destinationCoverageReadinessRatio: 1,
+        newlyRequiredDestinationTilesCount: 0,
         queuedCount: 0,
         fetchingCount: 0,
+        retrievedQueuedCount: 0,
         decodingCount: 0,
         reconstructWaitingCount: 0,
         gpuPrepWaitingCount: 0,
         failedCount: 0,
         slowestOutstandingTile: null,
+        oldestOutstandingTile: null,
         contention,
       };
     }
@@ -4353,13 +4885,17 @@ export class TileStreamManager {
         elapsedMs: Number(elapsedMs.toFixed(2)),
         requiredVisibleCount: 0,
         readyCount: 0,
+        destinationCoverageReadinessRatio: 0,
+        newlyRequiredDestinationTilesCount: this.currentTransitionNewlyRequiredTilesCount,
         queuedCount: 0,
         fetchingCount: 0,
+        retrievedQueuedCount: 0,
         decodingCount: 0,
         reconstructWaitingCount: 0,
         gpuPrepWaitingCount: 0,
         failedCount: 0,
         slowestOutstandingTile: null,
+        oldestOutstandingTile: null,
         contention,
       };
     }
@@ -4370,11 +4906,13 @@ export class TileStreamManager {
     let readyCount = 0;
     let queuedCount = 0;
     let fetchingCount = 0;
+    let retrievedQueuedCount = 0;
     let decodingCount = 0;
     let reconstructWaitingCount = 0;
     let gpuPrepWaitingCount = 0;
     let failedCount = 0;
     let slowestTile: TransitionOutstandingTileSnapshot | null = null;
+    let oldestTile: TransitionOutstandingTileSnapshot | null = null;
 
     if (pendingLevel) {
       for (const record of pendingLevel.tilesByKey.values()) {
@@ -4409,6 +4947,10 @@ export class TileStreamManager {
           fetchingCount += 1;
           currentStage = 'fetching';
           stageStartMs = p.fetchStartAtMs ?? stageStartMs;
+        } else if (record.state === 'retrieved_queued') {
+          retrievedQueuedCount += 1;
+          currentStage = 'retrieved_queued';
+          stageStartMs = p.retrievedQueuedAtMs ?? p.fetchCompleteAtMs ?? stageStartMs;
         } else if (record.state === 'decoding') {
           decodingCount += 1;
           currentStage = 'worker_queue_or_decoding';
@@ -4428,6 +4970,8 @@ export class TileStreamManager {
         }
 
         const stageElapsedMs = Math.max(0, now - stageStartMs);
+        const tileAgeSinceQueueMs =
+          p.queuedAtMs !== null ? Math.max(0, now - p.queuedAtMs) : elapsedMs;
         const liveFetchQueueWaitMs =
           record.state === 'queued' && p.queuedAtMs !== null
             ? Math.max(0, now - p.queuedAtMs)
@@ -4436,6 +4980,10 @@ export class TileStreamManager {
           record.state === 'fetching' && p.fetchStartAtMs !== null
             ? Math.max(0, now - p.fetchStartAtMs)
             : p.payloadRetrievalMs;
+        const liveRetrievedQueueWaitMs =
+          record.state === 'retrieved_queued' && p.retrievedQueuedAtMs !== null
+            ? Math.max(0, now - p.retrievedQueuedAtMs)
+            : p.retrievedQueueWaitMs;
         const liveReconstructWaitMs =
           record.state === 'ready_to_commit' && p.decodeCompleteAtMs !== null
             ? Math.max(0, now - p.decodeCompleteAtMs)
@@ -4453,10 +5001,11 @@ export class TileStreamManager {
           resolutionMeters: record.resolutionMeters,
           state: record.state,
           currentStage,
-          ageSinceTransitionStartMs: Number(elapsedMs.toFixed(2)),
+          ageSinceTransitionStartMs: Number(tileAgeSinceQueueMs.toFixed(2)),
           currentStageElapsedMs: Number(stageElapsedMs.toFixed(2)),
           fetchQueueWaitMs: Number(liveFetchQueueWaitMs.toFixed(2)),
           payloadRetrievalMs: Number(livePayloadRetrievalMs.toFixed(2)),
+          retrievedQueueWaitMs: Number(liveRetrievedQueueWaitMs.toFixed(2)),
           workerQueueWaitMs: Number(
             (p.workerClientQueueWaitMs + p.workerThreadQueueWaitMs).toFixed(2)
           ),
@@ -4483,6 +5032,12 @@ export class TileStreamManager {
         ) {
           slowestTile = candidate;
         }
+        if (
+          oldestTile === null ||
+          candidate.ageSinceTransitionStartMs > oldestTile.ageSinceTransitionStartMs
+        ) {
+          oldestTile = candidate;
+        }
       }
     }
 
@@ -4491,21 +5046,28 @@ export class TileStreamManager {
     if (failedCount > 0) {
       blockerCategory = 'error_or_missing';
       blockerReason = `${failedCount} required ${this.pendingResolutionMeters}m tile(s) failed to load.`;
-    } else if (this.workerBackpressureActive && queuedCount > 0) {
+    } else if (this.workerBackpressureActive && (queuedCount > 0 || retrievedQueuedCount > 0)) {
       blockerCategory = 'memory_backpressure';
-      blockerReason = `Worker backpressure active (${(pendingDecodedBytes / (1024 * 1024)).toFixed(1)}/${(this.hierarchicalBudget.maxPendingDecodedBytes / (1024 * 1024)).toFixed(1)} MiB pending decoded) blocking ${queuedCount} queued tile(s).`;
-    } else if (this.hasActiveVisibleCoverageGap() && (queuedCount > 0 || reconstructWaitingCount > 0 || gpuPrepWaitingCount > 0)) {
+      blockerReason = `Backpressure active (${(pendingDecodedBytes / (1024 * 1024)).toFixed(1)} MiB prepared awaiting reconstruction) blocking ${queuedCount + retrievedQueuedCount} tile(s).`;
+    } else if (
+      this.hasActiveVisibleCoverageGap() &&
+      (queuedCount > 0 || reconstructWaitingCount > 0 || gpuPrepWaitingCount > 0)
+    ) {
       blockerCategory = 'active_coverage_gap';
       blockerReason = `Active ${this.activeResolutionMeters}m visible coverage gap taking priority over ${requiredVisibleCount - readyCount} pending destination tile(s).`;
     } else if (slowestTile) {
       switch (slowestTile.currentStage) {
         case 'queued':
           blockerCategory = 'fetch_queue_contention';
-          blockerReason = `${queuedCount} destination tile(s) queued waiting for fetch slots (${this.activeFetchCount}/${this.maxConcurrentFetches} used, ${activePreloadInFlightCount} active-preload in flight).`;
+          blockerReason = `${queuedCount} destination tile(s) queued waiting for fetch slots (${this.activeFetchCount}/${maxFetches} used, ${activePreloadInFlightCount} active-preload in flight).`;
           break;
         case 'fetching':
           blockerCategory = 'network_fetching';
           blockerReason = `Fetching ${fetchingCount} destination tile(s); slowest ${slowestTile.tileKey} (${slowestTile.payloadRetrievalMs.toFixed(0)} ms).`;
+          break;
+        case 'retrieved_queued':
+          blockerCategory = 'retrieved_queue_waiting';
+          blockerReason = `${retrievedQueuedCount} retrieved destination payload(s) queued awaiting worker slot; slowest ${slowestTile.tileKey} (${(slowestTile.retrievedQueueWaitMs ?? 0).toFixed(0)} ms).`;
           break;
         case 'worker_queue_or_decoding':
           blockerCategory =
@@ -4530,6 +5092,11 @@ export class TileStreamManager {
       }
     }
 
+    const readinessRatio =
+      requiredVisibleCount > 0
+        ? Number((readyCount / requiredVisibleCount).toFixed(4))
+        : 1;
+
     return {
       active: true,
       blockerCategory,
@@ -4540,13 +5107,17 @@ export class TileStreamManager {
       elapsedMs: Number(elapsedMs.toFixed(2)),
       requiredVisibleCount,
       readyCount,
+      destinationCoverageReadinessRatio: readinessRatio,
+      newlyRequiredDestinationTilesCount: this.currentTransitionNewlyRequiredTilesCount,
       queuedCount,
       fetchingCount,
+      retrievedQueuedCount,
       decodingCount,
       reconstructWaitingCount,
       gpuPrepWaitingCount,
       failedCount,
       slowestOutstandingTile: slowestTile,
+      oldestOutstandingTile: oldestTile,
       contention,
     };
   }
@@ -4588,6 +5159,7 @@ export class TileStreamManager {
         const tilePipeSum =
           rec.pipeline.fetchQueueWaitMs +
           rec.pipeline.payloadRetrievalMs +
+          rec.pipeline.retrievedQueueWaitMs +
           rec.pipeline.workerClientQueueWaitMs +
           rec.pipeline.workerThreadQueueWaitMs +
           rec.pipeline.workerInflateAndDecodeMs +
@@ -4629,6 +5201,7 @@ export class TileStreamManager {
       const stagePairs: Array<[TransitionBlockerCategory, number]> = [
         ['fetch_queue_contention', cp.fetchQueueWaitMs],
         ['network_fetching', cp.payloadRetrievalMs],
+        ['retrieved_queue_waiting', cp.retrievedQueueWaitMs],
         ['worker_queue_waiting', workerQueueWaitMs],
         ['worker_decoding', workerDecodeAndBvhMs],
         ['main_thread_reconstruct_waiting', cp.mainThreadReconstructWaitMs + cp.reconstructMs],
@@ -4643,6 +5216,9 @@ export class TileStreamManager {
       }
     }
 
+    const desiredToActivationMs =
+      this.currentTransitionDebounceWaitMs + totalDurationMs;
+
     const record: TransitionCriticalPathRecord = {
       transitionGeneration: params.overrideGeneration ?? this.transitionGeneration,
       outcome: params.outcome,
@@ -4652,17 +5228,24 @@ export class TileStreamManager {
       finishedAtMs: Number(params.finishedAtMs.toFixed(2)),
       totalDurationMs: Number(totalDurationMs.toFixed(3)),
       debounceWaitMs: Number(this.currentTransitionDebounceWaitMs.toFixed(3)),
+      desiredToActivationMs: Number(desiredToActivationMs.toFixed(3)),
+      prewarmLeadTimeMs: Number(this.lastPreparationLeadTimeMs.toFixed(3)),
       activationSwapMs: Number(params.activationSwapMs.toFixed(3)),
       requiredTileCount,
       reusedFromCacheCount,
       reusedFromPrewarmCount,
+      newlyRequiredTilesDuringTransitionCount:
+        this.currentTransitionNewlyRequiredTilesCount,
       cancellationsDuringTransition: this.currentTransitionCancellations,
       dominantBlockerCategory,
       criticalPathTileKey: criticalRecord?.tileKey ?? null,
       stagesMs: {
         fetchQueueWaitMs: Number(cp.fetchQueueWaitMs.toFixed(3)),
         payloadRetrievalMs: Number(cp.payloadRetrievalMs.toFixed(3)),
+        retrievedQueueWaitMs: Number(cp.retrievedQueueWaitMs.toFixed(3)),
         workerQueueWaitMs: Number(workerQueueWaitMs.toFixed(3)),
+        workerInflateMs: Number(cp.workerInflateMs.toFixed(3)),
+        workerDecodeOnlyMs: Number(cp.workerDecodeOnlyMs.toFixed(3)),
         workerInflateAndDecodeMs: Number(cp.workerInflateAndDecodeMs.toFixed(3)),
         workerBvhBuildMs: Number(cp.workerBvhBuildMs.toFixed(3)),
         workerDecodeAndBvhMs: Number(workerDecodeAndBvhMs.toFixed(3)),
@@ -4712,8 +5295,14 @@ export class TileStreamManager {
         else if (record.state === 'cached_inactive') acc.cachedInactiveTiles += 1;
         else if (record.state === 'queued') acc.queuedTiles += 1;
         else if (record.state === 'fetching') acc.fetchingTiles += 1;
-        else if (record.state === 'decoding') acc.decodingTiles += 1;
-        else if (record.state === 'ready_to_commit') acc.readyToCommitTiles += 1;
+        else if (
+          record.state === 'retrieved_queued' ||
+          record.state === 'decoding'
+        ) {
+          acc.decodingTiles += 1;
+        } else if (record.state === 'ready_to_commit') {
+          acc.readyToCommitTiles += 1;
+        }
 
         const b = this.computeRecordFootprintBreakdown(record);
         acc.measuredCpuGeometryBytes += b.cpuGeometryBytes;
@@ -4787,6 +5376,7 @@ export class TileStreamManager {
     if (record.state === 'loaded') {
       this.detachTileFromCompositeScene(record);
     }
+    this.releaseRecordStageReservations(record);
     const reconstructed = record.reconstructed;
     record.reconstructed = null;
     record.decodedPayload = null;
@@ -4901,6 +5491,7 @@ export class TileStreamManager {
           if (
             record.state === 'queued' ||
             record.state === 'fetching' ||
+            record.state === 'retrieved_queued' ||
             record.state === 'decoding' ||
             record.state === 'ready_to_commit'
           ) {
@@ -5019,6 +5610,125 @@ export class TileStreamManager {
     this.speculativeBackpressureActive = totalMeasured >= reserveCutoffBytes;
   }
 
+  private computeThroughputPipelineSnapshot(): StreamingThroughputPipelineSnapshot {
+    let fetchQueuedCount = 0;
+    let httpRetrievingCount = 0;
+    let retrievedQueuedCount = 0;
+    let workerDecodingCount = 0;
+    let preparedQueuedCount = 0;
+    let preparedPayloadQueueBytes = 0;
+    let reconstructedAwaitingGpuBytes = 0;
+
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'queued') fetchQueuedCount += 1;
+      else if (record.state === 'fetching') httpRetrievingCount += 1;
+      else if (record.state === 'retrieved_queued') retrievedQueuedCount += 1;
+      else if (record.state === 'decoding') workerDecodingCount += 1;
+      else if (record.state === 'ready_to_commit') {
+        preparedQueuedCount += 1;
+        if (record.decodedFootprint) {
+          preparedPayloadQueueBytes +=
+            record.decodedFootprint.cpuGeometryBytes +
+            record.decodedFootprint.bvhBytes;
+        }
+      } else if (
+        record.state === 'prepared_inactive' &&
+        record.reconstructed &&
+        !this.gpuPreparer.isTilePrepared(record.reconstructed)
+      ) {
+        const fp = record.decodedFootprint;
+        if (fp) {
+          reconstructedAwaitingGpuBytes += fp.cpuGeometryBytes;
+        }
+      }
+    }
+
+    const workerUtil = this.decodeClient.getWorkerUtilizationSnapshot();
+    const httpMibPerSec =
+      this.totalHttpRetrievalDurationMs > 0
+        ? (this.totalNetworkTransferBytes / (1024 * 1024)) /
+          (this.totalHttpRetrievalDurationMs / 1000)
+        : 0;
+    const decodeRawMibPerSec =
+      this.totalWorkerActiveDurationMs > 0
+        ? (this.totalRawPayloadBytesDecoded / (1024 * 1024)) /
+          (this.totalWorkerActiveDurationMs / 1000)
+        : 0;
+    const tilesDecodedPerSec =
+      this.totalWorkerActiveDurationMs > 0
+        ? this.totalTilesDecoded / (this.totalWorkerActiveDurationMs / 1000)
+        : 0;
+
+    return {
+      independentPipelineStagesEnabled:
+        this.streamingFrameBudget.independentPipelineStagesEnabled,
+      useCompressedHttpTransfer:
+        this.streamingFrameBudget.useCompressedHttpTransfer,
+      maxConcurrentHttpRetrievals: this.getEffectiveMaxConcurrentHttpRetrievals(),
+      workerConcurrency: workerUtil.maxConcurrentWorkers,
+      reservedDestinationFetchSlots:
+        this.streamingFrameBudget.reservedDestinationFetchSlots,
+      reservedDestinationWorkerSlots:
+        this.streamingFrameBudget.reservedDestinationWorkerSlots,
+      fetchQueuedCount,
+      httpRetrievingCount,
+      retrievedQueuedCount,
+      workerDecodingCount,
+      preparedQueuedCount,
+      inFlightHttpReservationBytes: this.inFlightHttpReservationBytes,
+      retrievedPayloadQueueBytes: this.retrievedPayloadQueueBytes,
+      inFlightWorkerPreparationBytes: this.inFlightWorkerPreparationBytes,
+      preparedPayloadQueueBytes,
+      reconstructedAwaitingGpuBytes,
+      busyWorkerCount: workerUtil.busyWorkerCount,
+      idleWorkerCount: workerUtil.idleWorkerCount,
+      activeDestinationFetchCount: this.activeDestinationFetchCount,
+      activeDestinationWorkerCount: workerUtil.activeDestinationWorkerCount,
+      totalNetworkTransferBytes: this.totalNetworkTransferBytes,
+      totalRawPayloadBytesDecoded: this.totalRawPayloadBytesDecoded,
+      sustainedHttpTransferMibPerSec: Number(httpMibPerSec.toFixed(3)),
+      sustainedDecodeRawMibPerSec: Number(decodeRawMibPerSec.toFixed(3)),
+      sustainedTilesDecodedPerSec: Number(tilesDecodedPerSec.toFixed(3)),
+      avgRetrievedQueueWaitMs:
+        this.decodeSamples > 0
+          ? Number((this.totalRetrievedQueueWaitMs / this.decodeSamples).toFixed(3))
+          : 0,
+      avgServerSqliteLookupMs:
+        this.serverHeaderSamples > 0
+          ? Number(
+              (this.totalServerSqliteLookupMs / this.serverHeaderSamples).toFixed(3)
+            )
+          : 0,
+      avgServerInflateMs:
+        this.serverHeaderSamples > 0
+          ? Number(
+              (this.totalServerInflateMs / this.serverHeaderSamples).toFixed(3)
+            )
+          : 0,
+      avgServerTotalMs:
+        this.serverHeaderSamples > 0
+          ? Number(
+              (this.totalServerTotalMs / this.serverHeaderSamples).toFixed(3)
+            )
+          : 0,
+      dynamicReprioritizationsTotal: this.dynamicReprioritizationsTotal,
+      tailTileBoostsAppliedTotal: this.tailTileBoostsAppliedTotal,
+      ageEscalationsAppliedTotal: this.ageEscalationsAppliedTotal,
+      oversizedPayloadAdmissionsTotal: this.oversizedPayloadAdmissionsTotal,
+      runningWorkerJobsRetainedAfterDemotionTotal:
+        this.runningWorkerJobsRetainedAfterDemotionTotal,
+      discardedPreparedTilesTotal: this.discardedPreparedTilesTotal,
+      wastedNetworkBytes: this.wastedNetworkBytes,
+      wastedWorkerTimeMs: Number(
+        (this.wastedWorkerTimeMs + workerUtil.wastedWorkerTimeMs).toFixed(3)
+      ),
+      wastedPrewarmBytes: this.wastedPrewarmBytes,
+      prewarmedTilesActivatedTotal: this.prewarmedTilesActivatedTotal,
+      lastPreparationLeadTimeMs: Number(this.lastPreparationLeadTimeMs.toFixed(2)),
+      historicalPrepLatencyByResMs: { ...this.historicalPrepLatencyByResMs },
+    };
+  }
+
   getDiagnostics(): TileStreamDiagnosticsSnapshot {
     let visibleTiles = 0;
     let fetchTargetTiles = 0;
@@ -5027,6 +5737,7 @@ export class TileStreamManager {
     let emptyLoadedTiles = 0;
     let queuedTiles = 0;
     let fetchingTiles = 0;
+    let retrievedQueuedTiles = 0;
     let decodingTiles = 0;
     let readyToCommitTiles = 0;
     let failedTiles = 0;
@@ -5098,6 +5809,7 @@ export class TileStreamManager {
     // In-flight queues span active + pending levels
     let pendingQueued = 0;
     let pendingFetching = 0;
+    let pendingRetrievedQueued = 0;
     let pendingDecoding = 0;
     let pendingReadyToCommit = 0;
     let pendingPreparedTiles = 0;
@@ -5114,6 +5826,10 @@ export class TileStreamManager {
         fetchingTiles += 1;
         loadingTileKeys.push(key);
         if (isPendingRes) pendingFetching += 1;
+      } else if (record.state === 'retrieved_queued') {
+        retrievedQueuedTiles += 1;
+        loadingTileKeys.push(key);
+        if (isPendingRes) pendingRetrievedQueued += 1;
       } else if (record.state === 'decoding') {
         decodingTiles += 1;
         loadingTileKeys.push(key);
@@ -5135,7 +5851,11 @@ export class TileStreamManager {
     }
 
     const loadingTiles =
-      queuedTiles + fetchingTiles + decodingTiles + readyToCommitTiles;
+      queuedTiles +
+      fetchingTiles +
+      retrievedQueuedTiles +
+      decodingTiles +
+      readyToCommitTiles;
     this.peakLoadedTiles = Math.max(this.peakLoadedTiles, loadedTiles);
     this.peakLoadingTiles = Math.max(this.peakLoadingTiles, loadingTiles);
 
@@ -5160,6 +5880,8 @@ export class TileStreamManager {
       boundaryOverlayRebuildMsTotal: Number(this.boundaryOverlayRebuildMsTotal.toFixed(3)),
     };
 
+    const throughputPipeline = this.computeThroughputPipelineSnapshot();
+
     let hierarchicalDiag: HierarchicalStreamingDiagnosticsSnapshot | null = null;
     if (this.hierarchy && isLoaded && this.activeResolutionMeters !== null) {
       const pendingLevel = this.getPendingLevelState();
@@ -5177,6 +5899,16 @@ export class TileStreamManager {
           : 0;
       const currentTransitionBlocker =
         this.computeCurrentTransitionBlockerSnapshot(resources);
+      const destinationCoverageReadinessRatio =
+        readiness.requiredCount > 0
+          ? Number(
+              (
+                (this.isIncrementalGpuPrepActive()
+                  ? readiness.gpuPreparedCount
+                  : readiness.readyCount) / readiness.requiredCount
+              ).toFixed(3)
+            )
+          : 1;
 
       hierarchicalDiag = {
         enabled: true,
@@ -5195,6 +5927,7 @@ export class TileStreamManager {
         requiredDestinationTiles: readiness.requiredCount,
         readyDestinationTiles: readiness.readyCount,
         gpuPreparedDestinationTiles: readiness.gpuPreparedCount,
+        destinationCoverageReadinessRatio,
         activeVisibleTiles: visibleTiles,
         activeLoadedTiles: loadedTiles,
         pendingPreparedTiles,
@@ -5212,6 +5945,7 @@ export class TileStreamManager {
         pendingQueues: {
           queued: pendingQueued,
           fetching: pendingFetching,
+          retrievedQueued: pendingRetrievedQueued,
           decoding: pendingDecoding,
           readyToCommit: pendingReadyToCommit,
         },
@@ -5248,6 +5982,7 @@ export class TileStreamManager {
           stagesMs: { ...t.stagesMs },
         })),
         frameBudget: frameBudgetDiag,
+        throughputPipeline,
       };
     }
 
@@ -5277,6 +6012,7 @@ export class TileStreamManager {
       peakLoadingTiles: this.peakLoadingTiles,
       queuedTiles,
       fetchingTiles,
+      retrievedQueuedTiles,
       decodingTiles,
       readyToCommitTiles,
       failedTiles,
@@ -5332,6 +6068,7 @@ export class TileStreamManager {
       syncBvhFallbackTotal: this.syncBvhFallbackTotal,
       pendingReadyTileBytes,
       frameBudget: frameBudgetDiag,
+      throughputPipeline,
       hierarchical: hierarchicalDiag,
     };
   }
@@ -5347,6 +6084,7 @@ export class TileStreamManager {
       else if (
         record.state === 'queued' ||
         record.state === 'fetching' ||
+        record.state === 'retrieved_queued' ||
         record.state === 'decoding' ||
         record.state === 'ready_to_commit'
       ) {
@@ -5394,6 +6132,27 @@ export class TileStreamManager {
     this.boundaryOverlayRebuildMsTotal = 0;
     this.recentTransitions.length = 0;
     this.lastCompletedTransition = null;
+    this.totalNetworkTransferBytes = 0;
+    this.totalRawPayloadBytesDecoded = 0;
+    this.totalHttpRetrievalDurationMs = 0;
+    this.totalWorkerActiveDurationMs = 0;
+    this.totalTilesDecoded = 0;
+    this.totalRetrievedQueueWaitMs = 0;
+    this.totalServerSqliteLookupMs = 0;
+    this.totalServerInflateMs = 0;
+    this.totalServerTotalMs = 0;
+    this.serverHeaderSamples = 0;
+    this.dynamicReprioritizationsTotal = 0;
+    this.tailTileBoostsAppliedTotal = 0;
+    this.ageEscalationsAppliedTotal = 0;
+    this.oversizedPayloadAdmissionsTotal = 0;
+    this.runningWorkerJobsRetainedAfterDemotionTotal = 0;
+    this.discardedPreparedTilesTotal = 0;
+    this.wastedNetworkBytes = 0;
+    this.wastedWorkerTimeMs = 0;
+    this.wastedPrewarmBytes = 0;
+    this.prewarmedTilesActivatedTotal = 0;
+    this.lastPreparationLeadTimeMs = 0;
     this.workloadScheduler.resetStats();
     this.gpuPreparer.resetStats();
     this.deferredDisposalQueue.resetStats();
@@ -5412,6 +6171,7 @@ export class TileStreamManager {
         record.abortController.abort();
         record.abortController = null;
       }
+      this.releaseRecordStageReservations(record);
       if (record.reconstructed) {
         this.detachTileFromCompositeScene(record);
         record.reconstructed.dispose();
@@ -5422,6 +6182,12 @@ export class TileStreamManager {
       record.state = 'unloaded';
     }
 
+    this.inFlightHttpReservationBytes = 0;
+    this.retrievedPayloadQueueBytes = 0;
+    this.inFlightWorkerPreparationBytes = 0;
+    this.activeFetchCount = 0;
+    this.activeDestinationFetchCount = 0;
+    this.activeDecodeCount = 0;
     this.tilesByKey.clear();
     this.levelsByResolution.clear();
     this.hierarchy = null;
@@ -5461,10 +6227,42 @@ export class TileStreamManager {
     this.checkIdleWaiters();
   }
 
+  private estimateHttpTransferBytes(record: ManagedTileRecord): number {
+    if (this.streamingFrameBudget.useCompressedHttpTransfer) {
+      return record.manifest.compressedBytes > 0
+        ? record.manifest.compressedBytes
+        : 4 * 1024 * 1024;
+    }
+    if (record.manifest.rawBytes > 0) {
+      return record.manifest.rawBytes;
+    }
+    if (record.manifest.compressedBytes > 0) {
+      return record.manifest.compressedBytes * 3;
+    }
+    return 16 * 1024 * 1024;
+  }
+
+  private estimateWorkerPreparationBytes(
+    record: ManagedTileRecord,
+    actualRetrievedBytes: number
+  ): number {
+    if (record.manifest.rawBytes > 0) {
+      return record.manifest.rawBytes;
+    }
+    if (this.streamingFrameBudget.useCompressedHttpTransfer) {
+      return actualRetrievedBytes * 3;
+    }
+    return actualRetrievedBytes;
+  }
+
   private pumpFetchQueue(): void {
     if (this.isDisposed) return;
+    if (this.streamingFrameBudget.independentPipelineStagesEnabled) {
+      this.pumpIndependentPipelineStages();
+      return;
+    }
 
-    // Worker backpressure check in hierarchical mode
+    // Legacy coupled F1 pipeline (when independentPipelineStagesEnabled is false)
     if (this.hierarchy) {
       let queuedDecodedBytes = 0;
       const nonVisibleReadyPreloads: ManagedTileRecord[] = [];
@@ -5490,8 +6288,6 @@ export class TileStreamManager {
         }
       }
 
-      // Section 12: Never let non-visible preload payloads sitting in `ready_to_commit`
-      // block required visible active or visible destination tiles behind worker backpressure!
       if (
         this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
         hasQueuedVisibleCritical &&
@@ -5548,15 +6344,12 @@ export class TileStreamManager {
           record.resolutionMeters === this.prewarmTargetResolutionMeters &&
           this.streamingFrameBudget.predictivePrewarmEnabled;
         if (!isActiveRes && !isPendingRes && !isPrewarmRes) continue;
-        // Suppress non-visible speculative preload when budget reserve is tight or active viewport has gaps
         if (
           (!record.isVisibleInViewport || isPrewarmRes) &&
           (this.speculativeBackpressureActive || coverageGap)
         ) {
           continue;
         }
-        // Section 12: While a transition has incomplete required visible destination tiles,
-        // do not let non-visible active preload or speculative destination preload steal fetch slots!
         if (pendingTransitionNeedsVisible && !record.isVisibleInViewport) {
           continue;
         }
@@ -5573,6 +6366,839 @@ export class TileStreamManager {
     for (let i = 0; i < toLaunch; i++) {
       this.startTileFetchAndDecode(queued[i]);
     }
+  }
+
+  /**
+   * TKT-041-F2 Work Package B & C:
+   * Independently advances Stage 3 -> 4 (retrieved payload queue -> worker preparation)
+   * and Stage 1 -> 2 (fetch queue -> HTTP retrieval) with byte-based backpressure,
+   * reserved destination capacity, and oversized-payload forward progress.
+   */
+  private pumpIndependentPipelineStages(): void {
+    if (this.isDisposed) return;
+    this.pumpWorkerPreparationQueue();
+    this.pumpHttpFetchQueue();
+  }
+
+  private pumpWorkerPreparationQueue(): void {
+    if (this.isDisposed) return;
+
+    // Measure Stage 5 (ready_to_commit) prepared payload queue bytes and Stage 6 reconstructed awaiting GPU bytes
+    let preparedPayloadQueueBytes = 0;
+    let reconstructedAwaitingGpuBytes = 0;
+    const nonVisibleReadyPreloads: ManagedTileRecord[] = [];
+    const retrievedCandidates: ManagedTileRecord[] = [];
+    let hasRetrievedVisibleCritical = false;
+    let hasRetrievedVisibleDestination = false;
+
+    for (const record of this.tilesByKey.values()) {
+      if (record.state === 'ready_to_commit' && record.decodedFootprint) {
+        preparedPayloadQueueBytes +=
+          record.decodedFootprint.cpuGeometryBytes +
+          record.decodedFootprint.bvhBytes;
+        if (!record.isVisibleInViewport) {
+          nonVisibleReadyPreloads.push(record);
+        }
+      } else if (
+        record.state === 'prepared_inactive' &&
+        record.reconstructed &&
+        !this.gpuPreparer.isTilePrepared(record.reconstructed)
+      ) {
+        const fp = record.decodedFootprint;
+        if (fp) {
+          reconstructedAwaitingGpuBytes += fp.cpuGeometryBytes;
+        }
+      } else if (
+        record.state === 'retrieved_queued' &&
+        record.retrievedBuffer !== null
+      ) {
+        if (!record.isInKeepSet) {
+          this.wastedNetworkBytes += record.retrievedBuffer.byteLength;
+          this.cancelInFlightTile(record);
+          continue;
+        }
+        retrievedCandidates.push(record);
+        const isPendingDest =
+          this.hierarchy !== null &&
+          record.resolutionMeters === this.pendingResolutionMeters &&
+          this.transitionState !== 'deferred_budget' &&
+          record.isVisibleInViewport;
+        if (isPendingDest) {
+          hasRetrievedVisibleDestination = true;
+          hasRetrievedVisibleCritical = true;
+        } else if (
+          record.isVisibleInViewport &&
+          (!this.hierarchy ||
+            record.resolutionMeters === this.activeResolutionMeters)
+        ) {
+          hasRetrievedVisibleCritical = true;
+        }
+      }
+    }
+
+    const maxPreparedCap = Math.min(
+      this.streamingFrameBudget.maxPreparedPayloadQueueBytes,
+      this.hierarchy
+        ? this.hierarchicalBudget.maxPendingDecodedBytes
+        : this.streamingFrameBudget.maxPreparedPayloadQueueBytes
+    );
+
+    // Evict non-visible speculative ready_to_commit tiles if critical visible tiles are waiting in retrieved_queued
+    if (
+      this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
+      hasRetrievedVisibleCritical &&
+      preparedPayloadQueueBytes >= maxPreparedCap &&
+      nonVisibleReadyPreloads.length > 0
+    ) {
+      nonVisibleReadyPreloads.sort((a, b) => b.priorityScore - a.priorityScore);
+      for (const preloadRec of nonVisibleReadyPreloads) {
+        if (preparedPayloadQueueBytes < maxPreparedCap) break;
+        const fp = preloadRec.decodedFootprint;
+        const bytes = fp ? fp.cpuGeometryBytes + fp.bvhBytes : 0;
+        this.cancelInFlightTile(preloadRec);
+        preparedPayloadQueueBytes = Math.max(0, preparedPayloadQueueBytes - bytes);
+      }
+    }
+
+    const preparedQueueFull =
+      preparedPayloadQueueBytes >= maxPreparedCap ||
+      (this.hierarchy !== null &&
+        reconstructedAwaitingGpuBytes >=
+          this.streamingFrameBudget.maxReconstructedAwaitingGpuBytes);
+
+    // Oversized-payload rule for Stage 4 -> 5: allow at least 1 worker decode when Stage 4 and Stage 5 are drained
+    const stage4And5Drained =
+      this.activeDecodeCount === 0 && preparedPayloadQueueBytes === 0;
+    this.workerBackpressureActive = preparedQueueFull && !stage4And5Drained;
+    if (this.workerBackpressureActive || retrievedCandidates.length === 0) {
+      return;
+    }
+
+    retrievedCandidates.sort((a, b) => a.priorityScore - b.priorityScore);
+
+    const maxWorkerConcurrency = Math.max(
+      1,
+      this.streamingFrameBudget.workerConcurrency
+    );
+    const maxWorkerPrepBytes =
+      this.streamingFrameBudget.maxWorkerPreparationBytes;
+    const reservedDestWorkerSlots =
+      this.hierarchy !== null && hasRetrievedVisibleDestination
+        ? Math.min(
+            maxWorkerConcurrency - 1,
+            Math.max(0, this.streamingFrameBudget.reservedDestinationWorkerSlots)
+          )
+        : 0;
+
+    while (retrievedCandidates.length > 0) {
+      const workerUtil = this.decodeClient.getWorkerUtilizationSnapshot();
+      const totalWorkerInFlightAndQueued =
+        workerUtil.busyWorkerCount + workerUtil.queuedDecodeCount;
+      // Keep worker queue bounded to at most 2x workerConcurrency so dynamic reprioritization stays responsive
+      if (totalWorkerInFlightAndQueued >= maxWorkerConcurrency * 2) {
+        break;
+      }
+
+      // Pick next candidate respecting reserved destination worker capacity
+      const nonDestLimit = Math.max(
+        1,
+        maxWorkerConcurrency * 2 - reservedDestWorkerSlots
+      );
+      const nonDestInFlightAndQueued =
+        totalWorkerInFlightAndQueued -
+        (workerUtil.activeDestinationWorkerCount +
+          workerUtil.queuedDestinationDecodeCount);
+
+      let chosenIdx = -1;
+      for (let i = 0; i < retrievedCandidates.length; i++) {
+        const cand = retrievedCandidates[i];
+        const isDestVisible =
+          this.hierarchy !== null &&
+          cand.resolutionMeters === this.pendingResolutionMeters &&
+          this.transitionState !== 'deferred_budget' &&
+          cand.isVisibleInViewport;
+        if (
+          !isDestVisible &&
+          reservedDestWorkerSlots > 0 &&
+          nonDestInFlightAndQueued >= nonDestLimit
+        ) {
+          continue;
+        }
+        chosenIdx = i;
+        break;
+      }
+      if (chosenIdx < 0) {
+        chosenIdx = 0;
+      }
+
+      const nextRecord = retrievedCandidates[chosenIdx];
+      const buffer = nextRecord.retrievedBuffer;
+      if (!buffer) {
+        retrievedCandidates.splice(chosenIdx, 1);
+        continue;
+      }
+
+      const estWorkerBytes = this.estimateWorkerPreparationBytes(
+        nextRecord,
+        buffer.byteLength
+      );
+      const wouldExceedWorkerPrepCap =
+        this.inFlightWorkerPreparationBytes + estWorkerBytes > maxWorkerPrepBytes;
+      if (wouldExceedWorkerPrepCap) {
+        // Section 5.2 Oversized-payload rule: allow at least 1 oversized payload when worker stage is completely empty
+        if (
+          this.inFlightWorkerPreparationBytes === 0 &&
+          this.activeDecodeCount === 0
+        ) {
+          this.oversizedPayloadAdmissionsTotal += 1;
+        } else {
+          break;
+        }
+      }
+
+      retrievedCandidates.splice(chosenIdx, 1);
+      // Single-owner handoff from Stage 3 (retrieved_queued) to Stage 4 (decoding):
+      // subtract retrievedBuffer bytes before adding reservedWorkerBytes so buffers are never double-counted.
+      this.retrievedPayloadQueueBytes = Math.max(
+        0,
+        this.retrievedPayloadQueueBytes - buffer.byteLength
+      );
+      nextRecord.retrievedBuffer = null;
+      nextRecord.reservedWorkerBytes = estWorkerBytes;
+      this.inFlightWorkerPreparationBytes += estWorkerBytes;
+
+      this.startWorkerDecodeForRetrievedTile(nextRecord, buffer);
+    }
+  }
+
+  private pumpHttpFetchQueue(): void {
+    if (this.isDisposed) return;
+
+    const maxConcurrentHttp = this.getEffectiveMaxConcurrentHttpRetrievals();
+    const availableHttpSlots = maxConcurrentHttp - this.activeFetchCount;
+    if (availableHttpSlots <= 0) return;
+
+    // Backpressure check on Stage 3 (retrieved_queued) and Stage 2 (in-flight HTTP reservation)
+    const maxRetrievedQueueBytes =
+      this.streamingFrameBudget.maxRetrievedPayloadQueueBytes;
+    const maxHttpResBytes =
+      this.streamingFrameBudget.maxInFlightHttpReservationBytes;
+
+    if (
+      this.workerBackpressureActive &&
+      this.retrievedPayloadQueueBytes >= maxRetrievedQueueBytes
+    ) {
+      return;
+    }
+
+    const coverageGap =
+      this.streamingFrameBudget.suppressSpeculativeDuringActiveCoverageGap &&
+      this.hasActiveVisibleCoverageGap();
+    const pendingTransitionNeedsVisible =
+      this.hierarchy !== null &&
+      this.pendingResolutionMeters !== null &&
+      this.transitionState !== 'deferred_budget' &&
+      this.streamingFrameBudget.prioritizeDestinationOverActivePreload &&
+      (() => {
+        const pendingLevel = this.getPendingLevelState();
+        return pendingLevel
+          ? !this.checkDestinationReadiness(pendingLevel).allReady
+          : false;
+      })();
+
+    const queued: ManagedTileRecord[] = [];
+    let hasQueuedVisibleDestination = false;
+
+    for (const record of this.tilesByKey.values()) {
+      if (record.state !== 'queued' || !record.isInFetchSet) continue;
+      if (this.hierarchy) {
+        const isActiveRes = record.resolutionMeters === this.activeResolutionMeters;
+        const isPendingRes =
+          record.resolutionMeters === this.pendingResolutionMeters &&
+          this.transitionState !== 'deferred_budget';
+        const isPrewarmRes =
+          this.pendingResolutionMeters === null &&
+          record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+          this.streamingFrameBudget.predictivePrewarmEnabled;
+        if (!isActiveRes && !isPendingRes && !isPrewarmRes) continue;
+        if (
+          (!record.isVisibleInViewport || isPrewarmRes) &&
+          (this.speculativeBackpressureActive || coverageGap)
+        ) {
+          continue;
+        }
+        if (pendingTransitionNeedsVisible && !record.isVisibleInViewport) {
+          continue;
+        }
+        if (isPendingRes && record.isVisibleInViewport) {
+          hasQueuedVisibleDestination = true;
+        }
+      } else if (coverageGap && !record.isVisibleInViewport) {
+        continue;
+      }
+      queued.push(record);
+    }
+
+    if (queued.length === 0) return;
+    queued.sort((a, b) => a.priorityScore - b.priorityScore);
+
+    const reservedDestSlots =
+      this.hierarchy !== null && hasQueuedVisibleDestination
+        ? Math.min(
+            maxConcurrentHttp - 1,
+            Math.max(0, this.streamingFrameBudget.reservedDestinationFetchSlots)
+          )
+        : 0;
+    const maxNonDestActiveHttp = Math.max(
+      1,
+      maxConcurrentHttp - reservedDestSlots
+    );
+
+    while (queued.length > 0 && this.activeFetchCount < maxConcurrentHttp) {
+      const nonDestActiveHttp = Math.max(
+        0,
+        this.activeFetchCount - this.activeDestinationFetchCount
+      );
+
+      let chosenIdx = -1;
+      for (let i = 0; i < queued.length; i++) {
+        const cand = queued[i];
+        const isDestVisible =
+          this.hierarchy !== null &&
+          cand.resolutionMeters === this.pendingResolutionMeters &&
+          this.transitionState !== 'deferred_budget' &&
+          cand.isVisibleInViewport;
+        if (
+          !isDestVisible &&
+          reservedDestSlots > 0 &&
+          nonDestActiveHttp >= maxNonDestActiveHttp
+        ) {
+          continue;
+        }
+        chosenIdx = i;
+        break;
+      }
+      if (chosenIdx < 0) {
+        break;
+      }
+
+      const nextRecord = queued[chosenIdx];
+      const estHttpBytes = this.estimateHttpTransferBytes(nextRecord);
+      const projectedRetrievedAndInFlight =
+        this.inFlightHttpReservationBytes +
+        this.retrievedPayloadQueueBytes +
+        estHttpBytes;
+
+      const exceedsHttpCap =
+        this.inFlightHttpReservationBytes + estHttpBytes > maxHttpResBytes;
+      const exceedsRetrievedQueueCap =
+        projectedRetrievedAndInFlight > maxRetrievedQueueBytes;
+
+      if (exceedsHttpCap || exceedsRetrievedQueueCap) {
+        // Section 5.2 Oversized-payload rule: allow at least 1 oversized HTTP retrieval when Stage 2 & Stage 3 are empty
+        if (
+          this.activeFetchCount === 0 &&
+          this.inFlightHttpReservationBytes === 0 &&
+          this.retrievedPayloadQueueBytes === 0
+        ) {
+          this.oversizedPayloadAdmissionsTotal += 1;
+        } else {
+          break;
+        }
+      }
+
+      queued.splice(chosenIdx, 1);
+      this.startHttpRetrievalOnly(nextRecord, estHttpBytes);
+    }
+  }
+
+  private startHttpRetrievalOnly(
+    record: ManagedTileRecord,
+    estimatedHttpBytes: number
+  ): void {
+    const abortController = new AbortController();
+    const generation = this.requestGenerationCounter++;
+    record.abortController = abortController;
+    record.requestGeneration = generation;
+    record.state = 'fetching';
+    record.reservedHttpBytes = estimatedHttpBytes;
+    this.inFlightHttpReservationBytes += estimatedHttpBytes;
+    this.activeFetchCount += 1;
+
+    const isDestinationFetch =
+      this.hierarchy !== null &&
+      record.resolutionMeters === this.pendingResolutionMeters &&
+      record.isVisibleInViewport;
+    if (isDestinationFetch) {
+      this.activeDestinationFetchCount += 1;
+    }
+
+    const { lod, tx, ty } = record.manifest;
+    const tileKey = record.tileKey;
+    const tileSizeMeters = record.resolutionMeters;
+    const baseUrl = this.hierarchy
+      ? `${this.apiBaseUrl}/r/${tileSizeMeters}/${lod}/${tx}/${ty}`
+      : `${this.apiBaseUrl}/${lod}/${tx}/${ty}`;
+    const url = this.streamingFrameBudget.useCompressedHttpTransfer
+      ? `${baseUrl}?compressed=1`
+      : baseUrl;
+
+    const fetchStart = this.nowFn();
+    record.pipeline.fetchStartAtMs = fetchStart;
+    if (record.pipeline.queuedAtMs !== null) {
+      record.pipeline.fetchQueueWaitMs = Math.max(
+        0,
+        fetchStart - record.pipeline.queuedAtMs
+      );
+    }
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'fetch_start',
+        tileKey,
+        tileSizeMeters,
+        lod,
+        timestampMs: fetchStart,
+        queueDepths: this.getQueueDepthSnapshot(),
+      });
+    }
+
+    let slotReleased = false;
+    const releaseHttpSlot = () => {
+      if (slotReleased) return;
+      slotReleased = true;
+      this.activeFetchCount = Math.max(0, this.activeFetchCount - 1);
+      if (isDestinationFetch) {
+        this.activeDestinationFetchCount = Math.max(
+          0,
+          this.activeDestinationFetchCount - 1
+        );
+      }
+      if (record.reservedHttpBytes > 0) {
+        this.inFlightHttpReservationBytes = Math.max(
+          0,
+          this.inFlightHttpReservationBytes - record.reservedHttpBytes
+        );
+        record.reservedHttpBytes = 0;
+      }
+    };
+
+    (async () => {
+      try {
+        const response = await this.fetchFn(url, {
+          signal: abortController.signal,
+        });
+        if (
+          abortController.signal.aborted ||
+          record.requestGeneration !== generation
+        ) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} fetching tile ${tileKey}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        // Release HTTP slot & reservation IMMEDIATELY when payload arrives!
+        releaseHttpSlot();
+
+        if (
+          this.isDisposed ||
+          abortController.signal.aborted ||
+          record.requestGeneration !== generation
+        ) {
+          this.wastedNetworkBytes += arrayBuffer.byteLength;
+          return;
+        }
+
+        const headers = response.headers;
+        if (headers && typeof headers.get === 'function') {
+          const sqliteStr = headers.get('X-Tile-Server-Sqlite-Ms');
+          const inflateStr = headers.get('X-Tile-Server-Inflate-Ms');
+          const totalStr = headers.get('X-Tile-Server-Total-Ms');
+          if (sqliteStr !== null || totalStr !== null) {
+            const sqliteMs = Number(sqliteStr ?? 0);
+            const inflateMs = Number(inflateStr ?? 0);
+            const totalMs = Number(totalStr ?? 0);
+            record.pipeline.serverSqliteLookupMs = sqliteMs;
+            record.pipeline.serverInflateMs = inflateMs;
+            record.pipeline.serverTotalMs = totalMs;
+            this.totalServerSqliteLookupMs += sqliteMs;
+            this.totalServerInflateMs += inflateMs;
+            this.totalServerTotalMs += totalMs;
+            this.serverHeaderSamples += 1;
+          }
+        }
+
+        const payloadBytes = arrayBuffer.byteLength;
+        record.lastCompressedBytes = payloadBytes;
+        const fetchEnd = this.nowFn();
+        const fetchMs = Math.max(0, fetchEnd - fetchStart);
+        record.pipeline.fetchCompleteAtMs = fetchEnd;
+        record.pipeline.payloadRetrievalMs = fetchMs;
+        record.pipeline.retrievedQueuedAtMs = fetchEnd;
+        this.totalFetchMs += fetchMs;
+        this.fetchSamples += 1;
+        this.totalNetworkTransferBytes += payloadBytes;
+        this.totalHttpRetrievalDurationMs += fetchMs;
+        pushBoundedSample(this.fetchMsRing, fetchMs);
+
+        // Transition to Stage 3: Retrieved-payload queue
+        record.retrievedBuffer = arrayBuffer;
+        record.state = 'retrieved_queued';
+        this.retrievedPayloadQueueBytes += payloadBytes;
+        this.updatePeakTileCounters();
+
+        const profAtFetchDone =
+          this.profiler && this.profiler.enabled ? this.profiler : null;
+        if (profAtFetchDone) {
+          profAtFetchDone.recordEvent({
+            eventType: 'fetch_complete',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: fetchEnd,
+            payloadCompressedBytes: payloadBytes,
+            durationMs: fetchMs,
+            queueDepths: this.getQueueDepthSnapshot(),
+          });
+        }
+      } catch (err) {
+        releaseHttpSlot();
+        if (
+          abortController.signal.aborted ||
+          (err instanceof Error && err.name === 'AbortError')
+        ) {
+          return;
+        }
+        if (record.requestGeneration === generation) {
+          const msg = err instanceof Error ? err.message : String(err);
+          record.state = 'error';
+          record.lastError = msg;
+          record.abortController = null;
+          this.needsViewportRefresh = true;
+
+          const profAtErr =
+            this.profiler && this.profiler.enabled ? this.profiler : null;
+          if (profAtErr) {
+            profAtErr.recordEvent({
+              eventType: 'error',
+              tileKey,
+              tileSizeMeters,
+              lod,
+              queueDepths: this.getQueueDepthSnapshot(),
+              detail: { reason: msg },
+            });
+          }
+        }
+      } finally {
+        releaseHttpSlot();
+        if (!this.isDisposed) {
+          this.pumpIndependentPipelineStages();
+          this.checkIdleWaiters();
+        }
+      }
+    })();
+  }
+
+  private startWorkerDecodeForRetrievedTile(
+    record: ManagedTileRecord,
+    arrayBuffer: ArrayBuffer
+  ): void {
+    const abortController = record.abortController ?? new AbortController();
+    record.abortController = abortController;
+    const generation = record.requestGeneration;
+    const { lod, tx, ty } = record.manifest;
+    const tileKey = record.tileKey;
+    const tileSizeMeters = record.resolutionMeters;
+    const compressedPayloadBytes =
+      record.lastCompressedBytes ?? arrayBuffer.byteLength;
+    const decodeStart = this.nowFn();
+
+    record.state = 'decoding';
+    record.pipeline.decodeStartAtMs = decodeStart;
+    if (record.pipeline.retrievedQueuedAtMs !== null) {
+      record.pipeline.retrievedQueueWaitMs = Math.max(
+        0,
+        decodeStart - record.pipeline.retrievedQueuedAtMs
+      );
+      this.totalRetrievedQueueWaitMs += record.pipeline.retrievedQueueWaitMs;
+    }
+    this.activeDecodeCount += 1;
+    this.updatePeakTileCounters();
+
+    const prof = this.profiler && this.profiler.enabled ? this.profiler : null;
+    if (prof) {
+      prof.recordEvent({
+        eventType: 'decode_start',
+        tileKey,
+        tileSizeMeters,
+        lod,
+        timestampMs: decodeStart,
+        payloadCompressedBytes: compressedPayloadBytes,
+        queueDepths: this.getQueueDepthSnapshot(),
+      });
+    }
+
+    const isPendingDestination =
+      this.hierarchy !== null &&
+      record.resolutionMeters === this.pendingResolutionMeters &&
+      this.transitionState !== 'deferred_budget' &&
+      record.isVisibleInViewport;
+
+    const decodePriority = this.streamingFrameBudget
+      .prioritizeDestinationOverActivePreload
+      ? record.priorityScore
+      : 0;
+
+    (async () => {
+      try {
+        const decodeResult = await this.decodeClient.decodeTile(
+          arrayBuffer,
+          tileKey,
+          abortController.signal,
+          decodePriority,
+          {
+            isDestination: isPendingDestination,
+            retainIfRunningOnAbort:
+              this.streamingFrameBudget.retainRunningWorkerJobOnDemotion &&
+              !this.speculativeBackpressureActive,
+            estimatedBytes: record.reservedWorkerBytes,
+          }
+        );
+
+        const tCont0 = this.nowFn();
+        if (this.isDisposed) return;
+
+        // Release worker reservation before transitioning to Stage 5 (ready_to_commit) or inactive cache
+        if (record.reservedWorkerBytes > 0) {
+          this.inFlightWorkerPreparationBytes = Math.max(
+            0,
+            this.inFlightWorkerPreparationBytes - record.reservedWorkerBytes
+          );
+          record.reservedWorkerBytes = 0;
+        }
+
+        const stillValidLevel =
+          !this.hierarchy ||
+          record.resolutionMeters === this.activeResolutionMeters ||
+          (record.resolutionMeters === this.pendingResolutionMeters &&
+            this.transitionState !== 'deferred_budget') ||
+          (this.pendingResolutionMeters === null &&
+            record.resolutionMeters === this.prewarmTargetResolutionMeters &&
+            this.streamingFrameBudget.predictivePrewarmEnabled);
+
+        const wasDemotedOrAborted =
+          decodeResult.completedAfterAbort === true ||
+          abortController.signal.aborted ||
+          record.requestGeneration !== generation ||
+          !record.isInKeepSet ||
+          !stillValidLevel;
+
+        if (wasDemotedOrAborted) {
+          // Section 6.3: If a running worker job completed after demotion and we have memory headroom,
+          // retain the reconstructed tile in cached_inactive instead of throwing away completed worker work.
+          if (
+            this.hierarchy &&
+            this.streamingFrameBudget.retainRunningWorkerJobOnDemotion &&
+            !this.speculativeBackpressureActive &&
+            record.state === 'unloaded' &&
+            this.hierarchicalBudget.maxInactiveCachedTiles > 0 &&
+            this.hierarchicalBudget.inactiveCacheBudgetBytes > 0 &&
+            decodeResult.decoded.lod === lod &&
+            decodeResult.decoded.tx === tx &&
+            decodeResult.decoded.ty === ty &&
+            decodeResult.decoded.tileSizeMeters === record.resolutionMeters
+          ) {
+            const positionedPayload: AnyDecodedTilePayload = {
+              ...decodeResult.decoded,
+              tileCenterX: record.manifest.tileCenterX,
+              tileCenterZ: record.manifest.tileCenterZ,
+            };
+            const fp = computeDecodedTileMemoryFootprint(positionedPayload);
+            const estBytes = fp.cpuGeometryBytes + fp.bvhBytes;
+            if (
+              this.computeTotalMeasuredMemoryBytes() + estBytes <=
+              this.hierarchicalBudget.totalMemoryBudgetBytes
+            ) {
+              const reconstructed = reconstructTileSceneFromDecoded(
+                positionedPayload,
+                {
+                  materialRegistry: this.materialRegistry,
+                  foliagePrototypeRegistry: this.foliagePrototypeRegistry,
+                  foliageRuntimeState: this.foliageRuntimeState,
+                  optimizeMainThreadPrep:
+                    this.tilePrepOptions.optimizeMainThreadPrep,
+                }
+              );
+              record.reconstructed = reconstructed;
+              record.decodedFootprint = fp;
+              record.decodedPayload = null;
+              record.state = 'cached_inactive';
+              record.lastUsedAtMs = tCont0;
+              this.runningWorkerJobsRetainedAfterDemotionTotal += 1;
+              this.enforceResourceBudgets();
+              return;
+            }
+          }
+          this.wastedWorkerTimeMs += decodeResult.decodeDurationMs;
+          this.wastedNetworkBytes += compressedPayloadBytes;
+          return;
+        }
+
+        this.totalDecodeMs += decodeResult.decodeDurationMs;
+        this.decodeSamples += 1;
+        this.totalWorkerActiveDurationMs += decodeResult.decodeDurationMs;
+        this.totalTilesDecoded += 1;
+        pushBoundedSample(this.decodeMsRing, decodeResult.decodeDurationMs);
+
+        record.pipeline.decodeCompleteAtMs = tCont0;
+        record.pipeline.workerClientQueueWaitMs =
+          decodeResult.clientQueueWaitMs ?? 0;
+        if (decodeResult.workerTimings) {
+          record.pipeline.workerThreadQueueWaitMs =
+            decodeResult.workerTimings.workerQueueWaitMs;
+          record.pipeline.workerInflateMs =
+            decodeResult.workerTimings.workerInflateMs;
+          record.pipeline.workerDecodeOnlyMs =
+            decodeResult.workerTimings.workerDecodeOnlyMs;
+          record.pipeline.workerInflateAndDecodeMs =
+            decodeResult.workerTimings.workerInflateAndDecodeMs;
+          record.pipeline.workerBvhBuildMs =
+            decodeResult.workerTimings.workerBvhBuildMs;
+          record.pipeline.workerPayloadPrepMs =
+            decodeResult.workerTimings.workerPayloadPrepMs;
+          record.pipeline.workerDeliveryLatencyMs =
+            decodeResult.workerTimings.messageDeliveryLatencyMs;
+        }
+
+        if (
+          decodeResult.decoded.lod !== lod ||
+          decodeResult.decoded.tx !== tx ||
+          decodeResult.decoded.ty !== ty ||
+          decodeResult.decoded.tileSizeMeters !== record.resolutionMeters
+        ) {
+          throw new Error(`Decoded tile identity/size mismatch: ${tileKey}`);
+        }
+        const positionedPayload: AnyDecodedTilePayload = {
+          ...decodeResult.decoded,
+          tileCenterX: record.manifest.tileCenterX,
+          tileCenterZ: record.manifest.tileCenterZ,
+        };
+        record.decodedPayload = positionedPayload;
+        record.decodedFootprint = computeDecodedTileMemoryFootprint(
+          positionedPayload
+        );
+        this.totalRawPayloadBytesDecoded +=
+          record.decodedFootprint.cpuGeometryBytes +
+          record.decodedFootprint.bvhBytes;
+        record.abortController = null;
+        record.state = 'ready_to_commit';
+        this.updatePeakTileCounters();
+
+        const contDurationMs = Math.max(0, this.nowFn() - tCont0);
+        if (decodeResult.workerTimings) {
+          decodeResult.workerTimings.mainPromiseContinuationMs = Number(
+            contDurationMs.toFixed(3)
+          );
+        }
+
+        const profAtDecodeDone =
+          this.profiler && this.profiler.enabled ? this.profiler : null;
+        if (profAtDecodeDone) {
+          profAtDecodeDone.recordWorkerContinuation(contDurationMs);
+          const readyNowMs = this.nowFn();
+          const fp = record.decodedFootprint;
+          const rawBytes = fp.cpuGeometryBytes + fp.bvhBytes;
+          const depths = this.getQueueDepthSnapshot();
+          const wt = decodeResult.workerTimings;
+          profAtDecodeDone.recordEvent({
+            eventType: 'decode_complete',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: readyNowMs,
+            payloadCompressedBytes: compressedPayloadBytes,
+            payloadRawBytes: rawBytes,
+            durationMs: decodeResult.decodeDurationMs,
+            queueDepths: depths,
+            detail: {
+              meshCount: fp.meshCount,
+              triangleCount: fp.triangleCount,
+              usedWebWorker: decodeResult.usedWebWorker,
+              usedCompactTransport: wt?.usedCompactTransport,
+              workerInflateMs: wt?.workerInflateMs,
+              workerDecodeOnlyMs: wt?.workerDecodeOnlyMs,
+              workerBvhBuildMs: wt?.workerBvhBuildMs,
+              messageDeliveryLatencyMs: wt?.messageDeliveryLatencyMs,
+              mainOnMessageHandlerMs: wt?.mainOnMessageHandlerMs,
+              mainPromiseContinuationMs: Number(contDurationMs.toFixed(3)),
+              transferableBufferCount: wt?.transferableBufferCount,
+              transferableBytes: wt?.transferableBytes,
+            },
+          });
+          profAtDecodeDone.recordEvent({
+            eventType: 'ready_to_commit',
+            tileKey,
+            tileSizeMeters,
+            lod,
+            timestampMs: readyNowMs,
+            payloadCompressedBytes: compressedPayloadBytes,
+            payloadRawBytes: rawBytes,
+            queueDepths: depths,
+          });
+        }
+
+        // Wake any waitForIdle() caller so it can commit ready_to_commit tiles and relieve backpressure
+        this.wakeIdleWaiters();
+      } catch (err) {
+        if (record.reservedWorkerBytes > 0) {
+          this.inFlightWorkerPreparationBytes = Math.max(
+            0,
+            this.inFlightWorkerPreparationBytes - record.reservedWorkerBytes
+          );
+          record.reservedWorkerBytes = 0;
+        }
+        if (
+          abortController.signal.aborted ||
+          (err instanceof Error && err.name === 'AbortError')
+        ) {
+          return;
+        }
+        if (record.requestGeneration === generation) {
+          const msg = err instanceof Error ? err.message : String(err);
+          record.state = 'error';
+          record.lastError = msg;
+          record.abortController = null;
+          this.needsViewportRefresh = true;
+
+          const profAtErr =
+            this.profiler && this.profiler.enabled ? this.profiler : null;
+          if (profAtErr) {
+            profAtErr.recordEvent({
+              eventType: 'error',
+              tileKey,
+              tileSizeMeters,
+              lod,
+              queueDepths: this.getQueueDepthSnapshot(),
+              detail: { reason: msg },
+            });
+          }
+        }
+      } finally {
+        this.activeDecodeCount = Math.max(0, this.activeDecodeCount - 1);
+        if (record.reservedWorkerBytes > 0) {
+          this.inFlightWorkerPreparationBytes = Math.max(
+            0,
+            this.inFlightWorkerPreparationBytes - record.reservedWorkerBytes
+          );
+          record.reservedWorkerBytes = 0;
+        }
+        if (!this.isDisposed) {
+          this.pumpIndependentPipelineStages();
+          this.checkIdleWaiters();
+        }
+      }
+    })();
   }
 
   private startTileFetchAndDecode(record: ManagedTileRecord): void {
@@ -5637,6 +7263,8 @@ export class TileStreamManager {
         record.pipeline.decodeStartAtMs = fetchEnd;
         this.totalFetchMs += fetchMs;
         this.fetchSamples += 1;
+        this.totalNetworkTransferBytes += compressedPayloadBytes;
+        this.totalHttpRetrievalDurationMs += fetchMs;
         pushBoundedSample(this.fetchMsRing, fetchMs);
 
         record.state = 'decoding';
@@ -5698,6 +7326,8 @@ export class TileStreamManager {
 
         this.totalDecodeMs += decodeResult.decodeDurationMs;
         this.decodeSamples += 1;
+        this.totalWorkerActiveDurationMs += decodeResult.decodeDurationMs;
+        this.totalTilesDecoded += 1;
         pushBoundedSample(this.decodeMsRing, decodeResult.decodeDurationMs);
 
         record.pipeline.decodeCompleteAtMs = tCont0;
@@ -5706,6 +7336,10 @@ export class TileStreamManager {
         if (decodeResult.workerTimings) {
           record.pipeline.workerThreadQueueWaitMs =
             decodeResult.workerTimings.workerQueueWaitMs;
+          record.pipeline.workerInflateMs =
+            decodeResult.workerTimings.workerInflateMs;
+          record.pipeline.workerDecodeOnlyMs =
+            decodeResult.workerTimings.workerDecodeOnlyMs;
           record.pipeline.workerInflateAndDecodeMs =
             decodeResult.workerTimings.workerInflateAndDecodeMs;
           record.pipeline.workerBvhBuildMs =
@@ -5716,10 +7350,6 @@ export class TileStreamManager {
             decodeResult.workerTimings.messageDeliveryLatencyMs;
         }
 
-        // A regional mosaic reuses immutable shard-local OSMTILE1 payloads.
-        // Geometry inside each payload is tile-local; only the decoded center must
-        // be relocated to the canonical regional origin supplied by the composed manifest.
-        // Identical for legacy packs, where these centers already agree.
         if (
           decodeResult.decoded.lod !== lod ||
           decodeResult.decoded.tx !== tx ||
@@ -5737,6 +7367,9 @@ export class TileStreamManager {
         record.decodedFootprint = computeDecodedTileMemoryFootprint(
           positionedPayload
         );
+        this.totalRawPayloadBytesDecoded +=
+          record.decodedFootprint.cpuGeometryBytes +
+          record.decodedFootprint.bvhBytes;
         record.abortController = null;
         record.state = 'ready_to_commit';
         this.updatePeakTileCounters();
@@ -5772,6 +7405,8 @@ export class TileStreamManager {
               triangleCount: fp.triangleCount,
               usedWebWorker: decodeResult.usedWebWorker,
               usedCompactTransport: wt?.usedCompactTransport,
+              workerInflateMs: wt?.workerInflateMs,
+              workerDecodeOnlyMs: wt?.workerDecodeOnlyMs,
               workerBvhBuildMs: wt?.workerBvhBuildMs,
               messageDeliveryLatencyMs: wt?.messageDeliveryLatencyMs,
               mainOnMessageHandlerMs: wt?.mainOnMessageHandlerMs,
@@ -5791,6 +7426,7 @@ export class TileStreamManager {
             queueDepths: depths,
           });
         }
+        this.wakeIdleWaiters();
       } catch (err) {
         if (
           abortController.signal.aborted ||
@@ -5803,8 +7439,6 @@ export class TileStreamManager {
           record.state = 'error';
           record.lastError = msg;
           record.abortController = null;
-          // updateViewport normally retries fetch errors on the next frame.
-          // Invalidate the opt-in identical-camera gate to preserve that behavior.
           this.needsViewportRefresh = true;
 
           const profAtErr =
@@ -5832,6 +7466,25 @@ export class TileStreamManager {
 
   private cancelInFlightTile(record: ManagedTileRecord): void {
     const prevState = record.state;
+    const isPrewarmTile =
+      this.hierarchy !== null &&
+      this.prewarmTargetResolutionMeters !== null &&
+      record.resolutionMeters === this.prewarmTargetResolutionMeters;
+    if (prevState === 'retrieved_queued' && record.retrievedBuffer) {
+      this.wastedNetworkBytes += record.retrievedBuffer.byteLength;
+      if (isPrewarmTile) {
+        this.wastedPrewarmBytes += record.retrievedBuffer.byteLength;
+      }
+    } else if (prevState === 'ready_to_commit' && record.decodedFootprint) {
+      const bytes =
+        record.decodedFootprint.cpuGeometryBytes +
+        record.decodedFootprint.bvhBytes;
+      this.discardedPreparedTilesTotal += 1;
+      if (isPrewarmTile) {
+        this.wastedPrewarmBytes += bytes;
+      }
+    }
+    this.releaseRecordStageReservations(record);
     record.requestGeneration = this.requestGenerationCounter++;
     if (record.abortController) {
       record.abortController.abort();
@@ -5865,6 +7518,7 @@ export class TileStreamManager {
     forceImmediate = false
   ): void {
     if (!record.reconstructed) {
+      this.releaseRecordStageReservations(record);
       record.state = 'unloaded';
       return;
     }
@@ -5875,6 +7529,7 @@ export class TileStreamManager {
     const breakdown = this.computeRecordFootprintBreakdown(record);
 
     this.detachTileFromCompositeScene(record);
+    this.releaseRecordStageReservations(record);
     const reconstructed = record.reconstructed;
     record.reconstructed = null;
     record.decodedPayload = null;
@@ -6059,6 +7714,7 @@ export class TileStreamManager {
       else if (
         record.state === 'queued' ||
         record.state === 'fetching' ||
+        record.state === 'retrieved_queued' ||
         record.state === 'decoding' ||
         record.state === 'ready_to_commit'
       ) {
@@ -6070,7 +7726,7 @@ export class TileStreamManager {
   }
 
   private hasPendingAsyncWork(): boolean {
-    if (this.activeFetchCount > 0) return true;
+    if (this.activeFetchCount > 0 || this.activeDecodeCount > 0) return true;
     const coverageGap =
       this.streamingFrameBudget.suppressSpeculativeDuringActiveCoverageGap &&
       this.hasActiveVisibleCoverageGap();
@@ -6085,8 +7741,16 @@ export class TileStreamManager {
       })();
 
     for (const record of this.tilesByKey.values()) {
-      if (record.state === 'fetching' || record.state === 'decoding') {
+      if (
+        record.state === 'fetching' ||
+        record.state === 'decoding'
+      ) {
         return true;
+      }
+      if (record.state === 'retrieved_queued' && record.isInKeepSet) {
+        if (!this.workerBackpressureActive) {
+          return true;
+        }
       }
       if (record.state === 'queued' && record.isInFetchSet) {
         if (this.workerBackpressureActive) {
@@ -6160,17 +7824,23 @@ export class TileStreamManager {
     return true;
   }
 
+  private wakeIdleWaiters(): void {
+    if (this.idleWaiters.length === 0) return;
+    const waiters = this.idleWaiters.splice(0, this.idleWaiters.length);
+    for (const resolve of waiters) {
+      resolve();
+    }
+  }
+
   private checkIdleWaiters(): void {
     if (this.idleWaiters.length === 0) return;
     if (
       this.isDisposed ||
-      this.activeFetchCount === 0 ||
+      (!this.streamingFrameBudget.independentPipelineStagesEnabled &&
+        this.activeFetchCount === 0) ||
       !this.hasPendingAsyncWork()
     ) {
-      const waiters = this.idleWaiters.splice(0, this.idleWaiters.length);
-      for (const resolve of waiters) {
-        resolve();
-      }
+      this.wakeIdleWaiters();
     }
   }
 

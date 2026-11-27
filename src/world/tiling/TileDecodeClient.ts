@@ -21,6 +21,39 @@ export interface TileDecodeResult {
   workerTimings: WorkerDecodeStageTimings;
   /** Time spent queued in TileDecodeClient waiting for an idle Web Worker (ms). */
   clientQueueWaitMs?: number;
+  /** True if the request signal was aborted while already running on a worker, but retained by policy. */
+  completedAfterAbort?: boolean;
+}
+
+export interface TileDecodeJobOptions {
+  /** Whether this job prepares a required pending destination resolution tile. */
+  isDestination?: boolean;
+  /**
+   * When true, if the job's AbortSignal fires AFTER the job has already been dispatched
+   * to a Web Worker (or inline execution has started), allow it to resolve with
+   * `completedAfterAbort: true` so the caller can decide whether to retain it in inactive cache.
+   * Queued (not-yet-running) jobs are still immediately removed and rejected with AbortError.
+   */
+  retainIfRunningOnAbort?: boolean;
+  /** Estimated payload byte size for worker memory accounting. */
+  estimatedBytes?: number;
+}
+
+export interface TileDecodeWorkerUtilizationSnapshot {
+  configuredWorkerPoolSize: number;
+  maxConcurrentWorkers: number;
+  busyWorkerCount: number;
+  idleWorkerCount: number;
+  queuedDecodeCount: number;
+  queuedDestinationDecodeCount: number;
+  activeDestinationWorkerCount: number;
+  totalJobsCompleted: number;
+  totalJobsAbortedInQueue: number;
+  totalJobsAbortedWhileRunning: number;
+  totalJobsRetainedAfterAbort: number;
+  totalWorkerActiveTimeMs: number;
+  totalClientQueueWaitMs: number;
+  wastedWorkerTimeMs: number;
 }
 
 export interface WorkerMessageDeliveredInfo {
@@ -36,20 +69,42 @@ export interface TileDecodeClient {
     buffer: ArrayBuffer,
     tileKey: string,
     signal?: AbortSignal,
-    priority?: number
+    priority?: number,
+    jobOptions?: TileDecodeJobOptions
   ): Promise<TileDecodeResult>;
+  /**
+   * Dynamically updates the priority (and optional destination flag) of a queued
+   * decode job without restarting it or losing its enqueue timestamp.
+   * Returns true if a queued job was found and updated.
+   */
+  updateJobPriority(
+    tileKey: string,
+    newPriority: number,
+    isDestination?: boolean
+  ): boolean;
   getPreparationOptions(): TilePreparationOptions;
   setPreparationOptions(
     options: TilePreparationVariantId | Partial<TilePreparationOptions>
   ): TilePreparationOptions;
   getActiveWorkerCount(): number;
+  getBusyWorkerCount(): number;
+  getQueuedDecodeCount(): number;
   getPendingDecodeCount(): number;
+  setMaxWorkerConcurrency(
+    maxWorkers: number,
+    reservedDestinationSlots?: number
+  ): void;
+  getWorkerUtilizationSnapshot(): TileDecodeWorkerUtilizationSnapshot;
   dispose(): void;
 }
 
 export interface TileDecodeClientOptions {
-  /** Number of Web Workers in the decode pool (default: 2 in browser). */
+  /** Number of Web Workers in the decode pool (default: 4 in browser for TKT-041-F2). */
   workerCount?: number;
+  /** Maximum concurrently active workers (default: workerCount). */
+  maxConcurrentWorkers?: number;
+  /** Reserved worker slots for pending destination coverage when destination jobs are queued. */
+  reservedDestinationWorkerSlots?: number;
   /** Force inline async decode (useful for deterministic unit tests). */
   forceInlineDecode?: boolean;
   /** Initial TKT-040 tile preparation variant or explicit options (default: 'combined'). */
@@ -63,7 +118,10 @@ interface PendingJob {
   tileKey: string;
   buffer: ArrayBuffer;
   priority: number;
+  isDestination: boolean;
+  retainIfRunningOnAbort: boolean;
   enqueuedAtMs: number;
+  dispatchedAtMs: number;
   clientQueueWaitMs: number;
   signal?: AbortSignal;
   abortHandler?: () => void;
@@ -77,16 +135,41 @@ function createAbortError(tileKey: string): Error {
   return err;
 }
 
+function resolveDefaultWorkerPoolSize(explicitCount?: number): number {
+  if (typeof explicitCount === 'number' && Number.isFinite(explicitCount)) {
+    return Math.max(1, Math.floor(explicitCount));
+  }
+  const hc =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.hardwareConcurrency === 'number' &&
+    Number.isFinite(navigator.hardwareConcurrency)
+      ? navigator.hardwareConcurrency
+      : 8;
+  return Math.min(4, Math.max(2, Math.floor(hc / 2)));
+}
+
 /**
  * Manages a pool of browser Web Workers that decode `OSMTILE1` binary tile payloads
- * off the main thread, with priority-ordered dispatch, `AbortSignal` cancellation for
- * queued jobs, TKT-040/TKT-041-F1 cross-thread timing instrumentation, and automatic
- * fallback when running in Node.js test environments without browser `Worker`.
+ * off the main thread, with priority-ordered dispatch, dynamic queue reprioritization,
+ * reserved destination worker slot fairness, `AbortSignal` cancellation for queued jobs,
+ * optional retention of already-running worker jobs, TKT-040/TKT-041-F2 cross-thread
+ * timing instrumentation, and automatic fallback in Node.js test environments.
  */
 export function createTileDecodeClient(
   options: TileDecodeClientOptions = {}
 ): TileDecodeClient {
-  const desiredWorkers = Math.max(1, options.workerCount ?? 2);
+  const poolSize = resolveDefaultWorkerPoolSize(options.workerCount);
+  let maxConcurrentWorkers = Math.max(
+    1,
+    Math.min(poolSize, options.maxConcurrentWorkers ?? poolSize)
+  );
+  let reservedDestinationSlots = Math.max(
+    0,
+    Math.min(
+      maxConcurrentWorkers - 1,
+      options.reservedDestinationWorkerSlots ?? 0
+    )
+  );
   let currentPrepOptions: TilePreparationOptions = resolveTilePreparationOptions(
     options.preparationOptions
   );
@@ -100,22 +183,80 @@ export function createTileDecodeClient(
   let nextRequestId = 1;
   let disposed = false;
 
+  // Cumulative utilization telemetry (Work Package A / C / D)
+  let totalJobsCompleted = 0;
+  let totalJobsAbortedInQueue = 0;
+  let totalJobsAbortedWhileRunning = 0;
+  let totalJobsRetainedAfterAbort = 0;
+  let totalWorkerActiveTimeMs = 0;
+  let totalClientQueueWaitMs = 0;
+  let wastedWorkerTimeMs = 0;
+
   const canUseBrowserWorker =
     !options.forceInlineDecode &&
     typeof Worker !== 'undefined' &&
     typeof window !== 'undefined';
 
-  const popHighestPriorityJob = (): PendingJob | undefined => {
+  const countActiveDestinationWorkers = (): number => {
+    let count = 0;
+    for (const [, active] of activeJobsByRequestId.entries()) {
+      if (active.job.isDestination) count += 1;
+    }
+    return count;
+  };
+
+  const hasQueuedDestinationJobs = (): boolean => {
+    for (let i = 0; i < queuedJobs.length; i++) {
+      if (queuedJobs[i].isDestination && !queuedJobs[i].signal?.aborted) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const popNextEligibleJob = (): PendingJob | undefined => {
     if (queuedJobs.length === 0) return undefined;
-    let bestIdx = 0;
-    for (let i = 1; i < queuedJobs.length; i++) {
-      const a = queuedJobs[i];
-      const b = queuedJobs[bestIdx];
+
+    // Enforce reserved destination worker slots when destination jobs are waiting
+    const activeDest = countActiveDestinationWorkers();
+    const freeSlots = Math.max(0, maxConcurrentWorkers - busyWorkers.size);
+    const neededDestSlots = Math.max(0, reservedDestinationSlots - activeDest);
+    const mustPickDestination =
+      neededDestSlots > 0 &&
+      freeSlots <= neededDestSlots &&
+      hasQueuedDestinationJobs();
+
+    let bestIdx = -1;
+    for (let i = 0; i < queuedJobs.length; i++) {
+      const candidate = queuedJobs[i];
+      if (mustPickDestination && !candidate.isDestination) {
+        continue;
+      }
+      if (bestIdx === -1) {
+        bestIdx = i;
+        continue;
+      }
+      const best = queuedJobs[bestIdx];
       if (
-        a.priority < b.priority ||
-        (a.priority === b.priority && a.requestId < b.requestId)
+        candidate.priority < best.priority ||
+        (candidate.priority === best.priority &&
+          candidate.requestId < best.requestId)
       ) {
         bestIdx = i;
+      }
+    }
+
+    if (bestIdx === -1) {
+      bestIdx = 0;
+      for (let i = 1; i < queuedJobs.length; i++) {
+        const a = queuedJobs[i];
+        const b = queuedJobs[bestIdx];
+        if (
+          a.priority < b.priority ||
+          (a.priority === b.priority && a.requestId < b.requestId)
+        ) {
+          bestIdx = i;
+        }
       }
     }
     return queuedJobs.splice(bestIdx, 1)[0];
@@ -124,21 +265,25 @@ export function createTileDecodeClient(
   const pumpQueue = (): void => {
     if (disposed || workers.length === 0) return;
 
-    while (queuedJobs.length > 0) {
+    while (queuedJobs.length > 0 && busyWorkers.size < maxConcurrentWorkers) {
       const idleWorker = workers.find((w) => !busyWorkers.has(w));
       if (!idleWorker) break;
 
-      const job = popHighestPriorityJob();
+      const job = popNextEligibleJob();
       if (!job) break;
       if (job.signal?.aborted) {
         if (job.abortHandler && job.signal) {
           job.signal.removeEventListener('abort', job.abortHandler);
         }
+        totalJobsAbortedInQueue += 1;
         job.reject(createAbortError(job.tileKey));
         continue;
       }
 
-      job.clientQueueWaitMs = Math.max(0, performance.now() - job.enqueuedAtMs);
+      const nowMs = performance.now();
+      job.dispatchedAtMs = nowMs;
+      job.clientQueueWaitMs = Math.max(0, nowMs - job.enqueuedAtMs);
+      totalClientQueueWaitMs += job.clientQueueWaitMs;
       busyWorkers.add(idleWorker);
       activeJobsByRequestId.set(job.requestId, { job, worker: idleWorker });
 
@@ -166,7 +311,7 @@ export function createTileDecodeClient(
 
   if (canUseBrowserWorker) {
     try {
-      for (let i = 0; i < desiredWorkers; i++) {
+      for (let i = 0; i < poolSize; i++) {
         const worker = new Worker(
           new URL('./TileDecodeWorker.ts', import.meta.url),
           { type: 'module' }
@@ -186,10 +331,23 @@ export function createTileDecodeClient(
             job.signal.removeEventListener('abort', job.abortHandler);
           }
 
+          const workerExecMs = response.ok
+            ? response.decodeDurationMs
+            : Math.max(0, onMessageStartMs - job.dispatchedAtMs);
+          totalWorkerActiveTimeMs += workerExecMs;
+
           let deliveredTimings: WorkerDecodeStageTimings | null = null;
-          if (job.signal?.aborted) {
+          const wasAborted = Boolean(job.signal?.aborted);
+
+          if (wasAborted && !job.retainIfRunningOnAbort) {
+            totalJobsAbortedWhileRunning += 1;
+            wastedWorkerTimeMs += workerExecMs;
             job.reject(createAbortError(job.tileKey));
           } else if (response.ok) {
+            if (wasAborted) {
+              totalJobsRetainedAfterAbort += 1;
+            }
+            totalJobsCompleted += 1;
             const wt = response.workerTimings;
             const deliveryLatencyMs = Number(
               Math.max(
@@ -203,6 +361,8 @@ export function createTileDecodeClient(
               transferAllTypedArrays: wt.transferAllTypedArrays,
               workerInstanceBvhEnabled: wt.workerInstanceBvhEnabled,
               workerQueueWaitMs: wt.workerQueueWaitMs,
+              workerInflateMs: wt.workerInflateMs,
+              workerDecodeOnlyMs: wt.workerDecodeOnlyMs,
               workerInflateAndDecodeMs: wt.workerInflateAndDecodeMs,
               workerBvhBuildMs: wt.workerBvhBuildMs,
               workerPayloadPrepMs: wt.workerPayloadPrepMs,
@@ -224,6 +384,7 @@ export function createTileDecodeClient(
               usedWebWorker: true,
               workerTimings: deliveredTimings,
               clientQueueWaitMs: Number(job.clientQueueWaitMs.toFixed(3)),
+              completedAfterAbort: wasAborted,
             });
           } else {
             const errResp = response as TileDecodeWorkerErrorResponse;
@@ -290,13 +451,16 @@ export function createTileDecodeClient(
   const decodeInline = async (
     buffer: ArrayBuffer,
     tileKey: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    jobOptions?: TileDecodeJobOptions
   ): Promise<TileDecodeResult> => {
     if (signal?.aborted) {
+      totalJobsAbortedInQueue += 1;
       throw createAbortError(tileKey);
     }
     await Promise.resolve();
-    if (signal?.aborted) {
+    if (signal?.aborted && !jobOptions?.retainIfRunningOnAbort) {
+      totalJobsAbortedWhileRunning += 1;
       throw createAbortError(tileKey);
     }
     const t0 = performance.now();
@@ -306,12 +470,27 @@ export function createTileDecodeClient(
     const prep = prepareTileInWorker(rawBytes, tileKey, currentPrepOptions, false);
     const endMs = performance.now();
     const decodeDurationMs = endMs - t0;
+    totalWorkerActiveTimeMs += decodeDurationMs;
+
+    const wasAborted = Boolean(signal?.aborted);
+    if (wasAborted && !jobOptions?.retainIfRunningOnAbort) {
+      totalJobsAbortedWhileRunning += 1;
+      wastedWorkerTimeMs += decodeDurationMs;
+      throw createAbortError(tileKey);
+    }
+    if (wasAborted) {
+      totalJobsRetainedAfterAbort += 1;
+    }
+    totalJobsCompleted += 1;
+
     const timings: WorkerDecodeStageTimings = {
       usedWebWorker: false,
       usedCompactTransport: prep.options.compactMetadataTransport,
       transferAllTypedArrays: prep.options.transferAllTypedArrays,
       workerInstanceBvhEnabled: prep.options.workerInstanceBvh,
       workerQueueWaitMs: 0,
+      workerInflateMs: Number(inflateMs.toFixed(3)),
+      workerDecodeOnlyMs: Number(prep.decodeOnlyMs.toFixed(3)),
       workerInflateAndDecodeMs: Number((inflateMs + prep.decodeOnlyMs).toFixed(3)),
       workerBvhBuildMs: Number(prep.workerBvhBuildMs.toFixed(3)),
       workerPayloadPrepMs: Number(prep.workerPayloadPrepMs.toFixed(3)),
@@ -340,6 +519,7 @@ export function createTileDecodeClient(
       usedWebWorker: false,
       workerTimings: timings,
       clientQueueWaitMs: 0,
+      completedAfterAbort: wasAborted,
     };
   };
 
@@ -347,26 +527,32 @@ export function createTileDecodeClient(
     buffer: ArrayBuffer,
     tileKey: string,
     signal?: AbortSignal,
-    priority = 0
+    priority = 0,
+    jobOptions?: TileDecodeJobOptions
   ): Promise<TileDecodeResult> => {
     if (disposed) {
       return Promise.reject(new Error('TileDecodeClient has been disposed.'));
     }
     if (signal?.aborted) {
+      totalJobsAbortedInQueue += 1;
       return Promise.reject(createAbortError(tileKey));
     }
     if (workers.length === 0) {
-      return decodeInline(buffer, tileKey, signal);
+      return decodeInline(buffer, tileKey, signal, jobOptions);
     }
 
     return new Promise<TileDecodeResult>((resolve, reject) => {
       const requestId = nextRequestId++;
+      const nowMs = performance.now();
       const job: PendingJob = {
         requestId,
         tileKey,
         buffer,
         priority: Number.isFinite(priority) ? priority : 0,
-        enqueuedAtMs: performance.now(),
+        isDestination: Boolean(jobOptions?.isDestination),
+        retainIfRunningOnAbort: Boolean(jobOptions?.retainIfRunningOnAbort),
+        enqueuedAtMs: nowMs,
+        dispatchedAtMs: nowMs,
         clientQueueWaitMs: 0,
         signal,
         resolve,
@@ -379,6 +565,7 @@ export function createTileDecodeClient(
           if (queueIdx !== -1) {
             queuedJobs.splice(queueIdx, 1);
             signal.removeEventListener('abort', onAbort);
+            totalJobsAbortedInQueue += 1;
             reject(createAbortError(tileKey));
           }
         };
@@ -391,8 +578,40 @@ export function createTileDecodeClient(
     });
   };
 
+  const updateJobPriority = (
+    tileKey: string,
+    newPriority: number,
+    isDestination?: boolean
+  ): boolean => {
+    let updated = false;
+    for (let i = 0; i < queuedJobs.length; i++) {
+      const job = queuedJobs[i];
+      if (job.tileKey === tileKey) {
+        if (Number.isFinite(newPriority)) {
+          job.priority = newPriority;
+        }
+        if (typeof isDestination === 'boolean') {
+          job.isDestination = isDestination;
+        }
+        updated = true;
+      }
+    }
+    for (const [, active] of activeJobsByRequestId.entries()) {
+      if (active.job.tileKey === tileKey) {
+        if (Number.isFinite(newPriority)) {
+          active.job.priority = newPriority;
+        }
+        if (typeof isDestination === 'boolean') {
+          active.job.isDestination = isDestination;
+        }
+      }
+    }
+    return updated;
+  };
+
   return {
     decodeTile,
+    updateJobPriority,
     getPreparationOptions: () => ({ ...currentPrepOptions }),
     setPreparationOptions: (
       next: TilePreparationVariantId | Partial<TilePreparationOptions>
@@ -400,9 +619,64 @@ export function createTileDecodeClient(
       currentPrepOptions = resolveTilePreparationOptions(next);
       return { ...currentPrepOptions };
     },
-    getActiveWorkerCount: () => workers.length,
+    getActiveWorkerCount: () =>
+      workers.length > 0 ? maxConcurrentWorkers : 0,
+    getBusyWorkerCount: () => busyWorkers.size,
+    getQueuedDecodeCount: () => queuedJobs.length,
     getPendingDecodeCount: () =>
       queuedJobs.length + activeJobsByRequestId.size,
+    setMaxWorkerConcurrency: (
+      maxWorkers: number,
+      reservedDestSlots?: number
+    ) => {
+      if (Number.isFinite(maxWorkers) && maxWorkers >= 1) {
+        maxConcurrentWorkers = Math.max(
+          1,
+          Math.min(
+            workers.length > 0 ? workers.length : poolSize,
+            Math.floor(maxWorkers)
+          )
+        );
+      }
+      if (
+        typeof reservedDestSlots === 'number' &&
+        Number.isFinite(reservedDestSlots)
+      ) {
+        reservedDestinationSlots = Math.max(
+          0,
+          Math.min(maxConcurrentWorkers - 1, Math.floor(reservedDestSlots))
+        );
+      } else {
+        reservedDestinationSlots = Math.min(
+          reservedDestinationSlots,
+          Math.max(0, maxConcurrentWorkers - 1)
+        );
+      }
+      pumpQueue();
+    },
+    getWorkerUtilizationSnapshot: (): TileDecodeWorkerUtilizationSnapshot => {
+      let queuedDest = 0;
+      for (let i = 0; i < queuedJobs.length; i++) {
+        if (queuedJobs[i].isDestination) queuedDest += 1;
+      }
+      const effMax = workers.length > 0 ? maxConcurrentWorkers : 1;
+      return {
+        configuredWorkerPoolSize: workers.length,
+        maxConcurrentWorkers: effMax,
+        busyWorkerCount: busyWorkers.size,
+        idleWorkerCount: Math.max(0, effMax - busyWorkers.size),
+        queuedDecodeCount: queuedJobs.length,
+        queuedDestinationDecodeCount: queuedDest,
+        activeDestinationWorkerCount: countActiveDestinationWorkers(),
+        totalJobsCompleted,
+        totalJobsAbortedInQueue,
+        totalJobsAbortedWhileRunning,
+        totalJobsRetainedAfterAbort,
+        totalWorkerActiveTimeMs: Number(totalWorkerActiveTimeMs.toFixed(3)),
+        totalClientQueueWaitMs: Number(totalClientQueueWaitMs.toFixed(3)),
+        wastedWorkerTimeMs: Number(wastedWorkerTimeMs.toFixed(3)),
+      };
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;
@@ -435,3 +709,4 @@ export function createTileDecodeClient(
     },
   };
 }
+

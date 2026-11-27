@@ -638,3 +638,231 @@ export function parseHierarchicalPolicyFromSearch(
 
   return hasAny ? partial : null;
 }
+
+export interface AdaptivePrewarmHorizonEvaluation {
+  targetResolutionMeters: number | null;
+  reason: string;
+  triggeredByVelocityHorizon: boolean;
+  estimatedTimeToThresholdMs: number | null;
+  requiredLeadTimeMs: number | null;
+  distanceToThresholdScale: number | null;
+}
+
+/**
+ * TKT-041-F2 Work Package E: Latency-aware adaptive preparation horizon.
+ *
+ * Estimates when the camera will cross the next resolution activation threshold based on:
+ * - current effective orthographic scale and distance to threshold,
+ * - current scale velocity (`scaleVelocityPerSec`, negative when zooming out, positive when zooming in),
+ * - historical tile preparation latency (`historicalPrepLatencyMs`) for the target resolution,
+ * - current streaming queue backlog (`queueBacklogMs`),
+ * - and configured lead multiplier (`leadMultiplier`).
+ *
+ * Also retains the baseline spatial approach band so slow or stepped zoom sweeps still
+ * trigger pre-warming when entering the threshold approach band.
+ */
+export function evaluateAdaptivePrewarmHorizon(params: {
+  cameraZoom: number;
+  activeResolutionMeters: number;
+  availableResolutionsMeters: readonly number[];
+  viewportWidthPx?: number | null;
+  policy: HierarchicalResolutionPolicyConfig;
+  bandFraction: number;
+  zoomTrend?: 'zooming_out' | 'zooming_in' | 'steady';
+  scaleVelocityPerSec?: number;
+  historicalPrepLatencyMs?: Readonly<Record<number, number>>;
+  queueBacklogMs?: number;
+  leadMultiplier?: number;
+}): AdaptivePrewarmHorizonEvaluation {
+  const baseEval = resolveApproachingResolutionForPrewarm({
+    cameraZoom: params.cameraZoom,
+    activeResolutionMeters: params.activeResolutionMeters,
+    availableResolutionsMeters: params.availableResolutionsMeters,
+    viewportWidthPx: params.viewportWidthPx,
+    policy: params.policy,
+    bandFraction: params.bandFraction,
+    zoomTrend: params.zoomTrend,
+  });
+
+  if (params.policy.mode !== 'auto') {
+    return {
+      targetResolutionMeters: null,
+      reason: 'forced_mode',
+      triggeredByVelocityHorizon: false,
+      estimatedTimeToThresholdMs: null,
+      requiredLeadTimeMs: null,
+      distanceToThresholdScale: null,
+    };
+  }
+
+  const sorted = [...params.availableResolutionsMeters].sort((a, b) => a - b);
+  const activeIdx = sorted.indexOf(params.activeResolutionMeters);
+  if (sorted.length < 2 || activeIdx === -1) {
+    return {
+      targetResolutionMeters: null,
+      reason: 'single_or_unknown_resolution',
+      triggeredByVelocityHorizon: false,
+      estimatedTimeToThresholdMs: null,
+      requiredLeadTimeMs: null,
+      distanceToThresholdScale: null,
+    };
+  }
+
+  const { effectiveScalePxPerMeter } = computeEffectiveOrthographicScale(
+    params.cameraZoom,
+    params.viewportWidthPx,
+    params.policy
+  );
+  const scaleVel =
+    typeof params.scaleVelocityPerSec === 'number' &&
+    Number.isFinite(params.scaleVelocityPerSec)
+      ? params.scaleVelocityPerSec
+      : 0;
+  const leadMult = clamp(params.leadMultiplier ?? 1.35, 0.5, 4.0);
+  const backlogMs = Math.max(0, params.queueBacklogMs ?? 0);
+
+  const defaultLatencyForRes = (resMeters: number): number => {
+    const hist = params.historicalPrepLatencyMs?.[resMeters];
+    if (typeof hist === 'number' && Number.isFinite(hist) && hist > 20) {
+      return hist;
+    }
+    if (resMeters >= 4096) return 1400;
+    if (resMeters >= 2048) return 650;
+    return 300;
+  };
+
+  // Zooming out toward coarser resolution (scale decreasing)
+  if (activeIdx < sorted.length - 1 && scaleVel < -0.005) {
+    const nextCoarseRes = sorted[activeIdx + 1];
+    const coarseBand = findBandForBoundary(
+      sorted[activeIdx],
+      nextCoarseRes,
+      params.policy.bands
+    );
+    const distScale = Math.max(
+      0,
+      effectiveScalePxPerMeter - coarseBand.zoomOutThreshold
+    );
+    const timeToThresholdMs = (distScale / Math.abs(scaleVel)) * 1000;
+    const requiredLeadTimeMs =
+      defaultLatencyForRes(nextCoarseRes) * leadMult + backlogMs;
+
+    if (timeToThresholdMs <= requiredLeadTimeMs) {
+      return {
+        targetResolutionMeters: nextCoarseRes,
+        reason: `velocity_horizon_coarse_${nextCoarseRes}m`,
+        triggeredByVelocityHorizon: true,
+        estimatedTimeToThresholdMs: Number(timeToThresholdMs.toFixed(1)),
+        requiredLeadTimeMs: Number(requiredLeadTimeMs.toFixed(1)),
+        distanceToThresholdScale: Number(distScale.toFixed(4)),
+      };
+    }
+  }
+
+  // Zooming in toward finer resolution (scale increasing)
+  if (activeIdx > 0 && scaleVel > 0.005) {
+    const nextFineRes = sorted[activeIdx - 1];
+    const fineBand = findBandForBoundary(
+      nextFineRes,
+      sorted[activeIdx],
+      params.policy.bands
+    );
+    const distScale = Math.max(
+      0,
+      fineBand.zoomInThreshold - effectiveScalePxPerMeter
+    );
+    const timeToThresholdMs = (distScale / Math.abs(scaleVel)) * 1000;
+    const requiredLeadTimeMs =
+      defaultLatencyForRes(nextFineRes) * leadMult + backlogMs;
+
+    if (timeToThresholdMs <= requiredLeadTimeMs) {
+      return {
+        targetResolutionMeters: nextFineRes,
+        reason: `velocity_horizon_fine_${nextFineRes}m`,
+        triggeredByVelocityHorizon: true,
+        estimatedTimeToThresholdMs: Number(timeToThresholdMs.toFixed(1)),
+        requiredLeadTimeMs: Number(requiredLeadTimeMs.toFixed(1)),
+        distanceToThresholdScale: Number(distScale.toFixed(4)),
+      };
+    }
+  }
+
+  if (baseEval.targetResolutionMeters !== null) {
+    const reqLead =
+      defaultLatencyForRes(baseEval.targetResolutionMeters) * leadMult +
+      backlogMs;
+    return {
+      targetResolutionMeters: baseEval.targetResolutionMeters,
+      reason: baseEval.reason,
+      triggeredByVelocityHorizon: false,
+      estimatedTimeToThresholdMs: null,
+      requiredLeadTimeMs: Number(reqLead.toFixed(1)),
+      distanceToThresholdScale: null,
+    };
+  }
+
+  return {
+    targetResolutionMeters: null,
+    reason: baseEval.reason,
+    triggeredByVelocityHorizon: false,
+    estimatedTimeToThresholdMs: null,
+    requiredLeadTimeMs: null,
+    distanceToThresholdScale: null,
+  };
+}
+
+/**
+ * TKT-041-F2 Work Package E.2: Predicts the camera viewport bounds at the estimated
+ * activation horizon so destination tiles likely to intersect the viewport at activation
+ * time can be prioritized ahead of trailing tiles.
+ *
+ * Note: Actual visible coverage at activation time always remains authoritative;
+ * predicted bounds are used strictly for priority ordering and pre-warming selection.
+ */
+export function predictViewportBoundsAtHorizon(params: {
+  currentBounds: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+    centerX: number;
+    centerZ: number;
+  };
+  panVelocityXPerSec: number;
+  panVelocityZPerSec: number;
+  zoomRatioAtHorizon?: number;
+  horizonSeconds: number;
+  maxTranslationMeters?: number;
+}): {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  centerX: number;
+  centerZ: number;
+} {
+  const dt = clamp(params.horizonSeconds, 0, 2.5);
+  const maxShift = Math.max(256, params.maxTranslationMeters ?? 6144);
+  const dx = clamp(params.panVelocityXPerSec * dt, -maxShift, maxShift);
+  const dz = clamp(params.panVelocityZPerSec * dt, -maxShift, maxShift);
+  const scaleRatio = clamp(params.zoomRatioAtHorizon ?? 1.0, 0.5, 2.5);
+
+  const halfW =
+    Math.max(1, (params.currentBounds.maxX - params.currentBounds.minX) * 0.5) *
+    scaleRatio;
+  const halfH =
+    Math.max(1, (params.currentBounds.maxZ - params.currentBounds.minZ) * 0.5) *
+    scaleRatio;
+  const cx = params.currentBounds.centerX + dx;
+  const cz = params.currentBounds.centerZ + dz;
+
+  return {
+    minX: cx - halfW,
+    maxX: cx + halfW,
+    minZ: cz - halfH,
+    maxZ: cz + halfH,
+    centerX: cx,
+    centerZ: cz,
+  };
+}
+

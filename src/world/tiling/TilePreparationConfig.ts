@@ -199,6 +199,10 @@ export interface WorkerDecodeStageTimings {
   workerInstanceBvhEnabled: boolean;
   /** Queue + IPC wait from main-thread postMessage to worker onmessage entry. */
   workerQueueWaitMs: number;
+  /** Worker decompression (inflate) time in ms (0 when payload is already raw OSMTILE1). */
+  workerInflateMs?: number;
+  /** Worker binary decode time excluding inflate (ms). */
+  workerDecodeOnlyMs?: number;
   /** Worker decompression (inflate) + binary decode time. */
   workerInflateAndDecodeMs: number;
   /** Worker InstancedSpatialIndex BVH construction time (0 when disabled). */

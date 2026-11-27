@@ -34,6 +34,8 @@ export interface TileDecodeWorkerTimingsPayload {
   transferAllTypedArrays: boolean;
   workerInstanceBvhEnabled: boolean;
   workerQueueWaitMs: number;
+  workerInflateMs?: number;
+  workerDecodeOnlyMs?: number;
   workerInflateAndDecodeMs: number;
   workerBvhBuildMs: number;
   workerPayloadPrepMs: number;
@@ -356,6 +358,8 @@ if (
           transferAllTypedArrays: prep.options.transferAllTypedArrays,
           workerInstanceBvhEnabled: prep.options.workerInstanceBvh,
           workerQueueWaitMs: Number(workerQueueWaitMs.toFixed(3)),
+          workerInflateMs: Number(inflateMs.toFixed(3)),
+          workerDecodeOnlyMs: Number(prep.decodeOnlyMs.toFixed(3)),
           workerInflateAndDecodeMs: Number(workerInflateAndDecodeMs.toFixed(3)),
           workerBvhBuildMs: Number(prep.workerBvhBuildMs.toFixed(3)),
           workerPayloadPrepMs: Number(prep.workerPayloadPrepMs.toFixed(3)),

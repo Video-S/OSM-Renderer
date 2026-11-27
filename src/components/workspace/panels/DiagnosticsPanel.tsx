@@ -1034,8 +1034,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                   }}
                   className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 cursor-pointer"
                 >
-                  <option value="combined">combined (F1 default)</option>
-                  <option value="combined_prewarm">combined_prewarm</option>
+                  <option value="f2_combined">f2_combined (F2 default)</option>
+                  <option value="f2_independent_pipeline">f2_independent_pipeline</option>
+                  <option value="f2_destination_scheduling">f2_destination_scheduling</option>
+                  <option value="f2_tuned_concurrency">f2_tuned_concurrency</option>
+                  <option value="f2_latency_aware_prewarm">f2_latency_aware_prewarm</option>
+                  <option value="combined_prewarm">combined_prewarm (F1 ref)</option>
+                  <option value="combined">combined (F1)</option>
                   <option value="tkt041_baseline">tkt041_baseline</option>
                   <option value="scheduler_only">scheduler_only</option>
                   <option value="incremental_gpu_only">incremental_gpu_only</option>
@@ -1165,7 +1170,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
             </div>
           )}
 
-          {/* Live Transition Blocker & Critical Path (TKT-041-F1 Section 12) */}
+          {/* Live Transition Blocker & Critical Path (TKT-041-F1 Section 12 & TKT-041-F2) */}
           <div
             data-testid="diag-transition-blocker-section"
             className="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] font-mono tabular-nums text-slate-400 space-y-1.5"
@@ -1197,7 +1202,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     <strong className="text-slate-200">
                       {hierarchicalDiagnostics.currentTransitionBlocker.fromResolutionMeters}m→
                       {hierarchicalDiagnostics.currentTransitionBlocker.toResolutionMeters}m
-                    </strong>
+                    </strong>{' '}
+                    ({Math.round(hierarchicalDiagnostics.destinationCoverageReadinessRatio * 100)}%)
                   </span>
                   <span>
                     Pending:{' '}
@@ -1210,9 +1216,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-[9px] text-slate-400">
                   <span>
-                    Q/F/D/R/G:{' '}
+                    Q/F/RQ/D/R/G:{' '}
                     {hierarchicalDiagnostics.currentTransitionBlocker.queuedCount}/
                     {hierarchicalDiagnostics.currentTransitionBlocker.fetchingCount}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.retrievedQueuedCount}/
                     {hierarchicalDiagnostics.currentTransitionBlocker.decodingCount}/
                     {hierarchicalDiagnostics.currentTransitionBlocker.reconstructWaitingCount}/
                     {hierarchicalDiagnostics.currentTransitionBlocker.gpuPrepWaitingCount}
@@ -1221,7 +1228,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     Slots:{' '}
                     {hierarchicalDiagnostics.currentTransitionBlocker.contention.fetchSlotsUsed}/
                     {hierarchicalDiagnostics.currentTransitionBlocker.contention.fetchSlotsMax}{' '}
-                    (pre:{hierarchicalDiagnostics.currentTransitionBlocker.contention.activePreloadInFlightCount})
+                    W:{hierarchicalDiagnostics.currentTransitionBlocker.contention.workerPendingDecodes}/
+                    {hierarchicalDiagnostics.currentTransitionBlocker.contention.workerPoolSize}
                   </span>
                 </div>
 
@@ -1258,6 +1266,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                       {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.fetchQueueWaitMs.toFixed(0)}
                       ms · net:{' '}
                       {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.payloadRetrievalMs.toFixed(0)}
+                      ms · rq:{' '}
+                      {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.retrievedQueueWaitMs.toFixed(0)}
                       ms · wq:{' '}
                       {hierarchicalDiagnostics.currentTransitionBlocker.slowestOutstandingTile.workerQueueWaitMs.toFixed(0)}
                       ms · dec:{' '}
@@ -1313,11 +1323,56 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <div className="text-slate-500">
                   fq:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.fetchQueueWaitMs.toFixed(0)} ·
                   net:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.payloadRetrievalMs.toFixed(0)} ·
+                  rq:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.retrievedQueueWaitMs.toFixed(0)} ·
                   wq:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.workerQueueWaitMs.toFixed(0)} ·
                   dec:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.workerDecodeAndBvhMs.toFixed(0)} ·
                   rw:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.mainThreadReconstructWaitMs.toFixed(0)} ·
                   gpu:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.gpuPrepTotalMs.toFixed(0)} ·
                   tail:{hierarchicalDiagnostics.lastCompletedTransition.stagesMs.remainingCoverageWaitMs.toFixed(0)}ms
+                </div>
+              </div>
+            )}
+
+            {hierarchicalDiagnostics.throughputPipeline && (
+              <div
+                data-testid="diag-throughput-pipeline"
+                className="pt-1 border-t border-slate-800/80 text-[9px] text-slate-400 space-y-0.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span>
+                    HTTP / Decode:{' '}
+                    <strong className="text-emerald-300">
+                      {hierarchicalDiagnostics.throughputPipeline.sustainedHttpTransferMibPerSec.toFixed(1)}
+                    </strong>{' '}
+                    /{' '}
+                    <strong className="text-cyan-300">
+                      {hierarchicalDiagnostics.throughputPipeline.sustainedDecodeRawMibPerSec.toFixed(1)}
+                    </strong>{' '}
+                    MiB/s
+                  </span>
+                  <span>
+                    Workers:{' '}
+                    <strong className="text-slate-200">
+                      {hierarchicalDiagnostics.throughputPipeline.busyWorkerCount}/
+                      {hierarchicalDiagnostics.throughputPipeline.workerConcurrency}
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>
+                    RQ Buf:{' '}
+                    <strong className="text-slate-200">
+                      {formatDiagMb(
+                        hierarchicalDiagnostics.throughputPipeline.retrievedPayloadQueueBytes
+                      )}
+                    </strong>
+                  </span>
+                  <span>
+                    Reprio/Tail/Lead:{' '}
+                    {hierarchicalDiagnostics.throughputPipeline.dynamicReprioritizationsTotal}/
+                    {hierarchicalDiagnostics.throughputPipeline.tailTileBoostsAppliedTotal}/
+                    {hierarchicalDiagnostics.throughputPipeline.lastPreparationLeadTimeMs.toFixed(0)}ms
+                  </span>
                 </div>
               </div>
             )}

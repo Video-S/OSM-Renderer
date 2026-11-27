@@ -73,6 +73,15 @@ export const ALL_F1_BENCHMARK_VARIANTS: readonly StreamingF1VariantId[] = [
   'combined_prewarm',
 ] as const;
 
+export const ALL_F2_BENCHMARK_VARIANTS: readonly StreamingF1VariantId[] = [
+  'combined_prewarm',
+  'f2_independent_pipeline',
+  'f2_destination_scheduling',
+  'f2_tuned_concurrency',
+  'f2_latency_aware_prewarm',
+  'f2_combined',
+] as const;
+
 export interface HierarchicalBenchmarkCli {
   descriptorPath: string | null;
   index1024Path: string | null;
@@ -82,6 +91,8 @@ export interface HierarchicalBenchmarkCli {
   variants: StreamingF1VariantId[];
   frameBudgetsMs: number[] | null;
   debounceValuesMs: number[] | null;
+  httpConcurrencies: number[] | null;
+  workerConcurrencies: number[] | null;
   cpuMemoryBudgetMiB: number;
   themeId: string;
   requireHardware: boolean;
@@ -108,6 +119,7 @@ export interface LatencyDistributionSummary {
 export interface TransitionStageAggregate {
   fetchQueueWaitMs: number;
   payloadRetrievalMs: number;
+  retrievedQueueWaitMs: number;
   workerQueueWaitMs: number;
   workerDecodeAndBvhMs: number;
   mainThreadReconstructWaitMs: number;
@@ -155,6 +167,33 @@ export interface HierarchicalScenarioF1Counters {
   timeWithoutValidCoverageMs: number;
 }
 
+export interface HierarchicalScenarioF2ThroughputMetrics {
+  independentPipelineStagesEnabled: boolean;
+  useCompressedHttpTransfer: boolean;
+  maxConcurrentHttpRetrievals: number;
+  workerConcurrency: number;
+  sustainedHttpTransferMibPerSec: number;
+  sustainedDecodeRawMibPerSec: number;
+  sustainedTilesDecodedPerSec: number;
+  avgRetrievedQueueWaitMs: number;
+  avgServerSqliteLookupMs: number;
+  avgServerInflateMs: number;
+  avgServerTotalMs: number;
+  peakRetrievedPayloadQueueBytes: number;
+  peakWorkerPreparationBytes: number;
+  dynamicReprioritizationsDelta: number;
+  tailTileBoostsDelta: number;
+  ageEscalationsDelta: number;
+  oversizedPayloadAdmissionsDelta: number;
+  runningWorkerJobsRetainedDelta: number;
+  discardedPreparedTilesDelta: number;
+  wastedNetworkBytesDelta: number;
+  wastedWorkerTimeMsDelta: number;
+  wastedPrewarmBytesDelta: number;
+  prewarmedTilesActivatedDelta: number;
+  lastPreparationLeadTimeMs: number;
+}
+
 export interface HierarchicalScenarioMetrics {
   variantRunId: string;
   variantId: StreamingF1VariantId;
@@ -192,6 +231,7 @@ export interface HierarchicalScenarioMetrics {
   medianTriangles: number;
   hysteresisZeroTransitionsPassed?: boolean;
   f1Counters: HierarchicalScenarioF1Counters;
+  f2Throughput: HierarchicalScenarioF2ThroughputMetrics;
   transitionLatency: TransitionLatencySummary;
 }
 
@@ -280,6 +320,7 @@ function emptyStageAggregate(): TransitionStageAggregate {
   return {
     fetchQueueWaitMs: 0,
     payloadRetrievalMs: 0,
+    retrievedQueueWaitMs: 0,
     workerQueueWaitMs: 0,
     workerDecodeAndBvhMs: 0,
     mainThreadReconstructWaitMs: 0,
@@ -302,7 +343,7 @@ function aggregateTransitionStages(
   const out = emptyStageAggregate();
   for (const key of keys) {
     const vals = records
-      .map((r) => r.stagesMs[key])
+      .map((r) => r.stagesMs[key] ?? 0)
       .filter((v) => Number.isFinite(v))
       .sort((a, b) => a - b);
     if (vals.length === 0) {
@@ -414,8 +455,11 @@ export function summarizeTransitionLatency(params: {
 
 function parseVariantList(raw: string): StreamingF1VariantId[] {
   const trimmed = raw.trim().toLowerCase();
-  if (trimmed === 'all') {
+  if (trimmed === 'all' || trimmed === 'f1_all') {
     return [...ALL_F1_BENCHMARK_VARIANTS];
+  }
+  if (trimmed === 'f2_all') {
+    return [...ALL_F2_BENCHMARK_VARIANTS];
   }
   const tokens = trimmed
     .split(',')
@@ -428,7 +472,7 @@ function parseVariantList(raw: string): StreamingF1VariantId[] {
   for (const token of tokens) {
     if (!(token in STREAMING_F1_VARIANTS)) {
       throw new Error(
-        `Unknown variant "${token}". Valid values: all, ${ALL_F1_BENCHMARK_VARIANTS.join(', ')}`
+        `Unknown variant "${token}". Valid values: all, f2_all, ${Object.keys(STREAMING_F1_VARIANTS).join(', ')}`
       );
     }
     const id = token as StreamingF1VariantId;
@@ -452,6 +496,8 @@ export function buildVariantRunMatrix(opts: HierarchicalBenchmarkCli): VariantRu
   const runs: VariantRunSpec[] = [];
   const budgets = opts.frameBudgetsMs;
   const debounces = opts.debounceValuesMs;
+  const httpConcs = opts.httpConcurrencies;
+  const workerConcs = opts.workerConcurrencies;
 
   for (const variantId of opts.variants) {
     const base = STREAMING_F1_VARIANTS[variantId];
@@ -461,33 +507,47 @@ export function buildVariantRunMatrix(opts: HierarchicalBenchmarkCli): VariantRu
       debounces && base.transitionDebounceMs > 0
         ? debounces
         : [base.transitionDebounceMs];
+    const sweepHttp = httpConcs ?? [base.maxConcurrentHttpRetrievals];
+    const sweepWorkers = workerConcs ?? [base.workerConcurrency];
 
     for (const budgetMs of sweepBudgets) {
       for (const debounceMs of sweepDebounces) {
-        const cfg = normalizeStreamingFrameBudgetConfig(
-          {
-            frameStreamingBudgetMs: budgetMs,
-            transitionDebounceMs: debounceMs,
-          },
-          base
-        );
-        const suffixParts: string[] = [];
-        if (budgets && base.sharedSchedulerEnabled) {
-          suffixParts.push(`b${budgetMs}ms`);
+        for (const httpConc of sweepHttp) {
+          for (const workerConc of sweepWorkers) {
+            const cfg = normalizeStreamingFrameBudgetConfig(
+              {
+                frameStreamingBudgetMs: budgetMs,
+                transitionDebounceMs: debounceMs,
+                maxConcurrentHttpRetrievals: httpConc,
+                workerConcurrency: workerConc,
+              },
+              base
+            );
+            const suffixParts: string[] = [];
+            if (budgets && base.sharedSchedulerEnabled) {
+              suffixParts.push(`b${budgetMs}ms`);
+            }
+            if (debounces && base.transitionDebounceMs > 0) {
+              suffixParts.push(`d${debounceMs}ms`);
+            }
+            if (httpConcs) {
+              suffixParts.push(`http${httpConc}`);
+            }
+            if (workerConcs) {
+              suffixParts.push(`w${workerConc}`);
+            }
+            const runId =
+              suffixParts.length > 0
+                ? `${variantId}@${suffixParts.join('_')}`
+                : variantId;
+            runs.push({
+              runId,
+              variantId,
+              frameBudgetConfig: cfg,
+              cpuMemoryBudgetMiB: opts.cpuMemoryBudgetMiB,
+            });
+          }
         }
-        if (debounces && base.transitionDebounceMs > 0) {
-          suffixParts.push(`d${debounceMs}ms`);
-        }
-        const runId =
-          suffixParts.length > 0
-            ? `${variantId}@${suffixParts.join('_')}`
-            : variantId;
-        runs.push({
-          runId,
-          variantId,
-          frameBudgetConfig: cfg,
-          cpuMemoryBudgetMiB: opts.cpuMemoryBudgetMiB,
-        });
       }
     }
   }
@@ -506,15 +566,17 @@ export function parseHierarchicalBenchmarkCli(
     index2048Path: null,
     index4096Path: null,
     foliage: 'both',
-    variants: ['combined'],
+    variants: ['f2_combined'],
     frameBudgetsMs: null,
     debounceValuesMs: null,
+    httpConcurrencies: null,
+    workerConcurrencies: null,
     cpuMemoryBudgetMiB: defaultBudgetMiB,
     themeId: 'daylight',
     requireHardware: true,
     gpuBackend: 'auto',
-    outputPath: path.resolve('benchmarks/results/tkt041-f1-hierarchical-streaming.json'),
-    markdownPath: path.resolve('benchmarks/results/tkt041-f1-hierarchical-streaming.md'),
+    outputPath: path.resolve('benchmarks/results/tkt041-f2-hierarchical-streaming.json'),
+    markdownPath: path.resolve('benchmarks/results/tkt041-f2-hierarchical-streaming.md'),
     quick: false,
   };
 
@@ -550,6 +612,14 @@ export function parseHierarchicalBenchmarkCli(
       opts.frameBudgetsMs = parseNumberCsv(val, 'budgets', 0.25);
     } else if (key === 'debounce-ms') {
       opts.debounceValuesMs = parseNumberCsv(val, 'debounce-ms', 0);
+    } else if (key === 'http-concurrency') {
+      opts.httpConcurrencies = parseNumberCsv(val, 'http-concurrency', 1).map((n) =>
+        Math.round(n)
+      );
+    } else if (key === 'worker-concurrency') {
+      opts.workerConcurrencies = parseNumberCsv(val, 'worker-concurrency', 1).map((n) =>
+        Math.round(n)
+      );
     } else if (key === 'budget-mb') {
       const n = Number(val);
       if (!Number.isFinite(n) || n < 32) {
@@ -722,7 +792,7 @@ export function formatHierarchicalStreamingMarkdown(
   report: HierarchicalStreamingBenchmarkReport
 ): string {
   const lines: string[] = [
-    '# TKT-041-F1 Frame-Budgeted Hierarchical Tile Streaming Benchmark Report',
+    '# TKT-041-F2 Streaming Throughput, Transition Latency & Frame-Budgeted Benchmark Report',
     '',
     `- **Generated:** ${report.generatedAtIso}`,
     `- **Hierarchy:** \`${report.hierarchyName}\` (${report.availableResolutionsMeters.map((r) => `${r} m`).join(' / ')})`,
@@ -732,7 +802,7 @@ export function formatHierarchicalStreamingMarkdown(
     `- **WebGL Renderer:** \`${report.gpuRenderer}\` (${report.gpuVendor})`,
     `- **Renderer Classification:** ${
       report.isSoftwareRenderer
-        ? '**SOFTWARE RASTERIZER (SwiftShader — validates correctness, scheduler/GPU-prep/deferred-disposal orchestration, transition critical-path attribution, picking parity, and memory accounting; frame intervals DO NOT represent RTX hardware GPU performance)**'
+        ? '**SOFTWARE RASTERIZER (SwiftShader — validates correctness, decoupled 8-stage pipeline orchestration, byte-based backpressure, dynamic reprioritization, latency-aware prewarming, transition critical-path attribution, picking parity, and memory accounting; frame intervals DO NOT represent RTX hardware GPU performance)**'
         : 'Hardware WebGL2 GPU'
     }`,
     '',
@@ -767,11 +837,11 @@ export function formatHierarchicalStreamingMarkdown(
   lines.push('');
 
   lines.push(
-    '## 2. Independent Transition Latency & Critical-Path Attribution (Section 12)',
+    '## 2. Independent Transition Latency & Critical-Path Attribution (TKT-041-F2)',
     '',
     '> Transition latency is tracked separately from frame-time consistency so smoother frames are never achieved by leaving resolution transitions pending indefinitely.',
     '',
-    '| Variant | Foliage | Scenario | Trans (start/done/cancel/defer/unfinished) | Max Pending (ms) | Overall p50 / p95 / max (ms) | →4096m p50 / max (ms) | Med Critical Stages: fq / net / wq / dec / rw / gpu / tail (ms) | Top Dominant Blocker |',
+    '| Variant | Foliage | Scenario | Trans (start/done/cancel/defer/unfinished) | Max Pending (ms) | Overall p50 / p95 / max (ms) | →4096m p50 / max (ms) | Med Critical Stages: fq / net / rq / wq / dec / rw / gpu / tail (ms) | Top Dominant Blocker |',
     '|---|---|---|---|---:|---:|---:|---|---|'
   );
   for (const s of report.scenarios) {
@@ -792,14 +862,28 @@ export function formatHierarchicalStreamingMarkdown(
         ? `${tl.completedLatencyMs.p50Ms.toFixed(1)} / ${tl.completedLatencyMs.p95Ms.toFixed(1)} / ${tl.completedLatencyMs.maxMs.toFixed(1)}`
         : '—';
     lines.push(
-      `| \`${s.variantRunId}\` | ${s.foliageEnabled ? 'ON' : 'OFF'} | \`${s.scenarioId}\` | ${tl.transitionsAttempted}/${tl.transitionsCompleted}/${tl.transitionsCancelled}/${tl.transitionsDeferredBudget}/${tl.transitionsUnfinishedAtEnd} | ${tl.maxPendingDurationMs.toFixed(1)} | ${overallStr} | ${to4096Str} | ${st.fetchQueueWaitMs.toFixed(1)} / ${st.payloadRetrievalMs.toFixed(1)} / ${st.workerQueueWaitMs.toFixed(1)} / ${st.workerDecodeAndBvhMs.toFixed(1)} / ${st.mainThreadReconstructWaitMs.toFixed(1)} / ${st.gpuPrepTotalMs.toFixed(1)} / ${st.remainingCoverageWaitMs.toFixed(1)} | ${topBlocker} |`
+      `| \`${s.variantRunId}\` | ${s.foliageEnabled ? 'ON' : 'OFF'} | \`${s.scenarioId}\` | ${tl.transitionsAttempted}/${tl.transitionsCompleted}/${tl.transitionsCancelled}/${tl.transitionsDeferredBudget}/${tl.transitionsUnfinishedAtEnd} | ${tl.maxPendingDurationMs.toFixed(1)} | ${overallStr} | ${to4096Str} | ${st.fetchQueueWaitMs.toFixed(1)} / ${st.payloadRetrievalMs.toFixed(1)} / ${st.retrievedQueueWaitMs.toFixed(1)} / ${st.workerQueueWaitMs.toFixed(1)} / ${st.workerDecodeAndBvhMs.toFixed(1)} / ${st.mainThreadReconstructWaitMs.toFixed(1)} / ${st.gpuPrepTotalMs.toFixed(1)} / ${st.remainingCoverageWaitMs.toFixed(1)} | ${topBlocker} |`
+    );
+  }
+  lines.push('');
+
+  lines.push(
+    '## 3. Streaming Throughput, Stage Queue Occupancy & Dynamic Scheduling (TKT-041-F2)',
+    '',
+    '| Variant | Foliage | Scenario | HTTP / Worker Conc | HTTP MiB/s | Decode Raw MiB/s | Tiles/s | Peak RQ / Worker Prep (MiB) | Reprio / Tail / Age | Prewarm Act / Lead (ms) | Wasted Net (MiB) / Worker (ms) |',
+    '|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|'
+  );
+  for (const s of report.scenarios) {
+    const tp = s.f2Throughput;
+    lines.push(
+      `| \`${s.variantRunId}\` | ${s.foliageEnabled ? 'ON' : 'OFF'} | \`${s.scenarioId}\` | ${tp.maxConcurrentHttpRetrievals} / ${tp.workerConcurrency}${tp.useCompressedHttpTransfer ? ' (deflate)' : ''} | ${tp.sustainedHttpTransferMibPerSec.toFixed(1)} | ${tp.sustainedDecodeRawMibPerSec.toFixed(1)} | ${tp.sustainedTilesDecodedPerSec.toFixed(1)} | ${(tp.peakRetrievedPayloadQueueBytes / (1024 * 1024)).toFixed(2)} / ${(tp.peakWorkerPreparationBytes / (1024 * 1024)).toFixed(2)} | ${tp.dynamicReprioritizationsDelta} / ${tp.tailTileBoostsDelta} / ${tp.ageEscalationsDelta} | ${tp.prewarmedTilesActivatedDelta} / ${tp.lastPreparationLeadTimeMs.toFixed(0)} | ${(tp.wastedNetworkBytesDelta / (1024 * 1024)).toFixed(2)} / ${tp.wastedWorkerTimeMsDelta.toFixed(1)} |`
     );
   }
   lines.push('');
 
   if (report.pickingParity.length > 0) {
     lines.push(
-      '## 3. Feature Picking Latency & Cross-Resolution Parity',
+      '## 4. Feature Picking Latency & Cross-Resolution Parity',
       '',
       '| Variant | Foliage | Resolution | Status | Median Pick (ms) | P95 Pick (ms) | Hits / Samples | Cross-Resolution Parity |',
       '|---|---|---:|---|---:|---:|---:|---:|'
@@ -827,7 +911,7 @@ export function formatHierarchicalStreamingMarkdown(
 
   if (report.modeComparisons.length > 0) {
     lines.push(
-      '## 4. Auto vs. Forced Single-Resolution Mode Comparison',
+      '## 5. Auto vs. Forced Single-Resolution Mode Comparison',
       '',
       '| Variant | Foliage | Pose | Zoom | Mode | Req / Active Res | Status | Frame med / p95 (ms) | Median Draw Calls | Median Triangles | Measured CPU/BVH (MiB) | Est. GPU (MiB) |',
       '|---|---|---|---:|---|---|---|---:|---:|---:|---:|---:|'
@@ -847,9 +931,9 @@ export function formatHierarchicalStreamingMarkdown(
   lines.push(
     '## Notes & Accounting Caveats',
     '',
-    '- **Directly measured memory (`Measured CPU/BVH`)** sums JS typed-array vertex/index/instance buffers, serialized mesh BVHs, `InstancedSpatialIndex` buffers, queued decoded payloads, retained inactive LRU cache tiles, and queued pending-disposal tiles until physically disposed.',
+    '- **Directly measured memory (`Measured CPU/BVH`)** sums JS typed-array vertex/index/instance buffers, serialized mesh BVHs, `InstancedSpatialIndex` buffers, retrieved payload queue buffers, active worker reservations, queued decoded payloads, retained inactive LRU cache tiles, and queued pending-disposal tiles until physically disposed.',
+    '- **Single-owner stage accounting (TKT-041-F2 Section 5.3):** Payloads transferred from `retrieved_queued` to a worker thread transfer byte accounting from `retrievedPayloadQueueBytes` to `inFlightWorkerPreparationBytes` without double-counting.',
     '- **Estimated GPU memory (`Est. GPU`)** is an explicit upper-bound estimate of uploaded WebGL vertex/index/instance buffers; browsers do not expose exact driver VRAM residency.',
-    '- **GPU upload timing (`gpuUploadSubmitMs`)** measures main-thread CPU submission time of the public-API 1×1 `WebGLRenderTarget` offscreen staging render; asynchronous GPU driver completion is not measured by this timer.',
     '- **Comparison validity guard (TKT-041-F1 Section 8):** Forced or automatic mode comparisons whose requested resolution was deferred by memory budget or did not reach atomic activation are explicitly marked `INVALID` and never reported as valid resolution comparisons.',
     ''
   );
@@ -951,7 +1035,7 @@ export async function runHierarchicalStreamingBenchmark(
       }
 
       const softwareWarning = isSoftware
-        ? `Executed on software WebGL renderer (${gpuInfo.gpuRenderer}). Resolution switching, frame-budget scheduler, incremental GPU upload slicing, deferred disposal, zero-overlap invariants, Section 12 transition critical-path attribution, picking parity, and measured memory accounting are valid, but frame intervals reflect software rasterization rather than hardware GPU performance.`
+        ? `Executed on software WebGL renderer (${gpuInfo.gpuRenderer}). Decoupled 8-stage pipeline progression, byte-based backpressure, dynamic reprioritization, latency-aware adaptive prewarming, incremental GPU upload slicing, deferred disposal, zero-overlap invariants, transition critical-path attribution, picking parity, and measured memory accounting are valid, but frame intervals reflect software rasterization rather than hardware GPU performance.`
         : null;
 
       const foliageConfigs: boolean[] =
@@ -965,15 +1049,16 @@ export async function runHierarchicalStreamingBenchmark(
       const pickingParity: HierarchicalPickingParityResult[] = [];
       const modeComparisons: HierarchicalModeComparisonEntry[] = [];
 
-      const stepMs = opts.quick ? 550 : 1200;
+      const stepMs = opts.quick ? 450 : 1100;
       const continuousTotalMs = opts.quick ? 2400 : 5400;
       const reversalTotalMs = opts.quick ? 2200 : 4800;
-      const repeatedTotalMs = opts.quick ? 2800 : 6200;
-      const modeMeasureMs = opts.quick ? 600 : 1400;
+      const repeatedTotalMs = opts.quick ? 2600 : 6000;
+      const completionHoldCapMs = opts.quick ? 2500 : 8000;
+      const modeMeasureMs = opts.quick ? 500 : 1200;
       const cpuBudgetBytes = opts.cpuMemoryBudgetMiB * 1024 * 1024;
 
-      // Determine which variant runs the shared TKT-041 correctness/parity/mode-comparison checks
       const primaryVariantForExtras =
+        variantMatrix.find((v) => v.variantId === 'f2_combined')?.runId ??
         variantMatrix.find((v) => v.variantId === 'combined')?.runId ??
         variantMatrix[variantMatrix.length - 1].runId;
 
@@ -1029,6 +1114,8 @@ export async function runHierarchicalStreamingBenchmark(
           peakMeasuredCpuBytes: number;
           peakEstimatedGpuBytes: number;
           peakPendingDisposalBytes: number;
+          peakRetrievedPayloadQueueBytes: number;
+          peakWorkerPreparationBytes: number;
           maxObservedPendingMs: number;
           timeWithoutValidCoverageMs: number;
         }
@@ -1143,6 +1230,74 @@ export async function runHierarchicalStreamingBenchmark(
           ),
         };
 
+        const beforeTp = result.beforeDiag.throughputPipeline;
+        const afterTp = result.afterDiag.throughputPipeline;
+        const f2Throughput: HierarchicalScenarioF2ThroughputMetrics = {
+          independentPipelineStagesEnabled:
+            afterTp.independentPipelineStagesEnabled,
+          useCompressedHttpTransfer: afterTp.useCompressedHttpTransfer,
+          maxConcurrentHttpRetrievals: afterTp.maxConcurrentHttpRetrievals,
+          workerConcurrency: afterTp.workerConcurrency,
+          sustainedHttpTransferMibPerSec:
+            afterTp.sustainedHttpTransferMibPerSec,
+          sustainedDecodeRawMibPerSec: afterTp.sustainedDecodeRawMibPerSec,
+          sustainedTilesDecodedPerSec: afterTp.sustainedTilesDecodedPerSec,
+          avgRetrievedQueueWaitMs: afterTp.avgRetrievedQueueWaitMs,
+          avgServerSqliteLookupMs: afterTp.avgServerSqliteLookupMs,
+          avgServerInflateMs: afterTp.avgServerInflateMs,
+          avgServerTotalMs: afterTp.avgServerTotalMs,
+          peakRetrievedPayloadQueueBytes: result.peakRetrievedPayloadQueueBytes,
+          peakWorkerPreparationBytes: result.peakWorkerPreparationBytes,
+          dynamicReprioritizationsDelta: Math.max(
+            0,
+            afterTp.dynamicReprioritizationsTotal -
+              beforeTp.dynamicReprioritizationsTotal
+          ),
+          tailTileBoostsDelta: Math.max(
+            0,
+            afterTp.tailTileBoostsAppliedTotal -
+              beforeTp.tailTileBoostsAppliedTotal
+          ),
+          ageEscalationsDelta: Math.max(
+            0,
+            afterTp.ageEscalationsAppliedTotal -
+              beforeTp.ageEscalationsAppliedTotal
+          ),
+          oversizedPayloadAdmissionsDelta: Math.max(
+            0,
+            afterTp.oversizedPayloadAdmissionsTotal -
+              beforeTp.oversizedPayloadAdmissionsTotal
+          ),
+          runningWorkerJobsRetainedDelta: Math.max(
+            0,
+            afterTp.runningWorkerJobsRetainedAfterDemotionTotal -
+              beforeTp.runningWorkerJobsRetainedAfterDemotionTotal
+          ),
+          discardedPreparedTilesDelta: Math.max(
+            0,
+            afterTp.discardedPreparedTilesTotal -
+              beforeTp.discardedPreparedTilesTotal
+          ),
+          wastedNetworkBytesDelta: Math.max(
+            0,
+            afterTp.wastedNetworkBytes - beforeTp.wastedNetworkBytes
+          ),
+          wastedWorkerTimeMsDelta: roundNum(
+            Math.max(0, afterTp.wastedWorkerTimeMs - beforeTp.wastedWorkerTimeMs),
+            2
+          ),
+          wastedPrewarmBytesDelta: Math.max(
+            0,
+            afterTp.wastedPrewarmBytes - beforeTp.wastedPrewarmBytes
+          ),
+          prewarmedTilesActivatedDelta: Math.max(
+            0,
+            afterTp.prewarmedTilesActivatedTotal -
+              beforeTp.prewarmedTilesActivatedTotal
+          ),
+          lastPreparationLeadTimeMs: afterTp.lastPreparationLeadTimeMs,
+        };
+
         return {
           variantRunId: variantSpec.runId,
           variantId: variantSpec.variantId,
@@ -1183,6 +1338,7 @@ export async function runHierarchicalStreamingBenchmark(
             ? { hysteresisZeroTransitionsPassed: startedDelta === 0 }
             : {}),
           f1Counters,
+          f2Throughput,
           transitionLatency,
         };
       };
@@ -1193,13 +1349,21 @@ export async function runHierarchicalStreamingBenchmark(
         scenarioId: string;
         description: string;
         durationMs: number;
+        holdDestinationCompletionCapMs?: number;
         trajectoryKind:
+          | 'gradual_zoom_out_pan_complete'
+          | 'sustained_regional_zoom_pan'
           | 'pan_zoom_sweep'
           | 'rapid_zoom_reversal_pan'
           | 'repeated_transitions_pan';
       }): Promise<HierarchicalScenarioMetrics> => {
         const result = await page.evaluate(
-          async ({ scenarioId, durationMs, trajectoryKind }) => {
+          async ({
+            scenarioId,
+            durationMs,
+            trajectoryKind,
+            holdCapMs,
+          }) => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             const beforeDiag: HierarchicalStreamingDiagnosticsSnapshot =
               h.getHierarchicalDiagnostics();
@@ -1213,6 +1377,10 @@ export async function runHierarchicalStreamingBenchmark(
               beforeDiag?.resources.totalEstimatedGpuBytes ?? 0;
             let peakPendingDisposalBytes =
               beforeDiag?.frameBudget?.deferredDisposal.pendingBytes ?? 0;
+            let peakRetrievedPayloadQueueBytes =
+              beforeDiag?.throughputPipeline?.retrievedPayloadQueueBytes ?? 0;
+            let peakWorkerPreparationBytes =
+              beforeDiag?.throughputPipeline?.inFlightWorkerPreparationBytes ?? 0;
             let maxObservedPendingMs = beforeDiag?.transitionElapsedMs ?? 0;
             let timeWithoutValidCoverageMs = 0;
 
@@ -1246,6 +1414,16 @@ export async function runHierarchicalStreamingBenchmark(
                 if (dispBytes > peakPendingDisposalBytes) {
                   peakPendingDisposalBytes = dispBytes;
                 }
+                const rqBytes =
+                  hd.throughputPipeline?.retrievedPayloadQueueBytes ?? 0;
+                if (rqBytes > peakRetrievedPayloadQueueBytes) {
+                  peakRetrievedPayloadQueueBytes = rqBytes;
+                }
+                const wpBytes =
+                  hd.throughputPipeline?.inFlightWorkerPreparationBytes ?? 0;
+                if (wpBytes > peakWorkerPreparationBytes) {
+                  peakWorkerPreparationBytes = wpBytes;
+                }
                 if (
                   hd.transitionState !== 'idle' &&
                   hd.transitionElapsedMs > maxObservedPendingMs
@@ -1259,39 +1437,83 @@ export async function runHierarchicalStreamingBenchmark(
             };
 
             const computePose = (
-              u: number
+              u: number,
+              elapsedMs: number
             ): { target: [number, number, number]; zoom: number } => {
               const clampedU = Math.min(1, Math.max(0, u));
+              if (trajectoryKind === 'gradual_zoom_out_pan_complete') {
+                // Work Package G Scenario 3: Continuous diagonal pan while zooming out 1.6 -> 0.18
+                // over the first 45% of duration, then holding 0.18 (4,096 m band) while continuing
+                // to pan so the 4,096 m transition completes under active continuous camera movement.
+                const panPhase = elapsedMs / Math.max(1000, durationMs);
+                const x = Math.sin(panPhase * Math.PI * 1.5) * 850;
+                const z = (Math.min(1.5, panPhase) - 0.5) * 1100;
+                const zoomProgress = Math.min(1, clampedU / 0.45);
+                const logMax = Math.log(1.6);
+                const logMin = Math.log(0.18);
+                const zoom = Math.exp(logMax + (logMin - logMax) * zoomProgress);
+                return { target: [x, 0, z], zoom };
+              }
+              if (trajectoryKind === 'sustained_regional_zoom_pan') {
+                // Work Package G Scenario 4: Sustained regional navigation across 2,048 m (zoom 0.52)
+                // and 4,096 m (zoom 0.18) with long plateaus at each regional resolution while panning.
+                const panPhase = elapsedMs / Math.max(1000, durationMs);
+                const x = Math.cos(panPhase * Math.PI * 2) * 950;
+                const z = Math.sin(panPhase * Math.PI * 2) * 950;
+                let zoom = 0.52;
+                if (clampedU < 0.25) {
+                  zoom = 0.52;
+                } else if (clampedU < 0.4) {
+                  const t = (clampedU - 0.25) / 0.15;
+                  zoom = Math.exp(
+                    Math.log(0.52) + (Math.log(0.18) - Math.log(0.52)) * t
+                  );
+                } else if (clampedU < 0.8) {
+                  zoom = 0.18;
+                } else {
+                  const t = (clampedU - 0.8) / 0.2;
+                  zoom = Math.exp(
+                    Math.log(0.18) + (Math.log(0.52) - Math.log(0.18)) * t
+                  );
+                }
+                return { target: [x, 0, z], zoom };
+              }
               if (trajectoryKind === 'pan_zoom_sweep') {
-                // Continuous diagonal pan + smooth log-space zoom sweep 1.6 -> 0.18 -> 1.6
+                // Continuous diagonal pan + zoom sweep 1.6 -> 0.18 (with a 35% hold plateau at 0.18) -> 1.6
                 const x = Math.sin(clampedU * Math.PI * 2) * 900;
                 const z = (clampedU - 0.5) * 1400;
                 const logMin = Math.log(0.18);
                 const logMax = Math.log(1.6);
-                const phase =
-                  clampedU <= 0.5 ? clampedU * 2 : (1 - clampedU) * 2;
+                let phase = 1;
+                if (clampedU < 0.32) {
+                  phase = clampedU / 0.32;
+                } else if (clampedU <= 0.68) {
+                  phase = 1;
+                } else {
+                  phase = 1 - (clampedU - 0.68) / 0.32;
+                }
                 const zoom = Math.exp(logMax + (logMin - logMax) * phase);
                 return { target: [x, 0, z], zoom };
               }
               if (trajectoryKind === 'rapid_zoom_reversal_pan') {
-                // Continuous pan while rapidly oscillating across 1024<->2048 and 2048<->4096
+                // Separate test for genuinely cancelled / debounced transitions during rapid zoom reversals,
+                // followed by a sustained 4,096 m zoom-out hold.
                 const x = (clampedU - 0.5) * 1200;
                 const z = Math.cos(clampedU * Math.PI * 3) * 500;
-                // First half: fast boundary reversals around 0.72..1.08; second half: sustained zoom out to 0.18 then back to 1.4
                 let zoom: number;
-                if (clampedU < 0.45) {
-                  zoom = 0.9 + Math.sin(clampedU * Math.PI * 14) * 0.22;
-                } else if (clampedU < 0.78) {
-                  zoom = 0.2;
+                if (clampedU < 0.4) {
+                  zoom = 0.9 + Math.sin(clampedU * Math.PI * 16) * 0.22;
+                } else if (clampedU < 0.82) {
+                  zoom = 0.18;
                 } else {
                   zoom = 1.4;
                 }
                 return { target: [x, 0, z], zoom };
               }
-              // repeated_transitions_pan: continuous pan while visiting 1024 -> 2048 -> 4096 -> 2048 -> 1024 -> 4096 -> 1024
+              // repeated_transitions_pan: continuous pan with plateau holds at 1024 -> 2048 -> 4096 -> 2048 -> 1024
               const x = Math.cos(clampedU * Math.PI * 2) * 850;
               const z = Math.sin(clampedU * Math.PI * 2) * 850;
-              const zoomStops = [1.5, 0.52, 0.18, 0.52, 1.5, 0.18, 1.5];
+              const zoomStops = [1.5, 0.52, 0.18, 0.18, 0.52, 1.5];
               const segPos = clampedU * (zoomStops.length - 1);
               const idx = Math.min(zoomStops.length - 2, Math.floor(segPos));
               const frac = segPos - idx;
@@ -1303,7 +1525,6 @@ export async function runHierarchicalStreamingBenchmark(
               return { target: [x, 0, z], zoom };
             };
 
-            // Elapsed-time driven loop: NEVER calls waitForM2aIdle() between camera updates!
             const tStart = performance.now();
             lastSampleNow = tStart;
             await new Promise<void>((resolve) => {
@@ -1311,10 +1532,19 @@ export async function runHierarchicalStreamingBenchmark(
                 const now = performance.now();
                 const elapsed = now - tStart;
                 const u = Math.min(1, elapsed / durationMs);
-                const pose = computePose(u);
+                const pose = computePose(u, elapsed);
                 h.setCameraPose(pose.target, pose.zoom, 45);
                 sampleState(now);
-                if (elapsed >= durationMs) {
+                const hd =
+                  h.getHierarchicalDiagnostics() as HierarchicalStreamingDiagnosticsSnapshot | null;
+                const stillPending =
+                  hd !== null &&
+                  hd.transitionState !== 'idle' &&
+                  hd.transitionState !== 'deferred_budget';
+                if (
+                  elapsed >= durationMs &&
+                  (!stillPending || elapsed >= durationMs + holdCapMs)
+                ) {
                   resolve();
                   return;
                 }
@@ -1339,6 +1569,8 @@ export async function runHierarchicalStreamingBenchmark(
               peakMeasuredCpuBytes,
               peakEstimatedGpuBytes,
               peakPendingDisposalBytes,
+              peakRetrievedPayloadQueueBytes,
+              peakWorkerPreparationBytes,
               maxObservedPendingMs,
               timeWithoutValidCoverageMs,
             };
@@ -1347,6 +1579,7 @@ export async function runHierarchicalStreamingBenchmark(
             scenarioId: params.scenarioId,
             durationMs: params.durationMs,
             trajectoryKind: params.trajectoryKind,
+            holdCapMs: params.holdDestinationCompletionCapMs ?? completionHoldCapMs,
           }
         );
 
@@ -1375,108 +1608,127 @@ export async function runHierarchicalStreamingBenchmark(
         }>;
         checkZeroTransitions?: boolean;
       }): Promise<HierarchicalScenarioMetrics> => {
-        const result = await page.evaluate(async (p) => {
-          const h = (window as any).__BENCHMARK_HARNESS__;
-          const beforeDiag: HierarchicalStreamingDiagnosticsSnapshot =
-            h.getHierarchicalDiagnostics();
-          h.resetStreamingProfiler(p.scenarioId);
-          h.setStreamingProfilerEnabled(true, p.scenarioId);
+        const result = await page.evaluate(
+          async (p) => {
+            const h = (window as any).__BENCHMARK_HARNESS__;
+            const beforeDiag: HierarchicalStreamingDiagnosticsSnapshot =
+              h.getHierarchicalDiagnostics();
+            h.resetStreamingProfiler(p.scenarioId);
+            h.setStreamingProfilerEnabled(true, p.scenarioId);
 
-          let maxSimultaneousAttached = 0;
-          let peakMeasuredCpuBytes =
-            beforeDiag?.resources.totalMeasuredBytes ?? 0;
-          let peakEstimatedGpuBytes =
-            beforeDiag?.resources.totalEstimatedGpuBytes ?? 0;
-          let peakPendingDisposalBytes =
-            beforeDiag?.frameBudget?.deferredDisposal.pendingBytes ?? 0;
-          let maxObservedPendingMs = beforeDiag?.transitionElapsedMs ?? 0;
-          let timeWithoutValidCoverageMs = 0;
-          let lastSampleNow = performance.now();
+            let maxSimultaneousAttached = 0;
+            let peakMeasuredCpuBytes =
+              beforeDiag?.resources.totalMeasuredBytes ?? 0;
+            let peakEstimatedGpuBytes =
+              beforeDiag?.resources.totalEstimatedGpuBytes ?? 0;
+            let peakPendingDisposalBytes =
+              beforeDiag?.frameBudget?.deferredDisposal.pendingBytes ?? 0;
+            let peakRetrievedPayloadQueueBytes =
+              beforeDiag?.throughputPipeline?.retrievedPayloadQueueBytes ?? 0;
+            let peakWorkerPreparationBytes =
+              beforeDiag?.throughputPipeline?.inFlightWorkerPreparationBytes ?? 0;
+            let maxObservedPendingMs = beforeDiag?.transitionElapsedMs ?? 0;
+            let timeWithoutValidCoverageMs = 0;
+            let lastSampleNow = performance.now();
 
-          const sampleState = () => {
-            const now = performance.now();
-            const dt = Math.max(0, now - lastSampleNow);
-            lastSampleNow = now;
-            const breakdown = h.getAttachedResolutionBreakdown() as Record<
-              string,
-              number
-            > | null;
-            if (breakdown) {
-              const count = Object.keys(breakdown).length;
-              if (count > maxSimultaneousAttached) {
-                maxSimultaneousAttached = count;
-              }
-            }
-            const hd =
-              h.getHierarchicalDiagnostics() as HierarchicalStreamingDiagnosticsSnapshot | null;
-            if (hd) {
-              if (hd.resources.totalMeasuredBytes > peakMeasuredCpuBytes) {
-                peakMeasuredCpuBytes = hd.resources.totalMeasuredBytes;
-              }
-              if (
-                hd.resources.totalEstimatedGpuBytes > peakEstimatedGpuBytes
-              ) {
-                peakEstimatedGpuBytes = hd.resources.totalEstimatedGpuBytes;
-              }
-              const dispBytes =
-                hd.frameBudget?.deferredDisposal.pendingBytes ?? 0;
-              if (dispBytes > peakPendingDisposalBytes) {
-                peakPendingDisposalBytes = dispBytes;
-              }
-              if (
-                hd.transitionState !== 'idle' &&
-                hd.transitionElapsedMs > maxObservedPendingMs
-              ) {
-                maxObservedPendingMs = hd.transitionElapsedMs;
-              }
-              if (hd.frameBudget && !hd.frameBudget.hasValidViewportCoverage) {
-                timeWithoutValidCoverageMs += dt;
-              }
-            }
-          };
-
-          const tStart = performance.now();
-          for (const wp of p.waypoints) {
-            h.setCameraPose(wp.target, wp.zoom, 45);
-            const wpStart = performance.now();
-            await new Promise<void>((resolve) => {
-              const rafLoop = () => {
-                sampleState();
-                if (performance.now() - wpStart >= wp.holdMs) {
-                  resolve();
-                  return;
+            const sampleState = () => {
+              const now = performance.now();
+              const dt = Math.max(0, now - lastSampleNow);
+              lastSampleNow = now;
+              const breakdown = h.getAttachedResolutionBreakdown() as Record<
+                string,
+                number
+              > | null;
+              if (breakdown) {
+                const count = Object.keys(breakdown).length;
+                if (count > maxSimultaneousAttached) {
+                  maxSimultaneousAttached = count;
                 }
+              }
+              const hd =
+                h.getHierarchicalDiagnostics() as HierarchicalStreamingDiagnosticsSnapshot | null;
+              if (hd) {
+                if (hd.resources.totalMeasuredBytes > peakMeasuredCpuBytes) {
+                  peakMeasuredCpuBytes = hd.resources.totalMeasuredBytes;
+                }
+                if (
+                  hd.resources.totalEstimatedGpuBytes > peakEstimatedGpuBytes
+                ) {
+                  peakEstimatedGpuBytes = hd.resources.totalEstimatedGpuBytes;
+                }
+                const dispBytes =
+                  hd.frameBudget?.deferredDisposal.pendingBytes ?? 0;
+                if (dispBytes > peakPendingDisposalBytes) {
+                  peakPendingDisposalBytes = dispBytes;
+                }
+                const rqBytes =
+                  hd.throughputPipeline?.retrievedPayloadQueueBytes ?? 0;
+                if (rqBytes > peakRetrievedPayloadQueueBytes) {
+                  peakRetrievedPayloadQueueBytes = rqBytes;
+                }
+                const wpBytes =
+                  hd.throughputPipeline?.inFlightWorkerPreparationBytes ?? 0;
+                if (wpBytes > peakWorkerPreparationBytes) {
+                  peakWorkerPreparationBytes = wpBytes;
+                }
+                if (
+                  hd.transitionState !== 'idle' &&
+                  hd.transitionElapsedMs > maxObservedPendingMs
+                ) {
+                  maxObservedPendingMs = hd.transitionElapsedMs;
+                }
+                if (hd.frameBudget && !hd.frameBudget.hasValidViewportCoverage) {
+                  timeWithoutValidCoverageMs += dt;
+                }
+              }
+            };
+
+            const tStart = performance.now();
+            for (const wp of p.waypoints) {
+              h.setCameraPose(wp.target, wp.zoom, 45);
+              const wpStart = performance.now();
+              await new Promise<void>((resolve) => {
+                const rafLoop = () => {
+                  sampleState();
+                  if (performance.now() - wpStart >= wp.holdMs) {
+                    resolve();
+                    return;
+                  }
+                  requestAnimationFrame(rafLoop);
+                };
                 requestAnimationFrame(rafLoop);
-              };
-              requestAnimationFrame(rafLoop);
-            });
-            await h.waitForM2aIdle();
-            sampleState();
+              });
+              await h.waitForM2aIdle();
+              sampleState();
+            }
+            const durationMs = performance.now() - tStart;
+
+            const afterDiag: HierarchicalStreamingDiagnosticsSnapshot =
+              h.getHierarchicalDiagnostics();
+            const snap: StreamingProfilerSnapshot =
+              h.getStreamingProfilerSnapshot();
+            h.setStreamingProfilerEnabled(false);
+
+            return {
+              durationMs,
+              beforeDiag,
+              afterDiag,
+              snap,
+              maxSimultaneousAttached,
+              peakMeasuredCpuBytes,
+              peakEstimatedGpuBytes,
+              peakPendingDisposalBytes,
+              peakRetrievedPayloadQueueBytes,
+              peakWorkerPreparationBytes,
+              maxObservedPendingMs,
+              timeWithoutValidCoverageMs,
+            };
+          },
+          {
+            scenarioId: params.scenarioId,
+            waypoints: params.waypoints,
           }
-          const durationMs = performance.now() - tStart;
-
-          const afterDiag: HierarchicalStreamingDiagnosticsSnapshot =
-            h.getHierarchicalDiagnostics();
-          const snap: StreamingProfilerSnapshot =
-            h.getStreamingProfilerSnapshot();
-          h.setStreamingProfilerEnabled(false);
-
-          return {
-            durationMs,
-            beforeDiag,
-            afterDiag,
-            snap,
-            maxSimultaneousAttached,
-            peakMeasuredCpuBytes,
-            peakEstimatedGpuBytes,
-            peakPendingDisposalBytes,
-            maxObservedPendingMs,
-            timeWithoutValidCoverageMs,
-          };
-        }, {
-          scenarioId: params.scenarioId,
-          waypoints: params.waypoints,
-        });
+        );
 
         const entry = buildScenarioMetricsFromBrowser(
           params.variantSpec,
@@ -1497,37 +1749,68 @@ export async function runHierarchicalStreamingBenchmark(
             `[bench:hierarchical] Variant=${variantSpec.runId} (foliage=${foliageEnabled ? 'ON' : 'OFF'}, budget=${variantSpec.cpuMemoryBudgetMiB} MiB)...`
           );
 
-          // 1. Cold-cache continuous simultaneous pan + zoom (fresh mosaic reload)
+          // 1. Work Package G Scenario 1: Cold transition 1,024 m -> 4,096 m
+          await reloadFreshMosaic(variantSpec, foliageEnabled, 1.6);
+          await runSteppedScenario({
+            variantSpec,
+            foliageEnabled,
+            scenarioId: 'cold_1024_to_4096',
+            description:
+              'Cold-cache direct transition from 1,024 m (zoom 1.6) to 4,096 m (zoom 0.18) until atomic activation completes',
+            waypoints: [{ target: [0, 0, 0], zoom: 0.18, holdMs: stepMs }],
+          });
+
+          // 2. Work Package G Scenario 2: Cold transition 2,048 m -> 4,096 m
+          await reloadFreshMosaic(variantSpec, foliageEnabled, 0.55);
+          await runSteppedScenario({
+            variantSpec,
+            foliageEnabled,
+            scenarioId: 'cold_2048_to_4096',
+            description:
+              'Cold-cache transition from 2,048 m (zoom 0.55) to 4,096 m (zoom 0.18) until atomic activation completes',
+            waypoints: [{ target: [0, 0, 0], zoom: 0.18, holdMs: stepMs }],
+          });
+
+          // 3. Work Package G Scenario 3: Gradual zoom-out with continuous panning that completes 4,096 m activation
           await reloadFreshMosaic(variantSpec, foliageEnabled, 1.6);
           await runContinuousMotionScenario({
             variantSpec,
             foliageEnabled,
-            scenarioId: 'simultaneous_pan_zoom_cold',
+            scenarioId: 'gradual_zoom_out_pan_complete',
             description:
-              'Cold-cache continuous elapsed-time simultaneous pan + zoom (1.6 -> 0.18 -> 1.6) without waiting for streaming to settle',
+              'Cold-cache gradual zoom-out (1.6 -> 0.18) with continuous panning that holds destination zoom until 4,096 m activation completes',
             durationMs: continuousTotalMs,
-            trajectoryKind: 'pan_zoom_sweep',
+            trajectoryKind: 'gradual_zoom_out_pan_complete',
           });
 
-          // Let pending transitions finish briefly between cold and warm scenarios
+          // 4. Work Package G Scenario 4: Sustained regional navigation at 4,096 m and 2,048 m
+          await runContinuousMotionScenario({
+            variantSpec,
+            foliageEnabled,
+            scenarioId: 'sustained_regional_zoom_pan',
+            description:
+              'Sustained regional navigation across 2,048 m and 4,096 m with continuous panning and destination hold plateaus',
+            durationMs: continuousTotalMs,
+            trajectoryKind: 'sustained_regional_zoom_pan',
+          });
+
+          // 5. Work Package G Scenario 5: Warm-cache transitions
           await page.evaluate(async () => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             h.setCameraPose([0, 0, 0], 1.6, 45);
             await h.waitForM2aIdle();
           });
-
-          // 2. Warm-cache continuous simultaneous pan + zoom
           await runContinuousMotionScenario({
             variantSpec,
             foliageEnabled,
-            scenarioId: 'simultaneous_pan_zoom_warm',
+            scenarioId: 'warm_cache_transitions',
             description:
-              'Warm-cache continuous elapsed-time simultaneous pan + zoom (1.6 -> 0.18 -> 1.6) checking cache/GPU prep reuse',
+              'Warm-cache continuous simultaneous pan + zoom (1.6 -> 0.18 hold -> 1.6) evaluating cache/prewarm reuse',
             durationMs: continuousTotalMs,
             trajectoryKind: 'pan_zoom_sweep',
           });
 
-          // 3. Rapid zoom reversal while continuously panning
+          // 6. Work Package G Scenario 6: Rapid zoom reversals (separate test for genuinely cancelled/debounced transitions)
           await page.evaluate(async () => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             h.setCameraPose([0, 0, 0], 1.15, 45);
@@ -1538,12 +1821,26 @@ export async function runHierarchicalStreamingBenchmark(
             foliageEnabled,
             scenarioId: 'rapid_zoom_reversal_pan',
             description:
-              'Continuous pan with rapid zoom reversals across threshold then sustained zoom-out & zoom-in',
+              'Continuous pan with rapid zoom reversals across threshold (testing genuine cancellations/debounce) followed by sustained 4,096 m completion',
             durationMs: reversalTotalMs,
             trajectoryKind: 'rapid_zoom_reversal_pan',
           });
 
-          // 4. Repeated resolution transitions during continuous pan
+          // 7. Work Package G Scenario 7: Direct long-distance jump / teleport
+          await runSteppedScenario({
+            variantSpec,
+            foliageEnabled,
+            scenarioId: 'direct_long_distance_teleport',
+            description:
+              'Long-distance spatial teleport combined with resolution jump (1,024 m @ origin -> 4,096 m @ +1,500m -> 1,024 m @ -1,500m)',
+            waypoints: [
+              { target: [1500, 0, 1500], zoom: 0.18, holdMs: stepMs },
+              { target: [-1500, 0, -1500], zoom: 1.6, holdMs: stepMs },
+              { target: [0, 0, 0], zoom: 0.55, holdMs: stepMs },
+            ],
+          });
+
+          // 8. Work Package G Scenario 8: Repeated transitions under memory pressure
           await page.evaluate(async () => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             h.setCameraPose([0, 0, 0], 1.5, 45);
@@ -1552,14 +1849,14 @@ export async function runHierarchicalStreamingBenchmark(
           await runContinuousMotionScenario({
             variantSpec,
             foliageEnabled,
-            scenarioId: 'repeated_resolution_transitions_pan',
+            scenarioId: 'repeated_transitions_memory_pressure',
             description:
-              'Continuous circular pan with repeated 1024 -> 2048 -> 4096 -> 2048 -> 1024 -> 4096 -> 1024 transitions',
+              'Continuous circular pan with repeated 1,024 -> 2,048 -> 4,096 -> 2,048 -> 1,024 transitions exercising LRU cache and deferred disposal',
             durationMs: repeatedTotalMs,
             trajectoryKind: 'repeated_transitions_pan',
           });
 
-          // 5. Stepped full zoom sweep (1024 -> 2048 -> 4096 -> 2048 -> 1024) for deterministic transition-latency verification
+          // 9. Stepped full zoom sweep (1024 -> 2048 -> 4096 -> 2048 -> 1024) for direct comparison with TKT-041-F1
           await page.evaluate(async () => {
             const h = (window as any).__BENCHMARK_HARNESS__;
             h.setCameraPose([0, 0, 0], 1.6, 45);
@@ -1581,20 +1878,7 @@ export async function runHierarchicalStreamingBenchmark(
           });
 
           if (variantSpec.runId === primaryVariantForExtras) {
-            // 6. Direct non-adjacent jump (1024 <-> 4096)
-            await runSteppedScenario({
-              variantSpec,
-              foliageEnabled,
-              scenarioId: 'direct_jump_1024_4096',
-              description:
-                'Direct jump 1,024 m -> 4,096 m -> 1,024 m without intermediate stop',
-              waypoints: [
-                { target: [0, 0, 0], zoom: 0.18, holdMs: stepMs },
-                { target: [0, 0, 0], zoom: 1.6, holdMs: stepMs },
-              ],
-            });
-
-            // 7. Hysteresis deadband oscillation stability (0 transitions expected)
+            // Hysteresis deadband oscillation stability (0 transitions expected)
             await page.evaluate(async () => {
               const h = (window as any).__BENCHMARK_HARNESS__;
               h.setCameraPose([0, 0, 0], 1.2, 45);
@@ -1615,7 +1899,7 @@ export async function runHierarchicalStreamingBenchmark(
               ],
             });
 
-            // 8. Feature picking latency & cross-resolution parity (with Section 8 validity check)
+            // Feature picking latency & cross-resolution parity (with Section 8 validity check)
             const ndcGrid: Array<[number, number]> = [
               [0, 0],
               [-0.25, -0.25],
@@ -1714,7 +1998,7 @@ export async function runHierarchicalStreamingBenchmark(
               allResolutionsValid,
             });
 
-            // 9. Auto vs. forced single-resolution modes (Section 8 strict comparison validity guard)
+            // Auto vs. forced single-resolution modes (Section 8 strict comparison validity guard)
             const comparisonPoses: Array<{
               poseLabel: 'Street' | 'Mid' | 'Regional';
               zoom: number;
@@ -1835,7 +2119,7 @@ export async function runHierarchicalStreamingBenchmark(
       }
 
       const report: HierarchicalStreamingBenchmarkReport = {
-        schemaVersion: '2.0.0-tkt041-f1',
+        schemaVersion: '3.0.0-tkt041-f2',
         generatedAtIso: new Date().toISOString(),
         viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
         themeId: opts.themeId,

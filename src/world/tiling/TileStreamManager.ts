@@ -246,6 +246,7 @@ export interface TileStreamDiagnosticsSnapshot {
   decodingTiles: number;
   readyToCommitTiles: number;
   failedTiles: number;
+  lastTileError: string | null;
   evictedTilesTotal: number;
   cancelledRequestsTotal: number;
   duplicateRequestsSkippedTotal: number;
@@ -1124,6 +1125,7 @@ export class TileStreamManager {
   private activeDecodeCount = 0;
   private tailTileBoostsAppliedTotal = 0;
   private ageEscalationsAppliedTotal = 0;
+  private lastTileError: string | null = null;
   private requestGenerationCounter = 1;
   private isDisposed = false;
 
@@ -5847,6 +5849,9 @@ export class TileStreamManager {
         pendingPreparedTiles += 1;
       } else if (record.state === 'error') {
         failedTiles += 1;
+        if (!this.lastTileError && record.lastError) {
+          this.lastTileError = `${key}: ${record.lastError}`;
+        }
       }
     }
 
@@ -6016,6 +6021,7 @@ export class TileStreamManager {
       decodingTiles,
       readyToCommitTiles,
       failedTiles,
+      lastTileError: this.lastTileError,
       evictedTilesTotal: this.evictedTilesTotal,
       cancelledRequestsTotal: this.cancelledRequestsTotal,
       duplicateRequestsSkippedTotal: this.duplicateRequestsSkippedTotal,
@@ -6153,6 +6159,7 @@ export class TileStreamManager {
     this.wastedPrewarmBytes = 0;
     this.prewarmedTilesActivatedTotal = 0;
     this.lastPreparationLeadTimeMs = 0;
+    this.lastTileError = null;
     this.workloadScheduler.resetStats();
     this.gpuPreparer.resetStats();
     this.deferredDisposalQueue.resetStats();
@@ -6875,6 +6882,7 @@ export class TileStreamManager {
           record.state = 'error';
           record.lastError = msg;
           record.abortController = null;
+          this.lastTileError = `${tileKey}: ${msg}`;
           this.needsViewportRefresh = true;
 
           const profAtErr =
@@ -6889,6 +6897,7 @@ export class TileStreamManager {
               detail: { reason: msg },
             });
           }
+          this.emitDiagnostics();
         }
       } finally {
         releaseHttpSlot();
@@ -7169,6 +7178,7 @@ export class TileStreamManager {
           record.state = 'error';
           record.lastError = msg;
           record.abortController = null;
+          this.lastTileError = `${tileKey}: ${msg}`;
           this.needsViewportRefresh = true;
 
           const profAtErr =
@@ -7183,6 +7193,7 @@ export class TileStreamManager {
               detail: { reason: msg },
             });
           }
+          this.emitDiagnostics();
         }
       } finally {
         this.activeDecodeCount = Math.max(0, this.activeDecodeCount - 1);
@@ -7439,6 +7450,7 @@ export class TileStreamManager {
           record.state = 'error';
           record.lastError = msg;
           record.abortController = null;
+          this.lastTileError = `${tileKey}: ${msg}`;
           this.needsViewportRefresh = true;
 
           const profAtErr =
@@ -7453,6 +7465,7 @@ export class TileStreamManager {
               detail: { reason: msg },
             });
           }
+          this.emitDiagnostics();
         }
       } finally {
         this.activeFetchCount = Math.max(0, this.activeFetchCount - 1);

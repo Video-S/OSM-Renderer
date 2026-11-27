@@ -1041,11 +1041,31 @@ export default function App() {
         hierarchicalBudget: resolvedHierarchicalBudget,
         streamingFrameBudget: resolvedStreamingFrameBudget,
         onDiagnosticsChange: (diag) => {
+          if (diag.failedTiles > 0 && readinessWaitersRef.current.length > 0) {
+            const remaining: typeof readinessWaitersRef.current = [];
+            for (const waiter of readinessWaitersRef.current) {
+              if (waiter.expected.datasetId === 'hengelo_m2a_tiles') {
+                clearTimeout(waiter.timer);
+                waiter.reject(
+                  new Error(
+                    `Tile streaming decode/fetch failure (${diag.failedTiles} failed tile(s)): ${diag.lastTileError || 'unknown tile error'}`
+                  )
+                );
+              } else {
+                remaining.push(waiter);
+              }
+            }
+            readinessWaitersRef.current = remaining;
+          }
           if (typeof window !== 'undefined' && (window as any).__BENCHMARK_ACTIVE__ === true) {
             return;
           }
           const now = performance.now();
-          if (diag.loadingTiles === 0 || now - lastM2aDiagUiTimeRef.current >= 80) {
+          if (
+            diag.failedTiles > 0 ||
+            diag.loadingTiles === 0 ||
+            now - lastM2aDiagUiTimeRef.current >= 80
+          ) {
             lastM2aDiagUiTimeRef.current = now;
             setM2aStreamDiagnostics(diag);
           }
@@ -2096,6 +2116,20 @@ export default function App() {
         continue;
       }
       const snap = buildLiveHarnessSnapshot();
+      const ts = snap.tileStreamingStats;
+      if (
+        waiter.expected.datasetId === 'hengelo_m2a_tiles' &&
+        ts &&
+        ts.failedTiles > 0
+      ) {
+        clearTimeout(waiter.timer);
+        waiter.reject(
+          new Error(
+            `Tile streaming decode/fetch failure (${ts.failedTiles} failed tile(s)): ${ts.lastTileError || 'unknown tile error'}`
+          )
+        );
+        continue;
+      }
       const check = validateSceneReadinessSnapshot(snap, waiter.expected);
       if (check.ready) {
         clearTimeout(waiter.timer);
@@ -2113,6 +2147,18 @@ export default function App() {
     timeoutMs: number = 30000
   ): Promise<void> => {
     const existingSnap = buildLiveHarnessSnapshot();
+    if (
+      expected.datasetId === 'hengelo_m2a_tiles' &&
+      existingSnap.tileStreamingStats &&
+      existingSnap.tileStreamingStats.failedTiles > 0
+    ) {
+      const ts = existingSnap.tileStreamingStats;
+      return Promise.reject(
+        new Error(
+          `Tile streaming decode/fetch failure (${ts.failedTiles} failed tile(s)): ${ts.lastTileError || 'unknown tile error'}`
+        )
+      );
+    }
     const immediateCheck = validateSceneReadinessSnapshot(existingSnap, expected);
     if (immediateCheck.ready) {
       return Promise.resolve();
@@ -2124,10 +2170,26 @@ export default function App() {
           (w) => w.targetRevision !== targetRevision
         );
         const finalSnap = buildLiveHarnessSnapshot();
+        const ts = finalSnap.tileStreamingStats;
+        if (
+          expected.datasetId === 'hengelo_m2a_tiles' &&
+          ts &&
+          ts.failedTiles > 0
+        ) {
+          reject(
+            new Error(
+              `Tile streaming decode/fetch failure (${ts.failedTiles} failed tile(s)): ${ts.lastTileError || 'unknown tile error'}`
+            )
+          );
+          return;
+        }
         const finalCheck = validateSceneReadinessSnapshot(finalSnap, expected);
+        const streamDetail = ts
+          ? ` [streaming: loaded=${ts.loadedTiles}, queued=${ts.queuedTiles}, fetching=${ts.fetchingTiles}, retrievedQueued=${ts.retrievedQueuedTiles}, decoding=${ts.decodingTiles}, readyToCommit=${ts.readyToCommitTiles}, failed=${ts.failedTiles}, lastTileError=${ts.lastTileError ?? 'none'}]`
+          : '';
         reject(
           new Error(
-            `Timed out after ${timeoutMs}ms waiting for scene readiness (revision=${targetRevision}): ${finalCheck.reason || 'unknown readiness failure'}`
+            `Timed out after ${timeoutMs}ms waiting for scene readiness (revision=${targetRevision}): ${finalCheck.reason || 'unknown readiness failure'}${streamDetail}`
           )
         );
       }, timeoutMs);
@@ -2779,9 +2841,16 @@ export default function App() {
           await new Promise<void>((r) => requestAnimationFrame(() => r()));
           await new Promise<void>((r) => requestAnimationFrame(() => r()));
         }
+        const finalDiagnostics =
+          tileStreamManagerRef.current?.getDiagnostics() ?? null;
+        if (finalDiagnostics && finalDiagnostics.failedTiles > 0) {
+          throw new Error(
+            `Tile streaming decode/fetch failure (${finalDiagnostics.failedTiles} failed tile(s)): ${finalDiagnostics.lastTileError || 'unknown tile error'}`
+          );
+        }
         return {
           ...res,
-          diagnostics: tileStreamManagerRef.current?.getDiagnostics() ?? null,
+          diagnostics: finalDiagnostics,
         };
       },
       waitForM2aIdle: async () => {
@@ -2789,7 +2858,13 @@ export default function App() {
         await tileStreamManagerRef.current.waitForIdle();
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
         await new Promise<void>((r) => requestAnimationFrame(() => r()));
-        return tileStreamManagerRef.current.getDiagnostics();
+        const diag = tileStreamManagerRef.current.getDiagnostics();
+        if (diag.failedTiles > 0) {
+          throw new Error(
+            `Tile streaming decode/fetch failure (${diag.failedTiles} failed tile(s)): ${diag.lastTileError || 'unknown tile error'}`
+          );
+        }
+        return diag;
       },
       resetM2aPerfCounters: () => {
         tileStreamManagerRef.current?.resetPerformanceCounters();

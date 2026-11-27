@@ -63,7 +63,8 @@ Owner hardware validation of `TKT-041-F1` confirmed that frame-budgeted scheduli
 
 ### Work Package D — Concurrency Tuning, Compressed HTTP Transfer & Transition GPU Upload Cap
 - Made HTTP concurrency (`maxConcurrentHttpRetrievals`: `6, 8, 12`) and worker pool concurrency (`workerConcurrency`: `2, 4`) configurable at runtime and via URL parameters (`?maxHttpConcurrency=...&workerConcurrency=...`).
-- Added optional compressed HTTP transfer (`useCompressedHttpTransfer` / `?compressedTransfer=1`): requests `/api/tiles/...?compressed=1` so the server skips synchronous `zlib.inflateSync` and transfers compact deflate bytes (~3–5× smaller HTTP payload), while `TileDecodeWorker` decompresses off the main thread via `DecompressionStream('deflate')`.
+- Added optional compressed HTTP transfer (`useCompressedHttpTransfer` / `?compressedTransfer=1`): requests `/api/tiles/...?compressed=1` so the server skips synchronous `zlib.inflateSync` and transfers compact deflate bytes (~3–5× smaller HTTP payload), while `TileDecodeWorker` decompresses off the main thread via concurrent `DecompressionStream('deflate')` consumption (`new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer()`), preserving the uncompressed `OSMTILE1` fast path and avoiding stream backpressure deadlocks on large (`>160 MiB`) tiles.
+- Added per-job worker decode timeouts (`TileDecodeClient.ts`), `lastTileError` diagnostic tracking (`TileStreamManager.ts`), and immediate error rejection in `App.tsx` (`waitForSceneReady` / `loadM2aStreaming`) so decode failures surface explicitly rather than timing out after 120 seconds.
 - Raised the time-governed transition GPU upload slice cap (`24 MiB / 16 units` in `f2_tuned_concurrency` and `f2_combined`), still bounded by the per-frame scheduler budget.
 
 ### Work Package E — Latency-Aware Adaptive Preparation Horizon & Predicted Viewport Bounds
@@ -81,7 +82,7 @@ Owner hardware validation of `TKT-041-F1` confirmed that frame-budgeted scheduli
   - `f2_tuned_concurrency`
   - `f2_latency_aware_prewarm`
   - `f2_combined` (new interactive default)
-- Extended `benchmarks/hierarchicalStreamingRunner.ts` with all 8 required scenarios (plus `zoom_sweep_1024_2048_4096_back`) and `--f2-matrix` to compare `combined_prewarm` against all 5 staged F2 variants.
+- Extended `benchmarks/hierarchicalStreamingRunner.ts` with all 8 required scenarios (plus `zoom_sweep_1024_2048_4096_back`) and `--variants=f2_all` (along with `--http-concurrency=...` and `--worker-concurrency=...`) to compare `combined_prewarm` against all 5 staged F2 variants.
 
 ## Acceptance Criteria
 
@@ -93,13 +94,13 @@ Owner hardware validation of `TKT-041-F1` confirmed that frame-budgeted scheduli
 - [x] Uniform viewport resolution and atomic activation are preserved (`attachedResolutions.size <= 1`).
 - [x] Existing feature picking and visual fidelity are preserved (`OSMTILE1` v1 compatibility; zero rebaking or reconsolidation).
 - [x] Streaming versus rendering granularity options (Candidates A, B, C across all 10 dimensions) are evaluated with a clear recommendation and decision gate in `docs/reports/tkt041-f2-streaming-throughput-and-granularity.md`.
-- [x] Automated tests cover independent stage queuing, oversized-payload forward progress, dynamic reprioritization, running-job retention, adaptive prewarming, destination progress under continuous active panning, picking parity, and leak-free cancellation across all stages (`src/world/StreamingThroughputAndLatency.test.ts`).
+- [x] Automated tests cover independent stage queuing, oversized-payload forward progress, dynamic reprioritization, running-job retention, adaptive prewarming, destination progress under continuous active panning, picking parity, leak-free cancellation across all stages, byte-exact decompression of small to `>160 MiB` payloads, and actual browser Web Worker compressed tile decoding + explicit decode failure surfacing (`src/world/StreamingThroughputAndLatency.test.ts`).
 - [ ] Owner validates real-data transition latency (`>= 50%` cold-transition latency reduction target or hardware throughput ceiling characterization) and interactive fluidity on the full Twente dataset (`data/osm/twente-full-hierarchical.json`).
 
 ## Verification
 
 ### Automated Verification Executed in Sandbox (`2026-11-27`)
-- `npx tsx --test src/world/StreamingThroughputAndLatency.test.ts src/world/FrameBudgetedStreaming.test.ts src/world/HierarchicalTileStreaming.test.ts src/world/NonBlockingTilePreparation.test.ts` — **23 / 23 tests passed** (`7/7` in `StreamingThroughputAndLatency.test.ts`, `6/6` in `FrameBudgetedStreaming.test.ts`, `4/4` in `HierarchicalTileStreaming.test.ts`, `6/6` in `NonBlockingTilePreparation.test.ts`).
+- `npx tsx --test src/world/StreamingThroughputAndLatency.test.ts src/world/FrameBudgetedStreaming.test.ts src/world/HierarchicalTileStreaming.test.ts src/world/NonBlockingTilePreparation.test.ts` — **25 / 25 tests passed** (`9/9` in `StreamingThroughputAndLatency.test.ts`, `6/6` in `FrameBudgetedStreaming.test.ts`, `4/4` in `HierarchicalTileStreaming.test.ts`, `6/6` in `NonBlockingTilePreparation.test.ts`).
 - `npm run lint` (`tsc --noEmit`), `npm run build`, and `npm run docs:api`.
 
 ### Outstanding Verification (Requires Owner Hardware & Local Twente Dataset)

@@ -107,6 +107,8 @@ export interface TileDecodeClientOptions {
   reservedDestinationWorkerSlots?: number;
   /** Force inline async decode (useful for deterministic unit tests). */
   forceInlineDecode?: boolean;
+  /** Maximum duration (ms) a dispatched Web Worker decode job may run before timing out (default: 30000). */
+  workerJobTimeoutMs?: number;
   /** Initial TKT-040 tile preparation variant or explicit options (default: 'combined'). */
   preparationOptions?: TilePreparationVariantId | Partial<TilePreparationOptions>;
   /** Optional hook fired synchronously at the end of `worker.onmessage` for frame attribution. */
@@ -125,6 +127,7 @@ interface PendingJob {
   clientQueueWaitMs: number;
   signal?: AbortSignal;
   abortHandler?: () => void;
+  timeoutTimer?: ReturnType<typeof setTimeout>;
   resolve: (result: TileDecodeResult) => void;
   reject: (err: Error) => void;
 }
@@ -170,6 +173,12 @@ export function createTileDecodeClient(
       options.reservedDestinationWorkerSlots ?? 0
     )
   );
+  const workerJobTimeoutMs =
+    typeof options.workerJobTimeoutMs === 'number' &&
+    Number.isFinite(options.workerJobTimeoutMs) &&
+    options.workerJobTimeoutMs > 0
+      ? Math.max(250, Math.floor(options.workerJobTimeoutMs))
+      : 30000;
   let currentPrepOptions: TilePreparationOptions = resolveTilePreparationOptions(
     options.preparationOptions
   );
@@ -196,6 +205,16 @@ export function createTileDecodeClient(
     !options.forceInlineDecode &&
     typeof Worker !== 'undefined' &&
     typeof window !== 'undefined';
+
+  const clearJobListeners = (job: PendingJob): void => {
+    if (job.timeoutTimer !== undefined) {
+      clearTimeout(job.timeoutTimer);
+      job.timeoutTimer = undefined;
+    }
+    if (job.abortHandler && job.signal) {
+      job.signal.removeEventListener('abort', job.abortHandler);
+    }
+  };
 
   const countActiveDestinationWorkers = (): number => {
     let count = 0;
@@ -262,6 +281,156 @@ export function createTileDecodeClient(
     return queuedJobs.splice(bestIdx, 1)[0];
   };
 
+  const spawnWorkerInstance = (): Worker => {
+    const worker = new Worker(
+      new URL('./TileDecodeWorker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    worker.onmessage = (event: MessageEvent<TileDecodeWorkerResponse>) => {
+      const onMessageStartMs = performance.now();
+      const onMessageEnterEpochMs = nowEpochMs();
+      const response = event.data;
+      const active = activeJobsByRequestId.get(response.requestId);
+      if (!active) return;
+
+      activeJobsByRequestId.delete(response.requestId);
+      busyWorkers.delete(active.worker);
+
+      const { job } = active;
+      clearJobListeners(job);
+
+      const workerExecMs = response.ok
+        ? response.decodeDurationMs
+        : Math.max(0, onMessageStartMs - job.dispatchedAtMs);
+      totalWorkerActiveTimeMs += workerExecMs;
+
+      let deliveredTimings: WorkerDecodeStageTimings | null = null;
+      const wasAborted = Boolean(job.signal?.aborted);
+
+      if (wasAborted && !job.retainIfRunningOnAbort) {
+        totalJobsAbortedWhileRunning += 1;
+        wastedWorkerTimeMs += workerExecMs;
+        job.reject(createAbortError(job.tileKey));
+      } else if (response.ok) {
+        if (wasAborted) {
+          totalJobsRetainedAfterAbort += 1;
+        }
+        totalJobsCompleted += 1;
+        const wt = response.workerTimings;
+        const deliveryLatencyMs = Number(
+          Math.max(
+            0,
+            onMessageEnterEpochMs - wt.workerPostMessageStartEpochMs
+          ).toFixed(3)
+        );
+        deliveredTimings = {
+          usedWebWorker: true,
+          usedCompactTransport: wt.usedCompactTransport,
+          transferAllTypedArrays: wt.transferAllTypedArrays,
+          workerInstanceBvhEnabled: wt.workerInstanceBvhEnabled,
+          workerQueueWaitMs: wt.workerQueueWaitMs,
+          workerInflateMs: wt.workerInflateMs,
+          workerDecodeOnlyMs: wt.workerDecodeOnlyMs,
+          workerInflateAndDecodeMs: wt.workerInflateAndDecodeMs,
+          workerBvhBuildMs: wt.workerBvhBuildMs,
+          workerPayloadPrepMs: wt.workerPayloadPrepMs,
+          workerPostMessageCallMs: 0,
+          workerTotalMs: wt.workerTotalBeforePostMessageMs,
+          messageDeliveryLatencyMs: deliveryLatencyMs,
+          mainOnMessageHandlerMs: 0,
+          mainPromiseContinuationMs: 0,
+          mainOnMessageStartMs: onMessageStartMs,
+          mainOnMessageEndMs: onMessageStartMs,
+          transferableBufferCount: wt.transferableBufferCount,
+          transferableBytes: wt.transferableBytes,
+          workerBvhBatchCount: wt.workerBvhBatchCount,
+          workerBvhInstanceCount: wt.workerBvhInstanceCount,
+        };
+        job.resolve({
+          decoded: response.decoded,
+          decodeDurationMs: response.decodeDurationMs,
+          usedWebWorker: true,
+          workerTimings: deliveredTimings,
+          clientQueueWaitMs: Number(job.clientQueueWaitMs.toFixed(3)),
+          completedAfterAbort: wasAborted,
+        });
+      } else {
+        const errResp = response as TileDecodeWorkerErrorResponse;
+        job.reject(new Error(`TileDecodeWorker failed for ${job.tileKey}: ${errResp.error}`));
+      }
+
+      pumpQueue();
+
+      const onMessageEndMs = performance.now();
+      const handlerDurationMs = Math.max(0, onMessageEndMs - onMessageStartMs);
+      if (deliveredTimings) {
+        deliveredTimings.mainOnMessageHandlerMs = Number(
+          handlerDurationMs.toFixed(3)
+        );
+        deliveredTimings.mainOnMessageEndMs = onMessageEndMs;
+        options.onWorkerMessageDelivered?.({
+          tileKey: job.tileKey,
+          onMessageStartMs,
+          onMessageEndMs,
+          handlerDurationMs,
+          timings: deliveredTimings,
+        });
+      }
+    };
+
+    const failActiveJobsOnWorker = (reasonPrefix: string, detail?: string): void => {
+      for (const [reqId, active] of activeJobsByRequestId.entries()) {
+        if (active.worker === worker) {
+          activeJobsByRequestId.delete(reqId);
+          busyWorkers.delete(worker);
+          clearJobListeners(active.job);
+          active.job.reject(
+            new Error(
+              detail
+                ? `${reasonPrefix} for ${active.job.tileKey}: ${detail}`
+                : `${reasonPrefix} for ${active.job.tileKey}`
+            )
+          );
+        }
+      }
+      pumpQueue();
+    };
+
+    worker.onerror = (event: ErrorEvent) => {
+      failActiveJobsOnWorker('TileDecodeWorker error', event.message);
+    };
+
+    worker.onmessageerror = () => {
+      failActiveJobsOnWorker('TileDecodeWorker message deserialization error');
+    };
+
+    return worker;
+  };
+
+  const replaceHungWorker = (stuckWorker: Worker): void => {
+    busyWorkers.delete(stuckWorker);
+    try {
+      stuckWorker.terminate();
+    } catch {
+      // ignore
+    }
+    const idx = workers.indexOf(stuckWorker);
+    if (disposed) {
+      if (idx !== -1) workers.splice(idx, 1);
+      return;
+    }
+    try {
+      const replacement = spawnWorkerInstance();
+      if (idx !== -1) {
+        workers[idx] = replacement;
+      } else {
+        workers.push(replacement);
+      }
+    } catch {
+      if (idx !== -1) workers.splice(idx, 1);
+    }
+  };
+
   const pumpQueue = (): void => {
     if (disposed || workers.length === 0) return;
 
@@ -272,9 +441,7 @@ export function createTileDecodeClient(
       const job = popNextEligibleJob();
       if (!job) break;
       if (job.signal?.aborted) {
-        if (job.abortHandler && job.signal) {
-          job.signal.removeEventListener('abort', job.abortHandler);
-        }
+        clearJobListeners(job);
         totalJobsAbortedInQueue += 1;
         job.reject(createAbortError(job.tileKey));
         continue;
@@ -287,6 +454,21 @@ export function createTileDecodeClient(
       busyWorkers.add(idleWorker);
       activeJobsByRequestId.set(job.requestId, { job, worker: idleWorker });
 
+      job.timeoutTimer = setTimeout(() => {
+        const active = activeJobsByRequestId.get(job.requestId);
+        if (!active) return;
+        activeJobsByRequestId.delete(job.requestId);
+        clearJobListeners(active.job);
+        wastedWorkerTimeMs += workerJobTimeoutMs;
+        replaceHungWorker(active.worker);
+        active.job.reject(
+          new Error(
+            `TileDecodeWorker timed out after ${workerJobTimeoutMs}ms decoding ${active.job.tileKey}`
+          )
+        );
+        pumpQueue();
+      }, workerJobTimeoutMs);
+
       const message: TileDecodeWorkerRequest = {
         requestId: job.requestId,
         tileKey: job.tileKey,
@@ -297,11 +479,9 @@ export function createTileDecodeClient(
       try {
         idleWorker.postMessage(message, [job.buffer]);
       } catch (err) {
+        clearJobListeners(job);
         busyWorkers.delete(idleWorker);
         activeJobsByRequestId.delete(job.requestId);
-        if (job.abortHandler && job.signal) {
-          job.signal.removeEventListener('abort', job.abortHandler);
-        }
         job.reject(
           err instanceof Error ? err : new Error(String(err))
         );
@@ -312,128 +492,7 @@ export function createTileDecodeClient(
   if (canUseBrowserWorker) {
     try {
       for (let i = 0; i < poolSize; i++) {
-        const worker = new Worker(
-          new URL('./TileDecodeWorker.ts', import.meta.url),
-          { type: 'module' }
-        );
-        worker.onmessage = (event: MessageEvent<TileDecodeWorkerResponse>) => {
-          const onMessageStartMs = performance.now();
-          const onMessageEnterEpochMs = nowEpochMs();
-          const response = event.data;
-          const active = activeJobsByRequestId.get(response.requestId);
-          if (!active) return;
-
-          activeJobsByRequestId.delete(response.requestId);
-          busyWorkers.delete(active.worker);
-
-          const { job } = active;
-          if (job.abortHandler && job.signal) {
-            job.signal.removeEventListener('abort', job.abortHandler);
-          }
-
-          const workerExecMs = response.ok
-            ? response.decodeDurationMs
-            : Math.max(0, onMessageStartMs - job.dispatchedAtMs);
-          totalWorkerActiveTimeMs += workerExecMs;
-
-          let deliveredTimings: WorkerDecodeStageTimings | null = null;
-          const wasAborted = Boolean(job.signal?.aborted);
-
-          if (wasAborted && !job.retainIfRunningOnAbort) {
-            totalJobsAbortedWhileRunning += 1;
-            wastedWorkerTimeMs += workerExecMs;
-            job.reject(createAbortError(job.tileKey));
-          } else if (response.ok) {
-            if (wasAborted) {
-              totalJobsRetainedAfterAbort += 1;
-            }
-            totalJobsCompleted += 1;
-            const wt = response.workerTimings;
-            const deliveryLatencyMs = Number(
-              Math.max(
-                0,
-                onMessageEnterEpochMs - wt.workerPostMessageStartEpochMs
-              ).toFixed(3)
-            );
-            deliveredTimings = {
-              usedWebWorker: true,
-              usedCompactTransport: wt.usedCompactTransport,
-              transferAllTypedArrays: wt.transferAllTypedArrays,
-              workerInstanceBvhEnabled: wt.workerInstanceBvhEnabled,
-              workerQueueWaitMs: wt.workerQueueWaitMs,
-              workerInflateMs: wt.workerInflateMs,
-              workerDecodeOnlyMs: wt.workerDecodeOnlyMs,
-              workerInflateAndDecodeMs: wt.workerInflateAndDecodeMs,
-              workerBvhBuildMs: wt.workerBvhBuildMs,
-              workerPayloadPrepMs: wt.workerPayloadPrepMs,
-              workerPostMessageCallMs: 0,
-              workerTotalMs: wt.workerTotalBeforePostMessageMs,
-              messageDeliveryLatencyMs: deliveryLatencyMs,
-              mainOnMessageHandlerMs: 0,
-              mainPromiseContinuationMs: 0,
-              mainOnMessageStartMs: onMessageStartMs,
-              mainOnMessageEndMs: onMessageStartMs,
-              transferableBufferCount: wt.transferableBufferCount,
-              transferableBytes: wt.transferableBytes,
-              workerBvhBatchCount: wt.workerBvhBatchCount,
-              workerBvhInstanceCount: wt.workerBvhInstanceCount,
-            };
-            job.resolve({
-              decoded: response.decoded,
-              decodeDurationMs: response.decodeDurationMs,
-              usedWebWorker: true,
-              workerTimings: deliveredTimings,
-              clientQueueWaitMs: Number(job.clientQueueWaitMs.toFixed(3)),
-              completedAfterAbort: wasAborted,
-            });
-          } else {
-            const errResp = response as TileDecodeWorkerErrorResponse;
-            job.reject(new Error(errResp.error));
-          }
-
-          pumpQueue();
-
-          const onMessageEndMs = performance.now();
-          const handlerDurationMs = Math.max(0, onMessageEndMs - onMessageStartMs);
-          if (deliveredTimings) {
-            deliveredTimings.mainOnMessageHandlerMs = Number(
-              handlerDurationMs.toFixed(3)
-            );
-            deliveredTimings.mainOnMessageEndMs = onMessageEndMs;
-            options.onWorkerMessageDelivered?.({
-              tileKey: job.tileKey,
-              onMessageStartMs,
-              onMessageEndMs,
-              handlerDurationMs,
-              timings: deliveredTimings,
-            });
-          }
-        };
-
-        worker.onerror = (event: ErrorEvent) => {
-          // Reject any job currently running on this worker
-          for (const [reqId, active] of activeJobsByRequestId.entries()) {
-            if (active.worker === worker) {
-              activeJobsByRequestId.delete(reqId);
-              busyWorkers.delete(worker);
-              if (active.job.abortHandler && active.job.signal) {
-                active.job.signal.removeEventListener(
-                  'abort',
-                  active.job.abortHandler
-                );
-              }
-              active.job.reject(
-                new Error(
-                  event.message ||
-                    `TileDecodeWorker error for ${active.job.tileKey}`
-                )
-              );
-            }
-          }
-          pumpQueue();
-        };
-
-        workers.push(worker);
+        workers.push(spawnWorkerInstance());
       }
     } catch {
       // Fallback to inline decode if Worker construction fails in test/SSR environment
@@ -682,18 +741,11 @@ export function createTileDecodeClient(
       disposed = true;
       while (queuedJobs.length > 0) {
         const job = queuedJobs.shift()!;
-        if (job.abortHandler && job.signal) {
-          job.signal.removeEventListener('abort', job.abortHandler);
-        }
+        clearJobListeners(job);
         job.reject(new Error('TileDecodeClient disposed'));
       }
       for (const [, active] of activeJobsByRequestId.entries()) {
-        if (active.job.abortHandler && active.job.signal) {
-          active.job.signal.removeEventListener(
-            'abort',
-            active.job.abortHandler
-          );
-        }
+        clearJobListeners(active.job);
         active.job.reject(new Error('TileDecodeClient disposed'));
       }
       activeJobsByRequestId.clear();

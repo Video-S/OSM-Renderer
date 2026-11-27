@@ -298,11 +298,11 @@ export async function ensureRawOmsTileBytes(buffer: ArrayBuffer): Promise<Uint8A
     return bytes;
   }
   if (typeof DecompressionStream !== 'undefined') {
-    const ds = new DecompressionStream('deflate');
-    const writer = ds.writable.getWriter();
-    await writer.write(bytes);
-    await writer.close();
-    const inflatedBuffer = await new Response(ds.readable).arrayBuffer();
+    const inflatedBuffer = await new Response(
+      new Blob([buffer])
+        .stream()
+        .pipeThrough(new DecompressionStream('deflate'))
+    ).arrayBuffer();
     return new Uint8Array(inflatedBuffer);
   }
   return bytes;

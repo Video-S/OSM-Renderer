@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import zlib from 'node:zlib';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import * as THREE from 'three';
 import { resolveInspectedFeature } from './GeometryBuilder';
+import { ensureRawOmsTileBytes } from './tiling/TileDecodeWorker';
 import {
   BAKE_SCHEMA_VERSION,
   CANONICAL_HENGELO_SNAPSHOT_ID,
@@ -95,6 +98,7 @@ function createSyntheticTilePayload(params: {
   tileCenterX: number;
   tileCenterZ: number;
   tileSizeMeters: number;
+  treeCount?: number;
 }): DecodedTilePayload {
   const { tx, ty, tileCenterX, tileCenterZ, tileSizeMeters } = params;
   const half = tileSizeMeters * 0.5;
@@ -164,7 +168,9 @@ function createSyntheticTilePayload(params: {
     bvh: bBvh,
   };
 
-  const treeCount = 8;
+  // Default 600 trees per 1,024 m tile (~84 KiB raw per tile, ~336 KiB at 2,048 m, ~1.34 MiB at 4,096 m)
+  // so every compressed tile exceeds DecompressionStream internal highWaterMark (~16-64 KiB).
+  const treeCount = params.treeCount ?? 600;
   const matrices = new Float32Array(treeCount * 16);
   const featureIndices = new Int32Array(treeCount);
   const dummy = new THREE.Object3D();
@@ -1010,3 +1016,352 @@ test('TKT-041-F2: Cancellation and cleanup across all pipeline stages with zero 
     fs.rmSync(fixture.rootDir, { recursive: true, force: true });
   }
 });
+
+test('TKT-041-F2 regression: ensureRawOmsTileBytes preserves uncompressed fast path and decompresses small, multi-MiB, and >160 MiB payloads byte-exact without deadlock', async () => {
+  // 1. Uncompressed OSMTILE1 fast path
+  const smallPayload = createSyntheticTilePayload({
+    tx: 0,
+    ty: 0,
+    tileCenterX: 512,
+    tileCenterZ: 512,
+    tileSizeMeters: 1024,
+    treeCount: 16,
+  });
+  const smallRaw = encodeDecodedTilePayloadToBinary(smallPayload);
+  const fastPathOut = await ensureRawOmsTileBytes(
+    smallRaw.buffer.slice(
+      smallRaw.byteOffset,
+      smallRaw.byteOffset + smallRaw.byteLength
+    ) as ArrayBuffer
+  );
+  assert.equal(fastPathOut.byteLength, smallRaw.byteLength);
+  assert.equal(Buffer.compare(Buffer.from(fastPathOut), Buffer.from(smallRaw)), 0);
+
+  // 2. Small (~84 KiB) and medium (~2.1 MiB) compressed OSMTILE1 payloads
+  for (const treeCount of [600, 15000]) {
+    const payload = createSyntheticTilePayload({
+      tx: 1,
+      ty: 2,
+      tileCenterX: 1536,
+      tileCenterZ: 2560,
+      tileSizeMeters: 4096,
+      treeCount,
+    });
+    const rawBytes = encodeDecodedTilePayloadToBinary(payload);
+    assert.ok(
+      rawBytes.byteLength > 64 * 1024,
+      `Expected raw payload (${rawBytes.byteLength} B) to exceed 64 KiB stream highWaterMark`
+    );
+    const deflated = deflateTilePayload(rawBytes);
+    const compressedAb = deflated.buffer.slice(
+      deflated.byteOffset,
+      deflated.byteOffset + deflated.byteLength
+    ) as ArrayBuffer;
+
+    const inflated = await Promise.race([
+      ensureRawOmsTileBytes(compressedAb),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Decompression deadlocked for treeCount=${treeCount}`)),
+          10000
+        )
+      ),
+    ]);
+    assert.equal(inflated.byteLength, rawBytes.byteLength);
+    assert.equal(
+      Buffer.compare(Buffer.from(inflated), Buffer.from(rawBytes)),
+      0,
+      `Expected byte-exact inflation for treeCount=${treeCount}`
+    );
+  }
+
+  // 3. Large payload exceeding 160 MiB uncompressed (164 MiB = 171,966,464 bytes)
+  const largeSizeBytes = 164 * 1024 * 1024;
+  const largeRaw = new Uint8Array(largeSizeBytes);
+  // Write OSMTILE1 header at start
+  for (let i = 0; i < 8; i++) {
+    largeRaw[i] = 'OSMTILE1'.charCodeAt(i);
+  }
+  // Stamp deterministic non-trivial checkpoints every 1 MiB plus tail sentinel bytes
+  const checkpointOffsets: number[] = [8, 1024, 65535];
+  for (let mb = 1; mb <= 163; mb++) {
+    checkpointOffsets.push(mb * 1024 * 1024 + (mb * 997) % 4093);
+  }
+  checkpointOffsets.push(largeSizeBytes - 17, largeSizeBytes - 1);
+  for (const offset of checkpointOffsets) {
+    largeRaw[offset] = (offset * 131 + 17) & 0xff;
+  }
+
+  const largeCompressed = zlib.deflateSync(largeRaw, { level: 1 });
+  const largeCompressedAb = largeCompressed.buffer.slice(
+    largeCompressed.byteOffset,
+    largeCompressed.byteOffset + largeCompressed.byteLength
+  ) as ArrayBuffer;
+
+  const largeInflated = await Promise.race([
+    ensureRawOmsTileBytes(largeCompressedAb),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Decompression deadlocked on 164 MiB payload')),
+        20000
+      )
+    ),
+  ]);
+
+  assert.equal(largeInflated.byteLength, largeSizeBytes);
+  // Verify header and all deterministic checkpoints across the 164 MiB buffer
+  for (let i = 0; i < 8; i++) {
+    assert.equal(largeInflated[i], 'OSMTILE1'.charCodeAt(i));
+  }
+  for (const offset of checkpointOffsets) {
+    assert.equal(
+      largeInflated[offset],
+      (offset * 131 + 17) & 0xff,
+      `Byte mismatch at offset ${offset} in 164 MiB decompressed payload`
+    );
+  }
+
+  // 4. Corrupted deflate payload rejects explicitly rather than hanging
+  const corrupted = new Uint8Array([0x78, 0x9c, 0xff, 0x00, 0x12, 0x34, 0x56]);
+  await assert.rejects(
+    async () => {
+      await ensureRawOmsTileBytes(corrupted.buffer);
+    },
+    (err: unknown) => err instanceof Error
+  );
+});
+
+function resolveTestChromiumExecutablePath(): string | undefined {
+  const envExec = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (envExec && fs.existsSync(envExec)) return envExec;
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/ms-playwright';
+  if (!fs.existsSync(root)) return undefined;
+  const direct = path.join(
+    root,
+    'chrome-headless-shell-linux64',
+    'chrome-headless-shell'
+  );
+  if (fs.existsSync(direct)) return direct;
+  for (const entry of fs.readdirSync(root)) {
+    if (entry.startsWith('chromium_headless_shell-')) {
+      const candidate = path.join(
+        root,
+        entry,
+        'chrome-headless-shell-linux64',
+        'chrome-headless-shell'
+      );
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    if (entry.startsWith('chromium-')) {
+      const candidate = path.join(root, entry, 'chrome-linux', 'chrome');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
+test('TKT-041-F2 regression: Browser Web Worker decodes compressed tiles end-to-end into scene and surfaces decode errors explicitly', async () => {
+  const fixture = await buildSynthetic3ResolutionFixture();
+  const app = express();
+  const handler = createRegionalMosaicHttpHandler({
+    indexPath: fixture.descriptorPath,
+  });
+
+  app.get('/api/tiles-region/manifest', (req, res) => {
+    void handler.manifestHandler(req, res);
+  });
+  const tileRouteHandler = (req: express.Request, res: express.Response) => {
+    void handler.tilePayloadHandler(req, res);
+  };
+  app.get(
+    '/api/tiles-region/r/:tileSizeMeters/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+    tileRouteHandler
+  );
+  app.get('/api/tiles-region/r/:tileSizeMeters/:lod/:tx/:ty', tileRouteHandler);
+  app.get(
+    '/api/tiles-region/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+    tileRouteHandler
+  );
+  app.get('/api/tiles-region/:lod/:tx/:ty', tileRouteHandler);
+
+  // Separate corrupt-payload endpoint so Blink's in-memory immutable cache from step 1 is never reused
+  app.get('/api/tiles-region-corrupt/manifest', (req, res) => {
+    void handler.manifestHandler(req, res);
+  });
+  const corruptTileRouteHandler = (_req: express.Request, res: express.Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Tile-Transfer-Compressed', '1');
+    // Invalid deflate stream that does not start with OSMTILE1 magic
+    res.status(200).send(Buffer.from([0x78, 0x9c, 0xff, 0xff, 0x00, 0x01, 0x02]));
+  };
+  app.get(
+    '/api/tiles-region-corrupt/r/:tileSizeMeters/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+    corruptTileRouteHandler
+  );
+  app.get(
+    '/api/tiles-region-corrupt/r/:tileSizeMeters/:lod/:tx/:ty',
+    corruptTileRouteHandler
+  );
+  app.get(
+    '/api/tiles-region-corrupt/:snapshotId/:schemaVersion/:lod/:tx/:ty',
+    corruptTileRouteHandler
+  );
+  app.get('/api/tiles-region-corrupt/:lod/:tx/:ty', corruptTileRouteHandler);
+
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    server: { middlewareMode: true, hmr: false },
+    appType: 'spa',
+    logLevel: 'error',
+  });
+  app.use(vite.middlewares);
+
+  const httpServer = http.createServer(app);
+  await new Promise<void>((resolve) => {
+    httpServer.listen(0, '127.0.0.1', () => resolve());
+  });
+  const port = (httpServer.address() as AddressInfo).port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const playwright = await import('playwright');
+  const { resolveChromiumLaunchArgs } = await import('../../benchmarks/browserRunner');
+  const executablePath = resolveTestChromiumExecutablePath();
+  const browser = await playwright.chromium.launch({
+    headless: true,
+    ...(executablePath ? { executablePath } : {}),
+    args: resolveChromiumLaunchArgs({ useSwiftShader: true }),
+  });
+
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1024, height: 640 },
+    });
+    const page = await context.newPage();
+    await page.addInitScript('window.__name = (fn) => fn;');
+    await page.goto(`${baseUrl}/?benchmark=1&dock=collapsed&regionalMinZoom=0.15`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          (window as any).__BENCHMARK_HARNESS__?.loadM2aStreaming &&
+            (window as any).__M21_LAB__?.getSnapshot &&
+            document.querySelector('canvas')
+        ),
+      { timeout: 30000 }
+    );
+
+    // 1. End-to-end compressed tile retrieval, actual browser Web Worker decoding, and scene attachment
+    // Bounded completion timeout of 15,000 ms (previously deadlocked for 120,000 ms).
+    const e2eResult = await Promise.race([
+      page.evaluate(async () => {
+        const h = (window as any).__BENCHMARK_HARNESS__;
+        await h.unloadDataset?.();
+        const res = await h.loadM2aStreaming({
+          apiBaseUrl: '/api/tiles-region',
+          themeId: 'daylight',
+          target: [0, 0, 0],
+          zoom: 1.6,
+          azimuthDeg: 45,
+          regionalMinZoom: 0.15,
+          tilePreparationOptions: 'combined',
+          hierarchicalPolicy: { mode: 'auto' },
+          streamingFrameBudget: 'f2_combined',
+          waitForIdle: true,
+          timeoutMs: 12000,
+        });
+        const snap = (window as any).__M21_LAB__.getSnapshot();
+        return {
+          diagnostics: res.diagnostics,
+          constructedMeshesCount: snap.constructedMeshesCount,
+          sceneTriangles: snap.sceneTriangles,
+        };
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'Browser Web Worker f2_combined streaming timed out (15s bounded guard)'
+              )
+            ),
+          15000
+        )
+      ),
+    ]);
+
+    assert.ok(e2eResult.diagnostics, 'Expected streaming diagnostics from browser');
+    assert.equal(
+      e2eResult.diagnostics.throughputPipeline.useCompressedHttpTransfer,
+      true
+    );
+    assert.ok(
+      e2eResult.diagnostics.throughputPipeline.workerConcurrency >= 2,
+      'Expected actual browser Web Worker pool to be active'
+    );
+    assert.ok(
+      e2eResult.diagnostics.loadedTiles > 0,
+      `Expected loadedTiles > 0, got ${e2eResult.diagnostics.loadedTiles}`
+    );
+    assert.equal(
+      e2eResult.diagnostics.failedTiles,
+      0,
+      `Expected 0 failedTiles, got ${e2eResult.diagnostics.failedTiles} (${e2eResult.diagnostics.lastTileError})`
+    );
+    assert.ok(
+      e2eResult.diagnostics.loadedMeshCount > 0,
+      'Expected loadedMeshCount > 0 in TileStreamManager'
+    );
+    assert.ok(
+      e2eResult.constructedMeshesCount > 0,
+      'Expected constructedMeshesCount > 0 attached to Three.js scene'
+    );
+
+    // 2. Verify that a compressed tile decode failure in Web Worker is surfaced explicitly
+    // rather than hanging until a generic scene readiness timeout.
+    const errorStartMs = performance.now();
+    await assert.rejects(
+      async () => {
+        await page.evaluate(async () => {
+          const h = (window as any).__BENCHMARK_HARNESS__;
+          await h.unloadDataset?.();
+          await h.loadM2aStreaming({
+            apiBaseUrl: '/api/tiles-region-corrupt',
+            themeId: 'daylight',
+            target: [0, 0, 0],
+            zoom: 1.6,
+            azimuthDeg: 45,
+            regionalMinZoom: 0.15,
+            tilePreparationOptions: 'combined',
+            hierarchicalPolicy: { mode: 'auto' },
+            streamingFrameBudget: 'f2_combined',
+            waitForIdle: true,
+            timeoutMs: 30000,
+          });
+        });
+      },
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        return msg.includes('Tile streaming decode/fetch failure');
+      }
+    );
+    const errorElapsedMs = performance.now() - errorStartMs;
+    assert.ok(
+      errorElapsedMs < 10000,
+      `Expected explicit decode error to surface rapidly (<10s), took ${errorElapsedMs.toFixed(0)}ms`
+    );
+  } finally {
+    await browser.close();
+    try {
+      handler.close();
+    } catch {
+      // ignore
+    }
+    await vite.close();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    fs.rmSync(fixture.rootDir, { recursive: true, force: true });
+  }
+});
+

@@ -124,9 +124,9 @@ Below is the structured evaluation of **Candidate A**, **Candidate B**, and **Ca
 
 ## 5. Synthetic Sandbox Verification Results (`2026-11-27`)
 
-> **Environment Provenance Note:** Per `GEMINI.md`, the sandbox environment does not have the owner's 648 MiB full-Twente SQLite dataset or hardware GPU. The results below verify functional contracts, stage decoupling, byte accounting, oversized-payload forward progress, fairness, and leak-free cancellation on deterministic synthetic 3-resolution (`1,024 m / 2,048 m / 4,096 m`) `OSMTILE1` v1 fixtures.
+> **Environment Provenance Note:** Per `GEMINI.md`, the sandbox environment does not have the owner's 648 MiB full-Twente SQLite dataset or hardware GPU. The results below verify functional contracts, stage decoupling, byte accounting, oversized-payload forward progress, fairness, leak-free cancellation, `>160 MiB` compressed payload decompression, and end-to-end browser Web Worker decoding on deterministic synthetic 3-resolution (`1,024 m / 2,048 m / 4,096 m`) `OSMTILE1` v1 fixtures.
 
-### 5.1 Unit & Integration Test Suite (`23 / 23` Passed)
+### 5.1 Unit & Integration Test Suite (`25 / 25` Passed)
 
 Executed via:
 ```bash
@@ -135,40 +135,53 @@ npx tsx --test src/world/StreamingThroughputAndLatency.test.ts src/world/FrameBu
 
 | Test Suite | Subtests | Result | Verified Contracts |
 | --- | --- | --- | --- |
-| `src/world/StreamingThroughputAndLatency.test.ts` | `7 / 7` | **PASS** | 1. Staged F2 presets (`f2_independent_pipeline`, `f2_destination_scheduling`, `f2_tuned_concurrency`, `f2_latency_aware_prewarm`, `f2_combined`), URL parameter parsing (`?maxHttpConcurrency=12&workerConcurrency=4&compressedTransfer=1&adaptivePrewarm=1`), and `f2_combined` default.<br>2. Server `?compressed=1` deflate passthrough (`X-Tile-Transfer-Compressed: 1`, `X-Tile-Server-Inflate-Ms: 0`) vs uncompressed default (`X-Tile-Transfer-Compressed: 0`) and timing headers.<br>3. Decoupled HTTP slot release into `retrieved_queued` while worker decode is held, plus Section 5.2 oversized-payload forward-progress admission (`oversizedPayloadAdmissionsTotal >= 1`) when stage byte caps (`128 B`) are smaller than individual payloads.<br>4. Dynamic queue reprioritization (`dynamicReprioritizationsTotal > 0`) on camera focus shift without restarting in-flight transfers.<br>5. Velocity- and latency-aware adaptive prewarming horizon (`evaluateAdaptivePrewarmHorizon`) and predicted activation viewport bounds (`predictViewportBoundsAtHorizon`).<br>6. Continuous active-resolution panning during a `1,024 m -> 4,096 m` transition: verifies steady destination progress, uniform viewport resolution invariant (`attachedResolutions.size <= 1`), atomic activation, and canonical building feature picking parity.<br>7. Rapid multi-resolution zoom reversal (`1.5 -> 0.5 -> 0.18 -> 1.5 -> 0.5 -> 1.5`) verifying leak-free cleanup (`inFlightHttpReservationBytes === 0`, `retrievedPayloadQueueBytes === 0`, `inFlightWorkerPreparationBytes === 0`). |
+| `src/world/StreamingThroughputAndLatency.test.ts` | `9 / 9` | **PASS** | 1. Staged F2 presets (`f2_independent_pipeline`, `f2_destination_scheduling`, `f2_tuned_concurrency`, `f2_latency_aware_prewarm`, `f2_combined`), URL parameter parsing (`?maxHttpConcurrency=12&workerConcurrency=4&compressedTransfer=1&adaptivePrewarm=1`), and `f2_combined` default.<br>2. Server `?compressed=1` deflate passthrough (`X-Tile-Transfer-Compressed: 1`, `X-Tile-Server-Inflate-Ms: 0`) vs uncompressed default (`X-Tile-Transfer-Compressed: 0`) and timing headers.<br>3. Decoupled HTTP slot release into `retrieved_queued` while worker decode is held, plus Section 5.2 oversized-payload forward-progress admission (`oversizedPayloadAdmissionsTotal >= 1`) when stage byte caps (`128 B`) are smaller than individual payloads.<br>4. Dynamic queue reprioritization (`dynamicReprioritizationsTotal > 0`) on camera focus shift without restarting in-flight transfers.<br>5. Velocity- and latency-aware adaptive prewarming horizon (`evaluateAdaptivePrewarmHorizon`) and predicted activation viewport bounds (`predictViewportBoundsAtHorizon`).<br>6. Continuous active-resolution panning during a `1,024 m -> 4,096 m` transition: verifies steady destination progress, uniform viewport resolution invariant (`attachedResolutions.size <= 1`), atomic activation, and canonical building feature picking parity.<br>7. Rapid multi-resolution zoom reversal (`1.5 -> 0.5 -> 0.18 -> 1.5 -> 0.5 -> 1.5`) verifying leak-free cleanup (`inFlightHttpReservationBytes === 0`, `retrievedPayloadQueueBytes === 0`, `inFlightWorkerPreparationBytes === 0`).<br>8. `ensureRawOmsTileBytes()` concurrent `DecompressionStream('deflate')` regression test: preserves uncompressed `OSMTILE1` fast path and decompresses small (`~84 KiB`), multi-MiB (`~2.1 MiB`), and `>160 MiB` (`164 MiB` uncompressed) payloads byte-exact without stream backpressure deadlock, and rejects corrupted deflate bytes explicitly.<br>9. Actual browser Web Worker regression test (Playwright Chromium with bounded 15-second timeout): verifies `?compressed=1` HTTP retrieval, parallel Web Worker `DecompressionStream('deflate')` decoding, and Three.js scene mesh attachment end-to-end under `f2_combined`, plus explicit failure surfacing (`Tile streaming decode/fetch failure`) on corrupted compressed payloads. |
 | `src/world/FrameBudgetedStreaming.test.ts` | `6 / 6` | **PASS** | All `TKT-041-F1` scheduler, offscreen incremental GPU prep, deferred disposal, debounce, and Section 12 predictive prewarm contracts. |
 | `src/world/HierarchicalTileStreaming.test.ts` | `4 / 4` | **PASS** | All `TKT-041` resolution-qualified keys, hysteresis deadbands, atomic swaps, LRU cache, `deferred_budget` safeguard, and single-resolution backward compatibility. |
 | `src/world/NonBlockingTilePreparation.test.ts` | `6 / 6` | **PASS** | All `TKT-040` compact worker transport, worker-built `InstancedSpatialIndex` BVH, zero-copy buffer adoption, and profiler frame-alignment contracts. |
+
+### 5.2 Compressed Payload Decompression Regression Fix (`ensureRawOmsTileBytes`)
+
+Owner hardware testing of `f2_combined` exposed a 120-second scene readiness timeout with zero rendered meshes caused by a stream backpressure deadlock in `ensureRawOmsTileBytes()` (`src/world/tiling/TileDecodeWorker.ts`): awaiting `ds.writable.getWriter().write(bytes)` and `writer.close()` before reading `ds.readable` deadlocked whenever the decompressed payload exceeded the internal `TransformStream` `highWaterMark` (`16–64 KiB`).
+
+- **Fix in `TileDecodeWorker.ts`:** Replaced sequential writer awaiting with concurrent stream consumption (`await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer()`) while preserving the `hasOmsTileMagic(bytes)` uncompressed fast path.
+- **Explicit Error & Timeout Surfacing (`TileDecodeClient.ts`, `TileStreamManager.ts`, `App.tsx`):** Added a bounded per-job worker decode timeout (`30,000 ms` default) with automatic hung-worker replacement, `lastTileError` diagnostic attribution on `TileStreamManager`, and immediate rejection in `App.tsx` (`waitForSceneReady` / `loadM2aStreaming`) whenever `tileStreamingStats.failedTiles > 0`.
 
 ---
 
 ## 6. Owner Hardware Reproduction & Benchmark Plan (Windows PowerShell)
 
-All commands below use direct `npx tsx` invocation (compatible with Windows PowerShell) and point directly to `data/osm/twente-full-hierarchical.json`.
+All commands below use direct `npx tsx` invocation (compatible with Windows PowerShell) and use the CLI flags supported by `parseHierarchicalBenchmarkCli()` in `benchmarks/hierarchicalStreamingRunner.ts` (`--descriptor=...`, `--variants=...`, `--foliage=...`, `--http-concurrency=...`, `--worker-concurrency=...`, `--budget-mb=...`, `--out=...`, `--markdown-out=...`).
 
 ### 6.1 Staged 6-Variant Throughput & Transition Latency Matrix (Work Package G)
 
-Runs `combined_prewarm` (the `TKT-041-F1` baseline) against all 5 staged `TKT-041-F2` configurations (`f2_independent_pipeline`, `f2_destination_scheduling`, `f2_tuned_concurrency`, `f2_latency_aware_prewarm`, `f2_combined`) across all 8 Work Package G scenarios (`cold_direct_1024_to_4096`, `cold_stepped_1024_2048_4096`, `warm_reverse_4096_2048_1024`, `continuous_pan_plus_zoom_out`, `continuous_pan_plus_zoom_in`, `rapid_zoom_reversal_under_load`, `sustained_pan_at_2048`, `sustained_pan_at_4096`, plus `zoom_sweep_1024_2048_4096_back`):
+Runs `combined_prewarm` (the `TKT-041-F1` baseline) against all 5 staged `TKT-041-F2` configurations (`f2_independent_pipeline`, `f2_destination_scheduling`, `f2_tuned_concurrency`, `f2_latency_aware_prewarm`, `f2_combined`) across all 9 benchmark scenarios (`cold_stepped_1024_2048_4096`, `warm_reverse_4096_2048_1024`, `direct_1024_to_4096_cold`, `zoom_sweep_1024_2048_4096_back`, `continuous_zoom_out_pan`, `continuous_zoom_in_pan`, `rapid_zoom_reversal`, `sustained_pan_at_2048`, `sustained_pan_at_4096`):
 
 ```powershell
-npx tsx benchmarks/hierarchicalStreamingRunner.ts --mosaic=data/osm/twente-full-hierarchical.json --f2-matrix --headed --out=docs/reports/tkt041-f2-hardware-staged-matrix.json
+npx tsx benchmarks/hierarchicalStreamingRunner.ts --descriptor=data/osm/twente-full-hierarchical.json --variants=f2_all --foliage=both --budget-mb=1536 --out=docs/reports/tkt041-f2-hardware-staged-matrix.json --markdown-out=docs/reports/tkt041-f2-hardware-staged-matrix.md
 ```
 
 ### 6.2 Focused Transition-Latency Comparison (`combined_prewarm` vs `f2_combined`)
 
-For a fast side-by-side hardware run on the primary transition-latency scenarios (`cold_direct_1024_to_4096`, `cold_stepped_1024_2048_4096`, `continuous_pan_plus_zoom_out`, `rapid_zoom_reversal_under_load`):
+For a focused side-by-side hardware run comparing `combined_prewarm` against `f2_combined`:
 
 ```powershell
-npx tsx benchmarks/hierarchicalStreamingRunner.ts --mosaic=data/osm/twente-full-hierarchical.json --f1-variants=combined_prewarm,f2_combined --scenarios=cold_direct_1024_to_4096,cold_stepped_1024_2048_4096,continuous_pan_plus_zoom_out,rapid_zoom_reversal_under_load --headed --out=docs/reports/tkt041-f2-hardware-ab.json
+npx tsx benchmarks/hierarchicalStreamingRunner.ts --descriptor=data/osm/twente-full-hierarchical.json --variants=combined_prewarm,f2_combined --foliage=on --budget-mb=1536 --out=docs/reports/tkt041-f2-hardware-ab.json --markdown-out=docs/reports/tkt041-f2-hardware-ab.md
 ```
 
 ### 6.3 Work Package D Concurrency Matrix (`HTTP 6 / 8 / 12` × `Worker 2 / 4`)
 
-You can test specific HTTP and worker concurrency combinations interactively or in the benchmark viewer using URL query parameters:
+To benchmark the `HTTP 6, 8, 12` × `Worker 2, 4` concurrency matrix across `f2_combined`:
 
-- `http://localhost:3000/?streamingVariant=f2_combined&maxHttpConcurrency=6&workerConcurrency=2&compressedTransfer=1`
-- `http://localhost:3000/?streamingVariant=f2_combined&maxHttpConcurrency=8&workerConcurrency=4&compressedTransfer=1` (Default `f2_combined`)
-- `http://localhost:3000/?streamingVariant=f2_combined&maxHttpConcurrency=12&workerConcurrency=4&compressedTransfer=1`
+```powershell
+npx tsx benchmarks/hierarchicalStreamingRunner.ts --descriptor=data/osm/twente-full-hierarchical.json --variants=f2_combined --http-concurrency=6,8,12 --worker-concurrency=2,4 --foliage=on --budget-mb=1536 --out=docs/reports/tkt041-f2-hardware-concurrency.json --markdown-out=docs/reports/tkt041-f2-hardware-concurrency.md
+```
+
+You can also test specific HTTP and worker concurrency combinations interactively in the viewer using URL query parameters:
+
+- `http://localhost:3000/?streamingFrameBudget=f2_combined&maxHttpConcurrency=6&workerConcurrency=2&compressedTransfer=1`
+- `http://localhost:3000/?streamingFrameBudget=f2_combined&maxHttpConcurrency=8&workerConcurrency=4&compressedTransfer=1` (Default `f2_combined`)
+- `http://localhost:3000/?streamingFrameBudget=f2_combined&maxHttpConcurrency=12&workerConcurrency=4&compressedTransfer=1`
 
 To start the interactive viewer against the full-Twente hierarchical descriptor in Windows PowerShell:
 
